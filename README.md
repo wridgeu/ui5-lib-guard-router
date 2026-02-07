@@ -1,22 +1,23 @@
-# ui5-ext-routing
+# ui5.ext.routing
 
 UI5 Router extension with async navigation guards. Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation -- preventing unauthorized content flashes.
 
 ## Why
 
-UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to scattering guard logic across controller `attachPatternMatched` callbacks, which causes a flash of unauthorized content and pollutes browser history. See [docs/problem-statement.md](docs/problem-statement.md) for the full background.
+UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to scattering guard logic across controller `attachPatternMatched` callbacks, which causes a flash of unauthorized content and pollutes browser history.
 
 ## How it works
 
-The router overrides `parse()` -- the single method through which all navigation flows (programmatic `navTo`, browser back/forward, direct URL changes). Guards run before any route matching begins. See [docs/implementation-approaches.md](docs/implementation-approaches.md) for the design rationale.
+The router overrides `parse()` -- the single method through which all navigation flows (programmatic `navTo`, browser back/forward, direct URL changes). Guards run before any route matching begins.
+
+The pipeline stays **synchronous when all guards return plain values** and only falls back to async when a guard returns a Promise. A generation counter discards stale async results when navigations overlap.
 
 ## Monorepo structure
 
 ```
 packages/
-  lib/          ui5.ext.routing library (the router + types)
+  lib/          ui5.ext.routing library (Router + types)
   demo-app/     Demo app with auth guards (home, protected, forbidden routes)
-docs/           Design documents
 ```
 
 ## Prerequisites
@@ -38,32 +39,28 @@ npm start
 
 Opens the demo app at `http://localhost:8080/index.html`. Toggle login state and navigate between routes to see guards in action.
 
-### Type checking
+### Run tests
+
+Both QUnit and E2E tests require the demo-app server running on port 8080:
+
+```bash
+# Terminal 1: start the server
+npm start
+
+# Terminal 2: run all tests
+npm test
+
+# Or individually
+npm run test:qunit    # 76 QUnit tests (Router + NativeRouterCompat)
+npm run test:e2e      # 24 E2E tests across 8 spec files
+```
+
+### Type checking and linting
 
 ```bash
 npm run typecheck
-```
-
-### Linting
-
-```bash
 npm run lint
 ```
-
-### Run tests
-
-```bash
-# All tests (QUnit + E2E)
-npm test
-
-# QUnit unit tests only (lib)
-npm run test:qunit
-
-# E2E tests only (demo-app, requires demo-app server running)
-npm run test:e2e
-```
-
-**Note:** E2E tests require the demo-app to be running on port 8080. Start it with `npm start` in a separate terminal before running `npm run test:e2e`.
 
 ### Build the library
 
@@ -108,16 +105,22 @@ In your app's `package.json`:
 
 ```typescript
 import UIComponent from "sap/ui/core/UIComponent";
+import type { RouterInstance } from "ui5/ext/routing/types";
 
 export default class Component extends UIComponent {
+  static metadata = {
+    manifest: "json",
+    interfaces: ["sap.ui.core.IAsyncContentCreation"]
+  };
+
   init(): void {
     super.init();
-    const router = this.getRouter() as any;
+    const router = this.getRouter() as unknown as RouterInstance;
 
     // Global guard: runs for every navigation
     router.addGuard((context) => {
       if (context.toRoute === "admin" && !isAdmin()) {
-        return "home"; // redirect to home
+        return "home"; // redirect
       }
       return true; // allow
     });
@@ -130,7 +133,7 @@ export default class Component extends UIComponent {
     // Async guards are supported
     router.addRouteGuard("dashboard", async (context) => {
       const hasAccess = await checkPermissions(context.toRoute);
-      return hasAccess ? true : false; // false = block (stay on current route)
+      return hasAccess ? true : false;
     });
 
     router.initialize();
@@ -138,7 +141,7 @@ export default class Component extends UIComponent {
 }
 ```
 
-### Guard return values
+## Guard return values
 
 | Return value | Effect |
 |---|---|
@@ -146,15 +149,38 @@ export default class Component extends UIComponent {
 | `false` | Block navigation (stay on current route, no history entry) |
 | `"routeName"` | Redirect to named route (replaces history, no extra entry) |
 | `{ route: "name", parameters: { id: "42" } }` | Redirect with route parameters |
+| anything else (`null`, `undefined`, numbers) | Treated as block |
+
+Only strict `true` allows navigation. This prevents accidental allows from truthy coercion.
+
+## Guard context
+
+Every guard receives a `GuardContext` with navigation details:
+
+| Property | Type | Description |
+|---|---|---|
+| `toRoute` | `string` | Target route name (empty if no match) |
+| `toHash` | `string` | Raw hash being navigated to |
+| `toArguments` | `Record<string, string>` | Parsed route parameters |
+| `fromRoute` | `string` | Current route name (empty on first nav) |
+| `fromHash` | `string` | Current hash |
+
+## Guard execution order
+
+1. **Global guards** run first, in registration order
+2. **Route-specific guards** run next, in registration order
+3. The pipeline **short-circuits** at the first non-`true` result
 
 ## API
 
-- `addGuard(fn)` -- Register a global guard (runs for every navigation)
-- `removeGuard(fn)` -- Remove a global guard
-- `addRouteGuard(routeName, fn)` -- Register a guard for a specific route
-- `removeRouteGuard(routeName, fn)` -- Remove a route-specific guard
+| Method | Description |
+|---|---|
+| `addGuard(fn)` | Register a global guard (runs for every navigation) |
+| `removeGuard(fn)` | Remove a global guard |
+| `addRouteGuard(routeName, fn)` | Register a guard for a specific route |
+| `removeRouteGuard(routeName, fn)` | Remove a route-specific guard |
 
-All methods return `this` for chaining.
+All methods return `this` for chaining. Guards can be added or removed at any time during the router's lifetime.
 
 ## License
 
