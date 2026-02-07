@@ -1,6 +1,6 @@
 import Router from "ui5/ext/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn } from "ui5/ext/routing/types";
+import type { GuardContext, GuardFn, GuardRedirect } from "ui5/ext/routing/types";
 
 // Helper: create a router with standard test routes
 function createRouter(): any {
@@ -527,4 +527,297 @@ QUnit.test("Guard returning invalid value treats as block", function (assert: As
 		assert.notOk(routeMatched, "Invalid guard return treated as block");
 		done();
 	});
+});
+
+// ============================================================
+// Module: GuardRedirect object
+// ============================================================
+QUnit.module("Router - GuardRedirect object", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	}
+});
+
+QUnit.test("Guard returning GuardRedirect object redirects to route", function (assert: Assert) {
+	const done = assert.async();
+
+	router.addRouteGuard("forbidden", (): GuardRedirect => ({
+		route: "home"
+	}));
+	router.initialize();
+
+	router.getRoute("home").attachPatternMatched(() => {
+		assert.ok(true, "Redirected to home via GuardRedirect");
+		done();
+	});
+
+	router.navTo("forbidden");
+});
+
+QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", function (assert: Assert) {
+	const done = assert.async();
+
+	router.addRouteGuard("forbidden", (): GuardRedirect => ({
+		route: "detail",
+		parameters: { id: "error-403" }
+	}));
+	router.initialize();
+
+	router.getRoute("detail").attachPatternMatched((event: any) => {
+		assert.strictEqual(
+			event.getParameter("arguments").id,
+			"error-403",
+			"Redirect includes route parameters"
+		);
+		done();
+	});
+
+	router.navTo("forbidden");
+});
+
+QUnit.test("Async guard returning GuardRedirect works", function (assert: Assert) {
+	const done = assert.async();
+
+	router.addRouteGuard("protected", async (): Promise<GuardRedirect> => {
+		await nextTick(10);
+		return { route: "home" };
+	});
+	router.initialize();
+
+	router.getRoute("home").attachPatternMatched(() => {
+		assert.ok(true, "Async GuardRedirect worked");
+		done();
+	});
+
+	router.navTo("protected");
+});
+
+// ============================================================
+// Module: Hash change simulation (direct URL entry)
+// ============================================================
+QUnit.module("Router - Hash change (direct URL entry)", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	}
+});
+
+QUnit.test("Direct hash change to guarded route is blocked", function (assert: Assert) {
+	const done = assert.async();
+	let routeMatched = false;
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+
+	router.getRoute("protected").attachPatternMatched(() => {
+		routeMatched = true;
+	});
+
+	// Simulate typing a URL directly - uses HashChanger
+	HashChanger.getInstance().setHash("protected");
+
+	nextTick(200).then(() => {
+		assert.notOk(routeMatched, "Direct hash change was blocked by guard");
+		done();
+	});
+});
+
+QUnit.test("Direct hash change to unguarded route proceeds", function (assert: Assert) {
+	const done = assert.async();
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+
+	router.getRoute("home").attachPatternMatched(() => {
+		assert.ok(true, "Unguarded route matched via hash change");
+		done();
+	});
+
+	// Navigate away first, then back to home
+	router.navTo("forbidden");
+	nextTick(50).then(() => {
+		HashChanger.getInstance().setHash("");
+	});
+});
+
+QUnit.test("Direct hash change with redirect restores correct hash", function (assert: Assert) {
+	const done = assert.async();
+
+	router.addRouteGuard("forbidden", () => "home");
+	router.initialize();
+
+	router.getRoute("home").attachPatternMatched(() => {
+		nextTick(50).then(() => {
+			const hash = HashChanger.getInstance().getHash();
+			assert.strictEqual(hash, "", "Hash was restored to home route");
+			done();
+		});
+	});
+
+	HashChanger.getInstance().setHash("forbidden");
+});
+
+// ============================================================
+// Module: Sequential navigation with dynamic guard state
+// ============================================================
+QUnit.module("Router - Sequential navigation with changing guards", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	}
+});
+
+QUnit.test("Guard state change between navigations is respected", function (assert: Assert) {
+	const done = assert.async();
+	let allowNavigation = false;
+
+	router.addRouteGuard("protected", () => allowNavigation ? true : "home");
+	router.initialize();
+
+	let blockedCount = 0;
+	let homeMatchCount = 0;
+
+	router.getRoute("home").attachPatternMatched(() => {
+		homeMatchCount++;
+	});
+
+	// First attempt: blocked
+	router.navTo("protected");
+
+	nextTick(200).then(() => {
+		// Should have been redirected to home
+		assert.ok(homeMatchCount > 0, "First attempt redirected to home");
+
+		// Change state: now allow
+		allowNavigation = true;
+
+		router.getRoute("protected").attachPatternMatched(() => {
+			assert.ok(true, "Second attempt allowed after state change");
+			done();
+		});
+
+		router.navTo("protected");
+	});
+});
+
+QUnit.test("Adding guard mid-session blocks subsequent navigations", function (assert: Assert) {
+	const done = assert.async();
+	router.initialize();
+
+	// First nav: no guards, should work
+	router.getRoute("protected").attachPatternMatched(function handler() {
+		router.getRoute("protected").detachPatternMatched(handler);
+
+		// Now add a guard
+		router.addRouteGuard("protected", () => false);
+
+		let secondMatched = false;
+		router.getRoute("protected").attachPatternMatched(() => {
+			secondMatched = true;
+		});
+
+		// Navigate away and back
+		router.navTo("home");
+		nextTick(100).then(() => {
+			router.navTo("protected");
+			nextTick(200).then(() => {
+				assert.notOk(secondMatched, "Guard added mid-session blocked navigation");
+				done();
+			});
+		});
+	});
+
+	router.navTo("protected");
+});
+
+QUnit.test("Removing guard mid-session allows subsequent navigations", function (assert: Assert) {
+	const done = assert.async();
+	const guard: GuardFn = () => false;
+	router.addRouteGuard("protected", guard);
+	router.initialize();
+
+	let matchedCount = 0;
+
+	// First attempt: blocked
+	router.navTo("protected");
+	nextTick(200).then(() => {
+		// Remove the guard
+		router.removeRouteGuard("protected", guard);
+
+		router.getRoute("protected").attachPatternMatched(() => {
+			matchedCount++;
+		});
+
+		// Second attempt: should now work
+		router.navTo("protected");
+		nextTick(200).then(() => {
+			assert.strictEqual(matchedCount, 1, "Navigation allowed after guard removed");
+			done();
+		});
+	});
+});
+
+// ============================================================
+// Module: Guard re-entrancy (guard triggers navigation)
+// ============================================================
+QUnit.module("Router - Guard re-entrancy", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	}
+});
+
+QUnit.test("Guard that returns redirect does not cause infinite loop", function (assert: Assert) {
+	const done = assert.async();
+	let guardCallCount = 0;
+
+	// Guard on forbidden redirects to home
+	router.addRouteGuard("forbidden", () => {
+		guardCallCount++;
+		return "home";
+	});
+	router.initialize();
+
+	router.navTo("forbidden");
+
+	nextTick(500).then(() => {
+		assert.strictEqual(guardCallCount, 1, "Guard only called once (no infinite loop)");
+		done();
+	});
+});
+
+QUnit.test("Multiple route guards with cross-redirects settle correctly", function (assert: Assert) {
+	const done = assert.async();
+
+	// forbidden → redirects to protected, protected → redirects to home
+	router.addRouteGuard("forbidden", () => "protected");
+	router.addRouteGuard("protected", () => "home");
+	router.initialize();
+
+	// The redirect from forbidden→protected triggers parse("protected")
+	// which is re-entrant (guardRunning=true) so it bypasses guards
+	// This means we should end up on protected, not home
+	router.getRoute("protected").attachPatternMatched(() => {
+		assert.ok(true, "Cross-redirect settled on protected (re-entrant bypass)");
+		done();
+	});
+
+	router.navTo("forbidden");
 });
