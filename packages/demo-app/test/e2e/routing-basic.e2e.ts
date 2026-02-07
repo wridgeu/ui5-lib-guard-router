@@ -1,10 +1,9 @@
+import { waitForPage, fireEvent } from "./helpers";
+
 describe("Basic routing (no guard interaction)", () => {
 	it("should load Home view at root hash", async () => {
-		await browser.url("/index.html");
-		const page = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await page.getProperty("title")).toBe("Home");
+		await browser.goTo({ sHash: "" });
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
 	it("should show auth status as 'Logged Out' initially", async () => {
@@ -27,22 +26,13 @@ describe("Basic routing (no guard interaction)", () => {
 		});
 		await navBtn.press();
 
-		const page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		expect(await page.getProperty("title")).toBe("Protected Page");
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 
 	it("should navigate back to Home", async () => {
 		// Use the nav back button on the protected page
-		const page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		await page.fireEvent("navButtonPress");
+		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
 
-		const homePage = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await homePage.getProperty("title")).toBe("Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 });

@@ -1,9 +1,10 @@
 import Router from "ui5/ext/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn, GuardRedirect } from "ui5/ext/routing/types";
+import type { GuardContext, GuardFn, GuardRedirect, RouterInstance } from "ui5/ext/routing/types";
+import { initHashChanger, nextTick } from "./testHelpers";
 
 // Helper: create a router with standard test routes
-function createRouter(): any {
+function createRouter(): RouterInstance {
 	return new (Router as any)([
 		{ name: "home", pattern: "" },
 		{ name: "protected", pattern: "protected" },
@@ -14,24 +15,10 @@ function createRouter(): any {
 	});
 }
 
-// Helper: wait for next tick (let async parse() settle)
-function nextTick(ms = 50): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Helper: initialize HashChanger for tests
-function initHashChanger(): void {
-	const hashChanger = HashChanger.getInstance();
-	if (!(hashChanger as any).hasListeners("hashChanged")) {
-		hashChanger.init();
-	}
-	hashChanger.setHash("");
-}
-
 // ============================================================
 // Module: Drop-in replacement (no guards)
 // ============================================================
-let router: any;
+let router: RouterInstance;
 
 QUnit.module("Router - Drop-in replacement (no guards)", {
 	beforeEach: function () {
@@ -58,7 +45,7 @@ QUnit.test("Router is an instance of sap.m.routing.Router", function (assert: As
 
 QUnit.test("navTo navigates to named route", function (assert: Assert) {
 	const done = assert.async();
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Protected route matched");
 		done();
 	});
@@ -67,7 +54,7 @@ QUnit.test("navTo navigates to named route", function (assert: Assert) {
 
 QUnit.test("navTo with parameters", function (assert: Assert) {
 	const done = assert.async();
-	router.getRoute("detail").attachPatternMatched((event: any) => {
+	router.getRoute("detail")!.attachPatternMatched((event: any) => {
 		assert.strictEqual(
 			event.getParameter("arguments").id,
 			"42",
@@ -102,11 +89,11 @@ QUnit.test("beforeRouteMatched event fires", function (assert: Assert) {
 
 QUnit.test("navTo with replace does not create history entry", function (assert: Assert) {
 	const done = assert.async();
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Protected route matched with replace");
 		done();
 	});
-	router.navTo("protected", {}, true);
+	router.navTo("protected", {}, {}, true);
 });
 
 QUnit.test("getRoute returns route by name", function (assert: Assert) {
@@ -128,7 +115,7 @@ QUnit.module("Router - Guard API", {
 		router = createRouter();
 	},
 	afterEach: function () {
-		router.destroy();
+		try { router.destroy(); } catch { /* already destroyed */ }
 		HashChanger.getInstance().setHash("");
 	}
 });
@@ -145,7 +132,7 @@ QUnit.test("addGuard / removeGuard register and deregister global guards", funct
 QUnit.test("addRouteGuard / removeRouteGuard register and deregister per-route guards", function (assert: Assert) {
 	const guard: GuardFn = () => true;
 	router.addRouteGuard("protected", guard);
-	assert.strictEqual(router._routeGuards.get("protected").length, 1, "Route guard registered");
+	assert.strictEqual(router._routeGuards.get("protected")!.length, 1, "Route guard registered");
 
 	router.removeRouteGuard("protected", guard);
 	assert.notOk(router._routeGuards.has("protected"), "Route guard deregistered and map entry cleaned");
@@ -188,7 +175,7 @@ QUnit.test("Guard returning true allows navigation", function (assert: Assert) {
 	router.addGuard(() => true);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Navigation allowed through guard");
 		done();
 	});
@@ -203,7 +190,7 @@ QUnit.test("Async guard returning true allows navigation", function (assert: Ass
 	});
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Async guard allowed navigation");
 		done();
 	});
@@ -215,7 +202,7 @@ QUnit.test("Route-specific guard returning true allows navigation", function (as
 	router.addRouteGuard("protected", () => true);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Route guard allowed navigation");
 		done();
 	});
@@ -243,7 +230,7 @@ QUnit.test("Guard returning false blocks navigation", function (assert: Assert) 
 	router.addGuard(() => false);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -265,7 +252,7 @@ QUnit.test("Async guard returning false blocks navigation", function (assert: As
 	});
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -284,7 +271,7 @@ QUnit.test("Route-specific guard returning false blocks navigation", function (a
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -305,7 +292,7 @@ QUnit.test("Guard throwing an error blocks navigation", function (assert: Assert
 	});
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -324,7 +311,7 @@ QUnit.test("Guard returning rejected Promise blocks navigation", function (asser
 	router.addGuard(() => Promise.reject(new Error("Rejected")));
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -356,12 +343,18 @@ QUnit.test("Guard returning string redirects to named route", function (assert: 
 	router.addRouteGuard("forbidden", () => "home");
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
-		assert.ok(true, "Redirected to home route");
-		done();
-	});
+	// Wait for initialize's async patternMatched to settle before attaching test handler
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	router.navTo("forbidden");
+		homeRoute.attachPatternMatched(() => {
+			assert.ok(true, "Redirected to home route");
+			done();
+		});
+
+		router.navTo("forbidden");
+	});
 });
 
 QUnit.test("Async guard returning string redirects", function (assert: Assert) {
@@ -373,12 +366,18 @@ QUnit.test("Async guard returning string redirects", function (assert: Assert) {
 	});
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
-		assert.ok(true, "Async guard redirected to home");
-		done();
-	});
+	// Wait for initialize's async patternMatched to settle before attaching test handler
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	router.navTo("forbidden");
+		homeRoute.attachPatternMatched(() => {
+			assert.ok(true, "Async guard redirected to home");
+			done();
+		});
+
+		router.navTo("forbidden");
+	});
 });
 
 // ============================================================
@@ -405,7 +404,7 @@ QUnit.test("Guard receives correct context", function (assert: Assert) {
 	});
 	router.initialize();
 
-	router.getRoute("detail").attachPatternMatched(() => {
+	router.getRoute("detail")!.attachPatternMatched(() => {
 		assert.ok(capturedContext, "Context was captured");
 		assert.strictEqual(capturedContext!.toRoute, "detail", "toRoute is correct");
 		assert.strictEqual(capturedContext!.toHash, "detail/99", "toHash is correct");
@@ -439,11 +438,15 @@ QUnit.test("Multiple global guards run sequentially, first rejection wins", func
 	router.addGuard(() => { order.push(3); return true; });
 	router.initialize();
 
-	router.navTo("protected");
+	// Wait for initialize's parse to settle, then test
+	nextTick(100).then(() => {
+		order.length = 0;
+		router.navTo("protected");
 
-	nextTick(200).then(() => {
-		assert.deepEqual(order, [1, 2], "Guards ran sequentially and stopped at first rejection");
-		done();
+		nextTick(200).then(() => {
+			assert.deepEqual(order, [1, 2], "Guards ran sequentially and stopped at first rejection");
+			done();
+		});
 	});
 });
 
@@ -455,12 +458,17 @@ QUnit.test("Global guards run before route-specific guards", function (assert: A
 	router.addRouteGuard("protected", () => { order.push("route"); return true; });
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
-		assert.deepEqual(order, ["global", "route"], "Global guard ran before route guard");
-		done();
-	});
+	// Wait for initialize's parse to settle, then reset and navigate
+	nextTick(100).then(() => {
+		order.length = 0;
 
-	router.navTo("protected");
+		router.getRoute("protected")!.attachPatternMatched(() => {
+			assert.deepEqual(order, ["global", "route"], "Global guard ran before route guard");
+			done();
+		});
+
+		router.navTo("protected");
+	});
 });
 
 QUnit.test("Route guard only runs for its route", function (assert: Assert) {
@@ -473,7 +481,7 @@ QUnit.test("Route guard only runs for its route", function (assert: Assert) {
 	});
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
+	router.getRoute("home")!.attachPatternMatched(() => {
 		nextTick(100).then(() => {
 			assert.notOk(protectedGuardCalled, "Protected route guard did not run for home route");
 			done();
@@ -488,7 +496,7 @@ QUnit.test("No guards behaves identically to native router", function (assert: A
 	const done = assert.async();
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Navigation works without any guards");
 		done();
 	});
@@ -517,7 +525,7 @@ QUnit.test("Guard returning invalid value treats as block", function (assert: As
 	router.addGuard((() => 42) as any);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -551,12 +559,18 @@ QUnit.test("Guard returning GuardRedirect object redirects to route", function (
 	}));
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
-		assert.ok(true, "Redirected to home via GuardRedirect");
-		done();
-	});
+	// Wait for initialize's async patternMatched to settle before attaching test handler
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	router.navTo("forbidden");
+		homeRoute.attachPatternMatched(() => {
+			assert.ok(true, "Redirected to home via GuardRedirect");
+			done();
+		});
+
+		router.navTo("forbidden");
+	});
 });
 
 QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", function (assert: Assert) {
@@ -568,7 +582,7 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	}));
 	router.initialize();
 
-	router.getRoute("detail").attachPatternMatched((event: any) => {
+	router.getRoute("detail")!.attachPatternMatched((event: any) => {
 		assert.strictEqual(
 			event.getParameter("arguments").id,
 			"error-403",
@@ -589,12 +603,18 @@ QUnit.test("Async guard returning GuardRedirect works", function (assert: Assert
 	});
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
-		assert.ok(true, "Async GuardRedirect worked");
-		done();
-	});
+	// Wait for initialize's async patternMatched to settle before attaching test handler
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	router.navTo("protected");
+		homeRoute.attachPatternMatched(() => {
+			assert.ok(true, "Async GuardRedirect worked");
+			done();
+		});
+
+		router.navTo("protected");
+	});
 });
 
 // ============================================================
@@ -618,7 +638,7 @@ QUnit.test("Direct hash change to guarded route is blocked", function (assert: A
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 
-	router.getRoute("protected").attachPatternMatched(() => {
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		routeMatched = true;
 	});
 
@@ -637,7 +657,7 @@ QUnit.test("Direct hash change to unguarded route proceeds", function (assert: A
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
+	router.getRoute("home")!.attachPatternMatched(() => {
 		assert.ok(true, "Unguarded route matched via hash change");
 		done();
 	});
@@ -655,15 +675,21 @@ QUnit.test("Direct hash change with redirect restores correct hash", function (a
 	router.addRouteGuard("forbidden", () => "home");
 	router.initialize();
 
-	router.getRoute("home").attachPatternMatched(() => {
-		nextTick(50).then(() => {
-			const hash = HashChanger.getInstance().getHash();
-			assert.strictEqual(hash, "", "Hash was restored to home route");
-			done();
-		});
-	});
+	// Wait for initialize's async patternMatched to settle before attaching test handler
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	HashChanger.getInstance().setHash("forbidden");
+		homeRoute.attachPatternMatched(() => {
+			nextTick(50).then(() => {
+				const hash = HashChanger.getInstance().getHash();
+				assert.strictEqual(hash, "", "Hash was restored to home route");
+				done();
+			});
+		});
+
+		HashChanger.getInstance().setHash("forbidden");
+	});
 });
 
 // ============================================================
@@ -687,10 +713,9 @@ QUnit.test("Guard state change between navigations is respected", function (asse
 	router.addRouteGuard("protected", () => allowNavigation ? true : "home");
 	router.initialize();
 
-	let blockedCount = 0;
 	let homeMatchCount = 0;
 
-	router.getRoute("home").attachPatternMatched(() => {
+	router.getRoute("home")!.attachPatternMatched(() => {
 		homeMatchCount++;
 	});
 
@@ -704,7 +729,7 @@ QUnit.test("Guard state change between navigations is respected", function (asse
 		// Change state: now allow
 		allowNavigation = true;
 
-		router.getRoute("protected").attachPatternMatched(() => {
+		router.getRoute("protected")!.attachPatternMatched(() => {
 			assert.ok(true, "Second attempt allowed after state change");
 			done();
 		});
@@ -718,14 +743,14 @@ QUnit.test("Adding guard mid-session blocks subsequent navigations", function (a
 	router.initialize();
 
 	// First nav: no guards, should work
-	router.getRoute("protected").attachPatternMatched(function handler() {
-		router.getRoute("protected").detachPatternMatched(handler);
+	router.getRoute("protected")!.attachPatternMatched(function handler() {
+		router.getRoute("protected")!.detachPatternMatched(handler);
 
 		// Now add a guard
 		router.addRouteGuard("protected", () => false);
 
 		let secondMatched = false;
-		router.getRoute("protected").attachPatternMatched(() => {
+		router.getRoute("protected")!.attachPatternMatched(() => {
 			secondMatched = true;
 		});
 
@@ -757,7 +782,7 @@ QUnit.test("Removing guard mid-session allows subsequent navigations", function 
 		// Remove the guard
 		router.removeRouteGuard("protected", guard);
 
-		router.getRoute("protected").attachPatternMatched(() => {
+		router.getRoute("protected")!.attachPatternMatched(() => {
 			matchedCount++;
 		});
 
@@ -812,12 +837,47 @@ QUnit.test("Multiple route guards with cross-redirects settle correctly", functi
 	router.initialize();
 
 	// The redirect from forbidden→protected triggers parse("protected")
-	// which is re-entrant (guardRunning=true) so it bypasses guards
-	// This means we should end up on protected, not home
-	router.getRoute("protected").attachPatternMatched(() => {
+	// which is re-entrant (_redirecting=true) so it bypasses guards.
+	// This means we should end up on protected, not home.
+	router.getRoute("protected")!.attachPatternMatched(() => {
 		assert.ok(true, "Cross-redirect settled on protected (re-entrant bypass)");
 		done();
 	});
 
 	router.navTo("forbidden");
+});
+
+// ============================================================
+// Module: _suppressNextParse synchronous assumption
+// ============================================================
+QUnit.module("Router - _suppressNextParse synchronous assumption", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	}
+});
+
+QUnit.test("replaceHash fires hashChanged synchronously (validates _suppressNextParse mechanism)", function (assert: Assert) {
+	router.initialize();
+
+	// Navigate to a known route first so _currentHash is set
+	router.navTo("protected");
+
+	// Track whether parse is called synchronously during replaceHash
+	let parseCalled = false;
+	const origParse = router.parse.bind(router);
+	router.parse = function (hash: string) {
+		parseCalled = true;
+		origParse(hash);
+	};
+
+	const hashChanger = HashChanger.getInstance();
+	(hashChanger as any).replaceHash("forbidden");
+
+	// If replaceHash fires hashChanged synchronously, parse was already called
+	assert.ok(parseCalled, "replaceHash triggered parse() synchronously (same tick)");
 });

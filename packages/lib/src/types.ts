@@ -1,3 +1,5 @@
+import type MobileRouter from "sap/m/routing/Router";
+
 /**
  * Redirect target with route name and optional parameters.
  */
@@ -40,3 +42,39 @@ export interface GuardContext {
  * A guard function - can be synchronous or asynchronous.
  */
 export type GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResult>;
+
+/**
+ * Instance shape of the extended Router.
+ *
+ * Extends `sap.m.routing.Router` with guard-specific state and methods.
+ * Used as the `this` type in Router method bodies to provide autocomplete
+ * and catch property-name typos.
+ */
+export interface RouterInstance extends MobileRouter {
+
+	// Guard state
+	_globalGuards: GuardFn[];
+	_routeGuards: Map<string, GuardFn[]>;
+	_currentRoute: string;
+	_currentHash: string | null;
+	_redirecting: boolean;
+	_parseGeneration: number;
+	_suppressNextParse: boolean;
+
+	// Guard public API
+	addGuard(guard: GuardFn): RouterInstance;
+	removeGuard(guard: GuardFn): RouterInstance;
+	addRouteGuard(routeName: string, guard: GuardFn): RouterInstance;
+	removeRouteGuard(routeName: string, guard: GuardFn): RouterInstance;
+
+	// Guard internal methods
+	_commitNavigation(hash: string, route?: string): void;
+	_applyGuardResult(result: GuardResult, newHash: string, toRoute: string): void;
+	_runAllGuards(globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runGuardListSync(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
+	_finishGuardListAsync(pendingResult: Promise<GuardResult>, guards: GuardFn[], currentIndex: number, context: GuardContext): Promise<GuardResult>;
+	_validateGuardResult(result: GuardResult): GuardResult;
+	_handleGuardResult(result: GuardResult): void;
+	_restoreHash(): void;
+}

@@ -9,9 +9,21 @@
 		"title": "UI5 Router extension with async navigation guards",
 		"description": "Extends sap.m.routing.Router with async navigation guards, running before route matching begins."
 	},
+	"sap.ui": {
+		"technology": "UI5",
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
 	"sap.ui5": {
+		"contentDensities": {
+			"compact": true,
+			"cozy": true
+		},
 		"dependencies": {
-			"minUI5Version": "1.136.0",
+			"minUI5Version": "1.144.0",
 			"libs": {
 				"sap.ui.core": {},
 				"sap.m": {}

@@ -1,6 +1,9 @@
+import { waitForPage, fireEvent, resetAuth } from "./helpers";
+
 describe("Multi-route navigation sequences", () => {
-	it("should handle Home → Protected → Home → Forbidden (blocked) → Home sequence", async () => {
-		await browser.url("/index.html");
+	it("should handle Home -> Protected -> Home -> Forbidden (blocked) -> Home sequence", async () => {
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
 
 		// Login
 		const toggleBtn = await browser.asControl({
@@ -13,39 +16,33 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
 		});
 		await navProtected.press();
-		await browser.pause(500);
 
-		let page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		expect(await page.getProperty("title")).toBe("Protected Page");
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Nav back to Home
-		await page.fireEvent("navButtonPress");
-		await browser.pause(500);
+		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Try Forbidden (always blocked, redirects to Home)
 		const navForbidden = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navForbiddenBtn" }
+			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
+			forceSelect: true
 		});
 		await navForbidden.press();
-		await browser.pause(500);
 
 		// Should still be on Home
-		const homePage = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await homePage.getProperty("title")).toBe("Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		const url = await browser.getUrl();
 		expect(url).not.toContain("#/forbidden");
 	});
 
 	it("should block protected after mid-session logout", async () => {
-		await browser.url("/index.html");
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
 
 		// Login
-		const toggleBtn = await browser.asControl({
+		let toggleBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
 		});
 		await toggleBtn.press();
@@ -55,43 +52,40 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
 		});
 		await navBtn.press();
-		await browser.pause(500);
 
 		// Nav back to Home
-		const protectedPage = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		await protectedPage.fireEvent("navButtonPress");
-		await browser.pause(500);
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
-		// Logout
-		const logoutBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+		// Logout (re-retrieve control with forceSelect after navigation)
+		toggleBtn = await browser.asControl({
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
+			forceSelect: true
 		});
-		await logoutBtn.press();
+		await toggleBtn.press();
 
 		// Verify logged out
 		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" }
+			selector: { id: "container-demo.app---homeView--authStatus" },
+			forceSelect: true
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try Protected again (should now be blocked)
 		const navBtn2 = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
+			forceSelect: true
 		});
 		await navBtn2.press();
-		await browser.pause(500);
 
 		// Should still be on Home (guard blocks)
-		const homePage = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await homePage.getProperty("title")).toBe("Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
-	it("should handle login → protected → logout → protected (blocked) → login → protected (allowed)", async () => {
-		await browser.url("/index.html");
+	it("should handle login -> protected -> logout -> protected (blocked) -> login -> protected (allowed)", async () => {
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
 
 		// Login
 		let toggleBtn = await browser.asControl({
@@ -104,51 +98,43 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
 		});
 		await navBtn.press();
-		await browser.pause(500);
 
-		let page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		expect(await page.getProperty("title")).toBe("Protected Page");
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Back to home
-		await page.fireEvent("navButtonPress");
-		await browser.pause(500);
+		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Logout
 		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
+			forceSelect: true
 		});
 		await toggleBtn.press();
 
 		// Try Protected (blocked)
 		navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
+			forceSelect: true
 		});
 		await navBtn.press();
-		await browser.pause(500);
 
-		let homePage = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await homePage.getProperty("title")).toBe("Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Login again
 		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
+			forceSelect: true
 		});
 		await toggleBtn.press();
 
 		// Protected (allowed again)
 		navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
+			forceSelect: true
 		});
 		await navBtn.press();
-		await browser.pause(500);
 
-		page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		expect(await page.getProperty("title")).toBe("Protected Page");
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 });

@@ -1,4 +1,10 @@
-export const config: WebdriverIO.Config = {
+import type { wdi5Config } from "wdio-ui5-service";
+
+export const config: wdi5Config = {
+	wdi5: {
+		logLevel: "verbose",
+		waitForUI5Timeout: 30000
+	},
 	runner: "local",
 	specs: ["./e2e/**/*.e2e.ts"],
 	maxInstances: 1,
@@ -6,14 +12,15 @@ export const config: WebdriverIO.Config = {
 		{
 			browserName: "chrome",
 			"goog:chromeOptions": {
-				args: ["--headless", "--no-sandbox", "--disable-gpu", "--window-size=1920,1080"]
-			}
+				args: ["--headless=new", "--no-sandbox", "--disable-gpu", "--window-size=1920,1080"]
+			},
+			acceptInsecureCerts: true
 		}
 	],
-	logLevel: "warn",
+	logLevel: "error",
 	bail: 0,
-	baseUrl: "http://localhost:8080",
-	waitforTimeout: 10000,
+	baseUrl: "http://localhost:8080/index.html",
+	waitforTimeout: 31000,
 	connectionRetryTimeout: 120000,
 	connectionRetryCount: 3,
 	services: [

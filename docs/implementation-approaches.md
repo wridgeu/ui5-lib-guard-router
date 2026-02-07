@@ -41,7 +41,7 @@
 - **Earliest possible interception**: Guards run before route matching, target loading, view creation, and event firing. No flash, no unnecessary work.
 - **Clean blocking**: When a guard blocks, we simply don't call `super.parse()`. The framework never begins processing. We restore the previous hash via `replaceHash()`.
 - **Minimal surface**: Single method override. Less code, fewer bugs, easier to maintain.
-- **Async-friendly**: We can make `parse()` async (the framework doesn't use its return value) and await guard results.
+- **Async-friendly**: Synchronous guards execute in the same tick as the hash change. Async guards are supported via a deferred path with a generation counter to handle concurrent navigations.
 
 **Cons**:
 - `parse()` is not a public/documented-stable API. In theory, a future UI5 version could rename or refactor it. In practice, it has been stable since the router's inception and is fundamental to how `HashChanger` integration works.

@@ -7,7 +7,9 @@
 	"scripts": {
 		"lint": "oxlint packages/ --tsconfig tsconfig.base.json",
 		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.json",
+		"build": "npm run build --workspace=packages/lib",
 		"start": "npm start --workspace=packages/demo-app",
+		"test": "npm run test:qunit && npm run test:e2e",
 		"test:qunit": "npx wdio run packages/lib/test/wdio-qunit.conf.ts",
 		"test:e2e": "npx wdio run packages/demo-app/test/wdio.conf.ts"
 	},
@@ -18,6 +20,6 @@
 		"@wdio/spec-reporter": "^9.0.0",
 		"wdio-ui5-service": "^3.0.0",
 		"wdio-qunit-service": "^2.0.0",
-		"oxlint": "latest"
+		"oxlint": "^1.43.0"
 	}
 }

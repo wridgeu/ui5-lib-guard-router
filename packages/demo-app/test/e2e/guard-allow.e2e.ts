@@ -1,6 +1,9 @@
+import { waitForPage, resetAuth } from "./helpers";
+
 describe("Guard allows navigation when logged in", () => {
 	it("should allow navigation to Protected after login", async () => {
-		await browser.url("/index.html");
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
 
 		// Toggle login
 		const toggleBtn = await browser.asControl({
@@ -21,10 +24,7 @@ describe("Guard allows navigation when logged in", () => {
 		await navBtn.press();
 
 		// Should be on Protected page
-		const page = await browser.asControl({
-			selector: { id: "container-demo.app---protectedView--protectedPage" }
-		});
-		expect(await page.getProperty("title")).toBe("Protected Page");
+		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 
 	it("should have the correct hash fragment", async () => {

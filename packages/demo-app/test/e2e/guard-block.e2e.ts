@@ -1,6 +1,9 @@
+import { waitForPage, resetAuth } from "./helpers";
+
 describe("Guard blocks navigation", () => {
 	it("should stay on Home when navigating to Protected while logged out", async () => {
-		await browser.url("/index.html");
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
 
 		// Verify we start on Home and are logged out
 		const status = await browser.asControl({
@@ -15,11 +18,7 @@ describe("Guard blocks navigation", () => {
 		await navBtn.press();
 
 		// Should still be on Home (guard redirected)
-		await browser.pause(500);
-		const homePage = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--homePage" }
-		});
-		expect(await homePage.getProperty("title")).toBe("Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
 	it("should not have a hash fragment for the protected route", async () => {
