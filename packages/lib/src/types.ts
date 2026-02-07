@@ -1,11 +1,24 @@
 /**
+ * Redirect target with route name and optional parameters.
+ */
+export interface GuardRedirect {
+	/** Route name to redirect to */
+	route: string;
+	/** Optional route parameters */
+	parameters?: Record<string, string>;
+	/** Optional component target info for nested component routing */
+	componentTargetInfo?: Record<string, unknown>;
+}
+
+/**
  * Result of a guard check.
  *
- * - `true`   → allow navigation to proceed
- * - `false`  → block navigation (stay on current route, no history entry)
- * - `string` → redirect to this route name (replaceHash, no history entry)
+ * - `true`            → allow navigation to proceed
+ * - `false`           → block navigation (stay on current route, no history entry)
+ * - `string`          → redirect to this route name (replaceHash, no history entry)
+ * - `GuardRedirect`   → redirect with route name, parameters, and optional component target info
  */
-export type GuardResult = boolean | string;
+export type GuardResult = boolean | string | GuardRedirect;
 
 /**
  * Context passed to guard functions.

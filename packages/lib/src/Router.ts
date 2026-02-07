@@ -1,8 +1,12 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
-import type { GuardFn, GuardContext, GuardResult } from "./types";
+import type { GuardFn, GuardContext, GuardResult, GuardRedirect } from "./types";
 
 const LOG_COMPONENT = "ui5.ext.routing.Router";
+
+function isGuardRedirect(value: GuardResult): value is GuardRedirect {
+	return typeof value === "object" && typeof value.route === "string";
+}
 
 /**
  * Router with async navigation guard support.
@@ -147,15 +151,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			try {
 				const result = await guard(context);
 				if (result !== true) {
-					if (result !== false && typeof result !== "string") {
-						Log.warning(
-							"Guard returned invalid value, treating as block",
-							String(result),
-							LOG_COMPONENT
-						);
-						return false;
+					if (result === false || typeof result === "string" || isGuardRedirect(result)) {
+						return result;
 					}
-					return result;
+					Log.warning(
+						"Guard returned invalid value, treating as block",
+						String(result),
+						LOG_COMPONENT
+					);
+					return false;
 				}
 			} catch (error) {
 				Log.error("Guard threw an error, blocking navigation", String(error), LOG_COMPONENT);
@@ -173,7 +177,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			// Redirect to named route (replace history, no extra entry)
 			this._guardRunning = true;
 			try {
-				this.navTo(result, {}, true);
+				this.navTo(result, {}, undefined, true);
+			} finally {
+				this._guardRunning = false;
+			}
+		} else if (isGuardRedirect(result)) {
+			// Redirect with route parameters (replace history, no extra entry)
+			this._guardRunning = true;
+			try {
+				this.navTo(result.route, result.parameters || {}, result.componentTargetInfo, true);
 			} finally {
 				this._guardRunning = false;
 			}
