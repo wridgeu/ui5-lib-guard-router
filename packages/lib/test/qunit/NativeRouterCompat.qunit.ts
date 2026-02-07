@@ -2,6 +2,8 @@ import Router from "ui5/ext/routing/Router";
 import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { RouterInstance } from "ui5/ext/routing/types";
+import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
+import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import { initHashChanger, nextTick } from "./testHelpers";
 
 /**
@@ -11,6 +13,8 @@ import { initHashChanger, nextTick } from "./testHelpers";
  * sap.m.routing.Router when no guards are registered. This ensures it's
  * a true drop-in replacement.
  */
+
+interface DetailRouteArguments { id: string; }
 
 function createRouterConfig(): [object[], object] {
 	const routes = [
@@ -28,7 +32,7 @@ function createRouterConfig(): [object[], object] {
 // Module: API parity
 // ============================================================
 let extRouter: RouterInstance;
-let nativeRouter: any; // MobileRouter lacks usable TS types from .extend()
+let nativeRouter: MobileRouter;
 
 QUnit.module("NativeCompat - API parity", {
 	beforeEach: function () {
@@ -52,8 +56,8 @@ QUnit.test("Both routers are instances of sap.m.routing.Router", function (asser
 QUnit.test("Both routers have the same public routing methods", function (assert: Assert) {
 	const methods = ["navTo", "getRoute", "getRouteInfoByHash", "match", "initialize", "stop", "destroy"];
 	for (const method of methods) {
-		assert.ok(typeof (extRouter as any)[method] === "function", `ext router has ${method}`);
-		assert.ok(typeof nativeRouter[method] === "function", `native router has ${method}`);
+		assert.ok(typeof (extRouter as unknown as Record<string, unknown>)[method] === "function", `ext router has ${method}`);
+		assert.ok(typeof (nativeRouter as unknown as Record<string, unknown>)[method] === "function", `native router has ${method}`);
 	}
 });
 
@@ -125,7 +129,7 @@ QUnit.module("NativeCompat - Navigation", {
 
 QUnit.test("navTo triggers routeMatched", function (assert: Assert) {
 	const done = assert.async();
-	router.attachRouteMatched((event: any) => {
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
 		if (event.getParameter("name") === "page1") {
 			assert.ok(true, "routeMatched fired for page1");
 			done();
@@ -136,7 +140,7 @@ QUnit.test("navTo triggers routeMatched", function (assert: Assert) {
 
 QUnit.test("navTo with replace triggers routeMatched", function (assert: Assert) {
 	const done = assert.async();
-	router.attachRouteMatched((event: any) => {
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
 		if (event.getParameter("name") === "page2") {
 			assert.ok(true, "routeMatched fired for page2 with replace");
 			done();
@@ -147,8 +151,8 @@ QUnit.test("navTo with replace triggers routeMatched", function (assert: Assert)
 
 QUnit.test("navTo with parameters triggers routePatternMatched", function (assert: Assert) {
 	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: any) => {
-		assert.strictEqual(event.getParameter("arguments").id, "7", "Parameter extracted");
+	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
+		assert.strictEqual((event.getParameter("arguments") as DetailRouteArguments).id, "7", "Parameter extracted");
 		done();
 	});
 	router.navTo("detail", { id: "7" });

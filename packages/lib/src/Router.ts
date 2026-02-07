@@ -322,9 +322,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			if (typeof result === "string") {
 				this.navTo(result, {}, {}, true);
 			} else if (isGuardRedirect(result)) {
-				// navTo's componentTargetInfo parameter is typed as object internally
-				// but the public signature does not expose it accurately; cast required.
-				this.navTo(result.route, result.parameters || {}, result.componentTargetInfo as any, true);
+				this.navTo(result.route, result.parameters || {}, result.componentTargetInfo, true);
 			}
 		} finally {
 			this._redirecting = false;

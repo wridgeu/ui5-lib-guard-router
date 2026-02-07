@@ -1,7 +1,11 @@
 import Router from "ui5/ext/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardFn, GuardRedirect, RouterInstance } from "ui5/ext/routing/types";
+import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
+import type { Router$RouteMatchedEvent, Router$BeforeRouteMatchedEvent } from "sap/ui/core/routing/Router";
 import { initHashChanger, nextTick } from "./testHelpers";
+
+interface DetailRouteArguments { id: string; }
 
 // Helper: create a router with standard test routes
 function createRouter(): RouterInstance {
@@ -32,10 +36,6 @@ QUnit.module("Router - Drop-in replacement (no guards)", {
 	}
 });
 
-QUnit.test("Router initializes without errors", function (assert: Assert) {
-	assert.ok(router, "Router instance created");
-});
-
 QUnit.test("Router is an instance of sap.m.routing.Router", function (assert: Assert) {
 	assert.ok(
 		router.isA("sap.m.routing.Router"),
@@ -54,9 +54,9 @@ QUnit.test("navTo navigates to named route", function (assert: Assert) {
 
 QUnit.test("navTo with parameters", function (assert: Assert) {
 	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: any) => {
+	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
 		assert.strictEqual(
-			event.getParameter("arguments").id,
+			(event.getParameter("arguments") as DetailRouteArguments).id,
 			"42",
 			"Route parameter extracted correctly"
 		);
@@ -67,7 +67,7 @@ QUnit.test("navTo with parameters", function (assert: Assert) {
 
 QUnit.test("routeMatched event fires", function (assert: Assert) {
 	const done = assert.async();
-	router.attachRouteMatched((event: any) => {
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
 		if (event.getParameter("name") === "protected") {
 			assert.ok(true, "routeMatched fired for protected route");
 			done();
@@ -78,22 +78,13 @@ QUnit.test("routeMatched event fires", function (assert: Assert) {
 
 QUnit.test("beforeRouteMatched event fires", function (assert: Assert) {
 	const done = assert.async();
-	router.attachBeforeRouteMatched((event: any) => {
+	router.attachBeforeRouteMatched((event: Router$BeforeRouteMatchedEvent) => {
 		if (event.getParameter("name") === "protected") {
 			assert.ok(true, "beforeRouteMatched fired");
 			done();
 		}
 	});
 	router.navTo("protected");
-});
-
-QUnit.test("navTo with replace does not create history entry", function (assert: Assert) {
-	const done = assert.async();
-	router.getRoute("protected")!.attachPatternMatched(() => {
-		assert.ok(true, "Protected route matched with replace");
-		done();
-	});
-	router.navTo("protected", {}, {}, true);
 });
 
 QUnit.test("getRoute returns route by name", function (assert: Assert) {
@@ -582,9 +573,9 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	}));
 	router.initialize();
 
-	router.getRoute("detail")!.attachPatternMatched((event: any) => {
+	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
 		assert.strictEqual(
-			event.getParameter("arguments").id,
+			(event.getParameter("arguments") as DetailRouteArguments).id,
 			"error-403",
 			"Redirect includes route parameters"
 		);
@@ -657,15 +648,23 @@ QUnit.test("Direct hash change to unguarded route proceeds", function (assert: A
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 
-	router.getRoute("home")!.attachPatternMatched(() => {
-		assert.ok(true, "Unguarded route matched via hash change");
-		done();
-	});
+	// Wait for init to settle on home
+	const homeRoute = router.getRoute("home")!;
+	homeRoute.attachPatternMatched(function initHandler() {
+		homeRoute.detachPatternMatched(initHandler);
 
-	// Navigate away first, then back to home
-	router.navTo("forbidden");
-	nextTick(50).then(() => {
-		HashChanger.getInstance().setHash("");
+		// Navigate to forbidden (unguarded) so we're away from home
+		router.getRoute("forbidden")!.attachPatternMatched(function onForbidden() {
+			router.getRoute("forbidden")!.detachPatternMatched(onForbidden);
+
+			// Now test: direct hash change to home (unguarded) should proceed
+			homeRoute.attachPatternMatched(() => {
+				assert.ok(true, "Unguarded route matched via hash change");
+				done();
+			});
+			HashChanger.getInstance().setHash("");
+		});
+		router.navTo("forbidden");
 	});
 });
 
@@ -848,20 +847,6 @@ QUnit.test("Multiple route guards with cross-redirects settle correctly", functi
 });
 
 // ============================================================
-// Module: _suppressNextParse synchronous assumption
-// ============================================================
-QUnit.module("Router - _suppressNextParse synchronous assumption", {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	}
-});
-
-// ============================================================
 // Module: Mixed sync/async guard pipelines
 // ============================================================
 QUnit.module("Router - Mixed sync/async guard pipelines", {
@@ -1033,12 +1018,12 @@ QUnit.test("Superseded async guard result does not apply", function (assert: Ass
 	const done = assert.async();
 
 	let slowGuardCompleted = false;
-	// Slow global guard that takes 200ms
-	router.addGuard(async () => {
+	const slowGuard: GuardFn = async () => {
 		await nextTick(200);
 		slowGuardCompleted = true;
 		return "forbidden"; // This redirect should be discarded
-	});
+	};
+	router.addGuard(slowGuard);
 	router.initialize();
 
 	// First navigation triggers slow guard
@@ -1046,7 +1031,7 @@ QUnit.test("Superseded async guard result does not apply", function (assert: Ass
 
 	// Remove guard and navigate again before first resolves
 	nextTick(50).then(() => {
-		router._globalGuards.length = 0;
+		router.removeGuard(slowGuard);
 		router.navTo("detail", { id: "2" });
 
 		nextTick(500).then(() => {
@@ -1296,8 +1281,8 @@ QUnit.test("Rapid sync navigations - last one wins", function (assert: Assert) {
 	router.addGuard(() => true);
 	router.initialize();
 
-	router.attachRouteMatched((event: any) => {
-		matchedRoutes.push(event.getParameter("name"));
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+		matchedRoutes.push(event.getParameter("name")!);
 	});
 
 	// Wait for init to settle, then fire rapid navigations
@@ -1328,8 +1313,8 @@ QUnit.test("Rapid async navigations - only last navigation settles", function (a
 	});
 	router.initialize();
 
-	router.attachRouteMatched((event: any) => {
-		matchedRoutes.push(event.getParameter("name"));
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+		matchedRoutes.push(event.getParameter("name")!);
 	});
 
 	// Wait for init to settle, then fire rapid navigations
@@ -1377,7 +1362,7 @@ QUnit.test("replaceHash fires hashChanged synchronously (validates _suppressNext
 	};
 
 	const hashChanger = HashChanger.getInstance();
-	(hashChanger as any).replaceHash("forbidden");
+	hashChanger.replaceHash("forbidden", "Unknown");
 
 	// If replaceHash fires hashChanged synchronously, parse was already called
 	assert.ok(parseCalled, "replaceHash triggered parse() synchronously (same tick)");

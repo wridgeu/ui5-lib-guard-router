@@ -8,7 +8,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
  */
 export function initHashChanger(): void {
 	const hashChanger = HashChanger.getInstance();
-	if (!(hashChanger as any).hasListeners("hashChanged")) {
+	if (!hashChanger.hasListeners("hashChanged")) {
 		hashChanger.init();
 	}
 	hashChanger.setHash("");

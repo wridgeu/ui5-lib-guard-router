@@ -1,4 +1,5 @@
 import type MobileRouter from "sap/m/routing/Router";
+import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 
 /**
  * Redirect target with route name and optional parameters.
@@ -9,7 +10,7 @@ export interface GuardRedirect {
 	/** Optional route parameters */
 	parameters?: Record<string, string>;
 	/** Optional component target info for nested component routing */
-	componentTargetInfo?: Record<string, unknown>;
+	componentTargetInfo?: Record<string, ComponentTargetParameters>;
 }
 
 /**
