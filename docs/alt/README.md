@@ -4,20 +4,20 @@ This folder contains research documents exploring alternative implementations fo
 
 ## At a Glance
 
-| # | Document | Category | Verdict |
-|---|----------|----------|---------|
-| 01 | [Event-Based (PatternMatched)](#01---event-based-patternmatched) | Alternative | Usable as quick workaround, but causes content flash and history pollution |
-| 02 | [HashChanger Interception](#02---hashchanger-interception) | Alternative | Fragile, globally scoped, labeled "bad practice" by the UI5 team |
-| 03 | [Conditional Rendering](#03---conditional-rendering) | Alternative | Simplest for binary login/logout, but no per-route guards or deep linking |
-| 04 | [Component Separation](#04---component-separation) | Alternative | SAP-recommended for code isolation, but heavy overhead and no per-route guards |
-| 05 | [navTo with bReplace](#05---navto-with-breplace) | Complementary | Zero-risk fix for history pollution; already used internally by this library |
-| 06 | [Framework Comparison](#06---framework-comparison) | Reference | Survey of Vue, Angular, React, TanStack, Ember, Nuxt, Next.js, SvelteKit guard patterns |
-| 07 | [navTo Override](#07---navto-override) | Alternative | **Rejected.** Only catches programmatic navigation, misses back/forward and URL entry |
-| 08 | [Leave Guards](#08---leave-guards) | Extension | "Are you sure you want to leave?" guards for unsaved changes |
-| 09 | [Transition Object](#09---transition-object) | Extension | Ember-inspired retry mechanism for "redirect to login, then resume" flows |
-| 10 | [Route Metadata](#10---route-metadata) | Extension | Declarative `requiresAuth`, `roles` on routes so one guard handles all checks |
-| 11 | [Bypass Guards](#11---bypass-guards) | Extension | Mechanism to skip guards for specific navigations (logout, post-login retry) |
-| 12 | [TanStack Router Deep Dive](#12---tanstack-router-deep-dive) | Reference | Source-level analysis of TanStack Router's navigation pipeline and blocking model |
+| #   | Document                                                         | Category      | Verdict                                                                                 |
+| --- | ---------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------- |
+| 01  | [Event-Based (PatternMatched)](#01---event-based-patternmatched) | Alternative   | Usable as quick workaround, but causes content flash and history pollution              |
+| 02  | [HashChanger Interception](#02---hashchanger-interception)       | Alternative   | Fragile, globally scoped, labeled "bad practice" by the UI5 team                        |
+| 03  | [Conditional Rendering](#03---conditional-rendering)             | Alternative   | Simplest for binary login/logout, but no per-route guards or deep linking               |
+| 04  | [Component Separation](#04---component-separation)               | Alternative   | SAP-recommended for code isolation, but heavy overhead and no per-route guards          |
+| 05  | [navTo with bReplace](#05---navto-with-breplace)                 | Complementary | Zero-risk fix for history pollution; already used internally by this library            |
+| 06  | [Framework Comparison](#06---framework-comparison)               | Reference     | Survey of Vue, Angular, React, TanStack, Ember, Nuxt, Next.js, SvelteKit guard patterns |
+| 07  | [navTo Override](#07---navto-override)                           | Alternative   | **Rejected.** Only catches programmatic navigation, misses back/forward and URL entry   |
+| 08  | [Leave Guards](#08---leave-guards)                               | Extension     | "Are you sure you want to leave?" guards for unsaved changes                            |
+| 09  | [Transition Object](#09---transition-object)                     | Extension     | Ember-inspired retry mechanism for "redirect to login, then resume" flows               |
+| 10  | [Route Metadata](#10---route-metadata)                           | Extension     | Declarative `requiresAuth`, `roles` on routes so one guard handles all checks           |
+| 11  | [Bypass Guards](#11---bypass-guards)                             | Extension     | Mechanism to skip guards for specific navigations (logout, post-login retry)            |
+| 12  | [TanStack Router Deep Dive](#12---tanstack-router-deep-dive)     | Reference     | Source-level analysis of TanStack Router's navigation pipeline and blocking model       |
 
 ## Alternative Approaches
 
@@ -119,7 +119,7 @@ Source-level analysis of TanStack Router's internal navigation pipeline: its two
 
 In May 2025, SAP merged [`CPOUI5FRAMEWORK-776`](https://github.com/SAP/openui5/commit/b7fc43c46cee8c5b6371b4a895d1c86d82e431bf) ("[INTERNAL] core/routing: merge async version to the base"), making async routing the default code path. The sync implementation files (`sync/Route.js`, `sync/Target.js`, `sync/TargetCache.js`, `sync/Targets.js`) are slated for removal in UI5 2.x. Manifest Version 2 makes `routing/config/async: true` implicit.
 
-This is significant because the SAP team cited the synchronous nature of the hash-change/`parse()` cycle as the **blocker** for implementing navigation guards (see [#3411 comment, September 2022](https://github.com/SAP/openui5/issues/3411#issuecomment-1239439104)). That technical barrier is now partially removed. However, `parse()` itself remains synchronous — the async merge affects target/view loading *after* route matching, not the `parse()` entry point. The SAP team has not built guard features on top of this change.
+This is significant because the SAP team cited the synchronous nature of the hash-change/`parse()` cycle as the **blocker** for implementing navigation guards (see [#3411 comment, September 2022](https://github.com/SAP/openui5/issues/3411#issuecomment-1239439104)). That technical barrier is now partially removed. However, `parse()` itself remains synchronous — the async merge affects target/view loading _after_ route matching, not the `parse()` entry point. The SAP team has not built guard features on top of this change.
 
 **Impact on this library:** None. The `parse()` override still works identically. The async routing merge actually aligns well with this library's design — async guard resolution feeds naturally into async target loading.
 

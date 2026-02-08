@@ -90,13 +90,13 @@ Guards are resolved asynchronously, and the navigation is considered **pending**
 | Global guards           | `beforeEach`, `beforeResolve`, `afterEach`                  | `addGuard()`                             |
 | Per-route guards        | `beforeEnter`                                               | `addRouteGuard()`                        |
 | In-component guards     | `beforeRouteEnter`, `beforeRouteUpdate`, `beforeRouteLeave` | Not supported                            |
-| Leave guards            | `beforeRouteLeave`                                          | Not supported                            |
+| Leave guards            | `beforeRouteLeave`                                          | `addLeaveGuard()`                        |
 | Async support           | Native                                                      | Native                                   |
 | Route metadata          | `to.meta`                                                   | Via `context.toRoute` + external lookup  |
 | Return values           | `true`, `false`, route location, `undefined`                | `true`, `false`, string, `GuardRedirect` |
 | Concurrent nav handling | Auto-cancels pending navigation                             | `_parseGeneration` counter               |
 
-**What ui5.ext.routing is missing**: Leave guards (`beforeRouteLeave`) and in-component guards. These could be added as future enhancements.
+**What ui5.ext.routing is missing**: In-component guards (`beforeRouteEnter`, `beforeRouteUpdate`). Leave guards are now supported via `addLeaveGuard()`.
 
 ---
 
@@ -162,13 +162,13 @@ export class UnsavedChangesGuard implements CanDeactivate<FormComponent> {
 
 ### Comparison with ui5.ext.routing
 
-| Feature                 | Angular                       | ui5.ext.routing              |
-| ----------------------- | ----------------------------- | ---------------------------- |
-| Guard declaration       | In route config               | Programmatic registration    |
-| DI support              | Native                        | N/A (UI5 doesn't have DI)   |
+| Feature                 | Angular                            | ui5.ext.routing              |
+| ----------------------- | ---------------------------------- | ---------------------------- |
+| Guard declaration       | In route config                    | Programmatic registration    |
+| DI support              | Native                             | N/A (UI5 doesn't have DI)    |
 | Code loading prevention | `canMatch` (deprecated: `canLoad`) | N/A (UI5 always loads views) |
-| Deactivation guards     | `canDeactivate`               | Not supported                |
-| Observable/reactive     | Native (+ Signals in 19+)    | Promise-based                |
+| Deactivation guards     | `canDeactivate`                    | `addLeaveGuard()`            |
+| Observable/reactive     | Native (+ Signals in 19+)          | Promise-based                |
 
 ---
 
@@ -251,7 +251,7 @@ function EditForm() {
 | Pre-navigation check | Via loader + redirect()        | Via parse() override   |
 | Global guards        | Wrap root layout               | `addGuard()`           |
 | Per-route guards     | Per-route loader               | `addRouteGuard()`      |
-| Leave guards         | `useBlocker` hook **(stable)** | Not supported          |
+| Leave guards         | `useBlocker` hook **(stable)** | `addLeaveGuard()`      |
 | Paradigm             | Declarative (JSX)              | Imperative (API calls) |
 
 ---
@@ -323,7 +323,7 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 | ------------------- | ---------------------------- | ------------------------------------ |
 | Async model         | Fully async                  | Sync-first, async fallback           |
 | Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`      |
-| Leave guards        | `useBlocker` (history-level) | Not supported                        |
+| Leave guards        | `useBlocker` (history-level) | `addLeaveGuard()`                    |
 | Blocking layer      | History library              | Router `parse()`                     |
 | Context passing     | Parent-to-child accumulation | Via `GuardContext`                   |
 | Staleness detection | AbortController per match    | Generation counter + AbortSignal     |
@@ -404,7 +404,7 @@ this.router.on("routeWillChange", (transition) => {
 | Feature           | Ember.js                      | ui5.ext.routing                 |
 | ----------------- | ----------------------------- | ------------------------------- |
 | Enter guards      | `beforeModel` hook            | `addGuard()`, `addRouteGuard()` |
-| Leave guards      | `routeWillChange` + `abort()` | Not supported                   |
+| Leave guards      | `routeWillChange` + `abort()` | `addLeaveGuard()`               |
 | Store & retry     | `transition.retry()`          | Not supported                   |
 | Transition object | First-class                   | Not applicable                  |
 | Guard location    | In Route class                | Programmatic registration       |
@@ -462,13 +462,13 @@ export default defineNuxtRouteMiddleware((to, from) => {
 - **File-system conventions**: `.global.ts` suffix for automatic global registration
 - **`definePageMeta`**: Declarative middleware assignment per page
 - **Route groups (Nuxt 4.3)**: Folders wrapped in parentheses (e.g., `pages/(protected)/dashboard.vue`) expose `route.meta.groups`. Middleware can check group membership for convention-based route protection without per-page `definePageMeta`:
-  ```typescript
-  export default defineNuxtRouteMiddleware((to) => {
-      if (to.meta.groups?.includes('protected') && !isAuthenticated()) {
-          return navigateTo('/login');
-      }
-  });
-  ```
+    ```typescript
+    export default defineNuxtRouteMiddleware((to) => {
+    	if (to.meta.groups?.includes("protected") && !isAuthenticated()) {
+    		return navigateTo("/login");
+    	}
+    });
+    ```
 - **Async middleware**: Natively supported in Nuxt 4+ without workarounds
 
 ---
@@ -585,37 +585,38 @@ export const reroute: Reroute = async ({ url }) => {
 
 ### Comparison with ui5.ext.routing
 
-| Feature              | SvelteKit                  | ui5.ext.routing        |
-| -------------------- | -------------------------- | ---------------------- |
-| Global guard         | `hooks.server.ts` handle() | `addGuard()`           |
-| Per-route guard      | Load functions             | `addRouteGuard()`      |
-| Leave guard          | `beforeNavigate` + cancel  | Not supported          |
-| Async support        | Yes                        | Yes                    |
-| Guard registration   | File conventions           | Programmatic           |
-| Server/client split  | Explicit separation        | Client-only (SPA)      |
+| Feature             | SvelteKit                  | ui5.ext.routing   |
+| ------------------- | -------------------------- | ----------------- |
+| Global guard        | `hooks.server.ts` handle() | `addGuard()`      |
+| Per-route guard     | Load functions             | `addRouteGuard()` |
+| Leave guard         | `beforeNavigate` + cancel  | `addLeaveGuard()` |
+| Async support       | Yes                        | Yes               |
+| Guard registration  | File conventions           | Programmatic      |
+| Server/client split | Explicit separation        | Client-only (SPA) |
 
 ---
 
 ## Summary: Industry Standard Features
 
-| Feature             | Vue        | Angular               | React              | TanStack           | Ember             | Nuxt                       | Next            | SvelteKit          | **ui5.ext.routing**   |
-| ------------------- | ---------- | --------------------- | ------------------ | ------------------ | ----------------- | -------------------------- | --------------- | ------------------ | --------------------- |
-| Global before guard | Yes        | Yes                   | Via loader         | `beforeLoad`       | `beforeModel`     | Global middleware           | Edge middleware | `handle` hook     | **Yes**               |
-| Per-route guard     | Yes        | Yes                   | Via loader         | `beforeLoad`       | `beforeModel`     | Named middleware            | Matcher         | Load functions     | **Yes**               |
-| In-component guard  | Yes        | No                    | No                 | No                 | No                | No                          | No              | No                 | No                    |
-| Leave guard         | Yes        | `canDeactivate`       | `useBlocker` (**stable**) | `useBlocker` (exp.) | `routeWillChange` | Via Vue                | No              | `beforeNavigate`   | **No**                |
-| Transition retry    | No         | No                    | No                 | No                 | **Yes**           | No                          | No              | No                 | **No**                |
-| Bypass mechanism    | No         | No                    | No                 | `ignoreBlocker`    | No                | No                          | No              | No                 | **No**                |
-| Async support       | Yes        | Observable            | Yes                | Yes                | Yes               | Yes                         | Yes             | Yes                | **Yes**               |
-| Route metadata      | `to.meta`  | `route.data`          | Loader             | Context            | No                | `definePageMeta` + groups   | Matcher         | Via layout data    | **No**                |
-| Redirect            | Return loc | `navigate()`          | `throw redirect()` | `throw redirect()` | `transitionTo()`  | `navigateTo()`             | `redirect()`    | `throw redirect()` | **Return string/obj** |
-| History clean       | Yes        | Yes                   | `replace`          | Yes                | Yes               | Yes                         | Server          | Yes                | **Yes**               |
+| Feature             | Vue        | Angular         | React                     | TanStack            | Ember             | Nuxt                      | Next            | SvelteKit          | **ui5.ext.routing**   |
+| ------------------- | ---------- | --------------- | ------------------------- | ------------------- | ----------------- | ------------------------- | --------------- | ------------------ | --------------------- |
+| Global before guard | Yes        | Yes             | Via loader                | `beforeLoad`        | `beforeModel`     | Global middleware         | Edge middleware | `handle` hook      | **Yes**               |
+| Per-route guard     | Yes        | Yes             | Via loader                | `beforeLoad`        | `beforeModel`     | Named middleware          | Matcher         | Load functions     | **Yes**               |
+| In-component guard  | Yes        | No              | No                        | No                  | No                | No                        | No              | No                 | No                    |
+| Leave guard         | Yes        | `canDeactivate` | `useBlocker` (**stable**) | `useBlocker` (exp.) | `routeWillChange` | Via Vue                   | No              | `beforeNavigate`   | **Yes**               |
+| Transition retry    | No         | No              | No                        | No                  | **Yes**           | No                        | No              | No                 | **No**                |
+| Bypass mechanism    | No         | No              | No                        | `ignoreBlocker`     | No                | No                        | No              | No                 | **No**                |
+| Async support       | Yes        | Observable      | Yes                       | Yes                 | Yes               | Yes                       | Yes             | Yes                | **Yes**               |
+| Route metadata      | `to.meta`  | `route.data`    | Loader                    | Context             | No                | `definePageMeta` + groups | Matcher         | Via layout data    | **No**                |
+| Redirect            | Return loc | `navigate()`    | `throw redirect()`        | `throw redirect()`  | `transitionTo()`  | `navigateTo()`            | `redirect()`    | `throw redirect()` | **Return string/obj** |
+| History clean       | Yes        | Yes             | `replace`                 | Yes                 | Yes               | Yes                       | Server          | Yes                | **Yes**               |
 
 ### What ui5.ext.routing Provides Relative to Industry Standards
 
 **Covered well:**
 
-- Global and per-route guards (matches Vue, Angular)
+- Global and per-route enter guards (matches Vue, Angular)
+- Leave guards via `addLeaveGuard()` (matches Vue's `beforeRouteLeave`, Angular's `canDeactivate`)
 - Async support (matches all frameworks)
 - Redirect and block with clean history (matches all frameworks)
 - Centralized registration (matches Vue's `beforeEach`)
@@ -624,7 +625,6 @@ export const reroute: Reroute = async ({ url }) => {
 
 **Not yet covered (potential future enhancements):**
 
-- **Leave guards** (`beforeRouteLeave` / `canDeactivate` / `useBlocker`): Preventing navigation AWAY from a route (e.g., unsaved form data). See [Alternative 8: Leave Guards](./08-leave-guards.md).
 - **Transition object** (`transition.retry()`): Ember's unique pattern for storing and retrying aborted transitions. See [Alternative 9: Transition Object](./09-transition-object.md).
 - **Route metadata**: Declaring guard conditions in the route config itself (e.g., `{ meta: { requiresAuth: true } }`). See [Alternative 10: Route Metadata](./10-route-metadata.md).
 - **Bypass mechanism** (`ignoreBlocker`): Allowing specific navigations to skip guards. Useful for "Save & Navigate" patterns. See [Alternative 11: Bypass Guards](./11-bypass-guards.md).

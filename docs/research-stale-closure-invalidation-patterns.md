@@ -36,11 +36,11 @@ flipped to `true` in the cleanup function.
 
 The relevant files in [facebook/react](https://github.com/facebook/react) are:
 
-| File | Purpose |
-|---|---|
-| `packages/react-reconciler/src/ReactFiberHooks.js` | `mountEffect`, `updateEffect`, `pushEffect`; creates Effect objects with `{tag, inst, create, deps}` |
+| File                                                       | Purpose                                                                                                          |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/react-reconciler/src/ReactFiberHooks.js`         | `mountEffect`, `updateEffect`, `pushEffect`; creates Effect objects with `{tag, inst, create, deps}`             |
 | `packages/react-reconciler/src/ReactFiberCommitEffects.js` | `commitHookEffectListUnmount` (runs destroy), `commitHookEffectListMount` (runs create, stores returned destroy) |
-| `packages/react-reconciler/src/ReactHookEffectTags.js` | Flag constants `HookHasEffect`, `HookPassive`, `HookLayout` |
+| `packages/react-reconciler/src/ReactHookEffectTags.js`     | Flag constants `HookHasEffect`, `HookPassive`, `HookLayout`                                                      |
 
 **Effect type definition** (`ReactFiberHooks.js`):
 
@@ -59,32 +59,32 @@ type Effect = {
 ```js
 // Runs all destroy (cleanup) functions for matching effects
 function commitHookEffectListUnmount(flags, finishedWork, nearestMountedAncestor) {
-  // ...
-  do {
-    if ((effect.tag & flags) === flags) {
-      const inst = effect.inst;
-      const destroy = inst.destroy;
-      if (destroy !== undefined) {
-        inst.destroy = undefined;
-        safelyCallDestroy(finishedWork, nearestMountedAncestor, destroy);
-      }
-    }
-    effect = effect.next;
-  } while (effect !== firstEffect);
+	// ...
+	do {
+		if ((effect.tag & flags) === flags) {
+			const inst = effect.inst;
+			const destroy = inst.destroy;
+			if (destroy !== undefined) {
+				inst.destroy = undefined;
+				safelyCallDestroy(finishedWork, nearestMountedAncestor, destroy);
+			}
+		}
+		effect = effect.next;
+	} while (effect !== firstEffect);
 }
 
 // Runs all create functions and stores returned cleanup
 function commitHookEffectListMount(flags, finishedWork) {
-  // ...
-  do {
-    if ((effect.tag & flags) === flags) {
-      const create = effect.create;
-      const inst = effect.inst;
-      const destroy = create();   // Execute the effect
-      inst.destroy = destroy;     // Store cleanup for next cycle
-    }
-    effect = effect.next;
-  } while (effect !== firstEffect);
+	// ...
+	do {
+		if ((effect.tag & flags) === flags) {
+			const create = effect.create;
+			const inst = effect.inst;
+			const destroy = create(); // Execute the effect
+			inst.destroy = destroy; // Store cleanup for next cycle
+		}
+		effect = effect.next;
+	} while (effect !== firstEffect);
 }
 ```
 
@@ -101,21 +101,21 @@ From the [official React docs](https://react.dev/reference/react/useEffect):
 
 ```js
 useEffect(() => {
-  let ignore = false;
+	let ignore = false;
 
-  async function fetchData() {
-    const response = await fetch(`/api/user/${userId}`);
-    const data = await response.json();
-    if (!ignore) {
-      setUser(data);       // Only apply if this effect is still current
-    }
-  }
+	async function fetchData() {
+		const response = await fetch(`/api/user/${userId}`);
+		const data = await response.json();
+		if (!ignore) {
+			setUser(data); // Only apply if this effect is still current
+		}
+	}
 
-  fetchData();
+	fetchData();
 
-  return () => {
-    ignore = true;         // Flip the flag -- stale results are discarded
-  };
+	return () => {
+		ignore = true; // Flip the flag -- stale results are discarded
+	};
 }, [userId]);
 ```
 
@@ -128,16 +128,16 @@ that closure, causing any in-flight `fetch` response to be silently discarded.
 
 ```js
 useEffect(() => {
-  const controller = new AbortController();
+	const controller = new AbortController();
 
-  fetch(`/api/user/${userId}`, { signal: controller.signal })
-    .then(res => res.json())
-    .then(data => setUser(data))
-    .catch(err => {
-      if (err.name !== 'AbortError') throw err;
-    });
+	fetch(`/api/user/${userId}`, { signal: controller.signal })
+		.then((res) => res.json())
+		.then((data) => setUser(data))
+		.catch((err) => {
+			if (err.name !== "AbortError") throw err;
+		});
 
-  return () => controller.abort();
+	return () => controller.abort();
 }, [userId]);
 ```
 
@@ -164,33 +164,33 @@ There are two API surfaces:
 
 The relevant files in [vuejs/core](https://github.com/vuejs/core) are:
 
-| File | Purpose |
-|---|---|
-| `packages/reactivity/src/watch.ts` | `onWatcherCleanup`, `cleanupMap` WeakMap, `baseWatch` core logic |
+| File                                    | Purpose                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| `packages/reactivity/src/watch.ts`      | `onWatcherCleanup`, `cleanupMap` WeakMap, `baseWatch` core logic                  |
 | `packages/runtime-core/src/apiWatch.ts` | `watch`, `watchEffect`: thin wrappers over `baseWatch` with scheduler integration |
 
 **Cleanup registration** (`packages/reactivity/src/watch.ts`):
 
 ```ts
-const cleanupMap: WeakMap<ReactiveEffect, (() => void)[]> = new WeakMap()
+const cleanupMap: WeakMap<ReactiveEffect, (() => void)[]> = new WeakMap();
 
 export function onWatcherCleanup(
-  cleanupFn: () => void,
-  failSilently = false,
-  owner: ReactiveEffect | undefined = activeWatcher,
+	cleanupFn: () => void,
+	failSilently = false,
+	owner: ReactiveEffect | undefined = activeWatcher,
 ): void {
-  if (owner) {
-    let cleanups = cleanupMap.get(owner)
-    if (!cleanups) cleanupMap.set(owner, (cleanups = []))
-    cleanups.push(cleanupFn)
-  }
+	if (owner) {
+		let cleanups = cleanupMap.get(owner);
+		if (!cleanups) cleanupMap.set(owner, (cleanups = []));
+		cleanups.push(cleanupFn);
+	}
 }
 ```
 
 **Bound onCleanup parameter** (same file):
 
 ```ts
-boundCleanup = fn => onWatcherCleanup(fn, false, effect)
+boundCleanup = (fn) => onWatcherCleanup(fn, false, effect);
 ```
 
 This is passed into user callbacks so they can register cleanup without
@@ -200,14 +200,14 @@ importing `onWatcherCleanup` explicitly.
 
 ```ts
 const job = (immediateFirstRun?: boolean) => {
-  if (!(effect.flags & EffectFlags.ACTIVE) || (!effect.dirty && !immediateFirstRun)) {
-    return
-  }
-  if (cleanup) {
-    cleanup()           // Run registered cleanups before re-executing
-  }
-  // ... execute callback with new values ...
-}
+	if (!(effect.flags & EffectFlags.ACTIVE) || (!effect.dirty && !immediateFirstRun)) {
+		return;
+	}
+	if (cleanup) {
+		cleanup(); // Run registered cleanups before re-executing
+	}
+	// ... execute callback with new values ...
+};
 ```
 
 ### Canonical user-land pattern
@@ -217,49 +217,51 @@ From the [Vue docs](https://vuejs.org/guide/essentials/watchers):
 **Using `onWatcherCleanup` (Vue 3.5+):**
 
 ```ts
-import { watch, onWatcherCleanup } from 'vue'
+import { watch, onWatcherCleanup } from "vue";
 
 watch(id, (newId) => {
-  const controller = new AbortController()
+	const controller = new AbortController();
 
-  fetch(`/api/${newId}`, { signal: controller.signal }).then(() => {
-    // callback logic
-  })
+	fetch(`/api/${newId}`, { signal: controller.signal }).then(() => {
+		// callback logic
+	});
 
-  onWatcherCleanup(() => {
-    controller.abort()     // Abort stale request
-  })
-})
+	onWatcherCleanup(() => {
+		controller.abort(); // Abort stale request
+	});
+});
 ```
 
 **Using the `onCleanup` parameter (Vue 3.0+):**
 
 ```ts
 watch(id, (newId, oldId, onCleanup) => {
-  const controller = new AbortController()
+	const controller = new AbortController();
 
-  fetch(`/api/${newId}`, { signal: controller.signal }).then(() => {
-    // callback logic
-  })
+	fetch(`/api/${newId}`, { signal: controller.signal }).then(() => {
+		// callback logic
+	});
 
-  onCleanup(() => {
-    controller.abort()
-  })
-})
+	onCleanup(() => {
+		controller.abort();
+	});
+});
 ```
 
 **Using a boolean flag (same idea as React):**
 
 ```ts
 watchEffect(async (onCleanup) => {
-  let cancelled = false
-  onCleanup(() => { cancelled = true })
+	let cancelled = false;
+	onCleanup(() => {
+		cancelled = true;
+	});
 
-  const data = await fetchSomething(source.value)
-  if (!cancelled) {
-    result.value = data
-  }
-})
+	const data = await fetchSomething(source.value);
+	if (!cancelled) {
+		result.value = data;
+	}
+});
 ```
 
 ---
@@ -285,19 +287,18 @@ array naturally scopes to the reactive computation that registered it.
 
 The relevant file in [solidjs/solid](https://github.com/solidjs/solid) is:
 
-| File | Purpose |
-|---|---|
+| File                                    | Purpose                                                         |
+| --------------------------------------- | --------------------------------------------------------------- |
 | `packages/solid/src/reactive/signal.ts` | `onCleanup`, `cleanNode`, `updateComputation`, `runComputation` |
 
 **onCleanup registration:**
 
 ```ts
 export function onCleanup<T extends () => any>(fn: T): T {
-  if (Owner === null)
-    console.warn("cleanups created outside a `createRoot` or `render` will never be run");
-  else if (Owner.cleanups === null) Owner.cleanups = [fn];
-  else Owner.cleanups.push(fn);
-  return fn;
+	if (Owner === null) console.warn("cleanups created outside a `createRoot` or `render` will never be run");
+	else if (Owner.cleanups === null) Owner.cleanups = [fn];
+	else Owner.cleanups.push(fn);
+	return fn;
 }
 ```
 
@@ -305,26 +306,24 @@ export function onCleanup<T extends () => any>(fn: T): T {
 
 ```ts
 function cleanNode(node: Owner) {
-  // 1. Disconnect tracking subscriptions (sources/observers)
-  if ((node as Computation<any>).sources) {
-    while ((node as Computation<any>).sources!.length) {
-      // ... pop sources, unlink observers ...
-    }
-  }
+	// 1. Disconnect tracking subscriptions (sources/observers)
+	if ((node as Computation<any>).sources) {
+		while ((node as Computation<any>).sources!.length) {
+			// ... pop sources, unlink observers ...
+		}
+	}
 
-  // 2. Recursively clean owned child nodes
-  if ((node as Memo<any>).tOwned) {
-    for (i = (node as Memo<any>).tOwned!.length - 1; i >= 0; i--)
-      cleanNode((node as Memo<any>).tOwned![i]);
-    delete (node as Memo<any>).tOwned;
-  }
+	// 2. Recursively clean owned child nodes
+	if ((node as Memo<any>).tOwned) {
+		for (i = (node as Memo<any>).tOwned!.length - 1; i >= 0; i--) cleanNode((node as Memo<any>).tOwned![i]);
+		delete (node as Memo<any>).tOwned;
+	}
 
-  // 3. Execute cleanup functions in reverse order
-  if (node.cleanups) {
-    for (i = node.cleanups.length - 1; i >= 0; i--)
-      node.cleanups[i]();
-    node.cleanups = null;
-  }
+	// 3. Execute cleanup functions in reverse order
+	if (node.cleanups) {
+		for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
+		node.cleanups = null;
+	}
 }
 ```
 
@@ -369,14 +368,16 @@ function UserProfile(props) {
 
 ```ts
 createEffect(() => {
-  let stale = false;
-  const id = userId();
+	let stale = false;
+	const id = userId();
 
-  fetchUser(id).then(data => {
-    if (!stale) setUser(data);
-  });
+	fetchUser(id).then((data) => {
+		if (!stale) setUser(data);
+	});
 
-  onCleanup(() => { stale = true; });
+	onCleanup(() => {
+		stale = true;
+	});
 });
 ```
 
@@ -400,27 +401,27 @@ not eliminate, the stale closure problem.
 
 The relevant file in [sveltejs/svelte](https://github.com/sveltejs/svelte) is:
 
-| File | Purpose |
-|---|---|
+| File                                                        | Purpose                                     |
+| ----------------------------------------------------------- | ------------------------------------------- |
 | `packages/svelte/src/internal/client/reactivity/effects.js` | `execute_effect_teardown`, `destroy_effect` |
 
 **execute_effect_teardown:**
 
 ```js
 export function execute_effect_teardown(effect) {
-  var teardown = effect.teardown;
-  if (teardown !== null) {
-    const previously_destroying_effect = is_destroying_effect;
-    const previous_reaction = active_reaction;
-    set_is_destroying_effect(true);
-    set_active_reaction(null);
-    try {
-      teardown.call(null);
-    } finally {
-      set_is_destroying_effect(previously_destroying_effect);
-      set_active_reaction(previous_reaction);
-    }
-  }
+	var teardown = effect.teardown;
+	if (teardown !== null) {
+		const previously_destroying_effect = is_destroying_effect;
+		const previous_reaction = active_reaction;
+		set_is_destroying_effect(true);
+		set_active_reaction(null);
+		try {
+			teardown.call(null);
+		} finally {
+			set_is_destroying_effect(previously_destroying_effect);
+			set_active_reaction(previous_reaction);
+		}
+	}
 }
 ```
 
@@ -428,9 +429,9 @@ export function execute_effect_teardown(effect) {
 
 ```js
 export function destroy_effect(effect, remove_dom = true) {
-  // ...
-  execute_effect_teardown(effect);
-  // ... nullify effect properties ...
+	// ...
+	execute_effect_teardown(effect);
+	// ... nullify effect properties ...
 }
 ```
 
@@ -496,8 +497,8 @@ Angular effects only track signals read **synchronously**. Values read after an
 The relevant documentation lives at [angular.dev/guide/signals/effect](https://angular.dev/guide/signals/effect).
 The internal implementation is in:
 
-| File (angular/angular repo) | Purpose |
-|---|---|
+| File (angular/angular repo)                      | Purpose                                   |
+| ------------------------------------------------ | ----------------------------------------- |
 | `packages/core/src/render3/reactivity/effect.ts` | `effect()` creation, cleanup registration |
 
 ### Canonical user-land pattern
@@ -506,15 +507,15 @@ From the [Angular docs](https://angular.dev/guide/signals/effect):
 
 ```ts
 effect((onCleanup) => {
-  const user = currentUser();   // Tracked signal read
+	const user = currentUser(); // Tracked signal read
 
-  const timer = setTimeout(() => {
-    console.log(`1 second ago, the user became ${user}`);
-  }, 1000);
+	const timer = setTimeout(() => {
+		console.log(`1 second ago, the user became ${user}`);
+	}, 1000);
 
-  onCleanup(() => {
-    clearTimeout(timer);        // Cancel stale timer
-  });
+	onCleanup(() => {
+		clearTimeout(timer); // Cancel stale timer
+	});
 });
 ```
 
@@ -522,14 +523,14 @@ effect((onCleanup) => {
 
 ```ts
 effect((onCleanup) => {
-  const id = userId();
-  const controller = new AbortController();
+	const id = userId();
+	const controller = new AbortController();
 
-  fetch(`/api/user/${id}`, { signal: controller.signal })
-    .then(res => res.json())
-    .then(data => userData.set(data));
+	fetch(`/api/user/${id}`, { signal: controller.signal })
+		.then((res) => res.json())
+		.then((data) => userData.set(data));
 
-  onCleanup(() => controller.abort());
+	onCleanup(() => controller.abort());
 });
 ```
 
@@ -551,23 +552,25 @@ it solves the same stale-result problem.
 
 ### Source reference
 
-| Package | Module |
-|---|---|
-| `rxjs` | `src/internal/operators/switchMap.ts` |
+| Package | Module                                |
+| ------- | ------------------------------------- |
+| `rxjs`  | `src/internal/operators/switchMap.ts` |
 
 ### Canonical user-land pattern
 
 ```ts
 // Angular component
-this.searchTerms$.pipe(
-  debounceTime(300),
-  distinctUntilChanged(),
-  switchMap(term => this.http.get(`/api/search?q=${term}`))
-).subscribe(results => {
-  this.results = results;
-  // Only the latest search term's results arrive here.
-  // Previous in-flight requests are automatically cancelled.
-});
+this.searchTerms$
+	.pipe(
+		debounceTime(300),
+		distinctUntilChanged(),
+		switchMap((term) => this.http.get(`/api/search?q=${term}`)),
+	)
+	.subscribe((results) => {
+		this.results = results;
+		// Only the latest search term's results arrive here.
+		// Previous in-flight requests are automatically cancelled.
+	});
 ```
 
 **Key rule:** Place `takeUntil(this.destroy$)` or `takeUntilDestroyed()` after
@@ -595,22 +598,22 @@ pattern combined with `AbortSignal`:
 
 The relevant files in [TanStack/query](https://github.com/TanStack/query) are:
 
-| File | Purpose |
-|---|---|
-| `packages/query-core/src/query.ts` | `#retryer` property, `#revertState` snapshot, `#abortSignalConsumed` flag, fetch orchestration |
+| File                                 | Purpose                                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `packages/query-core/src/query.ts`   | `#retryer` property, `#revertState` snapshot, `#abortSignalConsumed` flag, fetch orchestration                  |
 | `packages/query-core/src/retryer.ts` | `CancelledError` class (`revert`, `silent` properties), `createRetryer`, resolution guarding via `isResolved()` |
 
 **CancelledError** (`retryer.ts`):
 
 ```ts
 export class CancelledError extends Error {
-  revert?: boolean
-  silent?: boolean
-  constructor(options?: CancelOptions) {
-    super('CancelledError')
-    this.revert = options?.revert
-    this.silent = options?.silent
-  }
+	revert?: boolean;
+	silent?: boolean;
+	constructor(options?: CancelOptions) {
+		super("CancelledError");
+		this.revert = options?.revert;
+		this.silent = options?.silent;
+	}
 }
 ```
 
@@ -618,37 +621,37 @@ export class CancelledError extends Error {
 
 ```ts
 const addSignalProperty = (object: unknown) => {
-  Object.defineProperty(object, 'signal', {
-    enumerable: true,
-    get: () => {
-      this.#abortSignalConsumed = true
-      return abortController.signal
-    },
-  })
-}
+	Object.defineProperty(object, "signal", {
+		enumerable: true,
+		get: () => {
+			this.#abortSignalConsumed = true;
+			return abortController.signal;
+		},
+	});
+};
 ```
 
 **Cancellation guard** (`retryer.ts`):
 
 ```ts
 const cancel = (cancelOptions?: CancelOptions): void => {
-  if (!isResolved()) {
-    const error = new CancelledError(cancelOptions) as TError
-    reject(error)
-    config.onCancel?.(error)
-  }
-}
+	if (!isResolved()) {
+		const error = new CancelledError(cancelOptions) as TError;
+		reject(error);
+		config.onCancel?.(error);
+	}
+};
 ```
 
 ### Canonical user-land pattern
 
 ```ts
 const { data } = useQuery({
-  queryKey: ['user', userId],
-  queryFn: async ({ signal }) => {
-    const response = await fetch(`/api/user/${userId}`, { signal });
-    return response.json();
-  },
+	queryKey: ["user", userId],
+	queryFn: async ({ signal }) => {
+		const response = await fetch(`/api/user/${userId}`, { signal });
+		return response.json();
+	},
 });
 ```
 
@@ -660,15 +663,15 @@ the signal is aborted, cancelling the request.
 
 ## Comparison summary
 
-| Framework | Invalidation mechanism | Who runs cleanup | Async cancellation |
-|---|---|---|---|
-| **React** | Per-closure boolean flag (`ignore`) | Framework calls `destroy` before re-running `create` | User-land (flag or AbortController) |
-| **Vue** | Registered cleanup callbacks in `cleanupMap` WeakMap | Framework calls cleanups before watcher `job` re-runs | User-land via `onCleanup`/`onWatcherCleanup` |
-| **Solid** | `Owner.cleanups` array, cleared by `cleanNode()` | Framework calls `cleanNode` in `updateComputation` before re-run | User-land via `onCleanup` |
-| **Svelte 5** | Return-function stored as `effect.teardown` | Framework calls `execute_effect_teardown` before re-run | User-land (flag or AbortController in teardown) |
-| **Angular** | `onCleanup` callback parameter in `effect()` | Framework calls cleanup before next execution or on `DestroyRef` destroy | User-land via `onCleanup` |
-| **RxJS** | `switchMap` auto-unsubscribes previous inner observable | Operator calls `.unsubscribe()` on previous inner subscription | Automatic (unsubscribe triggers XHR abort) |
-| **TanStack Query** | Single-retryer replacement + AbortSignal + state snapshot rollback | Framework replaces `#retryer`, signals abort | Automatic (AbortSignal passed to queryFn) |
+| Framework          | Invalidation mechanism                                             | Who runs cleanup                                                         | Async cancellation                              |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| **React**          | Per-closure boolean flag (`ignore`)                                | Framework calls `destroy` before re-running `create`                     | User-land (flag or AbortController)             |
+| **Vue**            | Registered cleanup callbacks in `cleanupMap` WeakMap               | Framework calls cleanups before watcher `job` re-runs                    | User-land via `onCleanup`/`onWatcherCleanup`    |
+| **Solid**          | `Owner.cleanups` array, cleared by `cleanNode()`                   | Framework calls `cleanNode` in `updateComputation` before re-run         | User-land via `onCleanup`                       |
+| **Svelte 5**       | Return-function stored as `effect.teardown`                        | Framework calls `execute_effect_teardown` before re-run                  | User-land (flag or AbortController in teardown) |
+| **Angular**        | `onCleanup` callback parameter in `effect()`                       | Framework calls cleanup before next execution or on `DestroyRef` destroy | User-land via `onCleanup`                       |
+| **RxJS**           | `switchMap` auto-unsubscribes previous inner observable            | Operator calls `.unsubscribe()` on previous inner subscription           | Automatic (unsubscribe triggers XHR abort)      |
+| **TanStack Query** | Single-retryer replacement + AbortSignal + state snapshot rollback | Framework replaces `#retryer`, signals abort                             | Automatic (AbortSignal passed to queryFn)       |
 
 ### Common patterns across all frameworks
 
@@ -695,23 +698,23 @@ the signal is aborted, cancelling the request.
    Functionally equivalent to the generation counter but sometimes more
    readable when the "counter" semantics are not needed.
 
-   ```ts
-   class Fetcher {
-     #currentToken: object | null = null;
+    ```ts
+    class Fetcher {
+    	#currentToken: object | null = null;
 
-     async load(url: string): Promise<void> {
-       const token = {};            // unique identity per invocation
-       this.#currentToken = token;  // store as "current"
+    	async load(url: string): Promise<void> {
+    		const token = {}; // unique identity per invocation
+    		this.#currentToken = token; // store as "current"
 
-       const data = await fetch(url).then(r => r.json());
+    		const data = await fetch(url).then((r) => r.json());
 
-       if (token !== this.#currentToken) {
-         return; // a newer load() replaced our token -- discard
-       }
-       this.applyData(data);
-     }
-   }
-   ```
+    		if (token !== this.#currentToken) {
+    			return; // a newer load() replaced our token -- discard
+    		}
+    		this.applyData(data);
+    	}
+    }
+    ```
 
 5. **Subscription replacement**: RxJS's `switchMap` replaces the entire
    subscription rather than using a flag, achieving automatic cancellation.

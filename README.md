@@ -43,18 +43,18 @@ Add the library dependency and set the router class:
 
 ```json
 {
-  "sap.ui5": {
-    "dependencies": {
-      "libs": {
-        "ui5.ext.routing": {}
-      }
-    },
-    "routing": {
-      "config": {
-        "routerClass": "ui5.ext.routing.Router"
-      }
-    }
-  }
+	"sap.ui5": {
+		"dependencies": {
+			"libs": {
+				"ui5.ext.routing": {}
+			}
+		},
+		"routing": {
+			"config": {
+				"routerClass": "ui5.ext.routing.Router"
+			}
+		}
+	}
 }
 ```
 
@@ -67,30 +67,30 @@ import UIComponent from "sap/ui/core/UIComponent";
 import type { GuardRouter } from "ui5/ext/routing/types";
 
 export default class Component extends UIComponent {
-  static metadata = {
-    manifest: "json",
-    interfaces: ["sap.ui.core.IAsyncContentCreation"],
-  };
+	static metadata = {
+		manifest: "json",
+		interfaces: ["sap.ui.core.IAsyncContentCreation"],
+	};
 
-  init(): void {
-    super.init();
-    const router = this.getRouter() as unknown as GuardRouter;
+	init(): void {
+		super.init();
+		const router = this.getRouter() as unknown as GuardRouter;
 
-    // Route-specific guard -- redirects to "home" when not logged in
-    router.addRouteGuard("protected", (context) => {
-      return isLoggedIn() ? true : "home";
-    });
+		// Route-specific guard -- redirects to "home" when not logged in
+		router.addRouteGuard("protected", (context) => {
+			return isLoggedIn() ? true : "home";
+		});
 
-    // Global guard -- runs for every navigation
-    router.addGuard((context) => {
-      if (context.toRoute === "admin" && !isAdmin()) {
-        return "home";
-      }
-      return true;
-    });
+		// Global guard -- runs for every navigation
+		router.addGuard((context) => {
+			if (context.toRoute === "admin" && !isAdmin()) {
+				return "home";
+			}
+			return true;
+		});
 
-    router.initialize();
-  }
+		router.initialize();
+	}
 }
 ```
 
@@ -106,10 +106,10 @@ import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardContext, GuardResult } from "ui5/ext/routing/types";
 
 export function createAuthGuard(authModel: JSONModel): GuardFn {
-  return (context: GuardContext): GuardResult => {
-    const isLoggedIn = authModel.getProperty("/isLoggedIn");
-    return isLoggedIn ? true : "home";
-  };
+	return (context: GuardContext): GuardResult => {
+		const isLoggedIn = authModel.getProperty("/isLoggedIn");
+		return isLoggedIn ? true : "home";
+	};
 }
 
 export const forbiddenGuard: GuardFn = () => "home";
@@ -129,11 +129,11 @@ router.addRouteGuard("forbidden", forbiddenGuard);
 
 ```typescript
 router.addRouteGuard("dashboard", async (context) => {
-  const res = await fetch(`/api/access/${context.toRoute}`, {
-    signal: context.signal, // cancelled automatically on newer navigation
-  });
-  const { allowed } = await res.json();
-  return allowed ? true : "forbidden";
+	const res = await fetch(`/api/access/${context.toRoute}`, {
+		signal: context.signal, // cancelled automatically on newer navigation
+	});
+	const { allowed } = await res.json();
+	return allowed ? true : "forbidden";
 });
 ```
 
@@ -141,15 +141,66 @@ router.addRouteGuard("dashboard", async (context) => {
 
 ```typescript
 router.addGuard((context) => {
-  if (context.toRoute === "old-detail") {
-    return {
-      route: "detail",
-      parameters: { id: context.toArguments.id },
-    };
-  }
-  return true;
+	if (context.toRoute === "old-detail") {
+		return {
+			route: "detail",
+			parameters: { id: context.toArguments.id },
+		};
+	}
+	return true;
 });
 ```
+
+### Leave guard (unsaved changes)
+
+Leave guards run when navigating **away from** a route. They return only a boolean — no redirects. Register them from a controller where you have access to the view's model:
+
+```typescript
+// guards.ts
+import JSONModel from "sap/ui/model/json/JSONModel";
+import type { LeaveGuardFn, GuardContext } from "ui5/ext/routing/types";
+
+export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
+	return (context: GuardContext): boolean => {
+		return !formModel.getProperty("/isDirty");
+	};
+}
+```
+
+```typescript
+// EditOrder.controller.ts
+import type { GuardRouter, LeaveGuardFn } from "ui5/ext/routing/types";
+import { createDirtyFormGuard } from "../guards";
+
+export default class EditOrderController extends Controller {
+	private _leaveGuard!: LeaveGuardFn;
+
+	onInit(): void {
+		const formModel = new JSONModel({ isDirty: false });
+		this.getView()!.setModel(formModel, "form");
+
+		const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+		this._leaveGuard = createDirtyFormGuard(formModel);
+		router.addLeaveGuard("editOrder", this._leaveGuard);
+	}
+
+	onExit(): void {
+		const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+		router.removeLeaveGuard("editOrder", this._leaveGuard);
+	}
+}
+```
+
+### Object form (enter + leave in one call)
+
+```typescript
+router.addRouteGuard("editOrder", {
+	beforeEnter: authGuard,
+	beforeLeave: dirtyFormGuard,
+});
+```
+
+When passing a function directly, it registers as an enter guard (backward compatible). When passing an object, `beforeEnter` and `beforeLeave` are optional — provide either or both.
 
 ### Dynamic guard registration
 
@@ -157,8 +208,8 @@ Guards can be added or removed at any point during the router's lifetime:
 
 ```typescript
 const logGuard: GuardFn = (ctx) => {
-  console.log(`Navigation: ${ctx.fromRoute} → ${ctx.toRoute}`);
-  return true;
+	console.log(`Navigation: ${ctx.fromRoute} → ${ctx.toRoute}`);
+	return true;
 };
 
 router.addGuard(logGuard);
@@ -166,45 +217,74 @@ router.addGuard(logGuard);
 router.removeGuard(logGuard);
 ```
 
+### Native alternative: Fiori Launchpad dirty flag
+
+If your app runs inside SAP Fiori Launchpad, the Launchpad provides built-in data loss protection via `sap.ushell.Container.setDirtyFlag()`. This shows a native warning dialog when users attempt to navigate away from the Launchpad (home button, browser back, refresh) — but it does **not** cover in-app route changes:
+
+```typescript
+// Set when user modifies data
+sap.ushell.Container.setDirtyFlag(true);
+
+// Clear after save
+sap.ushell.Container.setDirtyFlag(false);
+```
+
+For in-app navigation between routes, you still need leave guards as shown above. The two approaches are complementary: leave guards handle in-app routing, while `setDirtyFlag` handles Launchpad-level navigation.
+
 ## Guard return values
 
-| Return value | Effect |
-| --- | --- |
-| `true` | Allow navigation |
-| `false` | Block (stay on current route, no history entry) |
-| `"routeName"` | Redirect to named route (replaces history, no extra entry) |
-| `{ route, parameters }` | Redirect with route parameters |
-| anything else (`null`, `undefined`) | Treated as block |
+### Enter guards (`addRouteGuard`, `addGuard`)
+
+| Return value                        | Effect                                                     |
+| ----------------------------------- | ---------------------------------------------------------- |
+| `true`                              | Allow navigation                                           |
+| `false`                             | Block (stay on current route, no history entry)            |
+| `"routeName"`                       | Redirect to named route (replaces history, no extra entry) |
+| `{ route, parameters }`             | Redirect with route parameters                             |
+| anything else (`null`, `undefined`) | Treated as block                                           |
 
 Only strict `true` allows navigation. This prevents accidental allows from truthy coercion.
+
+### Leave guards (`addLeaveGuard`)
+
+| Return value                      | Effect                                          |
+| --------------------------------- | ----------------------------------------------- |
+| `true`                            | Allow leaving the current route                 |
+| `false` (or any non-`true` value) | Block (stay on current route, no history entry) |
+
+Leave guards cannot redirect. They answer the binary question "can I leave?" — use enter guards on the target route for redirection logic.
 
 ## Guard context
 
 Every guard receives a `GuardContext`:
 
-| Property | Type | Description |
-| --- | --- | --- |
-| `toRoute` | `string` | Target route name (empty if no match) |
-| `toHash` | `string` | Raw hash being navigated to |
-| `toArguments` | `Record<string, string>` | Parsed route parameters |
-| `fromRoute` | `string` | Current route name (empty on first nav) |
-| `fromHash` | `string` | Current hash |
-| `signal` | `AbortSignal` | Aborted when a newer navigation supersedes this one |
+| Property      | Type                     | Description                                         |
+| ------------- | ------------------------ | --------------------------------------------------- |
+| `toRoute`     | `string`                 | Target route name (empty if no match)               |
+| `toHash`      | `string`                 | Raw hash being navigated to                         |
+| `toArguments` | `Record<string, string>` | Parsed route parameters                             |
+| `fromRoute`   | `string`                 | Current route name (empty on first nav)             |
+| `fromHash`    | `string`                 | Current hash                                        |
+| `signal`      | `AbortSignal`            | Aborted when a newer navigation supersedes this one |
 
 ## Guard execution order
 
-1. **Global guards** run first, in registration order
-2. **Route-specific guards** run next, in registration order
-3. The pipeline **short-circuits** at the first non-`true` result
+1. **Leave guards** for the current route run first, in registration order
+2. **Global enter guards** run next, in registration order
+3. **Route-specific enter guards** for the target route run last, in registration order
+4. The pipeline **short-circuits** at the first non-`true` result — if a leave guard blocks, enter guards never run
 
 ## API
 
-| Method | Description |
-| --- | --- |
-| `addGuard(fn)` | Register a global guard (runs for every navigation) |
-| `removeGuard(fn)` | Remove a global guard |
-| `addRouteGuard(routeName, fn)` | Register a guard for a specific route |
-| `removeRouteGuard(routeName, fn)` | Remove a route-specific guard |
+| Method                                                     | Description                                               |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `addGuard(fn)`                                             | Register a global enter guard (runs for every navigation) |
+| `removeGuard(fn)`                                          | Remove a global enter guard                               |
+| `addRouteGuard(routeName, fn)`                             | Register an enter guard for a specific route              |
+| `addRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Register enter and/or leave guards via object form        |
+| `removeRouteGuard(routeName, fn)`                          | Remove an enter guard                                     |
+| `addLeaveGuard(routeName, fn)`                             | Register a leave guard (runs when leaving the route)      |
+| `removeLeaveGuard(routeName, fn)`                          | Remove a leave guard                                      |
 
 All methods return `this` for chaining.
 
@@ -229,12 +309,12 @@ In practice, redirect targets are typically "safe" routes like `home` or `login`
 
 ```typescript
 router.addRouteGuard("dashboard", (context) => {
-  if (!hasPermission()) {
-    // Instead of redirecting to "profile" and relying on its guard,
-    // check the profile condition here
-    return isOnboarded() ? "profile" : "onboarding";
-  }
-  return true;
+	if (!hasPermission()) {
+		// Instead of redirecting to "profile" and relying on its guard,
+		// check the profile condition here
+		return isOnboarded() ? "profile" : "onboarding";
+	}
+	return true;
 });
 ```
 
@@ -244,7 +324,7 @@ When a guard returns a Promise (e.g., a `fetch` call to check permissions), the 
 
 This does **not** affect sync guards, which resolve in the same tick as the hash change (the URL flicker is imperceptible).
 
-**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` *before* `parse()` is called. The router cannot prevent the URL change — it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
+**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` _before_ `parse()` is called. The router cannot prevent the URL change — it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
 
 **Application-level solutions**:
 
@@ -252,17 +332,17 @@ Show a busy indicator while async guards resolve. This communicates to the user 
 
 ```typescript
 router.addRouteGuard("dashboard", async (context) => {
-  const app = rootView.byId("app") as App;
-  app.setBusy(true);
-  try {
-    const res = await fetch(`/api/access/${context.toRoute}`, {
-      signal: context.signal,
-    });
-    const { allowed } = await res.json();
-    return allowed ? true : "home";
-  } finally {
-    app.setBusy(false);
-  }
+	const app = rootView.byId("app") as App;
+	app.setBusy(true);
+	try {
+		const res = await fetch(`/api/access/${context.toRoute}`, {
+			signal: context.signal,
+		});
+		const { allowed } = await res.json();
+		return allowed ? true : "home";
+	} finally {
+		app.setBusy(false);
+	}
 });
 ```
 
@@ -293,11 +373,11 @@ npm start         # demo app at http://localhost:8080/index.html
 ### Tests
 
 ```bash
-# QUnit (66 unit tests) -- needs the library server
+# QUnit (90 unit tests) -- needs the library server
 npm run start:lib          # Terminal 1
 npm run test:qunit         # Terminal 2
 
-# E2E (18 integration tests) -- needs the demo-app server
+# E2E (22 integration tests) -- needs the demo-app server
 npm start                  # Terminal 1
 npm run test:e2e           # Terminal 2
 

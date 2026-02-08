@@ -3,10 +3,7 @@ import Router from "ui5/ext/routing/Router";
 import type { GuardRouter } from "ui5/ext/routing/types";
 
 /** Typed constructor so test files don't need `as any` casts. */
-export const GuardRouterClass = Router as unknown as new (
-	routes: object[],
-	config: object,
-) => GuardRouter;
+export const GuardRouterClass = Router as unknown as new (routes: object[], config: object) => GuardRouter;
 
 /**
  * Initialize HashChanger for tests (idempotent).

@@ -1,21 +1,21 @@
 # Alternative 8: Leave Guards for UI5
 
+> **Status**: Implemented. This document captures the design research that informed the implementation. The actual API uses `GuardContext` (shared with enter guards) rather than the separate `LeaveGuardContext` proposed here. See the [README](../../README.md) for usage examples and [Feature 01](../features/01-leave-guards.md) for the feature specification.
+
 ## The Problem
 
 All major SPA frameworks provide a way to prevent navigation **away** from a route, commonly called "leave guards" or "deactivation guards". The most common use case is warning users about unsaved form data.
 
-Currently, `ui5.ext.routing` only supports **enter guards**: guards that run when navigating **to** a route. There is no mechanism to prevent leaving a route.
-
 ### Framework Precedents
 
-| Framework       | API                                                   | Pattern                                      | Status              |
-| --------------- | ----------------------------------------------------- | -------------------------------------------- | ------------------- |
-| Vue Router      | `beforeRouteLeave(to, from)` / `onBeforeRouteLeave()` | Return `false` to cancel                     | Stable              |
-| Angular         | `canDeactivate(component)` / functional `CanDeactivateFn` | Receives component instance, checks state | Stable              |
-| React Router    | `useBlocker(shouldBlock)`                             | `proceed()` / `reset()` on blocker object    | **Stable** (v6.19+) |
-| TanStack Router | `useBlocker({ shouldBlockFn })`                       | `proceed()` / `reset()` + `ignoreBlocker`. `shouldBlockFn` can be async. | Experimental        |
-| Ember.js        | `routeWillChange` + `transition.abort()`              | Event-based, transition can be retried later | Stable              |
-| SvelteKit       | `beforeNavigate` + `navigation.cancel()`              | Client-side only, must be called during component init | Stable              |
+| Framework       | API                                                       | Pattern                                                                  | Status              |
+| --------------- | --------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------- |
+| Vue Router      | `beforeRouteLeave(to, from)` / `onBeforeRouteLeave()`     | Return `false` to cancel                                                 | Stable              |
+| Angular         | `canDeactivate(component)` / functional `CanDeactivateFn` | Receives component instance, checks state                                | Stable              |
+| React Router    | `useBlocker(shouldBlock)`                                 | `proceed()` / `reset()` on blocker object                                | **Stable** (v6.19+) |
+| TanStack Router | `useBlocker({ shouldBlockFn })`                           | `proceed()` / `reset()` + `ignoreBlocker`. `shouldBlockFn` can be async. | Experimental        |
+| Ember.js        | `routeWillChange` + `transition.abort()`                  | Event-based, transition can be retried later                             | Stable              |
+| SvelteKit       | `beforeNavigate` + `navigation.cancel()`                  | Client-side only, must be called during component init                   | Stable              |
 
 ---
 

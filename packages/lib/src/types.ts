@@ -55,6 +55,28 @@ export interface GuardContext {
 export type GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResult>;
 
 /**
+ * A leave guard function - can be synchronous or asynchronous.
+ *
+ * Leave guards answer the question "can I leave this route?" and return
+ * only a boolean. They cannot redirect — use enter guards for that.
+ */
+export type LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>;
+
+/**
+ * Configuration object for registering enter and/or leave guards on a route.
+ *
+ * When passed to `addRouteGuard`, the object form allows registering both
+ * guard types in a single call. At least one of `beforeEnter` or `beforeLeave`
+ * must be provided.
+ */
+export interface RouteGuardConfig {
+	/** Guard that runs before entering this route */
+	beforeEnter?: GuardFn;
+	/** Guard that runs before leaving this route */
+	beforeLeave?: LeaveGuardFn;
+}
+
+/**
  * Public instance shape of the extended Router.
  *
  * Extends `sap.m.routing.Router` with guard management methods.
@@ -63,8 +85,10 @@ export type GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResu
 export interface GuardRouter extends MobileRouter {
 	addGuard(guard: GuardFn): GuardRouter;
 	removeGuard(guard: GuardFn): GuardRouter;
-	addRouteGuard(routeName: string, guard: GuardFn): GuardRouter;
+	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	removeRouteGuard(routeName: string, guard: GuardFn): GuardRouter;
+	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 }
 
 /**
@@ -77,7 +101,8 @@ export interface GuardRouter extends MobileRouter {
  */
 export interface RouterInternal extends GuardRouter {
 	_globalGuards: GuardFn[];
-	_routeGuards: Map<string, GuardFn[]>;
+	_enterGuards: Map<string, GuardFn[]>;
+	_leaveGuards: Map<string, LeaveGuardFn[]>;
 	_currentRoute: string;
 	_currentHash: string | null;
 	_pendingHash: string | null;
@@ -87,8 +112,16 @@ export interface RouterInternal extends GuardRouter {
 	_abortController: AbortController | null;
 
 	_commitNavigation(hash: string, route?: string): void;
+	_runLeaveGuards(context: GuardContext): boolean | Promise<boolean>;
+	_finishLeaveGuardsAsync(
+		pendingResult: Promise<boolean>,
+		guards: LeaveGuardFn[],
+		currentIndex: number,
+		context: GuardContext,
+	): Promise<boolean>;
 	_runAllGuards(globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
-	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runEnterPipeline(generation: number, newHash: string, toRoute: string, context: GuardContext): void;
+	_runEnterGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runGuardListSync(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
 	_finishGuardListAsync(
 		pendingResult: Promise<GuardResult>,

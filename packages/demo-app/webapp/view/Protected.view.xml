@@ -10,7 +10,17 @@
 					type="Success"
 					showIcon="true"
 					class="sapUiSmallMarginBottom" />
-				<Text text="If you see this page, the guard allowed your navigation." />
+				<Text text="If you see this page, the guard allowed your navigation." class="sapUiSmallMarginBottom" />
+				<CheckBox
+					id="dirtyCheckbox"
+					text="Simulate unsaved changes (dirty form)"
+					selected="{form>/isDirty}"
+					class="sapUiSmallMarginBottom" />
+				<ObjectStatus
+					id="dirtyStatus"
+					text="{= ${form>/isDirty} ? 'Form has unsaved changes' : 'Form is clean'}"
+					state="{= ${form>/isDirty} ? 'Warning' : 'Success'}"
+					icon="{= ${form>/isDirty} ? 'sap-icon://warning' : 'sap-icon://accept'}" />
 			</VBox>
 		</content>
 	</Page>

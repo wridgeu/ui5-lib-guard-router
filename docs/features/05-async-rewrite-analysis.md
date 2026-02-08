@@ -24,7 +24,7 @@ But they immediately acknowledged the problem: **this can only be synchronous**:
 > You can not perform any async backend calls here because the response of the backend call
 > would come later than the navigation process.
 >
-> *@flovogt, UI5 team*
+> _@flovogt, UI5 team_
 
 A year later (Sept 2022), the team explicitly stated:
 
@@ -33,7 +33,7 @@ A year later (Sept 2022), the team explicitly stated:
 > in this work stream, so **the team is still looking for a way to make this concept
 > asynchronous directly from the start**.
 >
-> *@flovogt, UI5 team*
+> _@flovogt, UI5 team_
 
 As of October 2024, no solution has been implemented. The community workarounds include:
 
@@ -147,8 +147,8 @@ HashChanger.fireHashChanged()
 
 | Module                 | Change                                                                        | Risk                             |
 | ---------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
-| `Router.js`            | Add guard registry, modify `parse()` to support deferred `crossroads.parse()` | Medium (core flow but localized)  |
-| `Router.js`            | Add generation counter or AbortController for concurrent navigations          | Low (new internal state)          |
+| `Router.js`            | Add guard registry, modify `parse()` to support deferred `crossroads.parse()` | Medium (core flow but localized) |
+| `Router.js`            | Add generation counter or AbortController for concurrent navigations          | Low (new internal state)         |
 | `HashChanger.js`       | No change needed (parse is still called sync, just may defer internally)      | None                             |
 | `Route.js`             | No change needed (only called after guards pass)                              | None                             |
 | `Targets.js`           | No change needed (already async)                                              | None                             |
@@ -319,7 +319,7 @@ parse(this: RouterInstance, newHash: string): void {
     Promise.resolve()
         .then(() => this._runLeaveGuards(context))
         .then((r) => r !== true ? r : this._runGlobalGuards(context))
-        .then((r) => r !== true ? r : this._runRouteGuards(toRoute, context))
+        .then((r) => r !== true ? r : this._runEnterGuards(toRoute, context))
         .then((result) => {
             if (generation !== this._parseGeneration) return;
             this._applyGuardResult(result, newHash, toRoute);
@@ -377,7 +377,7 @@ is already the minimal implementation of this pattern.
 
 ### Unified Guard Pipeline
 
-Instead of separate `_runAllGuards`, `_runRouteGuards`, and a future `_runLeaveGuards`, create
+Instead of separate `_runAllGuards`, `_runEnterGuards`, and a future `_runLeaveGuards`, create
 a single pipeline concept:
 
 ```typescript
@@ -409,10 +409,10 @@ _buildPipeline(newHash, toRoute, routeInfo): GuardPhase[] {
     }
 
     // Phase 3: Route-specific enter guards
-    if (toRoute && this._routeGuards.has(toRoute)) {
+    if (toRoute && this._enterGuards.has(toRoute)) {
         phases.push({
             name: "route",
-            guards: this._routeGuards.get(toRoute)!,
+            guards: this._enterGuards.get(toRoute)!,
             context: enterContext
         });
     }

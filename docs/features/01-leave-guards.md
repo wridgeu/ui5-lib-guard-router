@@ -1,5 +1,15 @@
 # Feature: Leave Guards
 
+> **Status**: Implemented. See the [README](../../README.md) for usage examples.
+>
+> **Implementation note**: The final implementation diverges from this proposal in several ways:
+>
+> - Leave guards use the shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
+> - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | Promise<boolean>` directly
+> - Public methods return `GuardRouter` (not `RouterInstance`)
+> - `addRouteGuard` also accepts an object form `{ beforeEnter?, beforeLeave? }` for convenience
+> - Open question #2 was resolved: leave guards receive the full `GuardContext`
+
 ## Problem
 
 The router currently only supports **enter guards**, functions that run before navigating **to** a route. There is no mechanism to prevent navigation **away from** a route, which is the standard approach for "unsaved changes?" dialogs in every major SPA framework (Vue's `beforeRouteLeave`, Angular's `canDeactivate`, React/TanStack's `useBlocker`).
@@ -67,7 +77,7 @@ The full guard pipeline becomes:
 
 1. **Leave guards** for `fromRoute` (NEW)
 2. **Global enter guards** (existing `_globalGuards`)
-3. **Route-specific enter guards** for `toRoute` (existing `_routeGuards`)
+3. **Route-specific enter guards** for `toRoute` (existing `_enterGuards`)
 
 If any leave guard returns `false`, the entire pipeline short-circuits and the hash is restored. Enter guards never run.
 
@@ -93,7 +103,7 @@ parse(this: RouterInstance, newHash: string): void {
     // Check if any guards apply (leave OR enter)
     const hasLeaveGuards = this._currentRoute && this._leaveGuards.has(this._currentRoute);
     const hasEnterGuards = this._globalGuards.length > 0
-        || (toRoute && this._routeGuards.has(toRoute));
+        || (toRoute && this._enterGuards.has(toRoute));
 
     if (!hasLeaveGuards && !hasEnterGuards) {
         this._commitNavigation(newHash, toRoute);

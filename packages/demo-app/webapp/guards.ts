@@ -1,6 +1,6 @@
 import Log from "sap/base/Log";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, GuardContext, GuardResult } from "ui5/ext/routing/types";
+import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/ext/routing/types";
 
 /**
  * Guard that requires the user to be logged in.
@@ -20,3 +20,17 @@ export function createAuthGuard(authModel: JSONModel): GuardFn {
  * Guard that always blocks navigation and redirects to "home".
  */
 export const forbiddenGuard: GuardFn = () => "home";
+
+/**
+ * Leave guard that blocks navigation when a form has unsaved changes.
+ * Demonstrates the "dirty form" pattern using a synchronous model check.
+ */
+export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
+	return (context: GuardContext): boolean => {
+		const isDirty = formModel.getProperty("/isDirty");
+		if (isDirty) {
+			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "demo.app.guards");
+		}
+		return !isDirty;
+	};
+}

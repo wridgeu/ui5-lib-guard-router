@@ -18,6 +18,7 @@
 ## 1. `beforeunload` Event Status
 
 ### Current Status (2026)
+
 - **NOT officially deprecated** but marked "Limited availability" on MDN
 - Still functional but with significant caveats
 - Not part of any formal deprecation timeline
@@ -25,22 +26,25 @@
 ### Key Changes Over Time
 
 #### Chrome 51 (April 2016): Custom Messages Removed
+
 - **What changed**: Custom strings in `beforeunload` dialogs were removed
 - **Reason**: Developers were misusing the feature to scam users
 - **Result**: Only generic browser-controlled messages are shown
 - **Consistency**: Aligned Chrome with Safari 9.1+ and Firefox 4+
 
 **Implementation**:
+
 ```javascript
 // Modern approach (post-Chrome 51)
-window.addEventListener('beforeunload', (event) => {
-  event.preventDefault();  // Signal to show dialog
-  event.returnValue = true;  // Legacy support (Chrome/Edge < 119)
-  // The return value is ignored - browser shows generic message
+window.addEventListener("beforeunload", (event) => {
+	event.preventDefault(); // Signal to show dialog
+	event.returnValue = true; // Legacy support (Chrome/Edge < 119)
+	// The return value is ignored - browser shows generic message
 });
 ```
 
 **Browser-controlled generic message examples**:
+
 - Chrome: "Leave site? Changes you made may not be saved."
 - Firefox: "This page is asking you to confirm that you want to leave..."
 - Safari: "Are you sure you want to leave this page?"
@@ -48,36 +52,41 @@ window.addEventListener('beforeunload', (event) => {
 ### Reliability Issues
 
 #### Mobile Platforms
+
 `beforeunload` **does not fire reliably** on mobile:
+
 - User switches to another app, then closes browser from app manager
 - Many mobile browsers don't support it at all
 - No workaround exists
 
 #### Back/Forward Cache (bfcache)
+
 - **Chrome/Safari**: Pages with `beforeunload` listeners ARE eligible for bfcache (as of 2024+)
 - **Firefox**: Pages with `beforeunload` listeners are INELIGIBLE for bfcache
 - **Impact**: Performance degradation in Firefox due to full page reloads
 
 #### User Interaction Requirement
+
 - Dialog only appears if page has received **sticky activation** (user gesture/interaction)
 - If user never interacted with page, dialog won't show
 
 ### Best Practices (2026)
 
 **Use sparingly and conditionally**:
+
 ```javascript
 const beforeUnloadHandler = (event) => {
-  event.preventDefault();
-  event.returnValue = true; // Legacy support
+	event.preventDefault();
+	event.returnValue = true; // Legacy support
 };
 
 // Only add listener when there are unsaved changes
 formElement.addEventListener("input", (event) => {
-  if (hasUnsavedChanges()) {
-    window.addEventListener("beforeunload", beforeUnloadHandler);
-  } else {
-    window.removeEventListener("beforeunload", beforeUnloadHandler);
-  }
+	if (hasUnsavedChanges()) {
+		window.addEventListener("beforeunload", beforeUnloadHandler);
+	} else {
+		window.removeEventListener("beforeunload", beforeUnloadHandler);
+	}
 });
 ```
 
@@ -92,19 +101,21 @@ formElement.addEventListener("input", (event) => {
 **Chrome's phased rollout** (unload only, NOT beforeunload):
 
 #### Phase 1: Top 50 Sites (Completed)
+
 - **Chrome 142** (October 2025): Rollout completed for top 50 sites
 
 #### Phase 2: All Origins (In Progress)
-| Chrome Version | Month | Percentage |
-|----------------|-------|------------|
-| 146 | March 2026 | 1% |
-| 147 | April 2026 | 5% |
-| 148 | May 2026 | 10% |
-| 149 | June 2026 | 20% |
-| 150 | June 2026 | 40% |
-| 151 | July 2026 | 60% |
-| 152 | August 2026 | 80% |
-| 153 | September 2026 | 100% |
+
+| Chrome Version | Month          | Percentage |
+| -------------- | -------------- | ---------- |
+| 146            | March 2026     | 1%         |
+| 147            | April 2026     | 5%         |
+| 148            | May 2026       | 10%        |
+| 149            | June 2026      | 20%        |
+| 150            | June 2026      | 40%        |
+| 151            | July 2026      | 60%        |
+| 152            | August 2026    | 80%        |
+| 153            | September 2026 | 100%       |
 
 ### Why `unload` is Deprecated
 
@@ -118,6 +129,7 @@ formElement.addEventListener("input", (event) => {
 ## 3. Navigation API
 
 ### Overview
+
 - **Purpose**: Modern replacement for History API and `window.location`
 - **Target audience**: Single-page applications (SPAs)
 - **Spec location**: WHATWG HTML Living Standard
@@ -125,40 +137,42 @@ formElement.addEventListener("input", (event) => {
 
 ### Browser Support (2026)
 
-| Browser | Supported Since | Version | Status |
-|---------|----------------|---------|---------|
-| Chrome | February 2023 | 102+ | ✅ Supported |
-| Edge | February 2023 | 102+ | ✅ Supported |
-| Firefox | January 2026 | 147+ | ✅ Supported |
-| Safari | January 2026 | 26.2+ | ✅ Supported |
+| Browser | Supported Since | Version | Status       |
+| ------- | --------------- | ------- | ------------ |
+| Chrome  | February 2023   | 102+    | ✅ Supported |
+| Edge    | February 2023   | 102+    | ✅ Supported |
+| Firefox | January 2026    | 147+    | ✅ Supported |
+| Safari  | January 2026    | 26.2+   | ✅ Supported |
 
 **Global coverage**: 83.66% (as of January 2026)
 
 ### Core Capabilities
 
 #### Intercepting Navigation
-```javascript
-navigation.addEventListener('navigate', (event) => {
-  // Check if we can intercept
-  if (!event.canIntercept) {
-    return; // Cross-origin navigation
-  }
 
-  // Intercept and handle as same-document navigation
-  event.intercept({
-    handler: async () => {
-      // Custom SPA routing logic
-      await updatePageContent(event.destination.url);
-    }
-  });
+```javascript
+navigation.addEventListener("navigate", (event) => {
+	// Check if we can intercept
+	if (!event.canIntercept) {
+		return; // Cross-origin navigation
+	}
+
+	// Intercept and handle as same-document navigation
+	event.intercept({
+		handler: async () => {
+			// Custom SPA routing logic
+			await updatePageContent(event.destination.url);
+		},
+	});
 });
 ```
 
 #### Preventing Navigation
+
 ```javascript
-navigation.addEventListener('navigate', (event) => {
-  // Prevent navigation (with limitations)
-  event.preventDefault();
+navigation.addEventListener("navigate", (event) => {
+	// Prevent navigation (with limitations)
+	event.preventDefault();
 });
 ```
 
@@ -166,13 +180,13 @@ navigation.addEventListener('navigate', (event) => {
 
 The Navigation API **CANNOT replace `beforeunload`** for navigation guards:
 
-| Capability | `beforeunload` | Navigation API |
-|-----------|---------------|---------------|
-| Cross-origin navigation | ✅ Can intercept | ❌ Cannot intercept |
-| User confirmation dialog | ✅ Shows dialog | ❌ No dialog support |
-| Back/Forward button | ✅ Can intercept | ❌ Cannot prevent |
-| Initial page load | ✅ N/A | ❌ Doesn't trigger |
-| Frame scope | ✅ Window-level | ❌ Single frame only |
+| Capability               | `beforeunload`   | Navigation API       |
+| ------------------------ | ---------------- | -------------------- |
+| Cross-origin navigation  | ✅ Can intercept | ❌ Cannot intercept  |
+| User confirmation dialog | ✅ Shows dialog  | ❌ No dialog support |
+| Back/Forward button      | ✅ Can intercept | ❌ Cannot prevent    |
+| Initial page load        | ✅ N/A           | ❌ Doesn't trigger   |
+| Frame scope              | ✅ Window-level  | ❌ Single frame only |
 
 **Critical constraint**: "You can't cancel a navigation via `preventDefault()` if the user is pressing the Back or Forward buttons."
 
@@ -181,12 +195,14 @@ The Navigation API **CANNOT replace `beforeunload`** for navigation guards:
 ### When to Use Navigation API
 
 ✅ **Good for**:
+
 - Same-document SPA routing
 - Programmatic navigation control
 - History state management
 - Navigation lifecycle hooks
 
 ❌ **NOT suitable for**:
+
 - Preventing navigation away from site
 - User confirmation for unsaved changes
 - Cross-origin navigation interception
@@ -201,15 +217,16 @@ The Navigation API **CANNOT replace `beforeunload`** for navigation guards:
 **Most reliable alternative** for state saving:
 
 ```javascript
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    // Last reliable chance to save state
-    saveApplicationState();
-  }
+document.addEventListener("visibilitychange", () => {
+	if (document.visibilityState === "hidden") {
+		// Last reliable chance to save state
+		saveApplicationState();
+	}
 });
 ```
 
 **Advantages**:
+
 - Works reliably on mobile
 - Triggers when user switches tabs
 - Triggers when browser is minimized
@@ -218,18 +235,19 @@ document.addEventListener('visibilitychange', () => {
 ### Secondary: `pagehide` Event
 
 ```javascript
-window.addEventListener('pagehide', (event) => {
-  // Fires when navigating away, reloading, or closing
-  if (event.persisted) {
-    // Page entering bfcache
-  } else {
-    // Page being unloaded
-  }
-  saveApplicationState();
+window.addEventListener("pagehide", (event) => {
+	// Fires when navigating away, reloading, or closing
+	if (event.persisted) {
+		// Page entering bfcache
+	} else {
+		// Page being unloaded
+	}
+	saveApplicationState();
 });
 ```
 
 **Advantages**:
+
 - Fires on navigation away
 - Indicates bfcache entry via `persisted` property
 
@@ -237,13 +255,14 @@ window.addEventListener('pagehide', (event) => {
 
 ```javascript
 // Modern replacement for analytics in unload handlers
-fetchLater('/analytics', {
-  method: 'POST',
-  body: JSON.stringify(analyticsData)
+fetchLater("/analytics", {
+	method: "POST",
+	body: JSON.stringify(analyticsData),
 });
 ```
 
 **Advantages**:
+
 - Browser optimizes delivery
 - Doesn't block navigation
 - More reliable than `sendBeacon`
@@ -257,26 +276,26 @@ fetchLater('/analytics', {
 let hasUnsavedChanges = false;
 
 function enableUnsavedWarning() {
-  if (!hasUnsavedChanges) {
-    window.addEventListener('beforeunload', beforeUnloadHandler);
-    hasUnsavedChanges = true;
-  }
+	if (!hasUnsavedChanges) {
+		window.addEventListener("beforeunload", beforeUnloadHandler);
+		hasUnsavedChanges = true;
+	}
 }
 
 function disableUnsavedWarning() {
-  if (hasUnsavedChanges) {
-    window.removeEventListener('beforeunload', beforeUnloadHandler);
-    hasUnsavedChanges = false;
-  }
+	if (hasUnsavedChanges) {
+		window.removeEventListener("beforeunload", beforeUnloadHandler);
+		hasUnsavedChanges = false;
+	}
 }
 
 // Enable when form is dirty
-form.addEventListener('input', enableUnsavedWarning);
+form.addEventListener("input", enableUnsavedWarning);
 
 // Disable after successful save
-saveButton.addEventListener('click', async () => {
-  await saveForm();
-  disableUnsavedWarning();
+saveButton.addEventListener("click", async () => {
+	await saveForm();
+	disableUnsavedWarning();
 });
 ```
 
@@ -287,12 +306,15 @@ saveButton.addEventListener('click', async () => {
 ### Testing Deprecation Impact
 
 #### Chrome DevTools
+
 1. Open DevTools → Application → Back/forward cache
 2. Test your page's bfcache eligibility
 3. Check for blocking factors
 
 #### Chrome Flags
+
 Enable early testing:
+
 ```
 chrome://flags/#deprecate-unload
 ```
@@ -312,17 +334,20 @@ chrome://flags/#deprecate-unload
 ## 6. Implications for UI5 Routing Guards
 
 ### Current Approach
+
 UI5-ext-routing implements async navigation guards that can prevent navigation based on business logic (e.g., unsaved changes, authentication checks).
 
 ### Browser Compatibility Issues
 
 #### `beforeunload` Limitations
+
 1. **No custom messages**: Cannot show specific reason for blocking
 2. **User interaction required**: Won't trigger without prior user gesture
 3. **Mobile unreliable**: May not work at all on mobile browsers
 4. **Generic dialog only**: Browser controls message, no customization
 
 #### Navigation API Not a Solution
+
 1. **Same-document only**: Can't intercept navigation to external URLs
 2. **No back/forward blocking**: Users can always use browser buttons
 3. **No user prompts**: Can't force user decision dialog
@@ -331,73 +356,73 @@ UI5-ext-routing implements async navigation guards that can prevent navigation b
 
 ```javascript
 class ExtendedRouter {
-  // For same-document (SPA) navigation
-  setupNavigationAPI() {
-    navigation.addEventListener('navigate', async (event) => {
-      if (!event.canIntercept) return;
+	// For same-document (SPA) navigation
+	setupNavigationAPI() {
+		navigation.addEventListener("navigate", async (event) => {
+			if (!event.canIntercept) return;
 
-      event.intercept({
-        handler: async () => {
-          // Run async guards
-          const guardResult = await this.runGuards(event.destination.url);
+			event.intercept({
+				handler: async () => {
+					// Run async guards
+					const guardResult = await this.runGuards(event.destination.url);
 
-          if (!guardResult.canNavigate) {
-            // Show custom UI modal (not browser dialog)
-            const userChoice = await showCustomDialog(guardResult.reason);
-            if (!userChoice.confirmed) {
-              // Stay on current page
-              return;
-            }
-          }
+					if (!guardResult.canNavigate) {
+						// Show custom UI modal (not browser dialog)
+						const userChoice = await showCustomDialog(guardResult.reason);
+						if (!userChoice.confirmed) {
+							// Stay on current page
+							return;
+						}
+					}
 
-          // Proceed with navigation
-          await this.navigateToRoute(event.destination.url);
-        }
-      });
-    });
-  }
+					// Proceed with navigation
+					await this.navigateToRoute(event.destination.url);
+				},
+			});
+		});
+	}
 
-  // For external/full-page navigation
-  setupBeforeUnload() {
-    // Only enable when guards might block
-    this.on('routeMatched', () => {
-      if (this.hasUnsavedChanges()) {
-        window.addEventListener('beforeunload', this._beforeUnloadHandler);
-      } else {
-        window.removeEventListener('beforeunload', this._beforeUnloadHandler);
-      }
-    });
-  }
+	// For external/full-page navigation
+	setupBeforeUnload() {
+		// Only enable when guards might block
+		this.on("routeMatched", () => {
+			if (this.hasUnsavedChanges()) {
+				window.addEventListener("beforeunload", this._beforeUnloadHandler);
+			} else {
+				window.removeEventListener("beforeunload", this._beforeUnloadHandler);
+			}
+		});
+	}
 
-  _beforeUnloadHandler(event) {
-    // Generic browser dialog will show
-    event.preventDefault();
-    event.returnValue = true;
-  }
+	_beforeUnloadHandler(event) {
+		// Generic browser dialog will show
+		event.preventDefault();
+		event.returnValue = true;
+	}
 }
 ```
 
 ### Key Recommendations
 
 1. **Use Navigation API for SPA routing**:
-   - Intercept same-document navigations
-   - Show custom modal for guard failures
-   - Provides better UX than browser dialogs
+    - Intercept same-document navigations
+    - Show custom modal for guard failures
+    - Provides better UX than browser dialogs
 
 2. **Use `beforeunload` as fallback**:
-   - Only for external navigation or page close
-   - Accept limitation of generic browser message
-   - Enable conditionally based on state
+    - Only for external navigation or page close
+    - Accept limitation of generic browser message
+    - Enable conditionally based on state
 
 3. **Save state proactively**:
-   - Use `visibilitychange` for auto-save
-   - Don't rely on navigation guards to prevent data loss
-   - Treat guards as UX enhancement, not data safety
+    - Use `visibilitychange` for auto-save
+    - Don't rely on navigation guards to prevent data loss
+    - Treat guards as UX enhancement, not data safety
 
 4. **Mobile strategy**:
-   - Accept that blocking navigation is unreliable
-   - Implement aggressive auto-save
-   - Consider server-side draft storage
+    - Accept that blocking navigation is unreliable
+    - Implement aggressive auto-save
+    - Consider server-side draft storage
 
 ---
 

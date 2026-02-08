@@ -44,6 +44,7 @@ matching, target loading, or event firing occurs.
 |                                                                      |
 |   router.addGuard(globalGuardFn)                                     |
 |   router.addRouteGuard("protected", routeGuardFn)                    |
+|   router.addLeaveGuard("editOrder", leaveGuardFn)                    |
 |   router.initialize()                                                |
 +----------------------------------------------------------------------+
          |                                                    ^
@@ -59,9 +60,11 @@ matching, target loading, or event firing occurs.
 |   | Guard Management   |    | Navigation Interception   |            |
 |   |                    |    |                           |            |
 |   | addGuard()         |    | parse() override          |            |
-|   | removeGuard()      |    | _runAllGuards()           |            |
-|   | addRouteGuard()    |    | _commitNavigation()       |            |
-|   | removeRouteGuard() |    | _handleGuardResult()      |            |
+|   | removeGuard()      |    | _runLeaveGuards()         |            |
+|   | addRouteGuard()    |    | _runEnterPipeline()       |            |
+|   | removeRouteGuard() |    | _runAllGuards()           |            |
+|   | addLeaveGuard()    |    | _commitNavigation()       |            |
+|   | removeLeaveGuard() |    | _handleGuardResult()      |            |
 |   +--------------------+    | _restoreHash()            |            |
 |                              +---------------------------+            |
 +----------------------------------------------------------------------+
@@ -80,7 +83,8 @@ matching, target loading, or event firing occurs.
 All types are defined in `types.ts` and exported for consumer use.
 
 ```
-GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResult>
+GuardFn      = (context: GuardContext) => GuardResult | Promise<GuardResult>
+LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>
 
 GuardContext                        GuardResult
 +--------------+                   +---------------------------+
@@ -89,21 +93,24 @@ GuardContext                        GuardResult
 | toArguments  |  Record           | string  -> redirect       |
 | fromRoute    |  string           | GuardRedirect -> redirect |
 | fromHash     |  string           |   with params & targets   |
-+--------------+                   +---------------------------+
+| signal       |  AbortSignal      +---------------------------+
++--------------+
 
-RouterInstance (interface)
-  extends sap.m.routing.Router
-  + 7 state fields
-  + 4 public guard methods
-  + 7 internal methods
+GuardRouter (public interface)      RouterInternal (internal interface)
+  extends sap.m.routing.Router        extends GuardRouter
+  + 6 public guard methods             + 10 state fields
+    addGuard / removeGuard             + 10 internal methods
+    addRouteGuard / removeRouteGuard
+    addLeaveGuard / removeLeaveGuard
 ```
 
 Only strict `true` allows navigation. Truthy non-boolean values (numbers, objects, etc.)
 are treated as blocks. This prevents accidental allow from coercion.
 
-The `RouterInstance` interface exists because the Router uses UI5's `.extend()` pattern
-(not ES6 `class extends`). Each method body declares `this: RouterInstance` as an explicit
-this-parameter for full type safety.
+The `RouterInternal` interface exists because the Router uses UI5's `.extend()` pattern
+(not ES6 `class extends`). Each method body declares `this: RouterInternal` as an explicit
+this-parameter for full type safety. Application code casts to `GuardRouter` (the public
+interface); `RouterInternal` is used only inside the Router method bodies.
 
 ## parse() Override - The Core Mechanism
 
@@ -124,13 +131,19 @@ guards before the parent router processes the hash.
                     +--------+--------+
                              | no
                     +--------v--------+
-                    | same hash as    |--yes--> bump generation, return
-                    | _currentHash?   |          (dedup spurious hashchange)
+                    | same hash as    |--yes--> abort + bump gen, return
+                    | _pendingHash    |          (dedup spurious hashchange)
+                    | or _currentHash?|
                     +--------+--------+
                              | no
                     +--------v--------+
                     | resolve route   |
                     | from hash       |
+                    +--------+--------+
+                             |
+                    +--------v--------+
+                    | abort previous  |
+                    | AbortController |
                     +--------+--------+
                              |
                     +--------v--------+
@@ -144,9 +157,34 @@ guards before the parent router processes the hash.
                     +--------+--------+
                              | yes
                     +--------v--------+
-                    | build           |
-                    | GuardContext     |
+                    | create          |
+                    | AbortController |
+                    | + GuardContext   |
                     +--------+--------+
+                             |
+                    +--------v--------+
+                    | has leave       |--no---> _runEnterPipeline()
+                    | guards?         |
+                    +--------+--------+
+                             | yes
+                    +--------v--------+
+                    | _runLeave-      |
+                    | Guards()        |
+                    +--------+--------+
+                           /   \
+                     sync /     \ async (Promise)
+                         /       \
+                +-------v--+  +--v-----------+
+                | false?    |  | await result |
+                | restore   |  | check gen    |
+                | hash      |  | false?       |
+                +-----------+  | restore hash |
+                        |      +--------------+
+                        | true          | true
+                        v               v
+                    +-------------------+
+                    | _runEnterPipeline |
+                    +--------+----------+
                              |
                     +--------v--------+
                     | _runAllGuards() |
@@ -183,26 +221,42 @@ guards before the parent router processes the hash.
 
 ## Guard Execution Pipeline
 
-Guards run sequentially: global guards first, then route-specific guards. The pipeline
-stays synchronous until a guard returns a Promise, then switches to async for the rest.
+Guards run in three phases: leave guards first, then global enter guards, then
+route-specific enter guards. Each phase stays synchronous until a guard returns a
+Promise, then switches to async for the rest.
 
 ```
-  _runAllGuards(globalGuards, toRoute, context)
+  _runLeaveGuards(context)              Phase 1: Can we leave?
+       |
+       +---[no leave guards]--------> skip to Phase 2
+       |
+       +---[sync false]-------------> _restoreHash() (short-circuit)
+       |
+       +---[sync true]--------------> Phase 2
+       |
+       +---[Promise]----------------> _finishLeaveGuardsAsync()
+                                           +--[false]--> _restoreHash()
+                                           +--[true]---> Phase 2
+
+  _runEnterPipeline(generation, hash, toRoute, context)
        |
        v
-  _runGuardListSync(globalGuards)
+  _runAllGuards(globalGuards, toRoute, context)    Phase 2+3: Enter guards
        |
-       +---[all sync, all true]---> _runRouteGuards(toRoute)
+       v
+  _runGuardListSync(globalGuards)       Phase 2: Global enter guards
+       |
+       +---[all sync, all true]---> _runEnterGuards(toRoute)
        |                                 |
        +---[sync non-true]----------> return result (short-circuit)
        |
        +---[Promise returned]-------> _finishGuardListAsync()
                                            |
-                                           +--[resolved true]--> _runRouteGuards()
+                                           +--[resolved true]--> _runEnterGuards()
                                            +--[non-true]-------> return (short-circuit)
                                            +--[rejected]--------> return false (block)
 
-  _runRouteGuards(toRoute, context)
+  _runEnterGuards(toRoute, context)     Phase 3: Route-specific enter guards
        |
        +---[no route guards]--------> return true
        |
@@ -269,15 +323,18 @@ that was running when the user navigated back to the original hash.
 
 ## Internal State
 
-| Field                | Type                     | Purpose                                       |
-| -------------------- | ------------------------ | --------------------------------------------- |
-| `_globalGuards`      | `GuardFn[]`              | Guards that run for every navigation          |
-| `_routeGuards`       | `Map<string, GuardFn[]>` | Route-specific guards, keyed by route name    |
-| `_currentRoute`      | `string`                 | Name of the currently active route            |
-| `_currentHash`       | `string \| null`         | Hash of the active route, `null` before first |
-| `_redirecting`       | `boolean`                | True during guard-triggered redirect          |
-| `_parseGeneration`   | `number`                 | Monotonic counter for async invalidation      |
-| `_suppressNextParse` | `boolean`                | Suppresses parse from `_restoreHash`          |
+| Field                | Type                          | Purpose                                       |
+| -------------------- | ----------------------------- | --------------------------------------------- |
+| `_globalGuards`      | `GuardFn[]`                   | Guards that run for every navigation          |
+| `_enterGuards`       | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
+| `_leaveGuards`       | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
+| `_currentRoute`      | `string`                      | Name of the currently active route            |
+| `_currentHash`       | `string \| null`              | Hash of the active route, `null` before first |
+| `_pendingHash`       | `string \| null`              | Hash being evaluated by async guards          |
+| `_redirecting`       | `boolean`                     | True during guard-triggered redirect          |
+| `_parseGeneration`   | `number`                      | Monotonic counter for async invalidation      |
+| `_suppressNextParse` | `boolean`                     | Suppresses parse from `_restoreHash`          |
+| `_abortController`   | `AbortController \| null`     | Aborted when navigation is superseded         |
 
 ## Monorepo Tooling
 
@@ -322,6 +379,7 @@ that was running when the user navigated back to the original hash.
                                | direct-url.e2e.ts         |
                                | multi-route.e2e.ts        |
                                | nav-button.e2e.ts         |
+                               | leave-guard.e2e.ts        |
                                +---------------------------+
 
   Unit tests verify:            E2e tests verify:
@@ -331,6 +389,7 @@ that was running when the user navigated back to the original hash.
   - Generation counter          - Guard block + redirect
   - Error handling              - Rapid hash changes
   - API parity with native      - Multi-step user flows
+  - Leave guard pipeline        - Leave guard dirty form
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.
@@ -343,14 +402,14 @@ The demo app shows the minimal integration pattern:
 
 1. **manifest.json** - set `routerClass` to `"ui5.ext.routing.Router"` and add
    `"ui5.ext.routing": {}` to library dependencies
-2. **Component.ts** - cast `getRouter()` to `RouterInstance`, register guards, call
+2. **Component.ts** - cast `getRouter()` to `GuardRouter`, register guards, call
    `initialize()`
 
 ```
   manifest.json                          Component.ts
   +----------------------------+         +----------------------------------+
   | routing.config.routerClass |-------->| router = getRouter() as          |
-  | = "ui5.ext.routing.Router" |         |            RouterInstance        |
+  | = "ui5.ext.routing.Router" |         |            GuardRouter        |
   |                            |         |                                  |
   | routes:                    |         | router.addRouteGuard("protected",|
   |   home     -> ""           |         |   () => isLoggedIn ? true : "home"|

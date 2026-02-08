@@ -15,12 +15,12 @@ The router provides:
 
 ## Proposed Features
 
-| #   | Feature                                        | Priority | Depends On | Status   |
-| --- | ---------------------------------------------- | -------- | ---------- | -------- |
-| 01  | [Leave Guards](./01-leave-guards.md)           | High     | None       | Proposed |
-| 02  | [Guard Bypass](./02-guard-bypass.md)           | High     | None       | Proposed |
-| 03  | [Transition Object](./03-transition-object.md) | Medium   | 02         | Proposed |
-| 04  | [Route Metadata](./04-route-metadata.md)       | Low      | None       | Proposed |
+| #   | Feature                                        | Priority | Depends On | Status          |
+| --- | ---------------------------------------------- | -------- | ---------- | --------------- |
+| 01  | [Leave Guards](./01-leave-guards.md)           | High     | None       | **Implemented** |
+| 02  | [Guard Bypass](./02-guard-bypass.md)           | High     | None       | Proposed        |
+| 03  | [Transition Object](./03-transition-object.md) | Medium   | 02         | Proposed        |
+| 04  | [Route Metadata](./04-route-metadata.md)       | Low      | None       | Proposed        |
 
 ## Architecture Analysis
 
@@ -53,12 +53,12 @@ Architecture: Unified Pipeline (from 05)
 
 | Feature               | Vue | Angular | React | TanStack | Ember | Nuxt | **ui5.ext** | After Features |
 | --------------------- | --- | ------- | ----- | -------- | ----- | ---- | ----------- | -------------- |
-| Global enter guard    | Yes | Yes     | No     | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Per-route enter guard | Yes | Yes     | No     | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Leave guard           | Yes | Yes     | Yes   | Yes      | Yes   | No    | **No**      | **01**         |
-| Guard bypass          | No   | No       | No     | Yes      | No     | No    | **No**      | **02**         |
-| Transition retry      | No   | No       | No     | No        | Yes   | No    | **No**      | **03**         |
-| Route metadata        | Yes | Yes     | No     | Yes      | No     | No    | **No**      | **04**         |
+| Global enter guard    | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**     | Yes            |
+| Per-route enter guard | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**     | Yes            |
+| Leave guard           | Yes | Yes     | Yes   | Yes      | Yes   | No   | **Yes**     | Yes            |
+| Guard bypass          | No  | No      | No    | Yes      | No    | No   | **No**      | **02**         |
+| Transition retry      | No  | No      | No    | No       | Yes   | No   | **No**      | **03**         |
+| Route metadata        | Yes | Yes     | No    | Yes      | No    | No   | **No**      | **04**         |
 | Async support         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
 | Redirect              | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
 | Clean history         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
