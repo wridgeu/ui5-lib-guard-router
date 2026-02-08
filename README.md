@@ -208,6 +208,66 @@ Every guard receives a `GuardContext`:
 
 All methods return `this` for chaining.
 
+## Limitations
+
+### Redirect targets bypass guards
+
+When a guard redirects navigation from route A to route B, route B's guards are **not** evaluated. The redirect commits immediately.
+
+This matters when the redirect target has its own guards. For example:
+
+```
+User navigates to "dashboard"
+  → dashboard guard checks permissions, returns "profile"
+  → profile guard checks onboarding status ← this guard is SKIPPED
+  → profile view renders
+```
+
+This is intentional. Evaluating guards on redirect targets introduces the risk of infinite loops (`A → B → A → B → ...`). While solvable with a visited-set that detects cycles, the implementation adds significant complexity — particularly when redirect targets have **async** guards, since the redirect chain can no longer be bracketed in a single synchronous call stack. The chain state must then persist across async boundaries and be cleared only by terminal events (commit, block, or loop detection).
+
+In practice, redirect targets are typically "safe" routes like `home` or `login` that don't have guards of their own. If you need guard logic on a redirect target, run the check inline before returning the redirect:
+
+```typescript
+router.addRouteGuard("dashboard", (context) => {
+  if (!hasPermission()) {
+    // Instead of redirecting to "profile" and relying on its guard,
+    // check the profile condition here
+    return isOnboarded() ? "profile" : "onboarding";
+  }
+  return true;
+});
+```
+
+### URL bar shows target hash during async guards
+
+When a guard returns a Promise (e.g., a `fetch` call to check permissions), the browser's URL bar shows the target hash while the guard is resolving. If the guard ultimately blocks or redirects, the URL reverts — but there is a brief window where the displayed URL doesn't match the active route.
+
+This does **not** affect sync guards, which resolve in the same tick as the hash change (the URL flicker is imperceptible).
+
+**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` *before* `parse()` is called. The router cannot prevent the URL change — it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
+
+**Application-level solutions**:
+
+Show a busy indicator while async guards resolve. This communicates to the user that navigation is in progress, making the URL bar state a non-issue:
+
+```typescript
+router.addRouteGuard("dashboard", async (context) => {
+  const app = rootView.byId("app") as App;
+  app.setBusy(true);
+  try {
+    const res = await fetch(`/api/access/${context.toRoute}`, {
+      signal: context.signal,
+    });
+    const { allowed } = await res.json();
+    return allowed ? true : "home";
+  } finally {
+    app.setBusy(false);
+  }
+});
+```
+
+This follows the same pattern as [TanStack Router's `pendingComponent`](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking#handling-blocked-navigations) — the URL reflects the intent while a loading state signals that the navigation hasn't committed yet.
+
 ## Development
 
 ### Monorepo structure
