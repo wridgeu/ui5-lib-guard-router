@@ -267,8 +267,10 @@ _createNavigationIntent(toHash: string, toRoute: string, routeInfo: RouteInfo | 
 
 ## Dependencies
 
-- **Feature 02 (Guard Bypass)**: `retrySkipGuards()` requires `skipGuards` support in `navTo()`
-- Without Feature 02, only `retry()` is available (guards always re-run)
+- **Feature 02 (Guard Bypass)**: Deprioritized. `retrySkipGuards()` would require `skipGuards`
+  support, but in practice `retry()` (which re-runs guards) is sufficient — if the blocking
+  condition is resolved (e.g., user logged in), guards pass naturally. The `retrySkipGuards()`
+  method can be omitted or added later if Feature 02 is ever implemented.
 
 ## Compatibility
 

@@ -1,5 +1,11 @@
 # Feature: Guard Bypass
 
+> **Status**: Deprioritized. Most use cases (save & navigate, logout, transition retry)
+> are better solved by updating application state so guards pass naturally — e.g., set
+> `isDirty = false` after saving, set `isLoggedIn = false` before navigating to login.
+> A `skipGuards` escape hatch adds API surface for edge cases that rarely arise in practice.
+> Revisit only if a concrete use case emerges that can't be handled by proper guard logic.
+
 ## Problem
 
 Every `navTo()` call goes through the full guard pipeline (except redirects via `_redirecting`). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
