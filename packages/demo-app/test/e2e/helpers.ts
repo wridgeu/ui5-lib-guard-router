@@ -55,18 +55,16 @@ export async function resetAuth(): Promise<void> {
 }
 
 /**
- * Set the dirty state of the form model on the protected view.
- * The form model is created in the Protected controller's onInit.
+ * Set the dirty state via the checkbox control on the protected view.
+ * Uses setSelected() on the CheckBox directly — the two-way binding
+ * propagates the value to the form model automatically.
  */
 export async function setDirtyState(isDirty: boolean): Promise<void> {
 	await browser.execute((dirty: boolean) => {
 		const Element = sap.ui.require("sap/ui/core/Element");
-		const page = Element?.getElementById("container-demo.app---protectedView--protectedPage");
-		if (page) {
-			const model = (page as any).getModel("form");
-			if (model) {
-				model.setProperty("/isDirty", dirty);
-			}
+		const checkbox = Element?.getElementById("container-demo.app---protectedView--dirtyCheckbox");
+		if (checkbox) {
+			(checkbox as any).setSelected(dirty);
 		}
 	}, isDirty);
 }

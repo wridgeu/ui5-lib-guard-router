@@ -191,6 +191,9 @@ export default class EditOrderController extends Controller {
 }
 ```
 
+> [!TIP]
+> **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash — there is no built-in confirmation dialog or toast. In production, show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) so the block is visible. The library intentionally stays low-level to avoid opinionated UX decisions.
+
 ### Object form (enter + leave in one call)
 
 ```typescript
@@ -297,15 +300,16 @@ Every guard receives a `GuardContext`:
 
 ## API
 
-| Method                                                     | Description                                               |
-| ---------------------------------------------------------- | --------------------------------------------------------- |
-| `addGuard(fn)`                                             | Register a global enter guard (runs for every navigation) |
-| `removeGuard(fn)`                                          | Remove a global enter guard                               |
-| `addRouteGuard(routeName, fn)`                             | Register an enter guard for a specific route              |
-| `addRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Register enter and/or leave guards via object form        |
-| `removeRouteGuard(routeName, fn)`                          | Remove an enter guard                                     |
-| `addLeaveGuard(routeName, fn)`                             | Register a leave guard (runs when leaving the route)      |
-| `removeLeaveGuard(routeName, fn)`                          | Remove a leave guard                                      |
+| Method                                                        | Description                                               |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
+| `addGuard(fn)`                                                | Register a global enter guard (runs for every navigation) |
+| `removeGuard(fn)`                                             | Remove a global enter guard                               |
+| `addRouteGuard(routeName, fn)`                                | Register an enter guard for a specific route              |
+| `addRouteGuard(routeName, { beforeEnter?, beforeLeave? })`    | Register enter and/or leave guards via object form        |
+| `removeRouteGuard(routeName, fn)`                             | Remove an enter guard                                     |
+| `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form          |
+| `addLeaveGuard(routeName, fn)`                                | Register a leave guard (runs when leaving the route)      |
+| `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                                      |
 
 All methods return `this` for chaining.
 
@@ -394,7 +398,7 @@ npm start         # demo app at http://localhost:8080/index.html
 ### Tests
 
 ```bash
-# QUnit (90 unit tests) -- needs the library server
+# QUnit (93 unit tests) -- needs the library server
 npm run start:lib          # Terminal 1
 npm run test:qunit         # Terminal 2
 
