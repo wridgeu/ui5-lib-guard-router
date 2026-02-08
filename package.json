@@ -1,6 +1,11 @@
 {
 	"name": "ui5-ext-routing-monorepo",
 	"private": true,
+	"author": "Marco Beier",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/wridgeu/ui5-guard-router.git"
+	},
 	"engines": {
 		"node": ">=22"
 	},

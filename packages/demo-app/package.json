@@ -2,6 +2,12 @@
 	"name": "ui5-ext-routing-demo",
 	"version": "0.1.0",
 	"private": true,
+	"author": "Marco Beier",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/wridgeu/ui5-guard-router.git",
+		"directory": "packages/demo-app"
+	},
 	"description": "Demo app for ui5-ext-routing library",
 	"type": "module",
 	"scripts": {

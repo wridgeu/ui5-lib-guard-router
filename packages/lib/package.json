@@ -5,6 +5,16 @@
 	"license": "MIT",
 	"main": "dist/resources/ui5/ext/routing/library.js",
 	"types": "dist/index.d.ts",
+	"author": "Marco Beier",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/wridgeu/ui5-guard-router.git",
+		"directory": "packages/lib"
+	},
+	"bugs": {
+		"url": "https://github.com/wridgeu/ui5-guard-router/issues"
+	},
+	"homepage": "https://github.com/wridgeu/ui5-guard-router#readme",
 	"description": "UI5 Router extension with async navigation guards",
 	"type": "module",
 	"files": [
