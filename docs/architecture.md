@@ -120,17 +120,17 @@ guards before the parent router processes the hash.
 ```mermaid
 flowchart TD
     start(["parse(newHash)"]) --> suppress{_suppressNextParse set?}
-    suppress -- yes --> ret1([return\nconsumed by _restoreHash])
+    suppress -- yes --> ret1(["return<br/>consumed by _restoreHash"])
     suppress -- no --> redirect{_redirecting set?}
-    redirect -- yes --> commit1(["_commitNavigation(newHash)\nbypass guards on redirect"])
-    redirect -- no --> samehash{same hash as\n_pendingHash or _currentHash?}
-    samehash -- yes --> ret2([abort + bump gen, return\ndedup spurious hashchange])
+    redirect -- yes --> commit1(["_commitNavigation(newHash)<br/>bypass guards on redirect"])
+    redirect -- no --> samehash{"same hash as<br/>_pendingHash or _currentHash?"}
+    samehash -- yes --> ret2(["abort + bump gen, return<br/>dedup spurious hashchange"])
     samehash -- no --> resolve[resolve route from hash]
     resolve --> abort[abort previous AbortController]
     abort --> bump[bump _parseGeneration]
     bump --> guards{any guards registered?}
-    guards -- no --> commit2(["_commitNavigation\n(fast path)"])
-    guards -- yes --> create[create AbortController\n+ GuardContext]
+    guards -- no --> commit2(["_commitNavigation<br/>(fast path)"])
+    guards -- yes --> create["create AbortController<br/>+ GuardContext"]
     create --> leave{has leave guards?}
     leave -- no --> enter1(["_runEnterPipeline()"])
     leave -- yes --> runleave["_runLeaveGuards()"]
@@ -144,8 +144,8 @@ flowchart TD
     enter1 --> runall["_runAllGuards()"]
     runall --> esync{sync result}
     runall --> easync{async result}
-    esync --> eapply([apply result\nsame tick])
-    easync --> eawait([await result\ncheck gen, apply result])
+    esync --> eapply(["apply result<br/>same tick"])
+    easync --> eawait(["await result<br/>check gen, apply result"])
 ```
 
 **Critical design decisions:**
@@ -180,7 +180,7 @@ flowchart TD
         leave(["_runLeaveGuards(context)"]) --> lcheck{leave guards?}
         lcheck -- none --> phase2
         lcheck -- present --> lrun[run leave guards]
-        lrun -- "sync false" --> lblock([_restoreHash\nshort-circuit])
+        lrun -- "sync false" --> lblock(["_restoreHash<br/>short-circuit"])
         lrun -- "sync true" --> phase2
         lrun -- Promise --> lfin["_finishLeaveGuardsAsync()"]
         lfin -- "false" --> lblock2([_restoreHash])
@@ -191,11 +191,11 @@ flowchart TD
         enter(["_runEnterPipeline()"]) --> allguards["_runAllGuards()"]
         allguards --> gsync["_runGuardListSync(globalGuards)"]
         gsync -- "all sync, all true" --> phase3
-        gsync -- "sync non-true" --> gblock([return result\nshort-circuit])
+        gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
         gsync -- "Promise returned" --> gfin["_finishGuardListAsync()"]
         gfin -- "resolved true" --> phase3
-        gfin -- "non-true" --> gblock2([return\nshort-circuit])
-        gfin -- "rejected" --> gblock3([return false\nblock])
+        gfin -- "non-true" --> gblock2(["return<br/>short-circuit"])
+        gfin -- "rejected" --> gblock3(["return false<br/>block"])
     end
 
     subgraph phase3 ["Phase 3: Route-specific enter guards"]

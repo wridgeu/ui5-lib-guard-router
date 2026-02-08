@@ -20,16 +20,12 @@ function isGuardRedirect(value: GuardResult): value is GuardRedirect {
 	return typeof value === "object" && value !== null && typeof value.route === "string";
 }
 
-function isPromise(value: GuardResult | Promise<GuardResult>): value is Promise<GuardResult> {
-	return value instanceof Promise;
-}
-
-function isLeavePromise(value: boolean | Promise<boolean>): value is Promise<boolean> {
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 	return value instanceof Promise;
 }
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
-	return typeof guard === "object" && guard !== null;
+	return typeof guard !== "function";
 }
 
 /**
@@ -227,7 +223,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		if (hasLeaveGuards) {
 			const leaveResult = this._runLeaveGuards(context);
 
-			if (isLeavePromise(leaveResult)) {
+			if (isPromiseLike(leaveResult)) {
 				leaveResult
 					.then((allowed: boolean) => {
 						if (generation !== this._parseGeneration) {
@@ -264,7 +260,13 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		this._runEnterPipeline(generation, newHash, toRoute, context);
 	},
 
-	/** Run leave guards for the current route. Returns boolean (no redirects). */
+	/**
+	 * Run leave guards for the current route. Returns boolean (no redirects).
+	 *
+	 * Note: the guard array is iterated by index. Mutating the array during
+	 * iteration (e.g. calling removeLeaveGuard from inside a guard) may cause
+	 * guards to be skipped or run twice. Avoid modifying guards mid-pipeline.
+	 */
 	_runLeaveGuards(this: RouterInternal, context: GuardContext): boolean | Promise<boolean> {
 		const guards = this._leaveGuards.get(this._currentRoute);
 		if (!guards || guards.length === 0) return true;
@@ -272,7 +274,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
-				if (isLeavePromise(result)) {
+				if (isPromiseLike(result)) {
 					return this._finishLeaveGuardsAsync(result, guards, i, context);
 				}
 				if (result !== true) return false;
@@ -326,7 +328,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	): void {
 		const result = this._runAllGuards(this._globalGuards, toRoute, context);
 
-		if (isPromise(result)) {
+		if (isPromiseLike(result)) {
 			result
 				.then((guardResult: GuardResult) => {
 					if (generation !== this._parseGeneration) {
@@ -373,7 +375,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	): GuardResult | Promise<GuardResult> {
 		const globalResult = this._runGuardListSync(globalGuards, context);
 
-		if (isPromise(globalResult)) {
+		if (isPromiseLike(globalResult)) {
 			return globalResult.then((r: GuardResult) => {
 				if (r !== true) return r;
 				if (context.signal.aborted) return false;
@@ -390,7 +392,13 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		return this._runGuardListSync(this._enterGuards.get(toRoute)!, context);
 	},
 
-	/** Run guards sync; switch to async path if a Promise is returned. */
+	/**
+	 * Run guards sync; switch to async path if a Promise is returned.
+	 *
+	 * Note: the guard array is iterated by index. Mutating the array during
+	 * iteration (e.g. calling removeGuard from inside a guard) may cause
+	 * guards to be skipped or run twice. Avoid modifying guards mid-pipeline.
+	 */
 	_runGuardListSync(
 		this: RouterInternal,
 		guards: GuardFn[],
@@ -399,7 +407,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
-				if (isPromise(result)) {
+				if (isPromiseLike(result)) {
 					return this._finishGuardListAsync(result, guards, i, context);
 				}
 				if (result !== true) return this._validateGuardResult(result);
@@ -433,7 +441,11 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				Log.error(`Enter guard [${guardIndex}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
+				Log.error(
+					`Enter guard [${guardIndex}] threw an error, blocking navigation`,
+					String(error),
+					LOG_COMPONENT,
+				);
 			}
 			return false;
 		}

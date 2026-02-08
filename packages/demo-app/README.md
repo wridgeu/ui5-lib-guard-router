@@ -4,11 +4,11 @@ Demo application showcasing `ui5.ext.routing.Router` with authentication-based n
 
 ## Routes
 
-| Route       | Pattern       | Guard behavior                                        |
-| ----------- | ------------- | ----------------------------------------------------- |
-| `home`      | `""`          | Open -- no guard                                                  |
+| Route       | Pattern       | Guard behavior                                                      |
+| ----------- | ------------- | ------------------------------------------------------------------- |
+| `home`      | `""`          | Open -- no guard                                                    |
 | `protected` | `"protected"` | Enter: requires login (redirects to `home`). Leave: blocks if dirty |
-| `forbidden` | `"forbidden"` | Always blocked -- redirects to `home`                             |
+| `forbidden` | `"forbidden"` | Always blocked -- redirects to `home`                               |
 
 ## Running
 
@@ -50,16 +50,16 @@ npm run test:e2e
 
 Test files are in `test/e2e/`:
 
-| File                    | Coverage                                                 |
-| ----------------------- | -------------------------------------------------------- |
-| `routing-basic.e2e.ts`  | Basic navigation, login flow, nav-back                   |
-| `guard-allow.e2e.ts`    | Navigation allowed after login                           |
-| `guard-block.e2e.ts`    | Navigation blocked when logged out                       |
-| `guard-redirect.e2e.ts` | Forbidden route redirects to Home                        |
-| `nav-button.e2e.ts`     | UI5 Page nav-back button, re-navigation                  |
-| `multi-route.e2e.ts`    | Multi-step sequences, mid-session logout                 |
-| `browser-back.e2e.ts`   | Browser back/forward with guard state changes            |
-| `direct-url.e2e.ts`     | Direct URL entry, nonexistent routes, rapid hash changes |
+| File                    | Coverage                                                       |
+| ----------------------- | -------------------------------------------------------------- |
+| `routing-basic.e2e.ts`  | Basic navigation, login flow, nav-back                         |
+| `guard-allow.e2e.ts`    | Navigation allowed after login                                 |
+| `guard-block.e2e.ts`    | Navigation blocked when logged out                             |
+| `guard-redirect.e2e.ts` | Forbidden route redirects to Home                              |
+| `nav-button.e2e.ts`     | UI5 Page nav-back button, re-navigation                        |
+| `multi-route.e2e.ts`    | Multi-step sequences, mid-session logout                       |
+| `browser-back.e2e.ts`   | Browser back/forward with guard state changes                  |
+| `direct-url.e2e.ts`     | Direct URL entry, nonexistent routes, rapid hash changes       |
 | `leave-guard.e2e.ts`    | Dirty form leave guard: allow clean, block dirty, browser back |
 
 ## Framework

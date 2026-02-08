@@ -312,7 +312,7 @@ router.addLeaveGuard("editOrder", (ctx) => {
 
 // Object form: register enter + leave guard in one call
 router.addRouteGuard("editOrder", {
-	beforeEnter: (ctx) => isLoggedIn() ? true : "login",
+	beforeEnter: (ctx) => (isLoggedIn() ? true : "login"),
 	beforeLeave: (ctx) => !hasUnsavedChanges(),
 });
 
