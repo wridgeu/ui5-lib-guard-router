@@ -80,6 +80,7 @@ export interface RouterInternal extends RouterInstance {
 	_routeGuards: Map<string, GuardFn[]>;
 	_currentRoute: string;
 	_currentHash: string | null;
+	_pendingHash: string | null;
 	_redirecting: boolean;
 	_parseGeneration: number;
 	_suppressNextParse: boolean;

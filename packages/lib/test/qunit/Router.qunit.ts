@@ -1371,6 +1371,92 @@ QUnit.test("Superseded route guards are not started after async global guards", 
 	assert.notOk(routeGuardCalled, "Route guard was not started after superseded global guard");
 });
 
+// ============================================================
+// Module: Pending hash dedup (in-flight navigation)
+// ============================================================
+QUnit.module("Router - Pending hash dedup", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("Duplicate navTo during pending guard is deduped (guard runs once)", async function (assert: Assert) {
+	let guardCallCount = 0;
+	router.addRouteGuard("protected", async () => {
+		guardCallCount++;
+		await nextTick(100);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First navTo triggers guard
+	router.navTo("protected");
+	// Second navTo to same destination while guard is pending — should be ignored
+	await nextTick(10);
+	router.navTo("protected");
+
+	await waitForRoute(router, "protected");
+	assert.strictEqual(guardCallCount, 1, "Guard only ran once (duplicate was deduped)");
+});
+
+QUnit.test("Different navTo during pending guard is NOT deduped", async function (assert: Assert) {
+	let protectedGuardCount = 0;
+	let detailGuardCount = 0;
+	router.addRouteGuard("protected", async () => {
+		protectedGuardCount++;
+		await nextTick(100);
+		return true;
+	});
+	router.addRouteGuard("detail", async () => {
+		detailGuardCount++;
+		await nextTick(10);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First navTo triggers protected guard
+	router.navTo("protected");
+	// Different destination — should NOT be deduped
+	await nextTick(10);
+	router.navTo("detail", { id: "1" });
+
+	await nextTick(300);
+	assert.strictEqual(protectedGuardCount, 1, "Protected guard started");
+	assert.strictEqual(detailGuardCount, 1, "Detail guard also started (not deduped)");
+});
+
+QUnit.test("Pending dedup does not block after guard commits", async function (assert: Assert) {
+	let guardCallCount = 0;
+	router.addRouteGuard("protected", async () => {
+		guardCallCount++;
+		await nextTick(50);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First navigation — guard runs and commits
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(guardCallCount, 1, "Guard ran for first navigation");
+
+	// Navigate away
+	router.navTo("home");
+	await waitForRoute(router, "home");
+
+	// Same destination again — should work (not stuck as "pending")
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(guardCallCount, 2, "Guard ran again for second navigation");
+});
+
 QUnit.test("AbortError from guard is silenced when navigation is superseded", async function (assert: Assert) {
 	router.addGuard(async (context: GuardContext) => {
 		// Simulate a fetch that throws AbortError when signal is aborted

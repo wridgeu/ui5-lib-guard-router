@@ -37,6 +37,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		this._routeGuards = new Map<string, GuardFn[]>();
 		this._currentRoute = "";
 		this._currentHash = null; // null = no parse processed yet
+		this._pendingHash = null;
 		this._redirecting = false;
 		this._parseGeneration = 0;
 		this._suppressNextParse = false;
@@ -103,9 +104,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 
 		// Same-hash dedup: also invalidates any pending async guard
 		if (this._currentHash !== null && newHash === this._currentHash) {
+			this._pendingHash = null;
 			++this._parseGeneration;
 			this._abortController?.abort();
 			this._abortController = null;
+			return;
+		}
+
+		// Dedup against in-flight pending navigation
+		if (this._pendingHash !== null && newHash === this._pendingHash) {
 			return;
 		}
 
@@ -116,6 +123,8 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		this._abortController?.abort();
 		this._abortController = null;
 		const generation = ++this._parseGeneration;
+
+		this._pendingHash = newHash;
 
 		// No guards → fast path
 		if (this._globalGuards.length === 0 && (!toRoute || !this._routeGuards.has(toRoute))) {
@@ -157,6 +166,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 				.catch((error: unknown) => {
 					if (generation !== this._parseGeneration) return;
 					Log.error("Async guard chain failed, blocking navigation", String(error), LOG_COMPONENT);
+					this._pendingHash = null;
 					this._restoreHash();
 				});
 		} else if (result === true) {
@@ -168,6 +178,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 
 	/** Delegate to the parent router and update internal state. */
 	_commitNavigation(this: RouterInternal, hash: string, route?: string): void {
+		this._pendingHash = null;
 		MobileRouter.prototype.parse.call(this, hash);
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
@@ -257,6 +268,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 
 	/** Handle a block or redirect result. */
 	_handleGuardResult(this: RouterInternal, result: GuardResult): void {
+		this._pendingHash = null;
 		if (result === false) {
 			this._restoreHash();
 			return;
@@ -294,6 +306,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		this._globalGuards = [];
 		this._routeGuards.clear();
 		++this._parseGeneration;
+		this._pendingHash = null;
 		this._abortController?.abort();
 		this._abortController = null;
 		return MobileRouter.prototype.destroy.call(this);
