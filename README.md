@@ -28,6 +28,9 @@ The guard pipeline stays **synchronous when all guards return plain values** and
 
 ## Setup
 
+> [!NOTE]
+> This repository is a **proof of concept**, not a published npm package. It demonstrates that async navigation guards are feasible in UI5 today, but it is not actively maintained as a consumable library. Feel free to use the source as a reference or starting point for your own implementation.
+
 ### 1. Install the library
 
 ```bash
