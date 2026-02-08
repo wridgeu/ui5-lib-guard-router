@@ -275,14 +275,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/**
 	 * Run leave guards for the current route. Returns boolean (no redirects).
 	 *
-	 * Note: the guard array is iterated by index. Mutating the array during
-	 * iteration (e.g. calling removeLeaveGuard from inside a guard) may cause
-	 * guards to be skipped or run twice. Avoid modifying guards mid-pipeline.
+	 * The guard array is snapshot-copied before iteration so that guards
+	 * may safely add/remove themselves (e.g. one-shot guards) without
+	 * affecting the current pipeline run.
 	 */
 	_runLeaveGuards(this: RouterInternal, context: GuardContext): boolean | Promise<boolean> {
-		const guards = this._leaveGuards.get(this._currentRoute);
-		if (!guards || guards.length === 0) return true;
+		const registered = this._leaveGuards.get(this._currentRoute);
+		if (!registered || registered.length === 0) return true;
 
+		const guards = registered.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
@@ -294,6 +295,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 						context,
 						() => false,
 						"Leave guard",
+						true,
 					) as Promise<boolean>;
 				}
 				if (result !== true) return false;
@@ -363,7 +365,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		toRoute: string,
 		context: GuardContext,
 	): GuardResult | Promise<GuardResult> {
-		const globalResult = this._runGuardsSync(globalGuards, context);
+		const globalResult = this._runGuards(globalGuards, context);
 
 		if (isPromiseLike(globalResult)) {
 			return globalResult.then((r: GuardResult) => {
@@ -379,17 +381,18 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/** Run route-specific guards if any are registered. */
 	_runRouteGuards(this: RouterInternal, toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._enterGuards.has(toRoute)) return true;
-		return this._runGuardsSync(this._enterGuards.get(toRoute)!, context);
+		return this._runGuards(this._enterGuards.get(toRoute)!, context);
 	},
 
 	/**
 	 * Run guards sync; switch to async path if a Promise is returned.
 	 *
-	 * Note: the guard array is iterated by index. Mutating the array during
-	 * iteration (e.g. calling removeGuard from inside a guard) may cause
-	 * guards to be skipped or run twice. Avoid modifying guards mid-pipeline.
+	 * The guard array is snapshot-copied before iteration so that guards
+	 * may safely add/remove themselves (e.g. one-shot guards) without
+	 * affecting the current pipeline run.
 	 */
-	_runGuardsSync(this: RouterInternal, guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+	_runGuards(this: RouterInternal, guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+		guards = guards.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
@@ -401,6 +404,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 						context,
 						(r) => this._validateGuardResult(r),
 						"Enter guard",
+						false,
 					);
 				}
 				if (result !== true) return this._validateGuardResult(result);
@@ -422,6 +426,8 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	 * Shared by both enter and leave guard pipelines. The `onBlock` callback
 	 * determines what to return for non-true results: leave guards always
 	 * return `false`, enter guards validate and may return redirects.
+	 *
+	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
 	 */
 	async _continueGuardsAsync(
 		this: RouterInternal,
@@ -431,6 +437,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		context: GuardContext,
 		onBlock: (result: GuardResult) => GuardResult,
 		label: string,
+		isLeaveGuard: boolean,
 	): Promise<GuardResult> {
 		let guardIndex = currentIndex;
 		try {
@@ -446,7 +453,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				const route = label === "Leave guard" ? context.fromRoute : context.toRoute;
+				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
 					`${label} [${guardIndex}] on route "${route}" threw, blocking navigation`,
 					String(error),

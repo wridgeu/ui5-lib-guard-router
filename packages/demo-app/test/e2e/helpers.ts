@@ -55,11 +55,6 @@ export async function resetAuth(): Promise<void> {
 }
 
 /**
- * Set the dirty state via the checkbox control on the protected view.
- * Uses setSelected() on the CheckBox directly — the two-way binding
- * propagates the value to the form model automatically.
- */
-/**
  * Wait for the URL hash to settle to an expected value, then assert it.
  */
 export async function expectHashToBe(expected: string, timeoutMsg?: string): Promise<void> {
@@ -74,12 +69,19 @@ export async function expectHashToBe(expected: string, timeoutMsg?: string): Pro
 	expect(hash).toBe(expected);
 }
 
+/**
+ * Set the dirty state by updating the form model property directly.
+ * Avoids relying on CheckBox internals or two-way binding propagation.
+ */
 export async function setDirtyState(isDirty: boolean): Promise<void> {
 	await browser.execute((dirty: boolean) => {
 		const Element = sap.ui.require("sap/ui/core/Element");
-		const checkbox = Element?.getElementById("container-demo.app---protectedView--dirtyCheckbox");
-		if (checkbox) {
-			(checkbox as any).setSelected(dirty);
+		const view = Element?.getElementById("container-demo.app---protectedView");
+		if (view) {
+			const model = (view as any).getModel("form");
+			if (model) {
+				model.setProperty("/isDirty", dirty);
+			}
 		}
 	}, isDirty);
 }

@@ -64,7 +64,7 @@ matching, target loading, or event firing occurs.
 |   | addRouteGuard()    |    | _runEnterPipeline()       |            |
 |   | removeRouteGuard() |    | _runEnterGuards()         |            |
 |   | addLeaveGuard()    |    | _runRouteGuards()         |            |
-|   | removeLeaveGuard() |    | _runGuardsSync()          |            |
+|   | removeLeaveGuard() |    | _runGuards()          |            |
 |   +--------------------+    | _continueGuardsAsync()    |            |
 |                             | _validateGuardResult()    |            |
 |                             | _commitNavigation()       |            |
@@ -200,7 +200,7 @@ flowchart TD
 
     subgraph phase2 ["Phase 2: Global enter guards"]
         enter(["_runEnterPipeline()"]) --> allguards["_runEnterGuards()"]
-        allguards --> gsync["_runGuardsSync(globalGuards)"]
+        allguards --> gsync["_runGuards(globalGuards)"]
         gsync -- "all sync, all true" --> phase3
         gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
         gsync -- "Promise returned" --> gfin["_continueGuardsAsync()"]
@@ -212,7 +212,7 @@ flowchart TD
     subgraph phase3 ["Phase 3: Route-specific enter guards"]
         renter(["_runRouteGuards(toRoute)"]) --> rcheck{route guards?}
         rcheck -- none --> rtrue([return true])
-        rcheck -- present --> rsync["_runGuardsSync(routeGuards)"]
+        rcheck -- present --> rsync["_runGuards(routeGuards)"]
         rsync --> rnote([same sync/async split as above])
     end
 

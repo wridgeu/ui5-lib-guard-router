@@ -66,8 +66,8 @@ export type LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>
  * Configuration object for registering enter and/or leave guards on a route.
  *
  * When passed to `addRouteGuard`, the object form allows registering both
- * guard types in a single call. At least one of `beforeEnter` or `beforeLeave`
- * must be provided.
+ * guard types in a single call. If neither `beforeEnter` nor `beforeLeave`
+ * is provided, an info message is logged and no guards are registered.
  */
 export interface RouteGuardConfig {
 	/** Guard that runs before entering this route */
@@ -120,7 +120,7 @@ export interface RouterInternal extends GuardRouter {
 	): GuardResult | Promise<GuardResult>;
 	_runEnterPipeline(generation: number, newHash: string, toRoute: string, context: GuardContext): void;
 	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
-	_runGuardsSync(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
 	_continueGuardsAsync(
 		pendingResult: Promise<GuardResult>,
 		guards: Array<(context: GuardContext) => GuardResult | Promise<GuardResult>>,
@@ -128,6 +128,7 @@ export interface RouterInternal extends GuardRouter {
 		context: GuardContext,
 		onBlock: (result: GuardResult) => GuardResult,
 		label: string,
+		isLeaveGuard: boolean,
 	): Promise<GuardResult>;
 	_validateGuardResult(result: GuardResult): GuardResult;
 	_handleGuardResult(result: GuardResult): void;

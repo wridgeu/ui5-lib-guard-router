@@ -274,7 +274,7 @@ we'd want from Level 3's guard/middleware capabilities without the framework rew
 
 ```
 hashChanged → parse() → _runEnterGuards()
-                          ├─ sync: _runGuardsSync() → result in same tick
+                          ├─ sync: _runGuards() → result in same tick
                           └─ async: _continueGuardsAsync() → result in microtask
                                     └─ generation check after each await
 ```
@@ -300,7 +300,7 @@ The sync-first approach is not a compromise; it's optimal:
 
 The current code has three guard-running methods:
 
-- `_runGuardsSync()`: 14 lines
+- `_runGuards()`: 14 lines
 - `_continueGuardsAsync()`: 22 lines (unified for both leave and enter guards)
 - `_runEnterGuards()`: 10 lines (coordinator)
 
@@ -422,7 +422,7 @@ _buildPipeline(newHash, toRoute, routeInfo): GuardPhase[] {
 
 _runPipeline(phases: GuardPhase[]): GuardResult | Promise<GuardResult> {
     for (const phase of phases) {
-        const result = this._runGuardsSync(phase.guards, phase.context);
+        const result = this._runGuards(phase.guards, phase.context);
         if (isThenable(result)) {
             return this._finishPipelineAsync(result, phases, currentPhaseIndex);
         }

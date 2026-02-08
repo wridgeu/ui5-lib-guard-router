@@ -362,7 +362,7 @@ ui5.ext.routing:
       → parse(newHash)                      ← BLOCKING + GUARDING happens here
         → _runLeaveGuards()
         → _runEnterGuards()
-          → _runGuardsSync()                ← sync-first optimization
+          → _runGuards()                ← sync-first optimization
           → _continueGuardsAsync()             ← async fallback
         → _commitNavigation()
           → MobileRouter.parse()
