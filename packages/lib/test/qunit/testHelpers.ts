@@ -45,10 +45,18 @@ export async function assertBlocked(
 	timeout = 500,
 ): Promise<void> {
 	let matched = false;
-	router.getRoute(routeName)!.attachPatternMatched(() => {
+	const route = router.getRoute(routeName)!;
+	const handler = () => {
 		matched = true;
-	});
+	};
+	route.attachPatternMatched(handler);
 	navigate();
 	await nextTick(timeout);
-	assert.notOk(matched, message);
+	route.detachPatternMatched(handler);
+	if (matched) {
+		const hash = HashChanger.getInstance().getHash();
+		assert.notOk(matched, `${message} (navigation unexpectedly reached "${routeName}", hash="${hash}")`);
+	} else {
+		assert.notOk(matched, message);
+	}
 }

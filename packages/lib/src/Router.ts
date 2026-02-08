@@ -404,7 +404,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 				}
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
-				Log.error(`Guard [${i}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
+				Log.error(`Enter guard [${i}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
 				return false;
 			}
 		}
@@ -433,7 +433,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				Log.error(`Guard [${guardIndex}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
+				Log.error(`Enter guard [${guardIndex}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
 			}
 			return false;
 		}
@@ -470,6 +470,8 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/**
 	 * Restore the previous hash without creating a history entry.
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
+	 * Note: _currentRoute intentionally stays unchanged — the blocked navigation
+	 * never committed, so the user remains on the same logical route.
 	 */
 	_restoreHash(this: RouterInternal): void {
 		const hashChanger = this.getHashChanger();
