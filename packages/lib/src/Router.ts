@@ -33,10 +33,10 @@ function isThenable(value: GuardResult | Promise<GuardResult>): value is Promise
 const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	constructor: function (this: RouterInstance, ...args: unknown[]) {
 		MobileRouter.prototype.constructor.apply(this, args);
-		this._globalGuards = [] as GuardFn[];
+		this._globalGuards = [];
 		this._routeGuards = new Map<string, GuardFn[]>();
 		this._currentRoute = "";
-		this._currentHash = null as string | null; // null = no parse processed yet
+		this._currentHash = null; // null = no parse processed yet
 		this._redirecting = false;
 		this._parseGeneration = 0;
 		this._suppressNextParse = false;
@@ -107,7 +107,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		}
 
 		const routeInfo = this.getRouteInfoByHash(newHash);
-		const toRoute = routeInfo ? routeInfo.name : "";
+		const toRoute = routeInfo?.name ?? "";
 		const generation = ++this._parseGeneration;
 
 		// No guards → fast path
@@ -119,7 +119,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		const context: GuardContext = {
 			toRoute,
 			toHash: newHash,
-			toArguments: (routeInfo ? routeInfo.arguments : {}) as Record<string, string>,
+			toArguments: (routeInfo?.arguments ?? {}) as Record<string, string>,
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 		};
@@ -159,12 +159,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	_commitNavigation(this: RouterInstance, hash: string, route?: string): void {
 		MobileRouter.prototype.parse.call(this, hash);
 		this._currentHash = hash;
-		if (route !== undefined) {
-			this._currentRoute = route;
-		} else {
-			const routeInfo = this.getRouteInfoByHash(hash);
-			this._currentRoute = routeInfo ? routeInfo.name : "";
-		}
+		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
 	},
 
 	/** Run global guards, then route-specific guards. Stays sync when possible. */
