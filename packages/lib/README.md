@@ -7,7 +7,7 @@ The core library providing `ui5.ext.routing.Router` -- an extension of `sap.m.ro
 ```
 src/
   Router.ts       Router implementation (overrides parse())
-  types.ts        TypeScript types (GuardFn, GuardContext, GuardResult, GuardRedirect, RouterInstance)
+  types.ts        TypeScript types (GuardFn, LeaveGuardFn, GuardContext, GuardResult, GuardRedirect, RouteGuardConfig, GuardRouter)
   library.ts      UI5 library registration
   manifest.json   Library manifest
   .library        XML library descriptor

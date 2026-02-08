@@ -8,6 +8,7 @@ The router provides:
 
 - Global enter guards (`addGuard` / `removeGuard`)
 - Per-route enter guards (`addRouteGuard` / `removeRouteGuard`)
+- Per-route leave guards (`addLeaveGuard` / `removeLeaveGuard`)
 - Sync-first execution with async fallback
 - Guard results: allow (`true`), block (`false`), redirect (string / `GuardRedirect`)
 - Concurrent navigation handling via generation counter

@@ -99,7 +99,7 @@ GuardContext                        GuardResult
 GuardRouter (public interface)      RouterInternal (internal interface)
   extends sap.m.routing.Router        extends GuardRouter
   + 6 public guard methods             + 10 state fields
-    addGuard / removeGuard             + 10 internal methods
+    addGuard / removeGuard             + 11 internal methods
     addRouteGuard / removeRouteGuard
     addLeaveGuard / removeLeaveGuard
 ```
@@ -117,86 +117,35 @@ interface); `RouterInternal` is used only inside the Router method bodies.
 Every navigation path in UI5 flows through `parse()`. The override intercepts it to run
 guards before the parent router processes the hash.
 
-```
-                        parse(newHash)
-                             |
-                    +--------v--------+
-                    | _suppressNext-  |--yes--> return (consumed by _restoreHash)
-                    | Parse set?      |
-                    +--------+--------+
-                             | no
-                    +--------v--------+
-                    | _redirecting    |--yes--> _commitNavigation(newHash)
-                    | set?            |          (bypass guards on redirect)
-                    +--------+--------+
-                             | no
-                    +--------v--------+
-                    | same hash as    |--yes--> abort + bump gen, return
-                    | _pendingHash    |          (dedup spurious hashchange)
-                    | or _currentHash?|
-                    +--------+--------+
-                             | no
-                    +--------v--------+
-                    | resolve route   |
-                    | from hash       |
-                    +--------+--------+
-                             |
-                    +--------v--------+
-                    | abort previous  |
-                    | AbortController |
-                    +--------+--------+
-                             |
-                    +--------v--------+
-                    | bump            |
-                    | _parseGeneration|
-                    +--------+--------+
-                             |
-                    +--------v--------+
-                    | any guards      |--no---> _commitNavigation (fast path)
-                    | registered?     |
-                    +--------+--------+
-                             | yes
-                    +--------v--------+
-                    | create          |
-                    | AbortController |
-                    | + GuardContext   |
-                    +--------+--------+
-                             |
-                    +--------v--------+
-                    | has leave       |--no---> _runEnterPipeline()
-                    | guards?         |
-                    +--------+--------+
-                             | yes
-                    +--------v--------+
-                    | _runLeave-      |
-                    | Guards()        |
-                    +--------+--------+
-                           /   \
-                     sync /     \ async (Promise)
-                         /       \
-                +-------v--+  +--v-----------+
-                | false?    |  | await result |
-                | restore   |  | check gen    |
-                | hash      |  | false?       |
-                +-----------+  | restore hash |
-                        |      +--------------+
-                        | true          | true
-                        v               v
-                    +-------------------+
-                    | _runEnterPipeline |
-                    +--------+----------+
-                             |
-                    +--------v--------+
-                    | _runAllGuards() |
-                    +--------+--------+
-                           /   \
-                     sync /     \ async (Promise)
-                         /       \
-                +-------v--+  +--v-----------+
-                | apply     |  | await result |
-                | result    |  | check gen    |
-                | same tick |  | apply result |
-                +-----------+  +--------------+
+```mermaid
+flowchart TD
+    start(["parse(newHash)"]) --> suppress{_suppressNextParse set?}
+    suppress -- yes --> ret1([return\nconsumed by _restoreHash])
+    suppress -- no --> redirect{_redirecting set?}
+    redirect -- yes --> commit1(["_commitNavigation(newHash)\nbypass guards on redirect"])
+    redirect -- no --> samehash{same hash as\n_pendingHash or _currentHash?}
+    samehash -- yes --> ret2([abort + bump gen, return\ndedup spurious hashchange])
+    samehash -- no --> resolve[resolve route from hash]
+    resolve --> abort[abort previous AbortController]
+    abort --> bump[bump _parseGeneration]
+    bump --> guards{any guards registered?}
+    guards -- no --> commit2(["_commitNavigation\n(fast path)"])
+    guards -- yes --> create[create AbortController\n+ GuardContext]
+    create --> leave{has leave guards?}
+    leave -- no --> enter1(["_runEnterPipeline()"])
+    leave -- yes --> runleave["_runLeaveGuards()"]
+    runleave --> lsync{sync result}
+    runleave --> lasync{async result}
+    lsync -- "false" --> lrestore([_restoreHash])
+    lsync -- "true" --> enter1
+    lasync --> lawait["await result, check gen"]
+    lawait -- "false" --> lrestore2([_restoreHash])
+    lawait -- "true" --> enter1
+    enter1 --> runall["_runAllGuards()"]
+    runall --> esync{sync result}
+    runall --> easync{async result}
+    esync --> eapply([apply result\nsame tick])
+    easync --> eawait([await result\ncheck gen, apply result])
 ```
 
 **Critical design decisions:**
@@ -225,44 +174,39 @@ Guards run in three phases: leave guards first, then global enter guards, then
 route-specific enter guards. Each phase stays synchronous until a guard returns a
 Promise, then switches to async for the rest.
 
-```
-  _runLeaveGuards(context)              Phase 1: Can we leave?
-       |
-       +---[no leave guards]--------> skip to Phase 2
-       |
-       +---[sync false]-------------> _restoreHash() (short-circuit)
-       |
-       +---[sync true]--------------> Phase 2
-       |
-       +---[Promise]----------------> _finishLeaveGuardsAsync()
-                                           +--[false]--> _restoreHash()
-                                           +--[true]---> Phase 2
+```mermaid
+flowchart TD
+    subgraph phase1 ["Phase 1: Can we leave?"]
+        leave(["_runLeaveGuards(context)"]) --> lcheck{leave guards?}
+        lcheck -- none --> phase2
+        lcheck -- present --> lrun[run leave guards]
+        lrun -- "sync false" --> lblock([_restoreHash\nshort-circuit])
+        lrun -- "sync true" --> phase2
+        lrun -- Promise --> lfin["_finishLeaveGuardsAsync()"]
+        lfin -- "false" --> lblock2([_restoreHash])
+        lfin -- "true" --> phase2
+    end
 
-  _runEnterPipeline(generation, hash, toRoute, context)
-       |
-       v
-  _runAllGuards(globalGuards, toRoute, context)    Phase 2+3: Enter guards
-       |
-       v
-  _runGuardListSync(globalGuards)       Phase 2: Global enter guards
-       |
-       +---[all sync, all true]---> _runEnterGuards(toRoute)
-       |                                 |
-       +---[sync non-true]----------> return result (short-circuit)
-       |
-       +---[Promise returned]-------> _finishGuardListAsync()
-                                           |
-                                           +--[resolved true]--> _runEnterGuards()
-                                           +--[non-true]-------> return (short-circuit)
-                                           +--[rejected]--------> return false (block)
+    subgraph phase2 ["Phase 2: Global enter guards"]
+        enter(["_runEnterPipeline()"]) --> allguards["_runAllGuards()"]
+        allguards --> gsync["_runGuardListSync(globalGuards)"]
+        gsync -- "all sync, all true" --> phase3
+        gsync -- "sync non-true" --> gblock([return result\nshort-circuit])
+        gsync -- "Promise returned" --> gfin["_finishGuardListAsync()"]
+        gfin -- "resolved true" --> phase3
+        gfin -- "non-true" --> gblock2([return\nshort-circuit])
+        gfin -- "rejected" --> gblock3([return false\nblock])
+    end
 
-  _runEnterGuards(toRoute, context)     Phase 3: Route-specific enter guards
-       |
-       +---[no route guards]--------> return true
-       |
-       +---[has guards]-------------> _runGuardListSync(routeGuards)
-                                           |
-                                           (same sync/async split as above)
+    subgraph phase3 ["Phase 3: Route-specific enter guards"]
+        renter(["_runEnterGuards(toRoute)"]) --> rcheck{route guards?}
+        rcheck -- none --> rtrue([return true])
+        rcheck -- present --> rsync["_runGuardListSync(routeGuards)"]
+        rsync --> rnote([same sync/async split as above])
+    end
+
+    phase1 --> phase2
+    phase2 --> phase3
 ```
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
@@ -274,44 +218,46 @@ navigation is blocked (`false`).
 
 After guards complete, the result is applied inline (no separate method):
 
-```
-  result === true ?
-       |
-       +---[true]-----> _commitNavigation()
-       |                     |
-       |                     +--> MobileRouter.prototype.parse(hash)
-       |                     +--> update _currentHash, _currentRoute
-       |
-       +---[non-true]-> _handleGuardResult(result)
-                             |
-                             +---[false]----> _restoreHash()
-                             |                     |
-                             |                     +--> set _suppressNextParse = true
-                             |                     +--> hashChanger.replaceHash(previousHash)
-                             |                     +--> (parse fires sync, sees flag, returns)
-                             |
-                             +---[string]---> set _redirecting = true
-                             |                navTo(routeName, {}, {}, replace=true)
-                             |                (triggers re-entrant parse, bypasses guards)
-                             |                _redirecting = false (in finally block)
-                             |
-                             +---[GuardRedirect]--> same as string, with params
+```mermaid
+flowchart TD
+    result{result === true?}
+    result -- "true" --> commit["_commitNavigation()"]
+    commit --> parse["MobileRouter.prototype.parse(hash)"]
+    commit --> update["update _currentHash, _currentRoute"]
+
+    result -- "non-true" --> handle["_handleGuardResult(result)"]
+
+    handle -- "false" --> restore["_restoreHash()"]
+    restore --> s1["set _suppressNextParse = true"]
+    s1 --> s2["hashChanger.replaceHash(previousHash)"]
+    s2 --> s3(["parse fires sync, sees flag, returns"])
+
+    handle -- "string" --> redir["set _redirecting = true"]
+    redir --> navto["navTo(routeName, {}, {}, replace=true)"]
+    navto --> reenter(["re-entrant parse bypasses guards"])
+    navto --> cleanup["_redirecting = false (finally)"]
+
+    handle -- "GuardRedirect" --> redir2(["same as string, with params"])
 ```
 
 ## Async Concurrency Control
 
 The `_parseGeneration` counter handles overlapping async navigations:
 
-```
-  Nav 1: parse("a")          Nav 2: parse("b")
-       |                          |
-   gen = 1                    gen = 2
-       |                          |
-   await guard...             await guard...
-       |                          |
-   check: gen(1) != current(2)    check: gen(2) == current(2)
-       |                          |
-   DISCARD (stale)            APPLY result
+```mermaid
+sequenceDiagram
+    participant Nav1 as Nav 1: parse("a")
+    participant Router as Router State
+    participant Nav2 as Nav 2: parse("b")
+
+    Nav1->>Router: gen = 1
+    Nav1->>Nav1: await guard...
+    Nav2->>Router: gen = 2
+    Nav2->>Nav2: await guard...
+    Nav1->>Router: check: gen(1) != current(2)
+    Note over Nav1: DISCARD (stale)
+    Nav2->>Router: check: gen(2) == current(2)
+    Note over Nav2: APPLY result
 ```
 
 Every `parse()` that enters the guard pipeline bumps the generation. After each `await`,

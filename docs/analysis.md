@@ -305,6 +305,17 @@ router.addRouteGuard("dashboard", async (ctx) => {
 	return ok ? true : false;
 });
 
+// Leave guard: blocks navigation away from a route
+router.addLeaveGuard("editOrder", (ctx) => {
+	return !hasUnsavedChanges(); // false blocks, true allows
+});
+
+// Object form: register enter + leave guard in one call
+router.addRouteGuard("editOrder", {
+	beforeEnter: (ctx) => isLoggedIn() ? true : "login",
+	beforeLeave: (ctx) => !hasUnsavedChanges(),
+});
+
 // Guards are chainable and can be added/removed at any time
 router.addGuard(guard1).addGuard(guard2).addRouteGuard("x", guard3);
 router.removeGuard(guard1);

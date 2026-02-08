@@ -6,9 +6,9 @@ Demo application showcasing `ui5.ext.routing.Router` with authentication-based n
 
 | Route       | Pattern       | Guard behavior                                        |
 | ----------- | ------------- | ----------------------------------------------------- |
-| `home`      | `""`          | Open -- no guard                                      |
-| `protected` | `"protected"` | Requires login -- redirects to `home` when logged out |
-| `forbidden` | `"forbidden"` | Always blocked -- redirects to `home`                 |
+| `home`      | `""`          | Open -- no guard                                                  |
+| `protected` | `"protected"` | Enter: requires login (redirects to `home`). Leave: blocks if dirty |
+| `forbidden` | `"forbidden"` | Always blocked -- redirects to `home`                             |
 
 ## Running
 
@@ -60,6 +60,7 @@ Test files are in `test/e2e/`:
 | `multi-route.e2e.ts`    | Multi-step sequences, mid-session logout                 |
 | `browser-back.e2e.ts`   | Browser back/forward with guard state changes            |
 | `direct-url.e2e.ts`     | Direct URL entry, nonexistent routes, rapid hash changes |
+| `leave-guard.e2e.ts`    | Dirty form leave guard: allow clean, block dirty, browser back |
 
 ## Framework
 
