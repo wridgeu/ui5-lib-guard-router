@@ -273,7 +273,7 @@ we'd want from Level 3's guard/middleware capabilities without the framework rew
 ## Current Architecture: Sync-First with Async Fallback
 
 ```
-hashChanged → parse() → _runAllGuards()
+hashChanged → parse() → _runEnterGuards()
                           ├─ sync: _runGuardListSync() → result in same tick
                           └─ async: _finishGuardListAsync() → result in microtask
                                     └─ generation check after each await
@@ -302,7 +302,7 @@ The current code has three guard-running methods:
 
 - `_runGuardListSync()`: 14 lines
 - `_finishGuardListAsync()`: 12 lines
-- `_runAllGuards()`: 10 lines (coordinator)
+- `_runEnterGuards()`: 10 lines (coordinator)
 
 Total: ~36 lines of dual-path logic. This is not a maintenance burden.
 
@@ -319,7 +319,7 @@ parse(this: RouterInstance, newHash: string): void {
     Promise.resolve()
         .then(() => this._runLeaveGuards(context))
         .then((r) => r !== true ? r : this._runGlobalGuards(context))
-        .then((r) => r !== true ? r : this._runEnterGuards(toRoute, context))
+        .then((r) => r !== true ? r : this._runRouteGuards(toRoute, context))
         .then((result) => {
             if (generation !== this._parseGeneration) return;
             this._applyGuardResult(result, newHash, toRoute);
@@ -377,7 +377,7 @@ is already the minimal implementation of this pattern.
 
 ### Unified Guard Pipeline
 
-Instead of separate `_runAllGuards`, `_runEnterGuards`, and a future `_runLeaveGuards`, create
+Instead of separate `_runEnterGuards`, `_runRouteGuards`, and `_runLeaveGuards`, create
 a single pipeline concept:
 
 ```typescript

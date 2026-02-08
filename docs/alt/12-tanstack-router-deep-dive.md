@@ -361,7 +361,7 @@ ui5.ext.routing:
     → HashChanger fires hashChanged
       → parse(newHash)                      ← BLOCKING + GUARDING happens here
         → _runLeaveGuards() [if implemented]
-        → _runAllGuards()
+        → _runEnterGuards()
           → _runGuardListSync()             ← sync-first optimization
           → _finishGuardListAsync()          ← async fallback
         → _commitNavigation()

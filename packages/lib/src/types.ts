@@ -119,9 +119,9 @@ export interface RouterInternal extends GuardRouter {
 		currentIndex: number,
 		context: GuardContext,
 	): Promise<boolean>;
-	_runAllGuards(globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runEnterGuards(globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runEnterPipeline(generation: number, newHash: string, toRoute: string, context: GuardContext): void;
-	_runEnterGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
+	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runGuardListSync(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
 	_finishGuardListAsync(
 		pendingResult: Promise<GuardResult>,

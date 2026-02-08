@@ -62,7 +62,7 @@ matching, target loading, or event firing occurs.
 |   | addGuard()         |    | parse() override          |            |
 |   | removeGuard()      |    | _runLeaveGuards()         |            |
 |   | addRouteGuard()    |    | _runEnterPipeline()       |            |
-|   | removeRouteGuard() |    | _runAllGuards()           |            |
+|   | removeRouteGuard() |    | _runEnterGuards()           |            |
 |   | addLeaveGuard()    |    | _commitNavigation()       |            |
 |   | removeLeaveGuard() |    | _handleGuardResult()      |            |
 |   +--------------------+    | _restoreHash()            |            |
@@ -139,9 +139,9 @@ flowchart TD
     lsync -- "false" --> lrestore([_restoreHash])
     lsync -- "true" --> enter1
     lasync --> lawait["await result, check gen"]
-    lawait -- "false" --> lrestore2([_restoreHash])
+    lawait -- "false" --> lrestore
     lawait -- "true" --> enter1
-    enter1 --> runall["_runAllGuards()"]
+    enter1 --> runall["_runEnterGuards()"]
     runall --> esync{sync result}
     runall --> easync{async result}
     esync --> eapply(["apply result<br/>same tick"])
@@ -183,12 +183,12 @@ flowchart TD
         lrun -- "sync false" --> lblock(["_restoreHash<br/>short-circuit"])
         lrun -- "sync true" --> phase2
         lrun -- Promise --> lfin["_finishLeaveGuardsAsync()"]
-        lfin -- "false" --> lblock2([_restoreHash])
+        lfin -- "false" --> lblock
         lfin -- "true" --> phase2
     end
 
     subgraph phase2 ["Phase 2: Global enter guards"]
-        enter(["_runEnterPipeline()"]) --> allguards["_runAllGuards()"]
+        enter(["_runEnterPipeline()"]) --> allguards["_runEnterGuards()"]
         allguards --> gsync["_runGuardListSync(globalGuards)"]
         gsync -- "all sync, all true" --> phase3
         gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
@@ -199,7 +199,7 @@ flowchart TD
     end
 
     subgraph phase3 ["Phase 3: Route-specific enter guards"]
-        renter(["_runEnterGuards(toRoute)"]) --> rcheck{route guards?}
+        renter(["_runRouteGuards(toRoute)"]) --> rcheck{route guards?}
         rcheck -- none --> rtrue([return true])
         rcheck -- present --> rsync["_runGuardListSync(routeGuards)"]
         rsync --> rnote([same sync/async split as above])

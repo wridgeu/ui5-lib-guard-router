@@ -326,7 +326,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		toRoute: string,
 		context: GuardContext,
 	): void {
-		const result = this._runAllGuards(this._globalGuards, toRoute, context);
+		const result = this._runEnterGuards(this._globalGuards, toRoute, context);
 
 		if (isPromiseLike(result)) {
 			result
@@ -367,7 +367,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	},
 
 	/** Run global guards, then route-specific guards. Stays sync when possible. */
-	_runAllGuards(
+	_runEnterGuards(
 		this: RouterInternal,
 		globalGuards: GuardFn[],
 		toRoute: string,
@@ -379,15 +379,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			return globalResult.then((r: GuardResult) => {
 				if (r !== true) return r;
 				if (context.signal.aborted) return false;
-				return this._runEnterGuards(toRoute, context);
+				return this._runRouteGuards(toRoute, context);
 			});
 		}
 		if (globalResult !== true) return globalResult;
-		return this._runEnterGuards(toRoute, context);
+		return this._runRouteGuards(toRoute, context);
 	},
 
 	/** Run route-specific guards if any are registered. */
-	_runEnterGuards(this: RouterInternal, toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
+	_runRouteGuards(this: RouterInternal, toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._enterGuards.has(toRoute)) return true;
 		return this._runGuardListSync(this._enterGuards.get(toRoute)!, context);
 	},
