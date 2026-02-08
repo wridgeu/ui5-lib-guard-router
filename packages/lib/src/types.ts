@@ -56,7 +56,6 @@ export type GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResu
  * and catch property-name typos.
  */
 export interface RouterInstance extends MobileRouter {
-
 	// Guard state
 	_globalGuards: GuardFn[];
 	_routeGuards: Map<string, GuardFn[]>;
@@ -74,11 +73,15 @@ export interface RouterInstance extends MobileRouter {
 
 	// Guard internal methods
 	_commitNavigation(hash: string, route?: string): void;
-	_applyGuardResult(result: GuardResult, newHash: string, toRoute: string): void;
 	_runAllGuards(globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runGuardListSync(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
-	_finishGuardListAsync(pendingResult: Promise<GuardResult>, guards: GuardFn[], currentIndex: number, context: GuardContext): Promise<GuardResult>;
+	_finishGuardListAsync(
+		pendingResult: Promise<GuardResult>,
+		guards: GuardFn[],
+		currentIndex: number,
+		context: GuardContext,
+	): Promise<GuardResult>;
 	_validateGuardResult(result: GuardResult): GuardResult;
 	_handleGuardResult(result: GuardResult): void;
 	_restoreHash(): void;

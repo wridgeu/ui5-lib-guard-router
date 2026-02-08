@@ -22,39 +22,11 @@ function isThenable(value: GuardResult | Promise<GuardResult>): value is Promise
  * registered guard functions before any route matching, target loading,
  * or event firing occurs.
  *
- * Design notes:
- * - `parse()` is intentionally synchronous. The UI5 framework calls it
- *   from the hashChanged event handler without awaiting a return value.
- *   If parse() were async, routing would be deferred to a microtask,
- *   creating a race condition where the framework (and test tools like
- *   wdi5's waitForUI5) see the event loop as idle before the navigation
- *   has actually occurred. When guards are synchronous (the common case),
- *   the entire guard check + route activation happens in the same tick.
- *   Async guards are supported but fall back to a deferred path.
- * - `_redirecting`: Set only inside `_handleGuardResult` to mark a re-entrant
- *   parse triggered by a guard redirect. These bypass guards to prevent loops.
- * - `_parseGeneration`: Monotonic counter incremented on each parse that
- *   enters the async guard path. After each `await`, the generation is
- *   checked; if a newer parse started during the suspension, the stale
- *   parse is abandoned. This ensures only the latest navigation wins when
- *   rapid/concurrent navigations occur.
- * - Same-hash dedup: If `parse()` is called for a hash identical to
- *   `_currentHash`, it is a no-op. This suppresses spurious browser
- *   `hashchange` events that fire asynchronously after a redirect's
- *   `history.replaceState`.
- * - `_suppressNextParse`: Set by `_restoreHash()` before calling `replaceHash`.
- *   The `replaceHash` fires `hashChanged` synchronously, which triggers `parse()`.
- *   This flag suppresses that re-entrant parse so guards don't run again after
- *   a block or error. Reset immediately after `replaceHash` to prevent leaking
- *   when the hash didn't actually change (replaceHash is a no-op for same hash).
- *
- * **Important: redirect targets bypass guards.**
- * When a guard returns a redirect (string or `GuardRedirect`), the resulting
- * `navTo` call triggers a re-entrant `parse()` with `_redirecting = true`.
- * This re-entrant parse skips all guard evaluation to prevent infinite loops.
- * As a consequence, if route A redirects to route B, route B's guards are
- * **not** evaluated during that redirect. Design guard chains accordingly:
- * do not rely on the redirect target's guards running during a redirect.
+ * Key assumptions (see docs/architecture.md for full rationale):
+ * - `parse()` is intentionally NOT async. Sync guards execute in the
+ *   same tick; async guards fall back to a deferred path.
+ * - `replaceHash` fires `hashChanged` synchronously (validated by test).
+ * - Redirect targets bypass guards to prevent infinite loops.
  *
  * @extends sap.m.routing.Router
  */
@@ -117,89 +89,73 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		return this;
 	},
 
-	/**
-	 * Override parse to run guards before route matching.
-	 *
-	 * Every navigation path (navTo, browser back/forward, URL bar)
-	 * flows through parse(). By intercepting here, we prevent
-	 * target loading, view creation, and event firing when guards block.
-	 *
-	 * IMPORTANT: This method is intentionally NOT async. See class-level
-	 * design notes for rationale.
-	 */
 	parse(this: RouterInstance, newHash: string): void {
-		// Suppress the parse triggered by _restoreHash()'s replaceHash call.
-		// replaceHash fires hashChanged synchronously, so this flag is always
-		// consumed immediately and never leaks.
 		if (this._suppressNextParse) {
 			this._suppressNextParse = false;
 			return;
 		}
 
-		// Re-entrant call from guard redirect → skip guards, proceed directly
 		if (this._redirecting) {
 			this._commitNavigation(newHash);
 			return;
 		}
 
-		// Deduplicate: skip if already on this hash (same-route re-entry).
+		// Same-hash dedup: also invalidates any pending async guard
 		if (this._currentHash !== null && newHash === this._currentHash) {
+			++this._parseGeneration;
 			return;
 		}
 
-		// Determine which route matches the new hash
 		const routeInfo = this.getRouteInfoByHash(newHash);
 		const toRoute = routeInfo ? routeInfo.name : "";
-
-		// Invalidate any pending async guard results. Every new parse
-		// (except suppressed and redirecting, handled above) must bump
-		// the generation so stale async guards are discarded.
 		const generation = ++this._parseGeneration;
 
-		// No guards apply to this navigation → fast path
-		if (this._globalGuards.length === 0
-			&& (!toRoute || !this._routeGuards.has(toRoute))) {
+		// No guards → fast path
+		if (this._globalGuards.length === 0 && (!toRoute || !this._routeGuards.has(toRoute))) {
 			this._commitNavigation(newHash, toRoute);
 			return;
 		}
 
-		// Build guard context
 		const context: GuardContext = {
 			toRoute,
 			toHash: newHash,
 			toArguments: (routeInfo ? routeInfo.arguments : {}) as Record<string, string>,
 			fromRoute: this._currentRoute,
-			fromHash: this._currentHash ?? ""
+			fromHash: this._currentHash ?? "",
 		};
 
-		// Try to run all guards synchronously first.
 		const result = this._runAllGuards(this._globalGuards, toRoute, context);
 
 		if (isThenable(result)) {
-			// At least one guard returned a Promise → fall back to async path
-			result.then((guardResult: GuardResult) => {
-				if (generation !== this._parseGeneration) {
-					Log.debug("Async guard result discarded (superseded by newer navigation)", newHash, LOG_COMPONENT);
-					return;
-				}
-				this._applyGuardResult(guardResult, newHash, toRoute);
-			}).catch((error: unknown) => {
-				if (generation !== this._parseGeneration) return;
-				Log.error("Async guard chain failed, blocking navigation", String(error), LOG_COMPONENT);
-				this._restoreHash();
-			});
+			result
+				.then((guardResult: GuardResult) => {
+					if (generation !== this._parseGeneration) {
+						Log.debug(
+							"Async guard result discarded (superseded by newer navigation)",
+							newHash,
+							LOG_COMPONENT,
+						);
+						return;
+					}
+					if (guardResult === true) {
+						this._commitNavigation(newHash, toRoute);
+					} else {
+						this._handleGuardResult(guardResult);
+					}
+				})
+				.catch((error: unknown) => {
+					if (generation !== this._parseGeneration) return;
+					Log.error("Async guard chain failed, blocking navigation", String(error), LOG_COMPONENT);
+					this._restoreHash();
+				});
+		} else if (result === true) {
+			this._commitNavigation(newHash, toRoute);
 		} else {
-			// All guards were synchronous → apply result in the same tick
-			this._applyGuardResult(result, newHash, toRoute);
+			this._handleGuardResult(result);
 		}
 	},
 
-	/**
-	 * Commit a navigation: delegate to the parent router and update state.
-	 * When `route` is provided it is used directly; otherwise the route
-	 * is resolved from the hash (used by the redirect path where the
-	 * caller does not have the route name readily available).
-	 */
+	/** Delegate to the parent router and update internal state. */
 	_commitNavigation(this: RouterInstance, hash: string, route?: string): void {
 		MobileRouter.prototype.parse.call(this, hash);
 		this._currentHash = hash;
@@ -211,23 +167,13 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		}
 	},
 
-	/**
-	 * Apply the final guard result: proceed with routing, redirect, or block.
-	 */
-	_applyGuardResult(this: RouterInstance, result: GuardResult, newHash: string, toRoute: string): void {
-		if (result === true) {
-			this._commitNavigation(newHash, toRoute);
-		} else {
-			this._handleGuardResult(result);
-		}
-	},
-
-	/**
-	 * Run all applicable guards (global + route-specific). Returns the
-	 * guard result directly when all guards are synchronous, or a
-	 * Promise<GuardResult> if any guard is async.
-	 */
-	_runAllGuards(this: RouterInstance, globalGuards: GuardFn[], toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
+	/** Run global guards, then route-specific guards. Stays sync when possible. */
+	_runAllGuards(
+		this: RouterInstance,
+		globalGuards: GuardFn[],
+		toRoute: string,
+		context: GuardContext,
+	): GuardResult | Promise<GuardResult> {
 		const globalResult = this._runGuardListSync(globalGuards, context);
 
 		if (isThenable(globalResult)) {
@@ -240,19 +186,18 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		return this._runRouteGuards(toRoute, context);
 	},
 
-	/**
-	 * Run route-specific guards if any are registered for `toRoute`.
-	 */
+	/** Run route-specific guards if any are registered. */
 	_runRouteGuards(this: RouterInstance, toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._routeGuards.has(toRoute)) return true;
 		return this._runGuardListSync(this._routeGuards.get(toRoute)!, context);
 	},
 
-	/**
-	 * Run a list of guards synchronously if possible. When a guard returns
-	 * a Promise, switches to the async path for the remainder.
-	 */
-	_runGuardListSync(this: RouterInstance, guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+	/** Run guards sync; switch to async path if a Promise is returned. */
+	_runGuardListSync(
+		this: RouterInstance,
+		guards: GuardFn[],
+		context: GuardContext,
+	): GuardResult | Promise<GuardResult> {
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
@@ -268,16 +213,13 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		return true;
 	},
 
-	/**
-	 * Continue running a guard list asynchronously after a guard returned
-	 * a Promise. Picks up from the guard at `currentIndex`.
-	 */
+	/** Continue guard list async from the first Promise onward. */
 	async _finishGuardListAsync(
 		this: RouterInstance,
 		pendingResult: Promise<GuardResult>,
 		guards: GuardFn[],
 		currentIndex: number,
-		context: GuardContext
+		context: GuardContext,
 	): Promise<GuardResult> {
 		try {
 			const result = await pendingResult;
@@ -294,24 +236,16 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		}
 	},
 
-	/**
-	 * Validate a non-true synchronous guard result.
-	 */
+	/** Validate a non-true guard result; invalid values become false. */
 	_validateGuardResult(this: RouterInstance, result: GuardResult): GuardResult {
 		if (typeof result === "string" || typeof result === "boolean" || isGuardRedirect(result)) {
 			return result;
 		}
-		Log.warning(
-			"Guard returned invalid value, treating as block",
-			String(result),
-			LOG_COMPONENT
-		);
+		Log.warning("Guard returned invalid value, treating as block", String(result), LOG_COMPONENT);
 		return false;
 	},
 
-	/**
-	 * Handle a non-true guard result (block or redirect).
-	 */
+	/** Handle a block or redirect result. */
 	_handleGuardResult(this: RouterInstance, result: GuardResult): void {
 		if (result === false) {
 			this._restoreHash();
@@ -322,7 +256,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			if (typeof result === "string") {
 				this.navTo(result, {}, {}, true);
 			} else if (isGuardRedirect(result)) {
-				this.navTo(result.route, result.parameters || {}, result.componentTargetInfo, true);
+				this.navTo(result.route, result.parameters ?? {}, result.componentTargetInfo, true);
 			}
 		} finally {
 			this._redirecting = false;
@@ -331,13 +265,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 
 	/**
 	 * Restore the previous hash without creating a history entry.
-	 * Sets _suppressNextParse so the synchronous parse() triggered by
-	 * replaceHash's hashChanged event is silently consumed.
-	 *
-	 * ASSUMPTION: replaceHash fires hashChanged synchronously (same tick).
-	 * This is validated by a QUnit test. If UI5 ever changes this to fire
-	 * asynchronously, the flag reset below would clear _suppressNextParse
-	 * before parse() can check it, causing a double navigation.
+	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
 	 */
 	_restoreHash(this: RouterInstance): void {
 		const hashChanger = this.getHashChanger();
@@ -345,22 +273,18 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			this._suppressNextParse = true;
 			hashChanger.replaceHash(this._currentHash ?? "", HistoryDirection.Unknown);
 			if (this._suppressNextParse) {
-				// replaceHash did not fire hashChanged (same hash, no-op).
-				// Reset to prevent the flag leaking into the next parse.
-				Log.debug("replaceHash did not trigger hashChanged (same hash)", "", LOG_COMPONENT);
+				// replaceHash was a no-op (same hash) - reset to prevent leak
 				this._suppressNextParse = false;
 			}
 		}
 	},
 
-	/**
-	 * Clean up guard registrations on destroy.
-	 */
+	/** Clean up guards on destroy. */
 	destroy(this: RouterInstance) {
 		this._globalGuards = [];
 		this._routeGuards.clear();
 		return MobileRouter.prototype.destroy.call(this);
-	}
+	},
 });
 
 export default Router;

@@ -4,7 +4,9 @@ describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await browser.execute(() => { window.location.hash = "#/protected"; });
+		await browser.execute(() => {
+			window.location.hash = "#/protected";
+		});
 
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
@@ -14,7 +16,9 @@ describe("Direct URL navigation with guards", () => {
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
 		await browser.goTo({ sHash: "" });
-		await browser.execute(() => { window.location.hash = "#/forbidden"; });
+		await browser.execute(() => {
+			window.location.hash = "#/forbidden";
+		});
 
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
@@ -27,11 +31,13 @@ describe("Direct URL navigation with guards", () => {
 		await resetAuth();
 
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
-		await browser.execute(() => { window.location.hash = "#/protected"; });
+		await browser.execute(() => {
+			window.location.hash = "#/protected";
+		});
 
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
@@ -41,15 +47,22 @@ describe("Direct URL navigation with guards", () => {
 		await resetAuth();
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
-		await browser.execute(() => { window.location.hash = "#/this/does/not/exist"; });
+		await browser.execute(() => {
+			window.location.hash = "#/this/does/not/exist";
+		});
 
-		await browser.waitUntil(async () => {
-			const url = await browser.getUrl();
-			return url.includes("#/this/does/not/exist");
-		}, { timeout: 5000, timeoutMsg: "Hash did not settle to nonexistent route" });
+		await browser.waitUntil(
+			async () => {
+				const url = await browser.getUrl();
+				return url.includes("#/this/does/not/exist");
+			},
+			{ timeout: 5000, timeoutMsg: "Hash did not settle to nonexistent route" },
+		);
 
 		// Verify the app is still functional by navigating back to a known route
-		await browser.execute(() => { window.location.hash = "#/"; });
+		await browser.execute(() => {
+			window.location.hash = "#/";
+		});
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
@@ -59,9 +72,15 @@ describe("Direct URL navigation with guards", () => {
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Rapidly change the hash multiple times
-		await browser.execute(() => { window.location.hash = "#/protected"; });
-		await browser.execute(() => { window.location.hash = "#/forbidden"; });
-		await browser.execute(() => { window.location.hash = "#/protected"; });
+		await browser.execute(() => {
+			window.location.hash = "#/protected";
+		});
+		await browser.execute(() => {
+			window.location.hash = "#/forbidden";
+		});
+		await browser.execute(() => {
+			window.location.hash = "#/protected";
+		});
 
 		// Should end up on Home (all guarded while logged out)
 		await waitForPage("container-demo.app---homeView--homePage", "Home");

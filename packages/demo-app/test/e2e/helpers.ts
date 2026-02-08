@@ -4,23 +4,34 @@
  * wdi5's control resolution incorrectly picking up sub-elements (e.g. navButton).
  */
 export async function waitForPage(controlId: string, expectedTitle: string, timeout = 10000): Promise<void> {
-	await browser.waitUntil(async () => {
-		return browser.execute((id: string, title: string) => {
-			const Element = sap.ui.require("sap/ui/core/Element");
-			const control = Element?.getElementById(id);
-			return (control as any)?.getTitle?.() === title;
-		}, controlId, expectedTitle);
-	}, { timeout, timeoutMsg: `Page "${controlId}" did not show title "${expectedTitle}" within ${timeout}ms` });
+	await browser.waitUntil(
+		async () => {
+			return browser.execute(
+				(id: string, title: string) => {
+					const Element = sap.ui.require("sap/ui/core/Element");
+					const control = Element?.getElementById(id);
+					return (control as any)?.getTitle?.() === title;
+				},
+				controlId,
+				expectedTitle,
+			);
+		},
+		{ timeout, timeoutMsg: `Page "${controlId}" did not show title "${expectedTitle}" within ${timeout}ms` },
+	);
 }
 
 /**
  * Fire an event on a UI5 control by ID, bypassing wdi5's control resolution.
  */
 export async function fireEvent(controlId: string, eventName: string): Promise<void> {
-	await browser.execute((id: string, evt: string) => {
-		const Element = sap.ui.require("sap/ui/core/Element");
-		Element?.getElementById(id)?.fireEvent(evt);
-	}, controlId, eventName);
+	await browser.execute(
+		(id: string, evt: string) => {
+			const Element = sap.ui.require("sap/ui/core/Element");
+			Element?.getElementById(id)?.fireEvent(evt);
+		},
+		controlId,
+		eventName,
+	);
 }
 
 /**

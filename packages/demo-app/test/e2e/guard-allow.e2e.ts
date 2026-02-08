@@ -7,19 +7,19 @@ describe("Guard allows navigation when logged in", () => {
 
 		// Toggle login
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Verify logged in
 		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" }
+			selector: { id: "container-demo.app---homeView--authStatus" },
 		});
 		expect(await status.getProperty("text")).toBe("Logged In");
 
 		// Navigate to protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 

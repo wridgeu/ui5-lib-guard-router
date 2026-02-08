@@ -6,7 +6,7 @@ describe("Guard redirects to Home", () => {
 
 		// Try to navigate to forbidden
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navForbiddenBtn" }
+			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
 		});
 		await navBtn.press();
 

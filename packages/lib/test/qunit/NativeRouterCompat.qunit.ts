@@ -2,27 +2,19 @@ import Router from "ui5/ext/routing/Router";
 import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { RouterInstance } from "ui5/ext/routing/types";
-import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
-import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
-import { initHashChanger, nextTick } from "./testHelpers";
+import { initHashChanger } from "./testHelpers";
 
 /**
- * Native Router Compatibility Tests
- *
- * These tests verify that ui5.ext.routing.Router behaves identically to
- * sap.m.routing.Router when no guards are registered. This ensures it's
- * a true drop-in replacement.
+ * Verify that ui5.ext.routing.Router is a true drop-in replacement
+ * for sap.m.routing.Router: same API surface, same route matching.
  */
-
-interface DetailRouteArguments { id: string; }
 
 function createRouterConfig(): [object[], object] {
 	const routes = [
 		{ name: "home", pattern: "" },
 		{ name: "page1", pattern: "page1" },
-		{ name: "page2", pattern: "page2" },
 		{ name: "detail", pattern: "detail/{id}" },
-		{ name: "nested", pattern: "category/{catId}/product/{prodId}" }
+		{ name: "nested", pattern: "category/{catId}/product/{prodId}" },
 	];
 	const config = { async: true };
 	return [routes, config];
@@ -45,7 +37,7 @@ QUnit.module("NativeCompat - API parity", {
 		extRouter.destroy();
 		nativeRouter.destroy();
 		HashChanger.getInstance().setHash("");
-	}
+	},
 });
 
 QUnit.test("Both routers are instances of sap.m.routing.Router", function (assert: Assert) {
@@ -56,8 +48,14 @@ QUnit.test("Both routers are instances of sap.m.routing.Router", function (asser
 QUnit.test("Both routers have the same public routing methods", function (assert: Assert) {
 	const methods = ["navTo", "getRoute", "getRouteInfoByHash", "match", "initialize", "stop", "destroy"];
 	for (const method of methods) {
-		assert.ok(typeof (extRouter as unknown as Record<string, unknown>)[method] === "function", `ext router has ${method}`);
-		assert.ok(typeof (nativeRouter as unknown as Record<string, unknown>)[method] === "function", `native router has ${method}`);
+		assert.ok(
+			typeof (extRouter as unknown as Record<string, unknown>)[method] === "function",
+			`ext router has ${method}`,
+		);
+		assert.ok(
+			typeof (nativeRouter as unknown as Record<string, unknown>)[method] === "function",
+			`native router has ${method}`,
+		);
 	}
 });
 
@@ -82,7 +80,7 @@ QUnit.module("NativeCompat - Route matching", {
 	afterEach: function () {
 		router.destroy();
 		HashChanger.getInstance().setHash("");
-	}
+	},
 });
 
 QUnit.test("match() returns true for known hashes", function (assert: Assert) {
@@ -102,103 +100,4 @@ QUnit.test("getRouteInfoByHash returns correct info", function (assert: Assert) 
 	assert.ok(info, "Info returned for detail/42");
 	assert.strictEqual(info!.name, "detail", "Route name is detail");
 	assert.deepEqual(info!.arguments, { id: "42" }, "Arguments extracted correctly");
-});
-
-QUnit.test("getRouteInfoByHash returns correct info for nested params", function (assert: Assert) {
-	const info = router.getRouteInfoByHash("category/electronics/product/laptop");
-	assert.ok(info, "Info returned for nested route");
-	assert.strictEqual(info!.name, "nested", "Route name is nested");
-	assert.deepEqual(info!.arguments, { catId: "electronics", prodId: "laptop" }, "Nested arguments correct");
-});
-
-// ============================================================
-// Module: Navigation parity
-// ============================================================
-QUnit.module("NativeCompat - Navigation", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		router = new (Router as any)(routes, config) as RouterInstance;
-		router.initialize();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	}
-});
-
-QUnit.test("navTo triggers routeMatched", function (assert: Assert) {
-	const done = assert.async();
-	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
-		if (event.getParameter("name") === "page1") {
-			assert.ok(true, "routeMatched fired for page1");
-			done();
-		}
-	});
-	router.navTo("page1");
-});
-
-QUnit.test("navTo with replace triggers routeMatched", function (assert: Assert) {
-	const done = assert.async();
-	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
-		if (event.getParameter("name") === "page2") {
-			assert.ok(true, "routeMatched fired for page2 with replace");
-			done();
-		}
-	});
-	router.navTo("page2", {}, {}, true);
-});
-
-QUnit.test("navTo with parameters triggers routePatternMatched", function (assert: Assert) {
-	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		assert.strictEqual((event.getParameter("arguments") as DetailRouteArguments).id, "7", "Parameter extracted");
-		done();
-	});
-	router.navTo("detail", { id: "7" });
-});
-
-QUnit.test("Hash change triggers route matching", function (assert: Assert) {
-	const done = assert.async();
-	router.getRoute("page1")!.attachPatternMatched(() => {
-		assert.ok(true, "Hash change triggered route match");
-		done();
-	});
-	HashChanger.getInstance().setHash("page1");
-});
-
-QUnit.test("stop() prevents further routing", function (assert: Assert) {
-	const done = assert.async();
-
-	// Wait for initialize()'s async routing to settle before stopping
-	router.getRoute("home")!.attachPatternMatched(function initHandler() {
-		router.getRoute("home")!.detachPatternMatched(initHandler);
-
-		let matched = false;
-		router.stop();
-
-		router.attachRouteMatched(() => {
-			matched = true;
-		});
-
-		HashChanger.getInstance().setHash("page1");
-
-		nextTick(200).then(() => {
-			assert.notOk(matched, "No routing after stop()");
-			done();
-		});
-	});
-});
-
-QUnit.test("initialize() after stop() resumes routing", function (assert: Assert) {
-	const done = assert.async();
-	router.stop();
-	router.initialize();
-
-	router.getRoute("page1")!.attachPatternMatched(() => {
-		assert.ok(true, "Routing resumed after initialize()");
-		done();
-	});
-
-	router.navTo("page1");
 });

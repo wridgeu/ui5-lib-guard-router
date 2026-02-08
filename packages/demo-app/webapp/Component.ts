@@ -7,7 +7,7 @@ import type { RouterInstance } from "ui5/ext/routing/types";
 export default class Component extends UIComponent {
 	public static metadata = {
 		manifest: "json",
-		interfaces: ["sap.ui.core.IAsyncContentCreation"]
+		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 
 	init(): void {

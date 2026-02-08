@@ -7,13 +7,13 @@ describe("Multi-route navigation sequences", () => {
 
 		// Login
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Go to Protected (allowed)
 		const navProtected = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navProtected.press();
 
@@ -26,7 +26,7 @@ describe("Multi-route navigation sequences", () => {
 		// Try Forbidden (always blocked, redirects to Home)
 		const navForbidden = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await navForbidden.press();
 
@@ -43,13 +43,13 @@ describe("Multi-route navigation sequences", () => {
 
 		// Login
 		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Navigate to Protected (allowed)
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 
@@ -61,21 +61,21 @@ describe("Multi-route navigation sequences", () => {
 		// Logout (re-retrieve control with forceSelect after navigation)
 		toggleBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await toggleBtn.press();
 
 		// Verify logged out
 		const status = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--authStatus" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try Protected again (should now be blocked)
 		const navBtn2 = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await navBtn2.press();
 
@@ -89,13 +89,13 @@ describe("Multi-route navigation sequences", () => {
 
 		// Login
 		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Protected (allowed)
 		let navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 
@@ -108,14 +108,14 @@ describe("Multi-route navigation sequences", () => {
 		// Logout
 		toggleBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await toggleBtn.press();
 
 		// Try Protected (blocked)
 		navBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await navBtn.press();
 
@@ -124,14 +124,14 @@ describe("Multi-route navigation sequences", () => {
 		// Login again
 		toggleBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await toggleBtn.press();
 
 		// Protected (allowed again)
 		navBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await navBtn.press();
 

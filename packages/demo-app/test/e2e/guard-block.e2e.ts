@@ -7,13 +7,13 @@ describe("Guard blocks navigation", () => {
 
 		// Verify we start on Home and are logged out
 		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" }
+			selector: { id: "container-demo.app---homeView--authStatus" },
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try to navigate to protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 

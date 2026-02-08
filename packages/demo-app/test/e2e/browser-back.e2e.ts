@@ -7,13 +7,13 @@ describe("Browser back navigation with guards", () => {
 
 		// Login
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Navigate to Protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 
@@ -33,13 +33,13 @@ describe("Browser back navigation with guards", () => {
 
 		// Login
 		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Navigate to Protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
@@ -51,14 +51,14 @@ describe("Browser back navigation with guards", () => {
 		// Logout (re-retrieve control with forceSelect after navigation)
 		toggleBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await toggleBtn.press();
 
 		// Verify logged out
 		const status = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--authStatus" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
@@ -75,7 +75,7 @@ describe("Browser back navigation with guards", () => {
 
 		// Try navigating to protected (will be blocked - logged out)
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 
@@ -95,13 +95,13 @@ describe("Browser back navigation with guards", () => {
 
 		// Login
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Navigate Home → Protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");

@@ -7,12 +7,12 @@ describe("UI5 in-app nav back button", () => {
 
 		// Login and go to Protected
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 
@@ -35,13 +35,13 @@ describe("UI5 in-app nav back button", () => {
 
 		// Login
 		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" }
+			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
 		});
 		await toggleBtn.press();
 
 		// Go to Protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" }
+			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
@@ -53,7 +53,7 @@ describe("UI5 in-app nav back button", () => {
 		// Navigate to Protected again
 		const navBtn2 = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true
+			forceSelect: true,
 		});
 		await navBtn2.press();
 

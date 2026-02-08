@@ -7,7 +7,7 @@ describe("Basic routing (no guard interaction)", () => {
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" }
+			selector: { id: "container-demo.app---homeView--authStatus" },
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 	});

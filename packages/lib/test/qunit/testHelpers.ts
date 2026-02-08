@@ -1,10 +1,8 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type { RouterInstance } from "ui5/ext/routing/types";
 
 /**
  * Initialize HashChanger for tests (idempotent).
- * Uses the private `hasListeners` method from `sap.ui.base.EventProvider`
- * to avoid double-init. This is an internal API; if UI5 removes it,
- * a try/catch around `init()` is an acceptable fallback.
  */
 export function initHashChanger(): void {
 	const hashChanger = HashChanger.getInstance();
@@ -14,7 +12,39 @@ export function initHashChanger(): void {
 	hashChanger.setHash("");
 }
 
-/** Wait for next tick (let async parse() settle). */
+/** Wait for a timer tick. */
 export function nextTick(ms = 50): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Wait for a single patternMatched on `routeName`, then detach. */
+export function waitForRoute(router: RouterInstance, routeName: string): Promise<void> {
+	return new Promise((resolve) => {
+		const route = router.getRoute(routeName)!;
+		route.attachPatternMatched(function handler() {
+			route.detachPatternMatched(handler);
+			resolve();
+		});
+	});
+}
+
+/**
+ * Assert that navigation to `routeName` does not complete within `timeout` ms.
+ * Call `navigate()` to trigger the navigation under test.
+ */
+export async function assertBlocked(
+	assert: Assert,
+	router: RouterInstance,
+	routeName: string,
+	navigate: () => void,
+	message: string,
+	timeout = 500,
+): Promise<void> {
+	let matched = false;
+	router.getRoute(routeName)!.attachPatternMatched(() => {
+		matched = true;
+	});
+	navigate();
+	await nextTick(timeout);
+	assert.notOk(matched, message);
 }

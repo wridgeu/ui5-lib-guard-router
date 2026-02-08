@@ -76,9 +76,9 @@ In your app's `package.json`:
 
 ```json
 {
-  "dependencies": {
-    "ui5-ext-routing": "*"
-  }
+	"dependencies": {
+		"ui5-ext-routing": "*"
+	}
 }
 ```
 
@@ -86,18 +86,18 @@ In your app's `package.json`:
 
 ```json
 {
-  "sap.ui5": {
-    "dependencies": {
-      "libs": {
-        "ui5.ext.routing": {}
-      }
-    },
-    "routing": {
-      "config": {
-        "routerClass": "ui5.ext.routing.Router"
-      }
-    }
-  }
+	"sap.ui5": {
+		"dependencies": {
+			"libs": {
+				"ui5.ext.routing": {}
+			}
+		},
+		"routing": {
+			"config": {
+				"routerClass": "ui5.ext.routing.Router"
+			}
+		}
+	}
 }
 ```
 
@@ -108,48 +108,48 @@ import UIComponent from "sap/ui/core/UIComponent";
 import type { RouterInstance } from "ui5/ext/routing/types";
 
 export default class Component extends UIComponent {
-  static metadata = {
-    manifest: "json",
-    interfaces: ["sap.ui.core.IAsyncContentCreation"]
-  };
+	static metadata = {
+		manifest: "json",
+		interfaces: ["sap.ui.core.IAsyncContentCreation"],
+	};
 
-  init(): void {
-    super.init();
-    const router = this.getRouter() as unknown as RouterInstance;
+	init(): void {
+		super.init();
+		const router = this.getRouter() as unknown as RouterInstance;
 
-    // Global guard: runs for every navigation
-    router.addGuard((context) => {
-      if (context.toRoute === "admin" && !isAdmin()) {
-        return "home"; // redirect
-      }
-      return true; // allow
-    });
+		// Global guard: runs for every navigation
+		router.addGuard((context) => {
+			if (context.toRoute === "admin" && !isAdmin()) {
+				return "home"; // redirect
+			}
+			return true; // allow
+		});
 
-    // Route-specific guard
-    router.addRouteGuard("protected", () => {
-      return isLoggedIn() ? true : "login";
-    });
+		// Route-specific guard
+		router.addRouteGuard("protected", () => {
+			return isLoggedIn() ? true : "login";
+		});
 
-    // Async guards are supported
-    router.addRouteGuard("dashboard", async (context) => {
-      const hasAccess = await checkPermissions(context.toRoute);
-      return hasAccess ? true : false;
-    });
+		// Async guards are supported
+		router.addRouteGuard("dashboard", async (context) => {
+			const hasAccess = await checkPermissions(context.toRoute);
+			return hasAccess ? true : false;
+		});
 
-    router.initialize();
-  }
+		router.initialize();
+	}
 }
 ```
 
 ## Guard return values
 
-| Return value | Effect |
-|---|---|
-| `true` | Allow navigation |
-| `false` | Block navigation (stay on current route, no history entry) |
-| `"routeName"` | Redirect to named route (replaces history, no extra entry) |
-| `{ route: "name", parameters: { id: "42" } }` | Redirect with route parameters |
-| anything else (`null`, `undefined`, numbers) | Treated as block |
+| Return value                                  | Effect                                                     |
+| --------------------------------------------- | ---------------------------------------------------------- |
+| `true`                                        | Allow navigation                                           |
+| `false`                                       | Block navigation (stay on current route, no history entry) |
+| `"routeName"`                                 | Redirect to named route (replaces history, no extra entry) |
+| `{ route: "name", parameters: { id: "42" } }` | Redirect with route parameters                             |
+| anything else (`null`, `undefined`, numbers)  | Treated as block                                           |
 
 Only strict `true` allows navigation. This prevents accidental allows from truthy coercion.
 
@@ -157,13 +157,13 @@ Only strict `true` allows navigation. This prevents accidental allows from truth
 
 Every guard receives a `GuardContext` with navigation details:
 
-| Property | Type | Description |
-|---|---|---|
-| `toRoute` | `string` | Target route name (empty if no match) |
-| `toHash` | `string` | Raw hash being navigated to |
-| `toArguments` | `Record<string, string>` | Parsed route parameters |
-| `fromRoute` | `string` | Current route name (empty on first nav) |
-| `fromHash` | `string` | Current hash |
+| Property      | Type                     | Description                             |
+| ------------- | ------------------------ | --------------------------------------- |
+| `toRoute`     | `string`                 | Target route name (empty if no match)   |
+| `toHash`      | `string`                 | Raw hash being navigated to             |
+| `toArguments` | `Record<string, string>` | Parsed route parameters                 |
+| `fromRoute`   | `string`                 | Current route name (empty on first nav) |
+| `fromHash`    | `string`                 | Current hash                            |
 
 ## Guard execution order
 
@@ -173,12 +173,12 @@ Every guard receives a `GuardContext` with navigation details:
 
 ## API
 
-| Method | Description |
-|---|---|
-| `addGuard(fn)` | Register a global guard (runs for every navigation) |
-| `removeGuard(fn)` | Remove a global guard |
-| `addRouteGuard(routeName, fn)` | Register a guard for a specific route |
-| `removeRouteGuard(routeName, fn)` | Remove a route-specific guard |
+| Method                            | Description                                         |
+| --------------------------------- | --------------------------------------------------- |
+| `addGuard(fn)`                    | Register a global guard (runs for every navigation) |
+| `removeGuard(fn)`                 | Remove a global guard                               |
+| `addRouteGuard(routeName, fn)`    | Register a guard for a specific route               |
+| `removeRouteGuard(routeName, fn)` | Remove a route-specific guard                       |
 
 All methods return `this` for chaining. Guards can be added or removed at any time during the router's lifetime.
 

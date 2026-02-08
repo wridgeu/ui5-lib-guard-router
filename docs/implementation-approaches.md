@@ -7,10 +7,12 @@
 **Idea**: Attach to the existing `beforeRouteMatched` event and add a `preventDefault()` mechanism.
 
 **Pros**:
+
 - Aligns with UI5's event system patterns
 - No method overrides needed
 
 **Cons**:
+
 - `beforeRouteMatched` fires **after** internal route matching has already occurred. The target is about to be displayed. Preventing at this stage requires undoing work the router already started (view creation may have begun).
 - The event is synchronous - no async guard support without fundamentally changing the event system.
 - Cannot cleanly prevent history entry creation since the hash has already changed.
@@ -22,10 +24,12 @@
 **Idea**: Override `navTo()` to run guards before triggering navigation.
 
 **Pros**:
+
 - Simple, clear interception point for programmatic navigation
 - Guards run before any hash change
 
 **Cons**:
+
 - Does **not** catch browser back/forward button navigation
 - Does **not** catch direct URL/hash changes (user typing in address bar)
 - Would need additional HashChanger listeners to cover all entry points, creating complexity and potential race conditions
@@ -37,6 +41,7 @@
 **Idea**: Override `parse(sNewHash)`, the single method through which all navigation flows.
 
 **Pros**:
+
 - **Complete coverage**: Every navigation path (programmatic `navTo`, browser back/forward, URL bar changes) flows through `parse()`. One override catches everything.
 - **Earliest possible interception**: Guards run before route matching, target loading, view creation, and event firing. No flash, no unnecessary work.
 - **Clean blocking**: When a guard blocks, we simply don't call `super.parse()`. The framework never begins processing. We restore the previous hash via `replaceHash()`.
@@ -44,6 +49,7 @@
 - **Async-friendly**: Synchronous guards execute in the same tick as the hash change. Async guards are supported via a deferred path with a generation counter to handle concurrent navigations.
 
 **Cons**:
+
 - `parse()` is not a public/documented-stable API. In theory, a future UI5 version could rename or refactor it. In practice, it has been stable since the router's inception and is fundamental to how `HashChanger` integration works.
 - Need to manually determine which route matches the hash (using `Route#match()`) to build guard context and run per-route guards.
 
@@ -54,10 +60,12 @@
 **Idea**: Wrap or replace the `HashChanger` instance to intercept hash changes before they reach the router.
 
 **Pros**:
+
 - Intercepts at the absolute earliest point
 - No router method overrides
 
 **Cons**:
+
 - HashChanger is a singleton shared across all routers. Wrapping it affects the entire application.
 - Complex lifecycle management (when to wrap, when to unwrap).
 - Breaks if multiple routers exist (nested components, component reuse).
@@ -70,10 +78,12 @@
 **Idea**: Create a standalone plugin that attaches to any router instance, without subclassing.
 
 **Pros**:
+
 - No subclassing required
 - Could work with any router implementation
 
 **Cons**:
+
 - Still needs to hook into `parse()` or `navTo()` via monkey-patching, which is worse than a clean override.
 - No type-safe integration with the router class.
 - Harder to discover and configure.

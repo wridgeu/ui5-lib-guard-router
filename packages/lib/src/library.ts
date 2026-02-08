@@ -11,7 +11,7 @@ const library = Lib.init({
 	interfaces: [],
 	controls: [],
 	elements: [],
-	noLibraryCSS: true
+	noLibraryCSS: true,
 });
 
 export default library;

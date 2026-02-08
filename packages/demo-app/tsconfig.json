@@ -9,8 +9,5 @@
 		},
 		"types": ["@openui5/types"]
 	},
-	"include": [
-		"webapp/**/*.ts",
-		"../lib/src/**/*.ts"
-	]
+	"include": ["webapp/**/*.ts", "../lib/src/**/*.ts"]
 }

@@ -1,20 +1,17 @@
 {
 	"name": "ui5-ext-routing",
 	"version": "0.1.0",
+	"private": true,
 	"description": "UI5 Router extension with async navigation guards",
 	"type": "module",
 	"scripts": {
-		"clean": "npx rimraf dist .ui5",
+		"clean": "rimraf dist .ui5",
 		"build": "ui5 build",
 		"start": "ui5 serve",
 		"test": "echo \"Run tests from monorepo root: npm run test:qunit\" && exit 1",
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@openui5/types": "1.144.0",
-		"@types/qunit": "^2.19.13",
-		"@ui5/cli": "^4.0.0",
-		"typescript": "~5.7.0",
-		"ui5-tooling-transpile": "^3.0.0"
+		"@types/qunit": "^2.19.13"
 	}
 }
