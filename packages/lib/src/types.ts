@@ -86,7 +86,7 @@ export interface GuardRouter extends MobileRouter {
 	addGuard(guard: GuardFn): GuardRouter;
 	removeGuard(guard: GuardFn): GuardRouter;
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
-	removeRouteGuard(routeName: string, guard: GuardFn): GuardRouter;
+	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 }

@@ -6,6 +6,7 @@ import type {
 	GuardContext,
 	GuardResult,
 	GuardRedirect,
+	GuardRouter,
 	LeaveGuardFn,
 	RouteGuardConfig,
 	RouterInternal,
@@ -64,7 +65,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/**
 	 * Register a global guard that runs for every navigation.
 	 */
-	addGuard(this: RouterInternal, guard: GuardFn): RouterInternal {
+	addGuard(this: RouterInternal, guard: GuardFn): GuardRouter {
 		this._globalGuards.push(guard);
 		return this;
 	},
@@ -72,7 +73,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/**
 	 * Remove a previously registered global guard.
 	 */
-	removeGuard(this: RouterInternal, guard: GuardFn): RouterInternal {
+	removeGuard(this: RouterInternal, guard: GuardFn): GuardRouter {
 		const index = this._globalGuards.indexOf(guard);
 		if (index !== -1) {
 			this._globalGuards.splice(index, 1);
@@ -86,7 +87,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 */
-	addRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): RouterInternal {
+	addRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter {
 		if (isRouteGuardConfig(guard)) {
 			if (guard.beforeEnter) {
 				this.addRouteGuard(routeName, guard.beforeEnter);
@@ -104,9 +105,22 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	},
 
 	/**
-	 * Remove an enter guard from a specific route.
+	 * Remove a guard from a specific route.
+	 *
+	 * Accepts the same forms as `addRouteGuard`: a guard function removes
+	 * an enter guard; a configuration object removes `beforeEnter` and/or
+	 * `beforeLeave` by reference.
 	 */
-	removeRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn): RouterInternal {
+	removeRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter {
+		if (isRouteGuardConfig(guard)) {
+			if (guard.beforeEnter) {
+				this.removeRouteGuard(routeName, guard.beforeEnter);
+			}
+			if (guard.beforeLeave) {
+				this.removeLeaveGuard(routeName, guard.beforeLeave);
+			}
+			return this;
+		}
 		const guards = this._enterGuards.get(routeName);
 		if (guards) {
 			const index = guards.indexOf(guard);
@@ -127,7 +141,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 */
-	addLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): RouterInternal {
+	addLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): GuardRouter {
 		if (!this._leaveGuards.has(routeName)) {
 			this._leaveGuards.set(routeName, []);
 		}
@@ -138,7 +152,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 	/**
 	 * Remove a leave guard from a specific route.
 	 */
-	removeLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): RouterInternal {
+	removeLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): GuardRouter {
 		const guards = this._leaveGuards.get(routeName);
 		if (guards) {
 			const index = guards.indexOf(guard);
@@ -263,7 +277,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 				}
 				if (result !== true) return false;
 			} catch (error) {
-				Log.error("Leave guard threw an error, blocking navigation", String(error), LOG_COMPONENT);
+				Log.error(`Leave guard [${i}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
 				return false;
 			}
 		}
@@ -278,19 +292,25 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		currentIndex: number,
 		context: GuardContext,
 	): Promise<boolean> {
+		let guardIndex = currentIndex;
 		try {
 			const result = await pendingResult;
 			if (result !== true) return false;
 
 			for (let i = currentIndex + 1; i < guards.length; i++) {
 				if (context.signal.aborted) return false;
+				guardIndex = i;
 				const r = await guards[i](context);
 				if (r !== true) return false;
 			}
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				Log.error("Leave guard threw an error, blocking navigation", String(error), LOG_COMPONENT);
+				Log.error(
+					`Leave guard [${guardIndex}] threw an error, blocking navigation`,
+					String(error),
+					LOG_COMPONENT,
+				);
 			}
 			return false;
 		}
@@ -384,7 +404,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 				}
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
-				Log.error("Guard threw an error, blocking navigation", String(error), LOG_COMPONENT);
+				Log.error(`Guard [${i}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
 				return false;
 			}
 		}
@@ -399,19 +419,21 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		currentIndex: number,
 		context: GuardContext,
 	): Promise<GuardResult> {
+		let guardIndex = currentIndex;
 		try {
 			const result = await pendingResult;
 			if (result !== true) return this._validateGuardResult(result);
 
 			for (let i = currentIndex + 1; i < guards.length; i++) {
 				if (context.signal.aborted) return false;
+				guardIndex = i;
 				const r = await guards[i](context);
 				if (r !== true) return this._validateGuardResult(r);
 			}
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				Log.error("Guard threw an error, blocking navigation", String(error), LOG_COMPONENT);
+				Log.error(`Guard [${guardIndex}] threw an error, blocking navigation`, String(error), LOG_COMPONENT);
 			}
 			return false;
 		}

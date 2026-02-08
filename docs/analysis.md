@@ -352,36 +352,36 @@ No application logic changes needed beyond the guard definitions themselves.
 
 ## 4. Test Coverage
 
-| Category              | Count  | What's Tested                                                                 |
-| --------------------- | ------ | ----------------------------------------------------------------------------- |
-| Drop-in replacement   | 8      | navTo, parameters, events, getRoute: all work without guards                  |
-| Guard API             | 5      | add/remove/chain guards, cleanup on destroy                                   |
-| Allow navigation      | 3      | Global, route, async guards returning `true`                                  |
-| Block navigation      | 5      | Global, route, async guards returning `false`, errors, rejections             |
-| Redirect              | 3      | String redirect, async redirect, GuardRedirect with parameters                |
-| Guard context         | 2      | Context properties, fromRoute/fromHash tracking                               |
-| Execution order       | 4      | Global before route, registration order, short-circuit, route isolation       |
-| Invalid values        | 1      | Non-boolean/string/object treated as block                                    |
-| GuardRedirect objects | 3      | Plain, with parameters, async                                                 |
-| Hash change (URL bar) | 3      | Direct URL blocked, unguarded proceeds, redirect restores hash                |
-| Dynamic guard changes | 3      | State change respected, mid-session add/remove                                |
-| Re-entrancy           | 2      | No infinite loops, cross-redirect settlement                                  |
-| Mixed sync/async      | 5      | All combinations of sync/async global + route guards                          |
-| Overlapping async     | 2      | Generation counter, stale result discard                                      |
-| Rapid sequential      | 2      | Sync: all processed; async: only last wins                                    |
-| `_suppressNextParse`  | 1      | Validates synchronous `hashChanged` assumption                                |
-| Leave guards          | 20     | Sync/async allow/block, execution order, short-circuit, object form, chaining |
-| **QUnit Total**       | **90** |                                                                               |
-| E2E (guard-allow)     | 1      | Login then navigate to protected                                              |
-| E2E (guard-block)     | 1      | Logged out, try protected → stays on home                                     |
-| E2E (guard-redirect)  | 1      | Navigate to forbidden → redirected                                            |
-| E2E (browser-back)    | multi  | Back button respects guards                                                   |
-| E2E (direct-url)      | multi  | URL bar entry respects guards                                                 |
-| E2E (multi-route)     | multi  | Complex sequential navigations with state changes                             |
-| E2E (nav-button)      | multi  | Button interactions trigger guards                                            |
-| E2E (routing-basic)   | 1      | Smoke test                                                                    |
-| E2E (leave-guard)     | 4      | Dirty form leave guard: allow clean, block dirty, clear state, browser back   |
-| **E2E Total**         | **22** |                                                                               |
+| Category              | Count  | What's Tested                                                                                               |
+| --------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| Drop-in replacement   | 8      | navTo, parameters, events, getRoute: all work without guards                                                |
+| Guard API             | 5      | add/remove/chain guards, cleanup on destroy                                                                 |
+| Allow navigation      | 3      | Global, route, async guards returning `true`                                                                |
+| Block navigation      | 5      | Global, route, async guards returning `false`, errors, rejections                                           |
+| Redirect              | 3      | String redirect, async redirect, GuardRedirect with parameters                                              |
+| Guard context         | 2      | Context properties, fromRoute/fromHash tracking                                                             |
+| Execution order       | 4      | Global before route, registration order, short-circuit, route isolation                                     |
+| Invalid values        | 1      | Non-boolean/string/object treated as block                                                                  |
+| GuardRedirect objects | 3      | Plain, with parameters, async                                                                               |
+| Hash change (URL bar) | 3      | Direct URL blocked, unguarded proceeds, redirect restores hash                                              |
+| Dynamic guard changes | 3      | State change respected, mid-session add/remove                                                              |
+| Re-entrancy           | 2      | No infinite loops, cross-redirect settlement                                                                |
+| Mixed sync/async      | 5      | All combinations of sync/async global + route guards                                                        |
+| Overlapping async     | 2      | Generation counter, stale result discard                                                                    |
+| Rapid sequential      | 2      | Sync: all processed; async: only last wins                                                                  |
+| `_suppressNextParse`  | 1      | Validates synchronous `hashChanged` assumption                                                              |
+| Leave guards          | 23     | Sync/async allow/block, execution order, short-circuit, object form, chaining, removeRouteGuard object form |
+| **QUnit Total**       | **93** |                                                                                                             |
+| E2E (guard-allow)     | 1      | Login then navigate to protected                                                                            |
+| E2E (guard-block)     | 1      | Logged out, try protected → stays on home                                                                   |
+| E2E (guard-redirect)  | 1      | Navigate to forbidden → redirected                                                                          |
+| E2E (browser-back)    | multi  | Back button respects guards                                                                                 |
+| E2E (direct-url)      | multi  | URL bar entry respects guards                                                                               |
+| E2E (multi-route)     | multi  | Complex sequential navigations with state changes                                                           |
+| E2E (nav-button)      | multi  | Button interactions trigger guards                                                                          |
+| E2E (routing-basic)   | 1      | Smoke test                                                                                                  |
+| E2E (leave-guard)     | 4      | Dirty form leave guard: allow clean, block dirty, clear state, browser back                                 |
+| **E2E Total**         | **22** |                                                                                                             |
 
 ---
 

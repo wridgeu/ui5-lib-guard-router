@@ -1,5 +1,12 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn, GuardRedirect, GuardRouter, LeaveGuardFn } from "ui5/ext/routing/types";
+import type {
+	GuardContext,
+	GuardFn,
+	GuardRedirect,
+	GuardRouter,
+	LeaveGuardFn,
+	RouteGuardConfig,
+} from "ui5/ext/routing/types";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import { GuardRouterClass, initHashChanger, nextTick, waitForRoute, assertBlocked } from "./testHelpers";
@@ -1839,4 +1846,60 @@ QUnit.test("addLeaveGuard and removeLeaveGuard return router for chaining", func
 	assert.strictEqual(result1, router, "addLeaveGuard returns router");
 	const result2 = router.removeLeaveGuard("home", guard);
 	assert.strictEqual(result2, router, "removeLeaveGuard returns router");
+});
+
+QUnit.test("removeRouteGuard with object form removes both enter and leave guards", async function (assert: Assert) {
+	const config: RouteGuardConfig = {
+		beforeEnter: () => false,
+		beforeLeave: () => false,
+	};
+	router.addRouteGuard("protected", config);
+	router.removeRouteGuard("protected", config);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Enter guard was removed: navigation to protected should succeed
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Enter guard removed via object form");
+
+	// Leave guard was removed: navigation away from protected should succeed
+	router.navTo("home");
+	await waitForRoute(router, "home");
+	assert.ok(true, "Leave guard removed via object form");
+});
+
+QUnit.test("removeRouteGuard with object form: partial config (beforeEnter only)", async function (assert: Assert) {
+	const enterGuard: GuardFn = () => false;
+	const leaveGuard: LeaveGuardFn = () => false;
+	router.addRouteGuard("protected", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
+
+	// Remove only the enter guard via object form
+	router.removeRouteGuard("protected", { beforeEnter: enterGuard });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Enter guard removed: navigation to protected should succeed
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Enter guard removed, leave guard still active");
+
+	// Leave guard still active: should block
+	await assertBlocked(
+		assert,
+		router,
+		"home",
+		() => router.navTo("home"),
+		"Leave guard still blocks after partial remove",
+	);
+});
+
+QUnit.test("removeRouteGuard with object form returns router for chaining", function (assert: Assert) {
+	const config: RouteGuardConfig = {
+		beforeEnter: () => true,
+		beforeLeave: () => true,
+	};
+	router.addRouteGuard("home", config);
+	const result = router.removeRouteGuard("home", config);
+	assert.strictEqual(result, router, "removeRouteGuard with object form returns router");
 });

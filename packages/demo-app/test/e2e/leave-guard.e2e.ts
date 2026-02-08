@@ -32,9 +32,15 @@ describe("Leave Guard - Dirty Form", () => {
 
 		// Try to navigate back — should be blocked
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await browser.pause(500);
 
-		// Still on protected page
+		// Wait for hash to settle, then verify we're still on protected
+		await browser.waitUntil(
+			async () => {
+				const hash = await browser.execute(() => window.location.hash);
+				return hash === "#/protected";
+			},
+			{ timeout: 3000, timeoutMsg: "Hash did not settle back to #/protected" },
+		);
 		const hash = await browser.execute(() => window.location.hash);
 		expect(hash).toBe("#/protected");
 	});
@@ -65,9 +71,15 @@ describe("Leave Guard - Dirty Form", () => {
 
 		// Browser back — should be blocked by leave guard
 		await browser.execute(() => window.history.back());
-		await browser.pause(500);
 
-		// Still on protected page
+		// Wait for hash to settle, then verify we're still on protected
+		await browser.waitUntil(
+			async () => {
+				const hash = await browser.execute(() => window.location.hash);
+				return hash === "#/protected";
+			},
+			{ timeout: 3000, timeoutMsg: "Hash did not settle back to #/protected after browser back" },
+		);
 		const hash = await browser.execute(() => window.location.hash);
 		expect(hash).toBe("#/protected");
 	});
