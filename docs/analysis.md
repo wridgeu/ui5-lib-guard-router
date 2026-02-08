@@ -1,10 +1,22 @@
 # Analysis: UI5 Navigation Guard Problem & This Repository's Solution
 
-## 1. The Problem
+## 1. Problem Statement
 
-UI5's native router (`sap.m.routing.Router` / `sap.ui.core.routing.Router`) has **no mechanism to intercept, guard, or cancel navigation before route matching and target display**. This is a long-standing gap that has been discussed across multiple GitHub issues and community forums since at least 2017.
+UI5's native router (`sap.ui.core.routing.Router` / `sap.m.routing.Router`) has **no mechanism to intercept, guard, or cancel navigation before route matching and target display**. This is a long-standing gap that has been discussed across multiple GitHub issues and community forums since at least 2017. It leads to two well-documented problems.
 
-### 1.1 Key GitHub Issues
+### 1.1 Back-Navigation to Invalid States
+
+**Reference**: [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1)
+
+`navTo()` creates browser history entries. After a user completes a step (e.g., login), the browser back button can return them to a screen that should no longer be accessible (e.g., the login page after successful authentication). The framework provides no way to prevent this at the routing level.
+
+### 1.2 No Route-Level Guards
+
+**Reference**: [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), CPOUI5FRAMEWORK-338
+
+There is no way to prevent a route from displaying based on conditions (permissions, authentication state, feature flags). The `beforeRouteMatched` event fires but offers no `preventDefault()` capability. The framework team acknowledged this need (CPOUI5FRAMEWORK-338) but the feature remains unimplemented after 4+ years.
+
+### 1.3 Key GitHub Issues
 
 #### SAP/openui5#3411: "How to interrupt / override the ongoing routing?" (OPEN since Dec 2021)
 
@@ -55,7 +67,7 @@ UI5's native router (`sap.m.routing.Router` / `sap.ui.core.routing.Router`) has 
 - **Proposed solutions**: Conditional rendering (no routes for login state), `navTo` with `bReplace: true`, custom Router extension, composable guard helper, component-registration API
 - **Connection to this repo**: Directly motivated the development of `ui5.ext.routing`
 
-### 1.2 The Core Problem Summarized
+### 1.4 The Core Problem Summarized
 
 | Problem                                        | Impact                                                                       |
 | ---------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -67,7 +79,7 @@ UI5's native router (`sap.m.routing.Router` / `sap.ui.core.routing.Router`) has 
 | No async guard support                         | UI5's event system is synchronous; can't check backend permissions           |
 | No centralized guard registry                  | No single place to define "route X requires condition Y"                     |
 
-### 1.3 The Deadlock
+### 1.5 The Deadlock
 
 The UI5 team wants to implement this natively but faces a dilemma:
 
@@ -77,11 +89,155 @@ The UI5 team wants to implement this natively but faces a dilemma:
 - The framework modernization effort takes priority
 - **Result: 4+ years with no native solution** (CPOUI5FRAMEWORK-338 remains on the backburner)
 
+### 1.6 Current Workaround
+
+Developers scatter guard logic across every controller's `onInit` or `attachPatternMatched` callbacks:
+
+```typescript
+// In every protected controller
+onInit() {
+  this.getRouter().getRoute("protected")
+    .attachPatternMatched(this._onRouteMatched, this);
+}
+
+_onRouteMatched() {
+  if (!this.isLoggedIn()) {
+    this.getRouter().navTo("login");
+    // Problem: The "protected" view already rendered briefly (flash)
+    // Problem: A history entry was created for "protected"
+  }
+}
+```
+
+#### Why This Fails
+
+1. **Flash of unauthorized content**: The target view is instantiated and displayed before the controller can redirect. Users see the protected content for a split second.
+2. **Polluted history**: The redirect creates additional history entries, making browser back/forward behavior unpredictable.
+3. **Scattered logic**: Every protected controller must independently implement the same guard check. This violates DRY and is error-prone.
+4. **No centralized control**: There is no single place to define "route X requires condition Y". Guards are implicit, buried in controller lifecycle methods.
+
+### 1.7 What's Needed
+
+A routing solution that:
+
+- Intercepts navigation **before** any target loading, view creation, or event firing
+- Supports async conditions (e.g., checking auth tokens, fetching permissions)
+- Allows blocking navigation entirely (stay on current route, clean history)
+- Allows redirecting to an alternative route (replace history, no extra entries)
+- Provides a centralized registration point (Component level, not scattered across controllers)
+- Is a drop-in replacement for `sap.m.routing.Router` (swap `routerClass` in manifest.json)
+- Preserves all existing router behavior when no guards are registered
+
 ---
 
-## 2. How This Repository Solves It
+## 2. Implementation Approaches Considered
 
-### 2.1 The Key Insight: Override `parse()`
+### 2.1 Event-Based Guard (Extend `beforeRouteMatched`)
+
+**Idea**: Attach to the existing `beforeRouteMatched` event and add a `preventDefault()` mechanism.
+
+**Pros**:
+
+- Aligns with UI5's event system patterns
+- No method overrides needed
+
+**Cons**:
+
+- `beforeRouteMatched` fires **after** internal route matching has already occurred. The target is about to be displayed. Preventing at this stage requires undoing work the router already started (view creation may have begun).
+- The event is synchronous -- no async guard support without fundamentally changing the event system.
+- Cannot cleanly prevent history entry creation since the hash has already changed.
+
+**Verdict**: Rejected. Too late in the lifecycle; cannot prevent the view flash.
+
+### 2.2 Override `navTo()` Only
+
+**Idea**: Override `navTo()` to run guards before triggering navigation.
+
+**Pros**:
+
+- Simple, clear interception point for programmatic navigation
+- Guards run before any hash change
+
+**Cons**:
+
+- Does **not** catch browser back/forward button navigation
+- Does **not** catch direct URL/hash changes (user typing in address bar)
+- Would need additional HashChanger listeners to cover all entry points, creating complexity and potential race conditions
+
+**Verdict**: Rejected. Incomplete coverage of navigation entry points.
+
+### 2.3 Override `parse()` (Chosen Approach)
+
+**Idea**: Override `parse(sNewHash)`, the single method through which all navigation flows.
+
+**Pros**:
+
+- **Complete coverage**: Every navigation path (programmatic `navTo`, browser back/forward, URL bar changes) flows through `parse()`. One override catches everything.
+- **Earliest possible interception**: Guards run before route matching, target loading, view creation, and event firing. No flash, no unnecessary work.
+- **Clean blocking**: When a guard blocks, we simply don't call `super.parse()`. The framework never begins processing. We restore the previous hash via `replaceHash()`.
+- **Minimal surface**: Single method override. Less code, fewer bugs, easier to maintain.
+- **Async-friendly**: Synchronous guards execute in the same tick as the hash change. Async guards are supported via a deferred path with a generation counter to handle concurrent navigations.
+
+**Cons**:
+
+- `parse()` is not a public/documented-stable API. In theory, a future UI5 version could rename or refactor it. In practice, it has been stable since the router's inception and is fundamental to how `HashChanger` integration works.
+- Need to manually determine which route matches the hash (using `Route#match()`) to build guard context and run per-route guards.
+
+**Verdict**: **Chosen**. Best coverage, earliest interception, minimal code.
+
+### 2.4 Custom HashChanger Wrapper
+
+**Idea**: Wrap or replace the `HashChanger` instance to intercept hash changes before they reach the router.
+
+**Pros**:
+
+- Intercepts at the absolute earliest point
+- No router method overrides
+
+**Cons**:
+
+- HashChanger is a singleton shared across all routers. Wrapping it affects the entire application.
+- Complex lifecycle management (when to wrap, when to unwrap).
+- Breaks if multiple routers exist (nested components, component reuse).
+- Tight coupling to HashChanger internals which have changed across versions.
+
+**Verdict**: Rejected. Too invasive, too fragile with multiple components.
+
+### 2.5 Middleware/Plugin Pattern
+
+**Idea**: Create a standalone plugin that attaches to any router instance, without subclassing.
+
+**Pros**:
+
+- No subclassing required
+- Could work with any router implementation
+
+**Cons**:
+
+- Still needs to hook into `parse()` or `navTo()` via monkey-patching, which is worse than a clean override.
+- No type-safe integration with the router class.
+- Harder to discover and configure.
+
+**Verdict**: Rejected. Monkey-patching is worse than clean inheritance.
+
+### 2.6 Why `sap.m.routing.Router`
+
+We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` because:
+
+- ~99% of UI5 apps use `sap.m` controls with `NavContainer` / `SplitApp`
+- `sap.m.routing.Router` adds `TargetHandler` for animated view transitions
+- Extending it preserves all mobile navigation behavior
+- Apps swap in via `"routerClass": "ui5.ext.routing.Router"` in manifest.json
+
+### 2.7 Minimum UI5 Version
+
+**1.75.0** required for `getHashChanger()` on the Router instance. A fallback using `HashChanger.getInstance()` could lower this to 1.58.0, but 1.75 is already 5+ years old and the per-router hash changer is architecturally cleaner.
+
+---
+
+## 3. How This Repository Solves It
+
+### 3.1 The Key Insight: Override `parse()`
 
 Every navigation path in UI5 flows through a single method: `parse(sNewHash)`.
 
@@ -93,7 +249,7 @@ Direct URL entry      →                  hashChanged  →  parse()
 
 By overriding `parse()`, we intercept **all** navigation at the earliest possible point, before route matching, target loading, view creation, or event firing.
 
-### 2.2 Architecture Overview
+### 3.2 Architecture Overview
 
 ```
                     ┌─────────────────────────────────────┐
@@ -116,7 +272,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
                     └─────────────────────────────────────┘
 ```
 
-### 2.3 Design Decisions
+### 3.3 Design Decisions
 
 | Decision                                  | Rationale                                                                                                                     |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -128,7 +284,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 | Strict `true` for allow                   | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.  |
 | `.extend()` pattern, not ES6 class        | Required for UI5 class registry; enables `"routerClass": "ui5.ext.routing.Router"` in manifest.json                            |
 
-### 2.4 Guard API
+### 3.4 Guard API
 
 ```typescript
 const router = this.getRouter() as unknown as RouterInstance;
@@ -153,7 +309,7 @@ router.addGuard(guard1).addGuard(guard2).addRouteGuard("x", guard3);
 router.removeGuard(guard1);
 ```
 
-### 2.5 Guard Return Values
+### 3.5 Guard Return Values
 
 | Return                                         | Effect                                             |
 | ---------------------------------------------- | -------------------------------------------------- |
@@ -163,7 +319,7 @@ router.removeGuard(guard1);
 | `{ route, parameters?, componentTargetInfo? }` | Redirect with parameters                           |
 | Anything else (`null`, `undefined`, `42`)      | Treated as block with warning                      |
 
-### 2.6 How It Addresses Each Original Problem
+### 3.6 How It Addresses Each Original Problem
 
 | Problem from Issues                              | How This Repo Solves It                                                               |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
@@ -175,15 +331,25 @@ router.removeGuard(guard1);
 | No async support (UI5's blocker)                 | Async guards natively supported. Generation counter handles concurrency.              |
 | `beforeRouteMatched` has no `preventDefault()`   | Override at `parse()` level, earlier than any event. No need for `preventDefault()`.   |
 
-### 2.7 What This Is NOT
+### 3.7 What This Is NOT
 
 - **Not a security solution.** As SAP/openui5#3094 makes clear, client-side guards are UX measures. Server-side authorization is still required.
 - **Not a replacement for `beforeRouteMatched` / `routePatternMatched`.** Those events still fire for allowed navigations. Guards add a pre-check layer.
 - **Not permanent.** If UI5 natively implements CPOUI5FRAMEWORK-338, migration is straightforward: remove guard registrations, revert `routerClass`, use native API.
 
+### 3.8 Migration Path
+
+If UI5 natively implements route guards (CPOUI5FRAMEWORK-338), migration is straightforward:
+
+1. Remove guard registrations from `Component.ts`
+2. Change `routerClass` back to `sap.m.routing.Router` in manifest.json
+3. Register equivalent guards using the native API
+
+No application logic changes needed beyond the guard definitions themselves.
+
 ---
 
-## 3. Test Coverage
+## 4. Test Coverage
 
 | Category              | Count   | What's Tested                                                           |
 | --------------------- | ------- | ----------------------------------------------------------------------- |
@@ -216,9 +382,9 @@ router.removeGuard(guard1);
 
 ---
 
-## 4. Risks and Limitations
+## 5. Risks and Limitations
 
-### 4.1 `parse()` is not a public API
+### 5.1 `parse()` is not a public API
 
 `parse()` is an internal method of `sap.ui.core.routing.Router`. It's not documented as stable or public. However:
 
@@ -229,19 +395,19 @@ router.removeGuard(guard1);
 
 **Mitigation**: The `NativeRouterCompat.qunit.ts` test suite validates API parity with the native router. If a UI5 update changes `parse()`, these tests would catch it.
 
-### 4.2 Redirect targets bypass guards
+### 5.2 Redirect targets bypass guards
 
 When a guard redirects (e.g., "forbidden" → "home"), the redirect target's guards are **not** evaluated. This is by design to prevent infinite loops, but means you cannot chain guard-redirect-guard.
 
 **Mitigation**: Document this clearly. Design guard logic so redirect targets don't need their own guards, or use global guards for universal checks.
 
-### 4.3 Async guard hash desync window
+### 5.3 Async guard hash desync window
 
 During async guard evaluation, the browser's URL bar shows the target hash (e.g., `#/protected`) while the guard is still deciding. If the guard ultimately blocks, the hash is restored, but there's a brief visual inconsistency.
 
 **Mitigation**: Keep async guards fast. Use sync guards for instant decisions; reserve async for backend calls.
 
-### 4.4 Initial navigation block leaves blank app
+### 5.4 Initial navigation block leaves blank app
 
 If a guard returns `false` (block) on the very first navigation (where `_currentHash` is `null`), no view is loaded and the app appears blank. This is because there's no "previous" route to restore to.
 
@@ -249,7 +415,7 @@ If a guard returns `false` (block) on the very first navigation (where `_current
 
 ---
 
-## 5. Related Work and References
+## 6. Related Work and References
 
 - [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411): The primary issue motivating this project
 - [SAP/openui5#3094](https://github.com/SAP/openui5/issues/3094): Auth protection (server-side vs client-side)
