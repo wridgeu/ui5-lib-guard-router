@@ -8,13 +8,14 @@ Currently, `ui5.ext.routing` only supports **enter guards**: guards that run whe
 
 ### Framework Precedents
 
-| Framework       | API                                                   | Pattern                                      |
-| --------------- | ----------------------------------------------------- | -------------------------------------------- |
-| Vue Router      | `beforeRouteLeave(to, from)` / `onBeforeRouteLeave()` | Return `false` to cancel                     |
-| Angular         | `canDeactivate(component)`                            | Receives component instance, checks state    |
-| React Router    | `useBlocker(shouldBlock)`                             | `proceed()` / `reset()` on blocker object    |
-| TanStack Router | `useBlocker({ shouldBlockFn })`                       | `proceed()` / `reset()` + `ignoreBlocker`    |
-| Ember.js        | `routeWillChange` + `transition.abort()`              | Event-based, transition can be retried later |
+| Framework       | API                                                   | Pattern                                      | Status              |
+| --------------- | ----------------------------------------------------- | -------------------------------------------- | ------------------- |
+| Vue Router      | `beforeRouteLeave(to, from)` / `onBeforeRouteLeave()` | Return `false` to cancel                     | Stable              |
+| Angular         | `canDeactivate(component)` / functional `CanDeactivateFn` | Receives component instance, checks state | Stable              |
+| React Router    | `useBlocker(shouldBlock)`                             | `proceed()` / `reset()` on blocker object    | **Stable** (v6.19+) |
+| TanStack Router | `useBlocker({ shouldBlockFn })`                       | `proceed()` / `reset()` + `ignoreBlocker`. `shouldBlockFn` can be async. | Experimental        |
+| Ember.js        | `routeWillChange` + `transition.abort()`              | Event-based, transition can be retried later | Stable              |
+| SvelteKit       | `beforeNavigate` + `navigation.cancel()`              | Client-side only, must be called during component init | Stable              |
 
 ---
 

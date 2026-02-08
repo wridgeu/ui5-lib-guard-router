@@ -302,26 +302,29 @@ onReady: async () => {
 
 TanStack delegates blocking to the history library. In UI5, the equivalent would be intercepting at the `HashChanger` level. However, `ui5.ext.routing` already found that `parse()` is a better interception point (see `docs/alt/02-hashchanger-interception.md`). The `parse()` approach is actually more reliable in UI5's architecture.
 
-### 2. AbortController for Async Guards
+### 2. AbortController for Async Guards ✅ Implemented
 
-Currently, `ui5.ext.routing` uses a generation counter for staleness. TanStack's `AbortController` approach could be useful for long-running async guards:
+~~Currently, `ui5.ext.routing` uses a generation counter for staleness.~~ **This has been implemented.** `ui5.ext.routing` now creates an `AbortController` per `parse()` call, aborts it when a newer navigation starts or the router is destroyed, and exposes `signal: AbortSignal` on the `GuardContext`. This runs alongside the generation counter — the signal provides cooperative cancellation for async operations (e.g., `fetch`), while the generation counter provides the hard staleness check after each `await`.
 
 ```typescript
-// Hypothetical enhancement to GuardContext:
+// Actual GuardContext (implemented):
 interface GuardContext {
-	// ... existing fields ...
-	signal: AbortSignal; // From an AbortController, aborted when navigation is superseded
+	toRoute: string;
+	toHash: string;
+	toArguments: Record<string, string>;
+	fromRoute: string;
+	fromHash: string;
+	signal: AbortSignal; // Aborted when navigation is superseded or router is destroyed
 }
 
 // Usage in a guard:
 router.addGuard(async (context) => {
 	const result = await fetch("/api/check-auth", { signal: context.signal });
-	if (context.signal.aborted) return false; // Navigation was superseded
 	return result.ok;
 });
 ```
 
-This would be an enhancement on top of the generation counter, not a replacement.
+The generation counter remains the primary staleness mechanism (checked after each async guard resolves), while the `AbortSignal` enables guards to cancel in-flight network requests immediately when a new navigation starts.
 
 ### 3. `ignoreBlocker` for Redirects
 
@@ -377,13 +380,15 @@ ui5.ext.routing:
 | **Async model**      | Fully async (everything in Promises)  | Sync-first, async fallback         |
 | **Blocking layer**   | History library (`@tanstack/history`) | Router `parse()` override          |
 | **Guard execution**  | In `loadMatches()` (async)            | In `parse()` (sync path preferred) |
-| **Staleness**        | AbortController per match             | Generation counter (single int)    |
+| **Staleness**        | AbortController per match             | Generation counter + AbortSignal   |
 | **Concurrent nav**   | Cancel matches + latest promise wins  | Generation check after each await  |
 | **Redirect bypass**  | `ignoreBlocker: true`                 | `_redirecting = true`              |
 | **State management** | `@tanstack/store` (reactive)          | Internal properties on router      |
 | **Match caching**    | `cachedMatches` array                 | Delegated to UI5 target caching    |
 
-**Bottom line**: TanStack Router is more complex and feature-rich (view transitions, match caching, SSR, preloading), but `ui5.ext.routing`'s simpler sync-first design is better suited to UI5's synchronous event model. The generation counter is lighter than per-match AbortControllers for the common case where guards are synchronous.
+**Bottom line**: TanStack Router is more complex and feature-rich (view transitions, match caching, SSR, preloading), but `ui5.ext.routing`'s simpler sync-first design is better suited to UI5's synchronous event model. The generation counter is lighter than per-match AbortControllers for the common case where guards are synchronous. The `AbortSignal` on `GuardContext` (implemented) provides cooperative cancellation for async guards without the overhead of per-match controllers.
+
+> **Note (2025):** TanStack Router's `navigate` function within `beforeLoad` context is now deprecated. The recommended pattern is `throw redirect({ to: '/somewhere' })`. TanStack Router now has official packages for React, Solid, and Vue.
 
 ## References
 

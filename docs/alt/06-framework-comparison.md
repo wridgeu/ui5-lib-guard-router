@@ -140,32 +140,35 @@ export class UnsavedChangesGuard implements CanDeactivate<FormComponent> {
 
 ### Guard Types
 
-| Guard              | When It Runs                         | Use Case                |
-| ------------------ | ------------------------------------ | ----------------------- |
-| `canActivate`      | Before entering a route              | Auth checks             |
-| `canActivateChild` | Before entering child routes         | Nested auth             |
-| `canDeactivate`    | Before leaving a route               | Unsaved changes         |
-| `canLoad`          | Before lazy-loading a module         | Prevent code loading    |
-| `canMatch`         | During route matching                | Dynamic route selection |
-| `resolve`          | After guards pass, before activation | Pre-fetch data          |
+| Guard              | When It Runs                         | Use Case                | Status                          |
+| ------------------ | ------------------------------------ | ----------------------- | ------------------------------- |
+| `canActivate`      | Before entering a route              | Auth checks             | Stable                          |
+| `canActivateChild` | Before entering child routes         | Nested auth             | Stable                          |
+| `canDeactivate`    | Before leaving a route               | Unsaved changes         | Stable                          |
+| `canMatch`         | During route matching                | Dynamic route selection | Stable (replaces `canLoad`)     |
+| `canLoad`          | Before lazy-loading a module         | Prevent code loading    | **Deprecated** (use `canMatch`) |
+| `resolve`          | After guards pass, before activation | Pre-fetch data          | Stable                          |
+
+> **Note (2025):** `canLoad` was deprecated in Angular 15.1 and is fully superseded by `canMatch`. Key difference: `canLoad` only ran once per lazy-loaded module; `canMatch` runs on every navigation and causes the router to fall through to try other matching routes on rejection. Functional guards via `CanActivateFn`, `CanDeactivateFn`, etc. are now the standard pattern, replacing class-based `implements CanActivate`.
 
 ### Key Design Choices
 
-- **Dependency injection**: Guards are services, can inject other services
+- **Functional guards (Angular 15+)**: Guards are plain functions using `inject()` for dependencies; class-based guards are legacy
 - **Observable support**: Guards can return `Observable<boolean>` for reactive patterns
-- **`canLoad`**: Prevents even the lazy-loaded module from downloading
+- **Signal integration (Angular 19+)**: Guards can read signal-based services via `inject()`, though guards cannot return Signals directly
+- **`canMatch`**: Replaces `canLoad`. Runs on every navigation and enables route fall-through on rejection
 - **`canDeactivate`**: Receives the component instance, enabling direct state checks
 - **Declarative**: Guards are listed in the route configuration, not registered programmatically
 
 ### Comparison with ui5.ext.routing
 
-| Feature                 | Angular         | ui5.ext.routing              |
-| ----------------------- | --------------- | ---------------------------- |
-| Guard declaration       | In route config | Programmatic registration    |
-| DI support              | Native          | N/A (UI5 doesn't have DI)    |
-| Code loading prevention | `canLoad`       | N/A (UI5 always loads views) |
-| Deactivation guards     | `canDeactivate` | Not supported                |
-| Observable/reactive     | Native          | Promise-based                |
+| Feature                 | Angular                       | ui5.ext.routing              |
+| ----------------------- | ----------------------------- | ---------------------------- |
+| Guard declaration       | In route config               | Programmatic registration    |
+| DI support              | Native                        | N/A (UI5 doesn't have DI)   |
+| Code loading prevention | `canMatch` (deprecated: `canLoad`) | N/A (UI5 always loads views) |
+| Deactivation guards     | `canDeactivate`               | Not supported                |
+| Observable/reactive     | Native (+ Signals in 19+)    | Promise-based                |
 
 ---
 
@@ -235,20 +238,21 @@ function EditForm() {
 - **No middleware API**: Guards are either component wrappers or loader functions
 - **Loaders run in parallel**: All matching route loaders execute concurrently
 - **`redirect()` from loaders**: Throw a `redirect()` to cancel and redirect
-- **`useBlocker` for leave guards**: Component-level hook with `proceed()`/`reset()` API
+- **`useBlocker` for leave guards**: Component-level hook with `proceed()`/`reset()` API — **stable since v6.19.0** (carried into v7). `unstable_usePrompt` remains permanently unstable due to inconsistent `window.confirm` behavior across browsers.
 - **No `beforeEach` equivalent**: Intentional. React favors composition over middleware
 - **Limitation**: `useBlocker` does not handle hard-reloads or cross-origin navigations
+- **Framework mode (v7)**: React Router v7 merges Remix, allowing loaders/actions to run on both server and client. Loader-based guards can now execute server-side.
 
 ### Comparison with ui5.ext.routing
 
-| Feature              | React Router            | ui5.ext.routing        |
-| -------------------- | ----------------------- | ---------------------- |
-| Guard API            | None (composition)      | Explicit registration  |
-| Pre-navigation check | Via loader + redirect() | Via parse() override   |
-| Global guards        | Wrap root layout        | `addGuard()`           |
-| Per-route guards     | Per-route loader        | `addRouteGuard()`      |
-| Leave guards         | `useBlocker` hook       | Not supported          |
-| Paradigm             | Declarative (JSX)       | Imperative (API calls) |
+| Feature              | React Router                   | ui5.ext.routing        |
+| -------------------- | ------------------------------ | ---------------------- |
+| Guard API            | None (composition)             | Explicit registration  |
+| Pre-navigation check | Via loader + redirect()        | Via parse() override   |
+| Global guards        | Wrap root layout               | `addGuard()`           |
+| Per-route guards     | Per-route loader               | `addRouteGuard()`      |
+| Leave guards         | `useBlocker` hook **(stable)** | Not supported          |
+| Paradigm             | Declarative (JSX)              | Imperative (API calls) |
 
 ---
 
@@ -261,7 +265,7 @@ TanStack Router (formerly React Location) provides a more structured guard syste
 ```typescript
 const adminRoute = createRoute({
 	path: "/admin",
-	beforeLoad: async ({ context, navigate }) => {
+	beforeLoad: async ({ context }) => {
 		if (!context.auth.isLoggedIn) {
 			throw redirect({ to: "/login" });
 		}
@@ -272,6 +276,8 @@ const adminRoute = createRoute({
 	component: AdminPanel,
 });
 ```
+
+> **Note (2025):** The `navigate` function in `beforeLoad` context is now **deprecated**. Use `throw redirect({ to: '/somewhere' })` instead.
 
 ### Leave Protection: useBlocker
 
@@ -304,7 +310,7 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 
 - **Fully async**: Unlike `ui5.ext.routing`'s sync-first design, TanStack's entire navigation pipeline (`load()` → `loadMatches()`) runs inside `async` functions. There is no synchronous fast path.
 - **Two-layer architecture**: Blocking happens in the history library (`@tanstack/history`), while guarding (`beforeLoad` hooks) happens in the router's async `loadMatches()`. `ui5.ext.routing` combines both in `parse()`.
-- **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.ext.routing`'s single `_parseGeneration` counter, but heavier.
+- **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.ext.routing`'s generation counter, but heavier. (Note: `ui5.ext.routing` now also exposes an `AbortSignal` on `GuardContext`, used alongside the generation counter.)
 - **`beforeLoad` hooks**: Run parent-to-child, each contributing to accumulated context
 - **Context accumulation**: Parent route context flows to children (type-safe)
 - **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.ext.routing`'s `_redirecting` flag.
@@ -320,7 +326,7 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 | Leave guards        | `useBlocker` (history-level) | Not supported                        |
 | Blocking layer      | History library              | Router `parse()`                     |
 | Context passing     | Parent-to-child accumulation | Via `GuardContext`                   |
-| Staleness detection | AbortController per match    | Generation counter                   |
+| Staleness detection | AbortController per match    | Generation counter + AbortSignal     |
 | Bypass mechanism    | `ignoreBlocker` option       | `_redirecting` flag (redirects only) |
 | Type safety         | Full route tree types        | Interface-based                      |
 
@@ -405,7 +411,7 @@ this.router.on("routeWillChange", (transition) => {
 
 ---
 
-## Nuxt 3
+## Nuxt 3/4
 
 Nuxt wraps Vue Router's guards with a middleware abstraction.
 
@@ -455,6 +461,15 @@ export default defineNuxtRouteMiddleware((to, from) => {
 - **SSR-aware**: Middleware runs on both server and client
 - **File-system conventions**: `.global.ts` suffix for automatic global registration
 - **`definePageMeta`**: Declarative middleware assignment per page
+- **Route groups (Nuxt 4.3)**: Folders wrapped in parentheses (e.g., `pages/(protected)/dashboard.vue`) expose `route.meta.groups`. Middleware can check group membership for convention-based route protection without per-page `definePageMeta`:
+  ```typescript
+  export default defineNuxtRouteMiddleware((to) => {
+      if (to.meta.groups?.includes('protected') && !isAuthenticated()) {
+          return navigateTo('/login');
+      }
+  });
+  ```
+- **Async middleware**: Natively supported in Nuxt 4+ without workarounds
 
 ---
 
@@ -490,23 +505,111 @@ export const config = {
 - **Matcher patterns**: Declarative path-based filtering
 - **No client-side guard API**: Client-side protection is done via component-level redirects
 - **Performance**: Runs before any page code loads
+- **`forbidden()` / `unauthorized()` (experimental, 15+)**: Helper functions that throw 403/401 errors and render customizable `forbidden.tsx` / `unauthorized.tsx` pages. Requires `experimental.authInterrupts: true`. Follows the same pattern as `notFound()`.
+
+> **Security note (2025):** [CVE-2025-29927](https://vercel.com/blog/postmortem-on-next-js-middleware-bypass) was a critical vulnerability where attackers could manipulate the internal `x-middleware-subrequest` header to **bypass middleware entirely**, including authentication checks. Fixed in 15.2.3. This demonstrates that framework-level middleware alone is not sufficient for security -- defense in depth (server components checking auth, not just middleware) is essential.
+
+---
+
+## SvelteKit
+
+SvelteKit does not provide a dedicated "route guard" API. Instead, it provides a layered hooks system that covers the same use cases.
+
+### Server-Side Guards: `hooks.server.ts`
+
+```typescript
+// src/hooks.server.ts
+import { redirect, type Handle } from "@sveltejs/kit";
+
+export const handle: Handle = async ({ event, resolve }) => {
+	const session = await getSession(event.cookies);
+	event.locals.user = session?.user;
+
+	if (event.url.pathname.startsWith("/admin") && !event.locals.user) {
+		throw redirect(303, "/login");
+	}
+
+	return resolve(event);
+};
+```
+
+This runs on **every server request** and is the primary mechanism for server-side route protection.
+
+### Client-Side Leave Guards: `beforeNavigate`
+
+```typescript
+import { beforeNavigate } from "$app/navigation";
+
+beforeNavigate((navigation) => {
+	if (formIsDirty && !confirm("Discard unsaved changes?")) {
+		navigation.cancel();
+	}
+});
+```
+
+Fires before any client-side navigation. Must be called during component initialization. Equivalent to `useBlocker` in React/TanStack Router.
+
+### Page-Level Guards: Load Functions
+
+```typescript
+// +layout.server.ts -- guards all child routes
+import { redirect } from "@sveltejs/kit";
+import type { LayoutServerLoad } from "./$types";
+
+export const load: LayoutServerLoad = async ({ locals }) => {
+	if (!locals.user) {
+		throw redirect(303, "/login");
+	}
+	return { user: locals.user };
+};
+```
+
+### URL Rewriting: `reroute` Hook
+
+```typescript
+// src/hooks.ts -- runs on both server and client
+// Async since SvelteKit 2.18
+export const reroute: Reroute = async ({ url }) => {
+	if (url.pathname.startsWith("/de/")) {
+		return url.pathname.replace("/de/", "/");
+	}
+};
+```
+
+### Key Design Choices
+
+- **Layered approach**: Server hooks, client hooks, and load functions each cover different scenarios
+- **No programmatic guard registration**: No `addGuard()` equivalent; guards are hooks and load functions
+- **`hooks.server.ts` limitation**: Only runs on server requests. Client-side navigations need load functions to trigger server guard logic
+- **`beforeNavigate` for leave guards**: Cancel client-side navigation (the only client-side blocking mechanism)
+
+### Comparison with ui5.ext.routing
+
+| Feature              | SvelteKit                  | ui5.ext.routing        |
+| -------------------- | -------------------------- | ---------------------- |
+| Global guard         | `hooks.server.ts` handle() | `addGuard()`           |
+| Per-route guard      | Load functions             | `addRouteGuard()`      |
+| Leave guard          | `beforeNavigate` + cancel  | Not supported          |
+| Async support        | Yes                        | Yes                    |
+| Guard registration   | File conventions           | Programmatic           |
+| Server/client split  | Explicit separation        | Client-only (SPA)      |
 
 ---
 
 ## Summary: Industry Standard Features
 
-| Feature             | Vue        | Angular         | React              | TanStack           | Ember             | Nuxt              | Next            | **ui5.ext.routing**   |
-| ------------------- | ---------- | --------------- | ------------------ | ------------------ | ----------------- | ----------------- | --------------- | --------------------- |
-| Global before guard | Yes        | Yes             | Via loader         | `beforeLoad`       | `beforeModel`     | Global middleware | Edge middleware | **Yes**               |
-| Per-route guard     | Yes        | Yes             | Via loader         | `beforeLoad`       | `beforeModel`     | Named middleware  | Matcher         | **Yes**               |
-| In-component guard  | Yes        | No              | No                 | No                 | No                | No                | No              | No                    |
-| Leave guard         | Yes        | `canDeactivate` | `useBlocker`       | `useBlocker`       | `routeWillChange` | Via Vue           | No              | **No**                |
-| Transition retry    | No         | No              | No                 | No                 | **Yes**           | No                | No              | **No**                |
-| Bypass mechanism    | No         | No              | No                 | `ignoreBlocker`    | No                | No                | No              | **No**                |
-| Async support       | Yes        | Observable      | Yes                | Yes                | Yes               | Yes               | Yes             | **Yes**               |
-| Route metadata      | `to.meta`  | `route.data`    | Loader             | Context            | No                | `definePageMeta`  | Matcher         | **No**                |
-| Redirect            | Return loc | `navigate()`    | `throw redirect()` | `throw redirect()` | `transitionTo()`  | `navigateTo()`    | `redirect()`    | **Return string/obj** |
-| History clean       | Yes        | Yes             | `replace`          | Yes                | Yes               | Yes               | Server          | **Yes**               |
+| Feature             | Vue        | Angular               | React              | TanStack           | Ember             | Nuxt                       | Next            | SvelteKit          | **ui5.ext.routing**   |
+| ------------------- | ---------- | --------------------- | ------------------ | ------------------ | ----------------- | -------------------------- | --------------- | ------------------ | --------------------- |
+| Global before guard | Yes        | Yes                   | Via loader         | `beforeLoad`       | `beforeModel`     | Global middleware           | Edge middleware | `handle` hook     | **Yes**               |
+| Per-route guard     | Yes        | Yes                   | Via loader         | `beforeLoad`       | `beforeModel`     | Named middleware            | Matcher         | Load functions     | **Yes**               |
+| In-component guard  | Yes        | No                    | No                 | No                 | No                | No                          | No              | No                 | No                    |
+| Leave guard         | Yes        | `canDeactivate`       | `useBlocker` (**stable**) | `useBlocker` (exp.) | `routeWillChange` | Via Vue                | No              | `beforeNavigate`   | **No**                |
+| Transition retry    | No         | No                    | No                 | No                 | **Yes**           | No                          | No              | No                 | **No**                |
+| Bypass mechanism    | No         | No                    | No                 | `ignoreBlocker`    | No                | No                          | No              | No                 | **No**                |
+| Async support       | Yes        | Observable            | Yes                | Yes                | Yes               | Yes                         | Yes             | Yes                | **Yes**               |
+| Route metadata      | `to.meta`  | `route.data`          | Loader             | Context            | No                | `definePageMeta` + groups   | Matcher         | Via layout data    | **No**                |
+| Redirect            | Return loc | `navigate()`          | `throw redirect()` | `throw redirect()` | `transitionTo()`  | `navigateTo()`             | `redirect()`    | `throw redirect()` | **Return string/obj** |
+| History clean       | Yes        | Yes                   | `replace`          | Yes                | Yes               | Yes                         | Server          | Yes                | **Yes**               |
 
 ### What ui5.ext.routing Provides Relative to Industry Standards
 
@@ -517,23 +620,29 @@ export const config = {
 - Redirect and block with clean history (matches all frameworks)
 - Centralized registration (matches Vue's `beforeEach`)
 - Concurrent navigation handling (matches Vue's pending navigation cancellation)
+- AbortSignal in guard context for cooperative cancellation of async operations (comparable to TanStack's per-match AbortController)
 
 **Not yet covered (potential future enhancements):**
 
 - **Leave guards** (`beforeRouteLeave` / `canDeactivate` / `useBlocker`): Preventing navigation AWAY from a route (e.g., unsaved form data). See [Alternative 8: Leave Guards](./08-leave-guards.md).
 - **Transition object** (`transition.retry()`): Ember's unique pattern for storing and retrying aborted transitions. See [Alternative 9: Transition Object](./09-transition-object.md).
 - **Route metadata**: Declaring guard conditions in the route config itself (e.g., `{ meta: { requiresAuth: true } }`). See [Alternative 10: Route Metadata](./10-route-metadata.md).
-- **Bypass mechanism** (`ignoreBlocker`): Allowing specific navigations to skip guards. Useful for "Save & Navigate" patterns.
+- **Bypass mechanism** (`ignoreBlocker`): Allowing specific navigations to skip guards. Useful for "Save & Navigate" patterns. See [Alternative 11: Bypass Guards](./11-bypass-guards.md).
 - **Code loading prevention**: Preventing lazy-loaded view code from being fetched until guards pass. UI5's view loading is tightly coupled to route matching, making this difficult.
+
+> **Note on client-side guards and security:** Client-side route guards are a UX feature, not a security feature. Server-side authorization is always required. [CVE-2025-29927](https://vercel.com/blog/postmortem-on-next-js-middleware-bypass) demonstrated that even framework-level guard mechanisms can have vulnerabilities — Next.js middleware could be bypassed entirely via header manipulation.
 
 ## References
 
 - [Vue Router Navigation Guards](https://router.vuejs.org/guide/advanced/navigation-guards.html)
-- [Angular Route Guards](https://angular.io/guide/router#preventing-unauthorized-access)
+- [Angular Route Guards](https://angular.dev/guide/routing/route-guards)
 - [React Router Navigation Blocking](https://reactrouter.com/how-to/navigation-blocking)
-- [React Router useBlocker](https://reactrouter.com/en/main/hooks/use-blocker)
-- [TanStack Router Navigation Blocking](https://tanstack.com/router/v1/docs/framework/react/guide/navigation-blocking)
+- [React Router useBlocker](https://reactrouter.com/api/hooks/useBlocker)
+- [TanStack Router Navigation Blocking](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking)
 - [Ember.js Preventing and Retrying Transitions](https://guides.emberjs.com/release/routing/preventing-and-retrying-transitions/)
-- [Nuxt 3 Route Middleware](https://nuxt.com/docs/guide/directory-structure/middleware)
+- [Nuxt Route Middleware](https://nuxt.com/docs/guide/directory-structure/middleware)
 - [Next.js Middleware](https://nextjs.org/docs/app/building-your-application/routing/middleware)
-- [SvelteKit Hooks](https://kit.svelte.dev/docs/hooks)
+- [Next.js forbidden() / unauthorized()](https://nextjs.org/docs/app/api-reference/functions/forbidden)
+- [SvelteKit Hooks](https://svelte.dev/docs/kit/hooks)
+- [SvelteKit $app/navigation](https://svelte.dev/docs/kit/$app-navigation)
+- [CVE-2025-29927 Postmortem](https://vercel.com/blog/postmortem-on-next-js-middleware-bypass)

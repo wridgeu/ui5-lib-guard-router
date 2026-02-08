@@ -198,4 +198,4 @@ authModel.setProperty("/bypassGuards", false);
 ## References
 
 - [TanStack Router ignoreBlocker](https://tanstack.com/router/v1/docs/framework/react/guide/navigation-blocking)
-- [TanStack Router navigate with ignoreBlocker](https://deepwiki.com/tanstack/router/9.3-navigation-guards-and-blocking)
+- [TanStack Router navigate API](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking)
