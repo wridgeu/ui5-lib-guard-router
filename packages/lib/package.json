@@ -1,6 +1,6 @@
 {
 	"name": "ui5-ext-routing",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"private": true,
 	"license": "MIT",
 	"main": "dist/resources/ui5/ext/routing/library.js",
