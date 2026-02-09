@@ -118,7 +118,6 @@ export interface RouterInternal extends GuardRouter {
 		toRoute: string,
 		context: GuardContext,
 	): GuardResult | Promise<GuardResult>;
-	_runEnterPipeline(generation: number, newHash: string, toRoute: string, context: GuardContext): void;
 	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
 	_continueGuardsAsync(

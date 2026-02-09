@@ -61,12 +61,11 @@ matching, target loading, or event firing occurs.
 |   |                    |    |                           |            |
 |   | addGuard()         |    | parse() override          |            |
 |   | removeGuard()      |    | _runLeaveGuards()         |            |
-|   | addRouteGuard()    |    | _runEnterPipeline()       |            |
-|   | removeRouteGuard() |    | _runEnterGuards()         |            |
-|   | addLeaveGuard()    |    | _runRouteGuards()         |            |
-|   | removeLeaveGuard() |    | _runGuards()          |            |
-|   +--------------------+    | _continueGuardsAsync()    |            |
-|                             | _validateGuardResult()    |            |
+|   | addRouteGuard()    |    | _runEnterGuards()         |            |
+|   | removeRouteGuard() |    | _runRouteGuards()         |            |
+|   | addLeaveGuard()    |    | _runGuards()              |            |
+|   | removeLeaveGuard() |    | _continueGuardsAsync()    |            |
+|   +--------------------+    | _validateGuardResult()    |            |
 |                             | _commitNavigation()       |            |
 |                             | _handleGuardResult()      |            |
 |                             | _blockNavigation()        |            |
@@ -143,20 +142,24 @@ flowchart TD
     guards -- no --> commit2(["_commitNavigation<br/>(fast path)"])
     guards -- yes --> create["create AbortController<br/>+ GuardContext"]
     create --> leave{has leave guards?}
-    leave -- no --> enter1(["_runEnterPipeline()"])
+    leave -- no --> runenter["_runEnterGuards()"]
     leave -- yes --> runleave["_runLeaveGuards()"]
     runleave --> lsync{sync result}
     runleave --> lasync{async result}
-    lsync -- "false" --> lrestore([_blockNavigation])
-    lsync -- "true" --> enter1
+    lsync -- "false" --> blockNav(["_blockNavigation()"])
+    lsync -- "true" --> runenter
     lasync --> lawait["await result, check gen"]
-    lawait -- "false" --> lblock([_blockNavigation])
-    lawait -- "true" --> enter1
-    enter1 --> runall["_runEnterGuards()"]
-    runall --> esync{sync result}
-    runall --> easync{async result}
-    esync --> eapply(["apply result<br/>same tick"])
-    easync --> eawait(["await result<br/>check gen, apply result"])
+    lawait -- "false" --> blockNav
+    lawait -- "true" --> runenter
+    runenter --> esync{sync result}
+    runenter --> easync{async result}
+    esync -- "true" --> commitNav(["_commitNavigation()"])
+    esync -- "false" --> blockNav
+    esync -- "redirect" --> handleResult(["_handleGuardResult()"])
+    easync --> eawait["await result, check gen"]
+    eawait -- "true" --> commitNav
+    eawait -- "false" --> blockNav
+    eawait -- "redirect" --> handleResult
 ```
 
 **Critical design decisions:**
@@ -199,8 +202,7 @@ flowchart TD
     end
 
     subgraph phase2 ["Phase 2: Global enter guards"]
-        enter(["_runEnterPipeline()"]) --> allguards["_runEnterGuards()"]
-        allguards --> gsync["_runGuards(globalGuards)"]
+        enter(["_runEnterGuards()"]) --> gsync["_runGuards(globalGuards)"]
         gsync -- "all sync, all true" --> phase3
         gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
         gsync -- "Promise returned" --> gfin["_continueGuardsAsync()"]

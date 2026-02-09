@@ -124,13 +124,13 @@ parse(this: RouterInstance, newHash: string): void {
     if (isThenable(leaveResult)) {
         leaveResult.then((r) => {
             if (generation !== this._parseGeneration) return;
-            if (r !== true) { this._restoreHash(); return; }
+            if (r !== true) { this._blockNavigation(); return; }
             // Continue with enter guards...
-            this._runEnterPipeline(generation, newHash, toRoute, context);
+            runEnterGuards(); // local helper that calls _runEnterGuards and applies result
         });
     } else {
-        if (leaveResult !== true) { this._restoreHash(); return; }
-        this._runEnterPipeline(generation, newHash, toRoute, context);
+        if (leaveResult !== true) { this._blockNavigation(); return; }
+        runEnterGuards(); // local helper that calls _runEnterGuards and applies result
     }
 }
 ```
