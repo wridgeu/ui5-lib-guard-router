@@ -270,9 +270,9 @@ router.addGuard(logGuard);
 router.removeGuard(logGuard);
 ```
 
-### Native alternative: Fiori Launchpad data loss prevention
+### Native alternative for leave guards: Fiori Launchpad data loss prevention
 
-If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
+If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection (an alternative to leave guards) through two public APIs on `sap.ushell.Container`:
 
 **`setDirtyFlag(bDirty)`** (since 1.27.0) — simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog when the user attempts cross-app navigation (home button, other tiles), browser back/forward out of the app, or page refresh/close:
 
