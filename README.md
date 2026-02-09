@@ -9,8 +9,8 @@ UI5 Router extension with async navigation guards. Drop-in replacement for `sap.
 > Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5. Track the UI5 team's progress there.
 >
 > **Related resources**:
-> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) — native `navigate` event approach (sync-only)
-> - [Research: Native Router navigate event](docs/research-native-router-navigate-event.md) — comparison with this library
+> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) — native NavContainer `navigate` event (sync-only, fires after route match)
+> - [Research: Native NavContainer navigate event](docs/research-native-router-navigate-event.md) — detailed comparison with this library
 
 > [!IMPORTANT]
 > **Minimum UI5 version: 1.118**
