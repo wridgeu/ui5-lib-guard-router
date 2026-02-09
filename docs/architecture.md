@@ -61,14 +61,13 @@ matching, target loading, or event firing occurs.
 |   |                    |    |                           |            |
 |   | addGuard()         |    | parse() override          |            |
 |   | removeGuard()      |    | _runLeaveGuards()         |            |
-|   | addRouteGuard()    |    | _runEnterPipeline()       |            |
-|   | removeRouteGuard() |    | _runEnterGuards()         |            |
-|   | addLeaveGuard()    |    | _runRouteGuards()         |            |
-|   | removeLeaveGuard() |    | _runGuards()          |            |
-|   +--------------------+    | _continueGuardsAsync()    |            |
-|                             | _validateGuardResult()    |            |
+|   | addRouteGuard()    |    | _runEnterGuards()         |            |
+|   | removeRouteGuard() |    | _runRouteGuards()         |            |
+|   | addLeaveGuard()    |    | _runGuards()              |            |
+|   | removeLeaveGuard() |    | _continueGuardsAsync()    |            |
+|   +--------------------+    | _validateGuardResult()    |            |
 |                             | _commitNavigation()       |            |
-|                             | _handleGuardResult()      |            |
+|                             | _redirect()               |            |
 |                             | _blockNavigation()        |            |
 |                             | _restoreHash()            |            |
 |                             +---------------------------+            |
@@ -104,7 +103,7 @@ GuardContext                        GuardResult
 GuardRouter (public interface)      RouterInternal (internal interface)
   extends sap.m.routing.Router        extends GuardRouter
   + 6 public guard methods             + 10 state fields
-    addGuard / removeGuard             + 11 internal methods
+    addGuard / removeGuard             + 10 internal methods
     addRouteGuard / removeRouteGuard     (incl. _runRouteGuards,
     addLeaveGuard / removeLeaveGuard      _validateGuardResult)
 
@@ -128,36 +127,35 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressNextParse set?}
-    suppress -- yes --> ret1(["return<br/>consumed by _restoreHash"])
-    suppress -- no --> redirect{_redirecting set?}
-    redirect -- yes --> commit1(["_commitNavigation(newHash)<br/>bypass guards on redirect"])
-    redirect -- no --> currhash{"same hash as _currentHash?"}
-    currhash -- yes --> ret2(["clear _pendingHash,<br/>abort + bump gen, return"])
-    currhash -- no --> pendhash{"same hash as _pendingHash?"}
-    pendhash -- yes --> ret3(["return<br/>dedup in-flight nav"])
-    pendhash -- no --> resolve[resolve route from hash]
-    resolve --> abort[abort previous AbortController]
-    abort --> bump[bump _parseGeneration]
-    bump --> guards{any guards registered?}
-    guards -- no --> commit2(["_commitNavigation<br/>(fast path)"])
-    guards -- yes --> create["create AbortController<br/>+ GuardContext"]
-    create --> leave{has leave guards?}
-    leave -- no --> enter1(["_runEnterPipeline()"])
-    leave -- yes --> runleave["_runLeaveGuards()"]
-    runleave --> lsync{sync result}
-    runleave --> lasync{async result}
-    lsync -- "false" --> lrestore([_blockNavigation])
-    lsync -- "true" --> enter1
-    lasync --> lawait["await result, check gen"]
-    lawait -- "false" --> lblock([_blockNavigation])
-    lawait -- "true" --> enter1
-    enter1 --> runall["_runEnterGuards()"]
-    runall --> esync{sync result}
-    runall --> easync{async result}
-    esync --> eapply(["apply result<br/>same tick"])
-    easync --> eawait(["await result<br/>check gen, apply result"])
+    start(["parse(newHash)"]) --> suppress{_suppressNextParse?}
+    suppress -- "yes" --> ret(["return"])
+    suppress -- "no" --> redir{_redirecting?}
+    redir -- "yes" --> bypass(["_commitNavigation()"])
+    redir -- "no" --> samehash{same as _currentHash?}
+    samehash -- "yes" --> ret
+    samehash -- "no" --> pending{same as _pendingHash?}
+    pending -- "yes" --> ret
+    pending -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
+
+    setup --> guards{guards registered?}
+    guards -- "no" --> commit(["_commitNavigation()"])
+    guards -- "yes" --> leave
+
+    leave{leave guards?}
+    leave -- "no" --> enter
+    leave -- "yes" --> runleave["_runLeaveGuards()"]
+    runleave -- "true" --> enter["_runEnterGuards()"]
+    runleave -- "false" --> block
+
+    enter --> result{result}
+    result -- "true" --> commit
+    result -- "false" --> block(["_blockNavigation()"])
+    result -- "redirect" --> redirect(["_redirect()"])
 ```
+
+**Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
+remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked—if
+a newer navigation started, the stale result is discarded.
 
 **Critical design decisions:**
 
@@ -199,8 +197,7 @@ flowchart TD
     end
 
     subgraph phase2 ["Phase 2: Global enter guards"]
-        enter(["_runEnterPipeline()"]) --> allguards["_runEnterGuards()"]
-        allguards --> gsync["_runGuards(globalGuards)"]
+        enter(["_runEnterGuards()"]) --> gsync["_runGuards(globalGuards)"]
         gsync -- "all sync, all true" --> phase3
         gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
         gsync -- "Promise returned" --> gfin["_continueGuardsAsync()"]
@@ -227,31 +224,16 @@ navigation is blocked (`false`).
 
 ## Guard Result Handling
 
-After guards complete, the result is applied inline (no separate method):
+After guards complete, the result is applied inline:
 
-```mermaid
-flowchart TD
-    result{result === true?}
-    result -- "true" --> commit["_commitNavigation()"]
-    commit --> parse["MobileRouter.prototype.parse(hash)"]
-    commit --> update["update _currentHash, _currentRoute"]
+| Result | Action |
+|--------|--------|
+| `true` | `_commitNavigation()` → update state, call parent `parse()` |
+| `false` | `_blockNavigation()` → restore previous hash |
+| `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true` |
 
-    result -- "non-true" --> handle["_handleGuardResult(result)"]
-
-    handle -- "false" --> block["_blockNavigation()"]
-    block --> s1["_pendingHash = null"]
-    s1 --> s2["_restoreHash()"]
-    s2 --> s3["set _suppressNextParse = true"]
-    s3 --> s4["hashChanger.replaceHash(previousHash)"]
-    s4 --> s5(["parse fires sync, sees flag, returns"])
-
-    handle -- "string" --> redir["set _redirecting = true"]
-    redir --> navto["navTo(routeName, {}, {}, replace=true)"]
-    navto --> reenter(["re-entrant parse bypasses guards"])
-    navto --> cleanup["_redirecting = false (finally)"]
-
-    handle -- "GuardRedirect" --> redir2(["same as string, with params"])
-```
+Redirects set `_redirecting = true` before calling `navTo()`, causing the re-entrant
+`parse()` to bypass all guards and commit immediately.
 
 ## Async Concurrency Control
 

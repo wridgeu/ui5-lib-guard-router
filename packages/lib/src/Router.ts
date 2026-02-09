@@ -230,6 +230,51 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			signal: this._abortController.signal,
 		};
 
+		// Run enter guards and apply result (reused after leave guards pass)
+		const runEnterGuards = (): void => {
+			const enterResult = this._runEnterGuards(this._globalGuards, toRoute, context);
+
+			if (isPromise(enterResult)) {
+				enterResult
+					.then((guardResult: GuardResult) => {
+						if (generation !== this._parseGeneration) {
+							Log.debug(
+								"Async enter guard result discarded (superseded by newer navigation)",
+								newHash,
+								LOG_COMPONENT,
+							);
+							return;
+						}
+						// Apply result: true=commit, false=block, other=redirect
+						if (guardResult === true) {
+							this._commitNavigation(newHash, toRoute);
+						} else if (guardResult === false) {
+							this._blockNavigation();
+						} else {
+							this._redirect(guardResult);
+						}
+					})
+					.catch((error: unknown) => {
+						if (generation !== this._parseGeneration) return;
+						Log.error(
+							`Async enter guard for route "${toRoute}" failed, blocking navigation`,
+							String(error),
+							LOG_COMPONENT,
+						);
+						this._blockNavigation();
+					});
+				return;
+			}
+			// Apply result: true=commit, false=block, other=redirect
+			if (enterResult === true) {
+				this._commitNavigation(newHash, toRoute);
+			} else if (enterResult === false) {
+				this._blockNavigation();
+			} else {
+				this._redirect(enterResult);
+			}
+		};
+
 		// Run leave guards first, then enter guards
 		if (hasLeaveGuards) {
 			const leaveResult = this._runLeaveGuards(context);
@@ -249,7 +294,7 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 							this._blockNavigation();
 							return;
 						}
-						this._runEnterPipeline(generation, newHash, toRoute, context);
+						runEnterGuards();
 					})
 					.catch((error: unknown) => {
 						if (generation !== this._parseGeneration) return;
@@ -268,8 +313,8 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			}
 		}
 
-		// Enter pipeline (leave guards passed or were absent)
-		this._runEnterPipeline(generation, newHash, toRoute, context);
+		// Enter guards (leave guards passed or were absent)
+		runEnterGuards();
 	},
 
 	/**
@@ -309,45 +354,6 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 			}
 		}
 		return true;
-	},
-
-	/** Run the enter guard pipeline (global + route-specific) and handle the result. */
-	_runEnterPipeline(
-		this: RouterInternal,
-		generation: number,
-		newHash: string,
-		toRoute: string,
-		context: GuardContext,
-	): void {
-		const result = this._runEnterGuards(this._globalGuards, toRoute, context);
-
-		if (isPromise(result)) {
-			result
-				.then((guardResult: GuardResult) => {
-					if (generation !== this._parseGeneration) {
-						Log.debug(
-							"Async guard result discarded (superseded by newer navigation)",
-							newHash,
-							LOG_COMPONENT,
-						);
-						return;
-					}
-					if (guardResult === true) {
-						this._commitNavigation(newHash, toRoute);
-					} else {
-						this._handleGuardResult(guardResult);
-					}
-				})
-				.catch((error: unknown) => {
-					if (generation !== this._parseGeneration) return;
-					Log.error("Async guard chain failed, blocking navigation", String(error), LOG_COMPONENT);
-					this._blockNavigation();
-				});
-		} else if (result === true) {
-			this._commitNavigation(newHash, toRoute);
-		} else {
-			this._handleGuardResult(result);
-		}
 	},
 
 	/**
@@ -479,19 +485,15 @@ const Router = MobileRouter.extend("ui5.ext.routing.Router", {
 		return false;
 	},
 
-	/** Handle a block or redirect result. */
-	_handleGuardResult(this: RouterInternal, result: GuardResult): void {
-		if (result === false) {
-			this._blockNavigation();
-			return;
-		}
+	/** Perform a guard redirect (string route name or GuardRedirect object). */
+	_redirect(this: RouterInternal, target: string | GuardRedirect): void {
 		this._pendingHash = null;
 		this._redirecting = true;
 		try {
-			if (typeof result === "string") {
-				this.navTo(result, {}, {}, true);
-			} else if (isGuardRedirect(result)) {
-				this.navTo(result.route, result.parameters ?? {}, result.componentTargetInfo, true);
+			if (typeof target === "string") {
+				this.navTo(target, {}, {}, true);
+			} else {
+				this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
 			}
 		} finally {
 			this._redirecting = false;

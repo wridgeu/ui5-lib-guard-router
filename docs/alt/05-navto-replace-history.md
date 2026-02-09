@@ -74,7 +74,7 @@ private _navigateBasedOnState(isLoggedIn: boolean): void {
 
 ## Combining with This Repository
 
-This approach is complementary. Even with `ui5.ext.routing`, guards use `navTo(..., true)` internally for redirects. The library's `_handleGuardResult` always passes `bReplace: true`:
+This approach is complementary. Even with `ui5.ext.routing`, guards use `navTo(..., true)` internally for redirects. The library's `_redirect` method always passes `bReplace: true`:
 
 ```typescript
 // Router.ts line 279
