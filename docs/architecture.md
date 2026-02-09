@@ -226,11 +226,11 @@ navigation is blocked (`false`).
 
 After guards complete, the result is applied inline:
 
-| Result | Action |
-|--------|--------|
-| `true` | `_commitNavigation()` → update state, call parent `parse()` |
-| `false` | `_blockNavigation()` → restore previous hash |
-| `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true` |
+| Result                      | Action                                                      |
+| --------------------------- | ----------------------------------------------------------- |
+| `true`                      | `_commitNavigation()` → update state, call parent `parse()` |
+| `false`                     | `_blockNavigation()` → restore previous hash                |
+| `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true`               |
 
 Redirects set `_redirecting = true` before calling `navTo()`, causing the re-entrant
 `parse()` to bypass all guards and commit immediately.
