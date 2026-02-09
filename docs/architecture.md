@@ -127,35 +127,35 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressNextParse set?}
-    suppress -- yes --> ret1(["return<br/>consumed by _restoreHash"])
-    suppress -- no --> redirect{_redirecting set?}
-    redirect -- yes --> commit1(["_commitNavigation(newHash)<br/>bypass guards on redirect"])
-    redirect -- no --> currhash{"same hash as _currentHash?"}
-    currhash -- yes --> ret2(["clear _pendingHash,<br/>abort + bump gen, return"])
-    currhash -- no --> pendhash{"same hash as _pendingHash?"}
-    pendhash -- yes --> ret3(["return<br/>dedup in-flight nav"])
-    pendhash -- no --> resolve[resolve route from hash]
-    resolve --> abort[abort previous AbortController]
-    abort --> bump[bump _parseGeneration]
-    bump --> guards{any guards registered?}
-    guards -- no --> commitNav(["_commitNavigation()"])
-    guards -- yes --> create["create AbortController<br/>+ GuardContext"]
-    create --> leave{has leave guards?}
-    leave -- no --> runenter["_runEnterGuards()"]
-    leave -- yes --> runleave["_runLeaveGuards()"]
-    runleave --> lsync{sync result}
-    runleave --> lasync{async result}
-    lsync -- "false" --> blockNav(["_blockNavigation()"])
-    lsync -- "true" --> runenter
-    lasync --> lawait["await result, check gen"]
-    lawait -- "false" --> blockNav
-    lawait -- "true" --> runenter
-    runenter --> eresult{result}
-    eresult -- "true" --> commitNav
-    eresult -- "false" --> blockNav
-    eresult -- "redirect" --> redirect(["_redirect()"])
+    start(["parse(newHash)"]) --> early{early exit?}
+    early -- "_suppressNextParse" --> ret(["return"])
+    early -- "_redirecting" --> bypass(["_commitNavigation()<br/>guard bypass"])
+    early -- "hash dedup" --> ret
+    early -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
+
+    setup --> guards{guards<br/>registered?}
+    guards -- "no" --> commit(["_commitNavigation()"])
+    guards -- "yes" --> pipeline
+
+    subgraph pipeline [" "]
+        direction TB
+        leave{leave<br/>guards?}
+        leave -- "no" --> enter
+        leave -- "yes" --> runleave[["_runLeaveGuards()"]]
+        runleave -- "true ✓" --> enter[["_runEnterGuards()"]]
+        runleave -- "false ✗" --> pblock(["block"])
+    end
+
+    enter --> result{result}
+    result -- "true" --> commit
+    result -- "false" --> block(["_blockNavigation()"])
+    result -- "string / object" --> redir(["_redirect()"])
+    pblock --> block
 ```
+
+**Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
+remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked—if
+a newer navigation started, the stale result is discarded.
 
 **Critical design decisions:**
 
