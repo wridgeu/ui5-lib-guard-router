@@ -127,13 +127,17 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> early{early exit?}
-    early -- "_suppressNextParse" --> ret(["return"])
-    early -- "_redirecting" --> bypass(["_commitNavigation()<br/>guard bypass"])
-    early -- "hash dedup" --> ret
-    early -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
+    start(["parse(newHash)"]) --> suppress{_suppressNextParse?}
+    suppress -- "yes" --> ret(["return"])
+    suppress -- "no" --> redir{_redirecting?}
+    redir -- "yes" --> bypass(["_commitNavigation()"])
+    redir -- "no" --> samehash{same as _currentHash?}
+    samehash -- "yes" --> ret
+    samehash -- "no" --> pending{same as _pendingHash?}
+    pending -- "yes" --> ret
+    pending -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
 
-    setup --> guards{guards<br/>registered?}
+    setup --> guards{guards registered?}
     guards -- "no" --> commit(["_commitNavigation()"])
     guards -- "yes" --> leave
 
@@ -146,7 +150,7 @@ flowchart TD
     enter --> result{result}
     result -- "true" --> commit
     result -- "false" --> block(["_blockNavigation()"])
-    result -- "redirect" --> redir(["_redirect()"])
+    result -- "redirect" --> redirect(["_redirect()"])
 ```
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
