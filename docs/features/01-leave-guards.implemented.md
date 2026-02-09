@@ -9,7 +9,6 @@
 > - Public methods return `GuardRouter` (not the proposed `RouterInstance` — which was renamed to `RouterInternal` for the internal interface)
 > - `addRouteGuard` also accepts an object form `{ beforeEnter?, beforeLeave? }` for convenience
 > - The helper is named `isPromise` (not `isThenable` as sketched below)
-> - Blocking calls `_blockNavigation()` (which clears `_pendingHash` then calls `_restoreHash()`), not `_restoreHash()` directly
 > - Open question #2 was resolved: leave guards receive the full `GuardContext`
 >
 > The code samples below reflect the original **proposal**, not the final implementation. Refer to `Router.ts` and `types.ts` for the actual code.

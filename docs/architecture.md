@@ -103,7 +103,7 @@ GuardContext                        GuardResult
 GuardRouter (public interface)      RouterInternal (internal interface)
   extends sap.m.routing.Router        extends GuardRouter
   + 6 public guard methods             + 10 state fields
-    addGuard / removeGuard             + 11 internal methods
+    addGuard / removeGuard             + 10 internal methods
     addRouteGuard / removeRouteGuard     (incl. _runRouteGuards,
     addLeaveGuard / removeLeaveGuard      _validateGuardResult)
 
