@@ -61,7 +61,12 @@ export default class Component extends UIComponent {
 
 	/**
 	 * Clean up registered guards on component destruction.
-	 * Important: Always remove guards to prevent memory leaks and stale references.
+	 *
+	 * Router.destroy() automatically clears all guards, so this explicit cleanup
+	 * is optional in most cases. It's shown here as a defensive best practice.
+	 *
+	 * Note: In FLP with sap-keep-alive enabled, destroy() is only called when
+	 * navigating to the launchpad home page, not when switching between apps.
 	 */
 	destroy(): void {
 		const router = this.getRouter() as unknown as GuardRouter;

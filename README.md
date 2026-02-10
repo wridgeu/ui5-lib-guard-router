@@ -260,6 +260,15 @@ export default class EditOrderController extends Controller {
 > [!TIP]
 > **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash — there is no built-in confirmation dialog or toast. In production, show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) so the block is visible.
 
+> [!NOTE]
+> **Guard cleanup and component lifecycle**
+>
+> The router's `destroy()` method automatically clears all registered guards. By default, when a component is destroyed (including during FLP navigation), cleanup happens automatically.
+>
+> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered, which is the intended behavior since the same component instance is reused. The component is destroyed (and guards cleared) when navigating to the launchpad home page.
+>
+> Explicit cleanup in `Component.destroy()` is shown as a defensive best practice, but is not strictly required in most scenarios.
+
 ### Dynamic guard registration
 
 Guards can be added or removed at any point during the router's lifetime:
