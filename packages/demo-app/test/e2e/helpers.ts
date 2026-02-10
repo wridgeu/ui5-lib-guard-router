@@ -71,14 +71,15 @@ export async function expectHashToBe(expected: string, timeoutMsg?: string): Pro
 
 /**
  * Set the dirty state by updating the form model property directly.
+ * The form model is owned by the Component (not the view) and inherited by views.
  * Avoids relying on CheckBox internals or two-way binding propagation.
  */
 export async function setDirtyState(isDirty: boolean): Promise<void> {
 	await browser.execute((dirty: boolean) => {
-		const Element = sap.ui.require("sap/ui/core/Element");
-		const view = Element?.getElementById("container-demo.app---protectedView");
-		if (view) {
-			const model = (view as any).getModel("form");
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const component = Component?.registry?.get("container-demo.app");
+		if (component) {
+			const model = component.getModel("form") as any;
 			if (model) {
 				model.setProperty("/isDirty", dirty);
 			}
