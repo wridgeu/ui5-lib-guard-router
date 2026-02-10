@@ -1,7 +1,12 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardRouter, GuardFn } from "ui5/ext/routing/types";
-import { createNavigationLogger, createAuthGuard, createDirtyFormGuard, forbiddenGuard } from "./guards";
+import {
+	createNavigationLogger,
+	createAsyncPermissionGuard,
+	createDirtyFormGuard,
+	forbiddenGuard,
+} from "./guards";
 
 /**
  * Demo application showcasing all guard registration patterns.
@@ -10,7 +15,9 @@ import { createNavigationLogger, createAuthGuard, createDirtyFormGuard, forbidde
  * - Global guards (addGuard) - run for every navigation
  * - Route-specific enter guards (addRouteGuard with function)
  * - Object form guards (addRouteGuard with { beforeEnter, beforeLeave })
- * - Leave guards (addLeaveGuard) - run when leaving a route
+ *
+ * Note: The standalone addLeaveGuard() API is also available but not shown here.
+ * Pattern 3 (object form) is preferred when a route needs both enter and leave guards.
  *
  * @namespace demo.app
  */
@@ -34,8 +41,9 @@ export default class Component extends UIComponent {
 		this.setModel(formModel, "form");
 
 		// ============================================================
-		// Pattern 1: Global Guard (addGuard)
-		// Runs for EVERY navigation, useful for logging or app-wide checks
+		// Pattern 1: Global Guards (addGuard)
+		// Run for EVERY navigation, useful for logging or app-wide checks
+		// Multiple global guards execute in registration order
 		// ============================================================
 		this._navigationLogger = createNavigationLogger();
 		router.addGuard(this._navigationLogger);
@@ -50,9 +58,10 @@ export default class Component extends UIComponent {
 		// Pattern 3: Object Form Guard (addRouteGuard with config object)
 		// Registers both enter AND leave guards in a single call
 		// This is the recommended pattern when a route needs both guard types
+		// Uses async guard to demonstrate Promise-based permission checks
 		// ============================================================
 		router.addRouteGuard("protected", {
-			beforeEnter: createAuthGuard(authModel),
+			beforeEnter: createAsyncPermissionGuard(authModel),
 			beforeLeave: createDirtyFormGuard(formModel),
 		});
 

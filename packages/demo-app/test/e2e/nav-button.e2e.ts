@@ -1,4 +1,4 @@
-import { waitForPage, fireEvent, resetAuth } from "./helpers";
+import { waitForPage, fireEvent, resetAuth, expectHashToBe } from "./helpers";
 
 describe("UI5 in-app nav back button", () => {
 	it("should navigate back to Home via the Page nav button", async () => {
@@ -16,7 +16,7 @@ describe("UI5 in-app nav back button", () => {
 		});
 		await navBtn.press();
 
-		// Verify on Protected page
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Click the UI5 Page's built-in nav back button
@@ -24,9 +24,6 @@ describe("UI5 in-app nav back button", () => {
 
 		// Should be back on Home
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
-
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/protected");
 	});
 
 	it("should allow re-navigation after using nav back button", async () => {
@@ -44,6 +41,7 @@ describe("UI5 in-app nav back button", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Nav back via UI5 button
@@ -57,7 +55,7 @@ describe("UI5 in-app nav back button", () => {
 		});
 		await navBtn2.press();
 
-		// Should be on Protected again
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 });

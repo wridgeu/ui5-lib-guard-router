@@ -13,7 +13,8 @@ export function createNavigationLogger(): GuardFn {
 	return (context: GuardContext): GuardResult => {
 		const from = context.fromRoute || "(initial)";
 		const to = context.toRoute || "(no match)";
-		Log.info(`Navigation: ${from} → ${to}`, LOG_COMPONENT);
+		// Use warning level to ensure it appears in browser console
+		Log.warning(`Navigation logger: ${from} → ${to}`, LOG_COMPONENT);
 		return true;
 	};
 }
@@ -95,6 +96,13 @@ export const forbiddenGuard: GuardFn = () => "home";
  * Guard that demonstrates redirect with route parameters.
  * Redirects to a route while preserving/transforming parameters.
  *
+ * **Reference implementation** - not used in the demo app as it requires
+ * routes with parameters. See documentation for usage examples.
+ *
+ * @example
+ * // Redirect from "old-detail/{id}" to "detail/{id}" preserving the id
+ * router.addRouteGuard("old-detail", createRedirectWithParamsGuard("detail"));
+ *
  * @param targetRoute - The route to redirect to
  */
 export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
@@ -128,13 +136,19 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 /**
  * Guard that demonstrates error handling behavior.
  *
- * When guards throw errors (sync) or reject (async), the router:
+ * **Reference implementation** - not used in the demo app. Shows how guard
+ * errors are handled by the router:
  * 1. Logs the error via sap/base/Log.error()
  * 2. Blocks the navigation (treats as if guard returned false)
  * 3. Does NOT propagate the error to the application
  *
- * This guard throws when a specific model property is set, allowing
- * demonstration of error handling without breaking normal app flow.
+ * @example
+ * // Register as global guard to block all navigation on error
+ * const errorModel = new JSONModel({ simulateError: false });
+ * router.addGuard(createErrorDemoGuard(errorModel));
+ *
+ * // Trigger error by setting model property
+ * errorModel.setProperty("/simulateError", true);
  *
  * @param errorModel - Model with /simulateError boolean property
  */
@@ -151,6 +165,14 @@ export function createErrorDemoGuard(errorModel: JSONModel): GuardFn {
 
 /**
  * Async version of error demo guard - demonstrates rejected Promise handling.
+ *
+ * **Reference implementation** - not used in the demo app. Shows how async
+ * guard errors (rejected Promises) are handled identically to sync errors.
+ *
+ * @example
+ * // Register as route guard
+ * const errorModel = new JSONModel({ simulateAsyncError: false });
+ * router.addRouteGuard("risky", createAsyncErrorDemoGuard(errorModel));
  *
  * @param errorModel - Model with /simulateAsyncError boolean property
  * @param delayMs - Delay before rejecting (default: 50ms)

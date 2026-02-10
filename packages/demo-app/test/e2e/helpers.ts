@@ -1,7 +1,12 @@
 /**
- * Wait for a UI5 Page control to be available and have the expected title.
+ * Wait for a UI5 Page control to be available, have the expected title,
+ * AND be the currently displayed page in the App container.
+ *
  * Uses browser.execute with Element.getElementById() directly to avoid
  * wdi5's control resolution incorrectly picking up sub-elements (e.g. navButton).
+ *
+ * Also verifies that the Router's navigation has completed (pendingHash is null)
+ * to avoid race conditions with cached views from previous navigations.
  */
 export async function waitForPage(controlId: string, expectedTitle: string, timeout = 10000): Promise<void> {
 	await browser.waitUntil(
@@ -10,7 +15,22 @@ export async function waitForPage(controlId: string, expectedTitle: string, time
 				(id: string, title: string) => {
 					const Element = sap.ui.require("sap/ui/core/Element");
 					const control = Element?.getElementById(id);
-					return (control as any)?.getTitle?.() === title;
+					if ((control as any)?.getTitle?.() !== title) {
+						return false;
+					}
+
+					// Also check that the Router's navigation has completed
+					const Component = sap.ui.require("sap/ui/core/Component");
+					const component = Component?.registry?.get("container-demo.app");
+					const router = component?.getRouter() as any;
+
+					// pendingHash being null means the navigation has settled
+					// (either committed or blocked - but the page title check ensures committed)
+					if (router?._pendingHash !== null) {
+						return false;
+					}
+
+					return true;
 				},
 				controlId,
 				expectedTitle,
@@ -86,3 +106,4 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 		}
 	}, isDirty);
 }
+

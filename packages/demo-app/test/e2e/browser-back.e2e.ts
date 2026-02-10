@@ -1,4 +1,4 @@
-import { waitForPage, resetAuth } from "./helpers";
+import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
 
 describe("Browser back navigation with guards", () => {
 	it("should handle back navigation cleanly after login flow", async () => {
@@ -17,7 +17,7 @@ describe("Browser back navigation with guards", () => {
 		});
 		await navBtn.press();
 
-		// Verify we're on Protected
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Browser back
@@ -42,6 +42,7 @@ describe("Browser back navigation with guards", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Navigate back to Home
@@ -65,7 +66,8 @@ describe("Browser back navigation with guards", () => {
 		// Try browser forward (toward previously visited #/protected)
 		await browser.execute(() => window.history.forward());
 
-		// Guard should block: still on Home, not Protected
+		// Guard should block: wait for hash to settle back to home
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
@@ -79,7 +81,8 @@ describe("Browser back navigation with guards", () => {
 		});
 		await navBtn.press();
 
-		// Should still be on Home
+		// Wait for hash to settle after guard redirects
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Browser back should not break the app
@@ -104,6 +107,7 @@ describe("Browser back navigation with guards", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
 		await navBtn.press();
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Back to Home
@@ -112,6 +116,7 @@ describe("Browser back navigation with guards", () => {
 
 		// Forward to Protected (still logged in)
 		await browser.execute(() => window.history.forward());
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Back to Home again

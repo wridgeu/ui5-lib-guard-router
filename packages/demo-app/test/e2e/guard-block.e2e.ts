@@ -1,4 +1,4 @@
-import { waitForPage, resetAuth } from "./helpers";
+import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
 
 describe("Guard blocks navigation", () => {
 	it("should stay on Home when navigating to Protected while logged out", async () => {
@@ -17,10 +17,10 @@ describe("Guard blocks navigation", () => {
 		});
 		await navBtn.press();
 
-		// Should still be on Home (guard redirected)
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		// Wait for hash to settle (async guard takes time, hash changes before guard completes)
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/protected");
+		// Verify we're still on Home page
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 });

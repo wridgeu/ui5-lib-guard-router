@@ -1,4 +1,4 @@
-import { waitForPage, resetAuth } from "./helpers";
+import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
 
 describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
@@ -8,10 +8,9 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/protected";
 		});
 
+		// Wait for hash to settle after async guard redirects
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
-
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/protected");
 	});
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
@@ -20,10 +19,9 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/forbidden";
 		});
 
+		// Wait for hash to settle after sync guard redirects
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
-
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/forbidden");
 	});
 
 	it("should load Protected page when accessing #/protected directly while logged in", async () => {
@@ -39,6 +37,7 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/protected";
 		});
 
+		// Wait for view to load - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 
