@@ -1,4 +1,4 @@
-import { waitForPage, fireEvent, resetAuth } from "./helpers";
+import { waitForPage, fireEvent, resetAuth, expectHashToBe } from "./helpers";
 
 describe("Multi-route navigation sequences", () => {
 	it("should handle Home -> Protected -> Home -> Forbidden (blocked) -> Home sequence", async () => {
@@ -17,6 +17,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navProtected.press();
 
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Nav back to Home
@@ -30,11 +31,9 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navForbidden.press();
 
-		// Should still be on Home
+		// Wait for hash to settle after redirect
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
-
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/forbidden");
 	});
 
 	it("should block protected after mid-session logout", async () => {
@@ -53,7 +52,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navBtn.press();
 
-		// Nav back to Home
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
@@ -79,7 +78,8 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navBtn2.press();
 
-		// Should still be on Home (guard blocks)
+		// Wait for hash to settle after guard redirects
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
@@ -99,6 +99,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navBtn.press();
 
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
 		// Back to home
@@ -119,6 +120,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navBtn.press();
 
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Login again
@@ -135,6 +137,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await navBtn.press();
 
+		// Wait for view - confirms async guard completed
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 });

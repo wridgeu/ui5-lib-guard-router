@@ -9,6 +9,7 @@ async function loginAndGoToProtected(): Promise<void> {
 describe("Leave Guard - Dirty Form", () => {
 	beforeEach(async () => {
 		await resetAuth();
+		await setDirtyState(false); // Ensure clean state before each test
 		await browser.goTo({ sHash: "" });
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
@@ -18,6 +19,7 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(false);
 
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await expectHashToBe("", "Hash should settle to home after leave guard allows");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
@@ -26,7 +28,9 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(true);
 
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await expectHashToBe("#/protected");
+
+		// Leave guard should block - hash should stay at protected
+		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
 	});
 
 	it("should allow leaving after clearing dirty state", async () => {
@@ -35,6 +39,7 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(false);
 
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await expectHashToBe("", "Hash should settle to home after leave guard allows");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
@@ -42,7 +47,14 @@ describe("Leave Guard - Dirty Form", () => {
 		await loginAndGoToProtected();
 		await setDirtyState(true);
 
+		// Verify dirty state was set before attempting navigation
+		const isDirty = await browser.execute(() => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			return Component?.getComponentById("container-demo.app")?.getModel("form")?.getProperty("/isDirty");
+		});
+		expect(isDirty).toBe(true);
+
 		await browser.execute(() => window.history.back());
-		await expectHashToBe("#/protected", "Hash did not settle back to #/protected after browser back");
+		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
 	});
 });

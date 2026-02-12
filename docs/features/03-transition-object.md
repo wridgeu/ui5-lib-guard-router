@@ -36,7 +36,7 @@ interface NavigationIntent {
 	/** Target hash */
 	readonly toHash: string;
 	/** Parsed route parameters */
-	readonly toArguments: Record<string, string>;
+	readonly toArguments: Record<string, string | Record<string, string>>;
 	/** Source route name */
 	readonly fromRoute: string;
 	/** Source hash */
@@ -72,7 +72,7 @@ interface NavigationIntent {
 interface GuardContext {
 	toRoute: string;
 	toHash: string;
-	toArguments: Record<string, string>;
+	toArguments: Record<string, string | Record<string, string>>;
 	fromRoute: string;
 	fromHash: string;
 	transition: NavigationIntent; // NEW
@@ -229,7 +229,7 @@ Both `retry()` and `retrySkipGuards()` set `used = true` and are no-ops on subse
 export interface NavigationIntent {
     readonly toRoute: string;
     readonly toHash: string;
-    readonly toArguments: Record<string, string>;
+    readonly toArguments: Record<string, string | Record<string, string>>;
     readonly fromRoute: string;
     readonly fromHash: string;
     retry(): void;
@@ -242,7 +242,7 @@ export interface NavigationIntent {
 export interface GuardContext {
     toRoute: string;
     toHash: string;
-    toArguments: Record<string, string>;
+    toArguments: Record<string, string | Record<string, string>>;
     fromRoute: string;
     fromHash: string;
     transition: NavigationIntent;

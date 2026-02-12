@@ -1,4 +1,4 @@
-import { waitForPage } from "./helpers";
+import { waitForPage, expectHashToBe } from "./helpers";
 
 describe("Guard redirects to Home", () => {
 	it("should redirect from Forbidden to Home", async () => {
@@ -10,10 +10,10 @@ describe("Guard redirects to Home", () => {
 		});
 		await navBtn.press();
 
-		// Should be redirected to Home
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		// Wait for hash to settle after redirect
+		await expectHashToBe("", "Hash should settle to home after guard redirect");
 
-		const url = await browser.getUrl();
-		expect(url).not.toContain("#/forbidden");
+		// Verify we're on Home page
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 });

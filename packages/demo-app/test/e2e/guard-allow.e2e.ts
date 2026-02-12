@@ -23,9 +23,11 @@ describe("Guard allows navigation when logged in", () => {
 		});
 		await navBtn.press();
 
-		// Should be on Protected page
+		// Wait for view to load - this confirms async guard completed and navigation committed.
+		// Don't wait for hash first because it changes BEFORE async guard completes.
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 
+		// Hash should now be correct
 		const url = await browser.getUrl();
 		expect(url).toContain("#/protected");
 	});
