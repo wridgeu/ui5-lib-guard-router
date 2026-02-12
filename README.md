@@ -10,8 +10,8 @@ UI5 Router extension with async navigation guards. Drop-in replacement for `sap.
 >
 > **Related resources**:
 >
-> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) — native NavContainer `navigate` event (sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](docs/research-native-router-navigate-event.md) — detailed comparison with this library
+> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
+> - [Research: Native NavContainer navigate event](docs/research-native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!IMPORTANT]
 > **Minimum UI5 version: 1.118**
@@ -160,7 +160,7 @@ Only strict `true` allows navigation. This prevents accidental allows from truth
 | `true`                            | Allow leaving the current route                 |
 | `false` (or any non-`true` value) | Block (stay on current route, no history entry) |
 
-Leave guards cannot redirect. They answer the binary question "can I leave?" — use enter guards on the target route for redirection logic.
+Leave guards cannot redirect. They answer the binary question "can I leave?". For redirection logic, use enter guards on the target route.
 
 ### Guard execution order
 
@@ -258,16 +258,16 @@ export default class EditOrderController extends Controller {
 ```
 
 > [!TIP]
-> **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash — there is no built-in confirmation dialog or toast. In production, show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) so the block is visible.
+> **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash. There is no built-in confirmation dialog or toast. In production, show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) so the block is visible.
 
 > [!NOTE]
-> **Guard cleanup and component lifecycle**
+> **Guard cleanup and lifecycle**
 >
-> The router's `destroy()` method automatically clears all registered guards. By default, when a component is destroyed (including during FLP navigation), cleanup happens automatically.
+> **Component level**: The router's `destroy()` method automatically clears all registered guards when the component is destroyed (including during FLP navigation).
 >
-> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered, which is the intended behavior since the same component instance is reused. The component is destroyed (and guards cleared) when navigating to the launchpad home page.
+> **Controller level**: UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away. Controller-registered guards therefore persist across in-app navigations. This is typically the desired behavior for route-specific guards tied to view state.
 >
-> Explicit cleanup in `Component.destroy()` is shown as a defensive best practice, but is not strictly required in most scenarios.
+> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
 
 ### Dynamic guard registration
 
@@ -288,14 +288,14 @@ router.removeGuard(logGuard);
 
 If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection (an alternative to leave guards) through two public APIs on `sap.ushell.Container`:
 
-**`setDirtyFlag(bDirty)`** (since 1.27.0) — simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog when the user attempts cross-app navigation (home button, other tiles), browser back/forward out of the app, or page refresh/close:
+**`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog when the user attempts cross-app navigation (home button, other tiles), browser back/forward out of the app, or page refresh/close:
 
 ```typescript
 sap.ushell.Container.setDirtyFlag(true); // mark unsaved changes
 sap.ushell.Container.setDirtyFlag(false); // clear after save
 ```
 
-**`registerDirtyStateProvider(fn)`** (since 1.31.0) — registers a callback that FLP calls during navigation to dynamically determine dirty state. The callback receives a `NavigationContext` with `isCrossAppNavigation` (boolean) and `innerAppRoute` (string), allowing the provider to distinguish between cross-app and in-app navigation:
+**`registerDirtyStateProvider(fn)`** (since 1.31.0): Registers a callback that FLP calls during navigation to dynamically determine dirty state. The callback receives a `NavigationContext` with `isCrossAppNavigation` (boolean) and `innerAppRoute` (string), allowing the provider to distinguish between cross-app and in-app navigation:
 
 ```typescript
 const dirtyProvider = (navigationContext) => {
@@ -312,7 +312,7 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-**How the two approaches complement each other**: FLP's data loss protection operates at the shell navigation filter level — it intercepts navigation _before_ the hash change reaches your app's router. Leave guards operate _inside_ your app's router, intercepting route-to-route navigation. For complete coverage:
+**How the two approaches complement each other**: FLP's data loss protection operates at the shell navigation filter level, intercepting navigation _before_ the hash change reaches your app's router. Leave guards operate _inside_ your app's router, intercepting route-to-route navigation. For complete coverage:
 
 - Use **leave guards** for in-app route changes (e.g., navigating from an edit form to a list within your app)
 - Use **`setDirtyFlag`** or **`registerDirtyStateProvider`** for FLP-level navigation (cross-app, browser close, home button)
@@ -334,7 +334,7 @@ User navigates to "dashboard"
   → profile view renders
 ```
 
-This is intentional. Evaluating guards on redirect targets introduces the risk of infinite loops (`A → B → A → B → ...`). While solvable with a visited-set that detects cycles, the implementation adds significant complexity — particularly when redirect targets have **async** guards, since the redirect chain can no longer be bracketed in a single synchronous call stack. The chain state must then persist across async boundaries and be cleared only by terminal events (commit, block, or loop detection).
+This is intentional. Evaluating guards on redirect targets introduces the risk of infinite loops (`A → B → A → B → ...`). While solvable with a visited-set that detects cycles, the implementation adds significant complexity. This is particularly true when redirect targets have **async** guards, since the redirect chain can no longer be bracketed in a single synchronous call stack. The chain state must then persist across async boundaries and be cleared only by terminal events (commit, block, or loop detection).
 
 In practice, redirect targets are typically "safe" routes like `home` or `login` that don't have guards of their own. If you need guard logic on a redirect target, run the check inline before returning the redirect:
 
@@ -351,11 +351,27 @@ router.addRouteGuard("dashboard", (context) => {
 
 ### URL bar shows target hash during async guards
 
-When a guard returns a Promise (e.g., a `fetch` call to check permissions), the browser's URL bar shows the target hash while the guard is resolving. If the guard ultimately blocks or redirects, the URL reverts — but there is a brief window where the displayed URL doesn't match the active route.
+When a guard returns a Promise (e.g., a `fetch` call to check permissions), the browser's URL bar shows the target hash while the guard is resolving. If the guard ultimately blocks or redirects, the URL reverts. However, there is a brief window where the displayed URL doesn't match the active route.
 
 This does **not** affect sync guards, which resolve in the same tick as the hash change (the URL flicker is imperceptible).
 
-**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` _before_ `parse()` is called. The router cannot prevent the URL change — it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
+**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` _before_ `parse()` is called. The router cannot prevent the URL change; it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
+
+```
+User clicks link / navTo()
+        ↓
+HashChanger updates browser URL    ← URL changes HERE
+        ↓
+HashChanger fires hashChanged
+        ↓
+Router.parse() called              ← guards run HERE
+        ↓
+   ┌────┴────┐
+allowed    blocked
+   ↓          ↓
+views      _restoreHash()
+load       reverts URL
+```
 
 **Application-level solutions**:
 
@@ -377,7 +393,7 @@ router.addRouteGuard("dashboard", async (context) => {
 });
 ```
 
-This follows the same pattern as [TanStack Router's `pendingComponent`](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking#handling-blocked-navigations) — the URL reflects the intent while a loading state signals that the navigation hasn't committed yet.
+This follows the same pattern as [TanStack Router's `pendingComponent`](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking#handling-blocked-navigations): the URL reflects the intent while a loading state signals that the navigation hasn't committed yet.
 
 ## Development
 
