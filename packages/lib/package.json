@@ -38,7 +38,7 @@
 	"scripts": {
 		"clean": "rimraf dist .ui5",
 		"build": "ui5 build",
-		"prepublishOnly": "node -e \"require('fs').copyFileSync('../../LICENSE','./LICENSE')\" && npm run build",
+		"prepublishOnly": "node -e \"import('fs').then(f=>f.copyFileSync('../../LICENSE','./LICENSE'))\" && npm run build",
 		"start": "ui5 serve",
 		"test": "echo \"Run tests from monorepo root: npm run test:qunit\" && exit 1",
 		"typecheck": "tsc --noEmit",

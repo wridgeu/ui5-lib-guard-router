@@ -5,6 +5,7 @@ on:
         branches: [main]
     push:
         branches: [main]
+    workflow_call:
     workflow_dispatch:
 
 concurrency:
@@ -20,14 +21,13 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 22
                   cache: npm
 
             - run: npm ci
 
             - name: Check formatting
               run: npm run fmt:check
-              continue-on-error: true
 
             - name: Lint
               run: npm run lint
