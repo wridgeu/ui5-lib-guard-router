@@ -40,6 +40,9 @@ jobs:
         if: needs.release-please.outputs.release_created == 'true' || inputs.force-publish == true
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        permissions:
+            contents: read
+            id-token: write
         steps:
             - uses: actions/checkout@v4
 
@@ -53,4 +56,4 @@ jobs:
 
             - run: npm run build
 
-            - run: npm publish -w packages/lib --provenance
+            - run: NODE_AUTH_TOKEN="" npm publish -w packages/lib --provenance --access public

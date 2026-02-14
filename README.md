@@ -452,12 +452,7 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (e.g. `feat:`, `fix:`)
 2. release-please automatically opens/updates a "Release PR" that bumps the version in `package.json` and `manifest.json`, and maintains a `CHANGELOG.md`
-3. Merging the Release PR triggers the publish workflow: build, test (QUnit + E2E), then `npm publish` with provenance
-
-**One-time setup (after first merge):**
-
-1. Create an **Automation** token on [npmjs.com](https://www.npmjs.com) (Access Tokens → Generate New Token → Automation)
-2. Add it as `NPM_TOKEN` in the repo's Settings → Secrets and variables → Actions
+3. Merging the Release PR triggers the publish workflow: build, test (QUnit + E2E), then `npm publish` with provenance via OIDC trusted publishers
 
 **Configuration files:**
 
