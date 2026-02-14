@@ -4,7 +4,7 @@
 	"author": "Marco Beier",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/wridgeu/ui5-guard-router.git"
+		"url": "https://github.com/wridgeu/ui5-lib-guard-router.git"
 	},
 	"engines": {
 		"node": ">=22"
