@@ -95,15 +95,15 @@ This is cleaner than manual `ComponentContainer` management but still doesn't so
 
 ## Comparison with This Repository's Approach
 
-| Aspect                | Component Separation     | `ui5.ext.routing` |
-| --------------------- | ------------------------ | ----------------- |
-| Auth code isolation   | Strong (code not loaded) | None (UX-only)    |
-| Per-route guards      | Not solved               | Full support      |
-| Deep linking          | Complex                  | Simple            |
-| Implementation effort | High                     | Low               |
-| FLP compatibility     | Requires care            | Standard          |
-| Server-side enforced  | Can be                   | Cannot be         |
-| Async guard support   | N/A                      | Yes               |
+| Aspect                | Component Separation     | `ui5.guard.router` |
+| --------------------- | ------------------------ | ------------------ |
+| Auth code isolation   | Strong (code not loaded) | None (UX-only)     |
+| Per-route guards      | Not solved               | Full support       |
+| Deep linking          | Complex                  | Simple             |
+| Implementation effort | High                     | Low                |
+| FLP compatibility     | Requires care            | Standard           |
+| Server-side enforced  | Can be                   | Cannot be          |
+| Async guard support   | N/A                      | Yes                |
 
 ## References
 

@@ -65,7 +65,7 @@ There is no way to prevent a route from displaying based on conditions (permissi
 - **Scenario**: After login, browser back button returns to "not logged in" screen despite still being authenticated
 - **Root cause**: `navTo()` creates browser history entries, allowing users to navigate "back" to invalid states
 - **Proposed solutions**: Conditional rendering (no routes for login state), `navTo` with `bReplace: true`, custom Router extension, composable guard helper, component-registration API
-- **Connection to this repo**: Directly motivated the development of `ui5.ext.routing`
+- **Connection to this repo**: Directly motivated the development of `ui5.guard.router`
 
 ### 1.4 The Core Problem Summarized
 
@@ -227,7 +227,7 @@ We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` becaus
 - ~99% of UI5 apps use `sap.m` controls with `NavContainer` / `SplitApp`
 - `sap.m.routing.Router` adds `TargetHandler` for animated view transitions
 - Extending it preserves all mobile navigation behavior
-- Apps swap in via `"routerClass": "ui5.ext.routing.Router"` in manifest.json
+- Apps swap in via `"routerClass": "ui5.guard.router.Router"` in manifest.json
 
 ### 2.7 Minimum UI5 Version
 
@@ -283,7 +283,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 | `_redirecting` flag bypasses guards       | Prevents infinite loops when a guard redirects to another guarded route                                                       |
 | `_suppressNextParse` for hash restoration | `replaceHash()` fires `hashChanged` synchronously; the flag prevents double-processing                                        |
 | Strict `true` for allow                   | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.  |
-| `.extend()` pattern, not ES6 class        | Required for UI5 class registry; enables `"routerClass": "ui5.ext.routing.Router"` in manifest.json                           |
+| `.extend()` pattern, not ES6 class        | Required for UI5 class registry; enables `"routerClass": "ui5.guard.router.Router"` in manifest.json                          |
 
 ### 3.4 Guard API
 

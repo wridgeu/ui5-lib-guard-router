@@ -1,6 +1,6 @@
 # Feature Proposals
 
-Proposed enhancements for `ui5.ext.routing.Router`, derived from framework comparison analysis (docs/alt/) and TanStack Router source code study.
+Proposed enhancements for `ui5.guard.router.Router`, derived from framework comparison analysis (docs/alt/) and TanStack Router source code study.
 
 ## Current State
 
@@ -51,14 +51,14 @@ Deprioritized: Guard Bypass (02)
 
 ## Framework Comparison Summary
 
-| Feature               | Vue | Angular | React | TanStack | Ember | Nuxt | **ui5.ext** | After Features |
-| --------------------- | --- | ------- | ----- | -------- | ----- | ---- | ----------- | -------------- |
-| Global enter guard    | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Per-route enter guard | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Leave guard           | Yes | Yes     | Yes   | Yes      | Yes   | No   | **Yes**     | Yes            |
-| Guard bypass          | No  | No      | No    | Yes      | No    | No   | **No**      | Deprioritized  |
-| Transition retry      | No  | No      | No    | No       | Yes   | No   | **No**      | **03**         |
-| Route metadata        | Yes | Yes     | No    | Yes      | No    | No   | **No**      | **04**         |
-| Async support         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Redirect              | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
-| Clean history         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**     | Yes            |
+| Feature               | Vue | Angular | React | TanStack | Ember | Nuxt | **ui5.guard** | After Features |
+| --------------------- | --- | ------- | ----- | -------- | ----- | ---- | ------------- | -------------- |
+| Global enter guard    | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**       | Yes            |
+| Per-route enter guard | Yes | Yes     | No    | Yes      | Yes   | Yes  | **Yes**       | Yes            |
+| Leave guard           | Yes | Yes     | Yes   | Yes      | Yes   | No   | **Yes**       | Yes            |
+| Guard bypass          | No  | No      | No    | Yes      | No    | No   | **No**        | Deprioritized  |
+| Transition retry      | No  | No      | No    | No       | Yes   | No   | **No**        | **03**         |
+| Route metadata        | Yes | Yes     | No    | Yes      | No    | No   | **No**        | **04**         |
+| Async support         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**       | Yes            |
+| Redirect              | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**       | Yes            |
+| Clean history         | Yes | Yes     | Yes   | Yes      | Yes   | Yes  | **Yes**       | Yes            |

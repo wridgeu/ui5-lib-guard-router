@@ -3,7 +3,7 @@
 ## Repository Structure
 
 ```
-ui5-ext-routing/
+ui5-lib-guard-router/
 |-- package.json                    npm workspaces root
 |-- tsconfig.base.json              shared TypeScript config (strict mode)
 |-- .oxlintrc.json                  linter config
@@ -23,7 +23,7 @@ ui5-ext-routing/
         |-- ui5.yaml                serves lib + app with transpile
         |-- webapp/
         |   |-- Component.ts        guard registration example
-        |   |-- manifest.json       routerClass: "ui5.ext.routing.Router"
+        |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
         |   |-- controller/         Home, Protected, Forbidden
         |   |-- view/               XML views
         |-- test/
@@ -48,10 +48,10 @@ matching, target loading, or event firing occurs.
 |   router.initialize()                                                |
 +----------------------------------------------------------------------+
          |                                                    ^
-         | manifest: routerClass = "ui5.ext.routing.Router"   | navTo()
+         | manifest: routerClass = "ui5.guard.router.Router"   | navTo()
          v                                                    |
 +----------------------------------------------------------------------+
-|                     ui5.ext.routing.Router                            |
+|                     ui5.guard.router.Router                            |
 |                                                                      |
 |   extends sap.m.routing.Router                                       |
 |   overrides parse() to intercept all hash changes                    |
@@ -341,8 +341,8 @@ navigation, hash changes, and the full UI5 component lifecycle.
 
 The demo app shows the minimal integration pattern:
 
-1. **manifest.json** - set `routerClass` to `"ui5.ext.routing.Router"` and add
-   `"ui5.ext.routing": {}` to library dependencies
+1. **manifest.json** - set `routerClass` to `"ui5.guard.router.Router"` and add
+   `"ui5.guard.router": {}` to library dependencies
 2. **Component.ts** - cast `getRouter()` to `GuardRouter`, register guards, call
    `initialize()`
 
@@ -350,7 +350,7 @@ The demo app shows the minimal integration pattern:
   manifest.json                          Component.ts
   +----------------------------+         +----------------------------------+
   | routing.config.routerClass |-------->| router = getRouter() as          |
-  | = "ui5.ext.routing.Router" |         |            GuardRouter        |
+  | = "ui5.guard.router.Router" |         |            GuardRouter        |
   |                            |         |                                  |
   | routes:                    |         | router.addRouteGuard("protected",|
   |   home     -> ""           |         |   () => isLoggedIn ? true : "home"|

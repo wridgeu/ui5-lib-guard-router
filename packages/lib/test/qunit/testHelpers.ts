@@ -1,6 +1,6 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import Router from "ui5/ext/routing/Router";
-import type { GuardRouter } from "ui5/ext/routing/types";
+import Router from "ui5/guard/router/Router";
+import type { GuardRouter } from "ui5/guard/router/types";
 
 /** Typed constructor so test files don't need `as any` casts. */
 export const GuardRouterClass = Router as unknown as new (routes: object[], config: object) => GuardRouter;

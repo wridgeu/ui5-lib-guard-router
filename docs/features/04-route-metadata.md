@@ -31,7 +31,7 @@ Store default metadata in `manifest.json` under a custom section:
 
 ```json
 {
-	"ui5.ext.routing": {
+	"ui5.guard.router": {
 		"routeMeta": {
 			"admin": {
 				"requiresAuth": true,
@@ -135,7 +135,7 @@ _initRouteMeta(this: RouterInstance): void {
     if (!component) return;
 
     const manifest = component.getManifest();
-    const extSection = manifest["ui5.ext.routing"];
+    const extSection = manifest["ui5.guard.router"];
     if (extSection?.routeMeta) {
         this._manifestMeta = new Map(Object.entries(extSection.routeMeta));
     }
@@ -200,7 +200,7 @@ interface GuardContext {
 5. `context.toMeta` reflects merged metadata in guard
 6. `context.fromMeta` reflects current route metadata
 7. Runtime metadata changes are reflected in subsequent navigations
-8. Manifest metadata loads from `ui5.ext.routing` section
+8. Manifest metadata loads from `ui5.guard.router` section
 9. Guard uses `toMeta.requiresAuth` to block/redirect
 
 ## Trade-offs
@@ -215,7 +215,7 @@ interface GuardContext {
 **Cons:**
 
 - Two sources of truth (manifest + runtime), which could be confusing
-- Manifest section (`ui5.ext.routing`) is non-standard; UI5 tooling won't validate it
+- Manifest section (`ui5.guard.router`) is non-standard; UI5 tooling won't validate it
 - Shallow merge may not handle nested objects well
 - Metadata is untyped (`Record<string, unknown>`), with no compile-time safety
 

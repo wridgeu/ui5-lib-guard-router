@@ -106,7 +106,7 @@ From `docs/implementation-approaches.md`:
 
 ## Comparison with This Repository's Approach
 
-| Aspect                    | navTo Override              | `ui5.ext.routing` (parse)  |
+| Aspect                    | navTo Override              | `ui5.guard.router` (parse) |
 | ------------------------- | --------------------------- | -------------------------- |
 | Programmatic navTo        | Covered                     | Covered                    |
 | Browser back/forward      | NOT covered                 | Covered                    |

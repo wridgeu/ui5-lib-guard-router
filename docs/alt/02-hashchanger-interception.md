@@ -104,7 +104,7 @@ This is a variant of the same approach applied to FLP cross-app navigation rathe
 
 ## Comparison with This Repository's Approach
 
-| Aspect              | HashChanger Interception      | `ui5.ext.routing`                      |
+| Aspect              | HashChanger Interception      | `ui5.guard.router`                     |
 | ------------------- | ----------------------------- | -------------------------------------- |
 | Interception point  | Before router                 | Inside router (`parse()`)              |
 | Scope               | All routers (global)          | Single router instance                 |

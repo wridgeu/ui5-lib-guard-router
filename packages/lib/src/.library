@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <library xmlns="http://www.sap.com/sap.ui.library.xsd">
-	<name>ui5.ext.routing</name>
+	<name>ui5.guard.router</name>
 	<vendor>Marco</vendor>
 	<version>${version}</version>
 	<copyright></copyright>

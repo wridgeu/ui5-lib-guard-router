@@ -1,6 +1,6 @@
 # Alternative 6: How Other Frameworks Solve Navigation Guards
 
-This document compares how major web frameworks handle route-level navigation guards, to contextualize what `ui5.ext.routing` provides relative to industry standards.
+This document compares how major web frameworks handle route-level navigation guards, to contextualize what `ui5.guard.router` provides relative to industry standards.
 
 ---
 
@@ -83,9 +83,9 @@ Guards are resolved asynchronously, and the navigation is considered **pending**
 - **Composition API**: `onBeforeRouteLeave` and `onBeforeRouteUpdate` can be used in any component rendered by `<router-view>`, not just the direct route component
 - **Error handling**: Throwing an `Error` from a guard cancels navigation
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature                 | Vue Router                                                  | ui5.ext.routing                          |
+| Feature                 | Vue Router                                                  | ui5.guard.router                         |
 | ----------------------- | ----------------------------------------------------------- | ---------------------------------------- |
 | Global guards           | `beforeEach`, `beforeResolve`, `afterEach`                  | `addGuard()`                             |
 | Per-route guards        | `beforeEnter`                                               | `addRouteGuard()`                        |
@@ -96,7 +96,7 @@ Guards are resolved asynchronously, and the navigation is considered **pending**
 | Return values           | `true`, `false`, route location, `undefined`                | `true`, `false`, string, `GuardRedirect` |
 | Concurrent nav handling | Auto-cancels pending navigation                             | `_parseGeneration` counter               |
 
-**What ui5.ext.routing is missing**: In-component guards (`beforeRouteEnter`, `beforeRouteUpdate`). Leave guards are now supported via `addLeaveGuard()`.
+**What ui5.guard.router is missing**: In-component guards (`beforeRouteEnter`, `beforeRouteUpdate`). Leave guards are now supported via `addLeaveGuard()`.
 
 ---
 
@@ -160,9 +160,9 @@ export class UnsavedChangesGuard implements CanDeactivate<FormComponent> {
 - **`canDeactivate`**: Receives the component instance, enabling direct state checks
 - **Declarative**: Guards are listed in the route configuration, not registered programmatically
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature                 | Angular                            | ui5.ext.routing              |
+| Feature                 | Angular                            | ui5.guard.router             |
 | ----------------------- | ---------------------------------- | ---------------------------- |
 | Guard declaration       | In route config                    | Programmatic registration    |
 | DI support              | Native                             | N/A (UI5 doesn't have DI)    |
@@ -243,9 +243,9 @@ function EditForm() {
 - **Limitation**: `useBlocker` does not handle hard-reloads or cross-origin navigations
 - **Framework mode (v7)**: React Router v7 merges Remix, allowing loaders/actions to run on both server and client. Loader-based guards can now execute server-side.
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature              | React Router                   | ui5.ext.routing        |
+| Feature              | React Router                   | ui5.guard.router       |
 | -------------------- | ------------------------------ | ---------------------- |
 | Guard API            | None (composition)             | Explicit registration  |
 | Pre-navigation check | Via loader + redirect()        | Via parse() override   |
@@ -258,7 +258,7 @@ function EditForm() {
 
 ## TanStack Router
 
-TanStack Router (formerly React Location) provides a more structured guard system than React Router. A [deep dive into its source code](./12-tanstack-router-deep-dive.md) reveals key architectural differences from `ui5.ext.routing`.
+TanStack Router (formerly React Location) provides a more structured guard system than React Router. A [deep dive into its source code](./12-tanstack-router-deep-dive.md) reveals key architectural differences from `ui5.guard.router`.
 
 ### Enter Protection: beforeLoad
 
@@ -308,18 +308,18 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 
 ### Key Design Choices
 
-- **Fully async**: Unlike `ui5.ext.routing`'s sync-first design, TanStack's entire navigation pipeline (`load()` → `loadMatches()`) runs inside `async` functions. There is no synchronous fast path.
-- **Two-layer architecture**: Blocking happens in the history library (`@tanstack/history`), while guarding (`beforeLoad` hooks) happens in the router's async `loadMatches()`. `ui5.ext.routing` combines both in `parse()`.
-- **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.ext.routing`'s generation counter, but heavier. (Note: `ui5.ext.routing` now also exposes an `AbortSignal` on `GuardContext`, used alongside the generation counter.)
+- **Fully async**: Unlike `ui5.guard.router`'s sync-first design, TanStack's entire navigation pipeline (`load()` → `loadMatches()`) runs inside `async` functions. There is no synchronous fast path.
+- **Two-layer architecture**: Blocking happens in the history library (`@tanstack/history`), while guarding (`beforeLoad` hooks) happens in the router's async `loadMatches()`. `ui5.guard.router` combines both in `parse()`.
+- **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.guard.router`'s generation counter, but heavier. (Note: `ui5.guard.router` now also exposes an `AbortSignal` on `GuardContext`, used alongside the generation counter.)
 - **`beforeLoad` hooks**: Run parent-to-child, each contributing to accumulated context
 - **Context accumulation**: Parent route context flows to children (type-safe)
-- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.ext.routing`'s `_redirecting` flag.
+- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.guard.router`'s `_redirecting` flag.
 - **`cause` parameter**: `beforeLoad` receives `'preload' | 'enter' | 'stay'` to distinguish navigation reasons
 - **No generation counter**: Uses `latestLoadPromise` tracking + AbortController instead
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature             | TanStack Router              | ui5.ext.routing                      |
+| Feature             | TanStack Router              | ui5.guard.router                     |
 | ------------------- | ---------------------------- | ------------------------------------ |
 | Async model         | Fully async                  | Sync-first, async fallback           |
 | Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`      |
@@ -399,9 +399,9 @@ this.router.on("routeWillChange", (transition) => {
 - **Route hooks**: `beforeModel`, `model`, `afterModel` all receive the transition
 - **Limitation**: Browser back button changes the URL before `routeWillChange` fires
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature           | Ember.js                      | ui5.ext.routing                 |
+| Feature           | Ember.js                      | ui5.guard.router                |
 | ----------------- | ----------------------------- | ------------------------------- |
 | Enter guards      | `beforeModel` hook            | `addGuard()`, `addRouteGuard()` |
 | Leave guards      | `routeWillChange` + `abort()` | `addLeaveGuard()`               |
@@ -583,9 +583,9 @@ export const reroute: Reroute = async ({ url }) => {
 - **`hooks.server.ts` limitation**: Only runs on server requests. Client-side navigations need load functions to trigger server guard logic
 - **`beforeNavigate` for leave guards**: Cancel client-side navigation (the only client-side blocking mechanism)
 
-### Comparison with ui5.ext.routing
+### Comparison with ui5.guard.router
 
-| Feature             | SvelteKit                  | ui5.ext.routing   |
+| Feature             | SvelteKit                  | ui5.guard.router  |
 | ------------------- | -------------------------- | ----------------- |
 | Global guard        | `hooks.server.ts` handle() | `addGuard()`      |
 | Per-route guard     | Load functions             | `addRouteGuard()` |
@@ -598,7 +598,7 @@ export const reroute: Reroute = async ({ url }) => {
 
 ## Summary: Industry Standard Features
 
-| Feature             | Vue        | Angular         | React                     | TanStack            | Ember             | Nuxt                      | Next            | SvelteKit          | **ui5.ext.routing**   |
+| Feature             | Vue        | Angular         | React                     | TanStack            | Ember             | Nuxt                      | Next            | SvelteKit          | **ui5.guard.router**  |
 | ------------------- | ---------- | --------------- | ------------------------- | ------------------- | ----------------- | ------------------------- | --------------- | ------------------ | --------------------- |
 | Global before guard | Yes        | Yes             | Via loader                | `beforeLoad`        | `beforeModel`     | Global middleware         | Edge middleware | `handle` hook      | **Yes**               |
 | Per-route guard     | Yes        | Yes             | Via loader                | `beforeLoad`        | `beforeModel`     | Named middleware          | Matcher         | Load functions     | **Yes**               |
@@ -611,7 +611,7 @@ export const reroute: Reroute = async ({ url }) => {
 | Redirect            | Return loc | `navigate()`    | `throw redirect()`        | `throw redirect()`  | `transitionTo()`  | `navigateTo()`            | `redirect()`    | `throw redirect()` | **Return string/obj** |
 | History clean       | Yes        | Yes             | `replace`                 | Yes                 | Yes               | Yes                       | Server          | Yes                | **Yes**               |
 
-### What ui5.ext.routing Provides Relative to Industry Standards
+### What ui5.guard.router Provides Relative to Industry Standards
 
 **Covered well:**
 

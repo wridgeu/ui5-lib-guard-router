@@ -1,9 +1,8 @@
 {
-	"name": "ui5-ext-routing",
+	"name": "ui5-lib-guard-router",
 	"version": "1.0.0",
-	"private": true,
 	"license": "MIT",
-	"main": "dist/resources/ui5/ext/routing/library.js",
+	"main": "dist/resources/ui5/guard/router/library.js",
 	"types": "dist/index.d.ts",
 	"author": "Marco Beier",
 	"repository": {
@@ -16,6 +15,17 @@
 	},
 	"homepage": "https://github.com/wridgeu/ui5-guard-router#readme",
 	"description": "UI5 Router extension with async navigation guards",
+	"keywords": [
+		"ui5",
+		"openui5",
+		"sapui5",
+		"router",
+		"navigation",
+		"guards"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"type": "module",
 	"files": [
 		"dist/**/*",
@@ -28,10 +38,11 @@
 	"scripts": {
 		"clean": "rimraf dist .ui5",
 		"build": "ui5 build",
-		"prepublishOnly": "npm run build",
+		"prepublishOnly": "node -e \"import('node:fs').then(f=>f.copyFileSync('../../LICENSE','./LICENSE'))\" && npm run build",
 		"start": "ui5 serve",
 		"test": "echo \"Run tests from monorepo root: npm run test:qunit\" && exit 1",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"pack:check": "npm pack --dry-run"
 	},
 	"devDependencies": {
 		"@types/qunit": "^2.19.13",

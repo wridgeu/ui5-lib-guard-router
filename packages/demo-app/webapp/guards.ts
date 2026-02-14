@@ -1,6 +1,6 @@
 import Log from "sap/base/Log";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/ext/routing/types";
+import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard/router/types";
 
 const LOG_COMPONENT = "demo.app.guards";
 

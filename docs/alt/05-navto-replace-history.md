@@ -62,7 +62,7 @@ private _navigateBasedOnState(isLoggedIn: boolean): void {
 
 ## Comparison with This Repository's Approach
 
-| Aspect                | `navTo(bReplace)`       | `ui5.ext.routing`                |
+| Aspect                | `navTo(bReplace)`       | `ui5.guard.router`               |
 | --------------------- | ----------------------- | -------------------------------- |
 | History pollution     | Fixed                   | Fixed                            |
 | URL bar protection    | No                      | Yes (guards run on hash change)  |
@@ -74,7 +74,7 @@ private _navigateBasedOnState(isLoggedIn: boolean): void {
 
 ## Combining with This Repository
 
-This approach is complementary. Even with `ui5.ext.routing`, guards use `navTo(..., true)` internally for redirects. The library's `_redirect` method always passes `bReplace: true`:
+This approach is complementary. Even with `ui5.guard.router`, guards use `navTo(..., true)` internally for redirects. The library's `_redirect` method always passes `bReplace: true`:
 
 ```typescript
 // Router.ts line 279

@@ -1,12 +1,7 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, GuardFn } from "ui5/ext/routing/types";
-import {
-	createNavigationLogger,
-	createAsyncPermissionGuard,
-	createDirtyFormGuard,
-	forbiddenGuard,
-} from "./guards";
+import type { GuardRouter, GuardFn } from "ui5/guard/router/types";
+import { createNavigationLogger, createAsyncPermissionGuard, createDirtyFormGuard, forbiddenGuard } from "./guards";
 
 /**
  * Demo application showcasing guard registration patterns.

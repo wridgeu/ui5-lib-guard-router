@@ -1,5 +1,5 @@
 {
-	"name": "ui5-ext-routing-demo",
+	"name": "ui5-lib-guard-router-demo",
 	"version": "1.0.0",
 	"private": true,
 	"author": "Marco Beier",
@@ -8,7 +8,7 @@
 		"url": "https://github.com/wridgeu/ui5-guard-router.git",
 		"directory": "packages/demo-app"
 	},
-	"description": "Demo app for ui5-ext-routing library",
+	"description": "Demo app for ui5-lib-guard-router library",
 	"type": "module",
 	"scripts": {
 		"clean": "rimraf dist .ui5",
@@ -24,6 +24,6 @@
 		"ui5-tooling-transpile": "^3.0.0"
 	},
 	"dependencies": {
-		"ui5-ext-routing": "*"
+		"ui5-lib-guard-router": "*"
 	}
 }

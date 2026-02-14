@@ -1,6 +1,6 @@
-# ui5-ext-routing Demo App
+# ui5-lib-guard-router Demo App
 
-Demo application showcasing `ui5.ext.routing.Router` with authentication-based navigation guards.
+Demo application showcasing `ui5.guard.router.Router` with authentication-based navigation guards.
 
 ## Routes
 

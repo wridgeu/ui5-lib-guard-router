@@ -1,7 +1,7 @@
 import Controller from "sap/ui/core/mvc/Controller";
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, LeaveGuardFn } from "ui5/ext/routing/types";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 import { createHomeLeaveLogger } from "../guards";
 
 /**

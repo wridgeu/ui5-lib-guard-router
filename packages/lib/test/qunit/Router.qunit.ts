@@ -6,7 +6,7 @@ import type {
 	GuardRouter,
 	LeaveGuardFn,
 	RouteGuardConfig,
-} from "ui5/ext/routing/types";
+} from "ui5/guard/router/types";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import { GuardRouterClass, initHashChanger, nextTick, waitForRoute, assertBlocked } from "./testHelpers";

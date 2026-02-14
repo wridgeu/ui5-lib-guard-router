@@ -262,7 +262,7 @@ returns a Promise and defer only in that case.
 
 If the UI5 team adopted our approach for Level 2, the migration would be:
 
-1. Replace `ui5.ext.routing.Router` with native `sap.m.routing.Router`
+1. Replace `ui5.guard.router.Router` with native `sap.m.routing.Router`
 2. Map `addGuard()` → native guard API
 3. Map `addRouteGuard()` → native per-route guard API
 4. Map `addLeaveGuard()` → native leave guard API (if supported)
@@ -500,7 +500,7 @@ This library is a working answer to the community's request. The `parse()` overr
 - Doesn't require the multi-module framework changes the UI5 team would need
 
 If the UI5 team ever implements native guard support, the migration path is straightforward:
-replace `ui5.ext.routing.Router` with the native `sap.m.routing.Router` and map guard
+replace `ui5.guard.router.Router` with the native `sap.m.routing.Router` and map guard
 registrations to the new API.
 
 ## Comparison Table

@@ -1,6 +1,6 @@
-# ui5.ext.routing (Library)
+# ui5.guard.router (Library)
 
-The core library providing `ui5.ext.routing.Router` -- an extension of `sap.m.routing.Router` with async navigation guards.
+The core library providing `ui5.guard.router.Router` -- an extension of `sap.m.routing.Router` with async navigation guards.
 
 ## Structure
 
@@ -22,7 +22,7 @@ test/
 ```bash
 # Serve the library (for running QUnit tests in browser)
 npm start
-# => http://localhost:8080/test-resources/ui5/ext/routing/qunit/testsuite.qunit.html
+# => http://localhost:8080/test-resources/ui5/guard/router/qunit/testsuite.qunit.html
 
 # Build
 npm run build

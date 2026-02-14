@@ -103,7 +103,7 @@ A mechanism for specific navigations to skip all guards (logout, "Save & Navigat
 
 ### 06 - Framework Comparison
 
-Comprehensive survey of navigation guard patterns across Vue Router, Angular Router, React Router, TanStack Router, Ember.js, Nuxt 3, and Next.js. Covers global guards, per-route guards, leave guards, async support, transition retry, bypass, and route metadata. Useful for understanding where `ui5.ext.routing` sits relative to industry standards.
+Comprehensive survey of navigation guard patterns across Vue Router, Angular Router, React Router, TanStack Router, Ember.js, Nuxt 3, and Next.js. Covers global guards, per-route guards, leave guards, async support, transition retry, bypass, and route metadata. Useful for understanding where `ui5.guard.router` sits relative to industry standards.
 
 > [06-framework-comparison.md](06-framework-comparison.md)
 

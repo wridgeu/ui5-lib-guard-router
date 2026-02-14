@@ -14,7 +14,7 @@ import type {
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
-const LOG_COMPONENT = "ui5.ext.routing.Router";
+const LOG_COMPONENT = "ui5.guard.router.Router";
 
 function isGuardRedirect(value: GuardResult): value is GuardRedirect {
 	return typeof value === "object" && value !== null;
@@ -60,7 +60,7 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
  *
  * @extends sap.m.routing.Router
  */
-const Router = MobileRouter.extend("ui5.ext.routing.Router", {
+const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	constructor: function (this: RouterInternal, ...args: unknown[]) {
 		MobileRouter.prototype.constructor.apply(this, args);
 		this._globalGuards = [];

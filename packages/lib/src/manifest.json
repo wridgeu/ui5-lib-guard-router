@@ -1,7 +1,7 @@
 {
 	"_version": "2.0.0",
 	"sap.app": {
-		"id": "ui5.ext.routing",
+		"id": "ui5.guard.router",
 		"type": "library",
 		"applicationVersion": {
 			"version": "1.0.0"

@@ -4,7 +4,7 @@ import "sap/m/library";
 
 const library = Lib.init({
 	apiVersion: 2,
-	name: "ui5.ext.routing",
+	name: "ui5.guard.router",
 	version: "${version}",
 	dependencies: ["sap.ui.core", "sap.m"],
 	types: [],

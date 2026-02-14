@@ -38,13 +38,13 @@ The guard pipeline stays **synchronous when all guards return plain values** and
 
 ## Setup
 
-> [!NOTE]
-> This repository is a **proof of concept**, not a published npm package. It demonstrates that async navigation guards are feasible in UI5 today, but it is not actively maintained as a consumable library. Feel free to use the source as a reference or starting point for your own implementation.
+> [!WARNING]
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk -- make sure to pin your version and review changes before upgrading.
 
 ### 1. Install the library
 
 ```bash
-npm install ui5-ext-routing
+npm install ui5-lib-guard-router
 ```
 
 ### 2. Configure manifest.json
@@ -56,12 +56,12 @@ Add the library dependency and set the router class:
 	"sap.ui5": {
 		"dependencies": {
 			"libs": {
-				"ui5.ext.routing": {}
+				"ui5.guard.router": {}
 			}
 		},
 		"routing": {
 			"config": {
-				"routerClass": "ui5.ext.routing.Router"
+				"routerClass": "ui5.guard.router.Router"
 			}
 		}
 	}
@@ -74,7 +74,7 @@ That's it. All your existing routes, targets, and navigation calls continue to w
 
 ```typescript
 import UIComponent from "sap/ui/core/UIComponent";
-import type { GuardRouter } from "ui5/ext/routing/types";
+import type { GuardRouter } from "ui5/guard/router/types";
 
 export default class Component extends UIComponent {
 	static metadata = {
@@ -204,7 +204,7 @@ Extract guards into a separate module for testability and reuse:
 ```typescript
 // guards.ts
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/ext/routing/types";
+import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export function createAuthGuard(authModel: JSONModel): GuardFn {
 	return (context: GuardContext): GuardResult => {
@@ -235,7 +235,7 @@ router.addRouteGuard("editOrder", {
 Leave guards registered in controllers should be cleaned up on exit:
 
 ```typescript
-import type { GuardRouter, LeaveGuardFn } from "ui5/ext/routing/types";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 import { createDirtyFormGuard } from "./guards";
 
 export default class EditOrderController extends Controller {
@@ -401,7 +401,7 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 
 ```
 packages/
-  lib/          ui5.ext.routing library (Router + types)
+  lib/          ui5.guard.router library (Router + types)
   demo-app/     Demo app with auth guards (home, protected, forbidden routes)
 ```
 
@@ -436,11 +436,37 @@ npm run fmt:check    # oxfmt
 npm run check        # all of the above
 ```
 
+A pre-commit hook (husky + lint-staged) automatically runs `oxlint --fix` and `oxfmt` on staged files before each commit, so formatting and lint issues are fixed before they reach CI.
+
 ### Build
 
 ```bash
 npm run build        # library → packages/lib/dist/
 ```
+
+### Deployment
+
+Releases are automated via [release-please](https://github.com/googleapis/release-please) and GitHub Actions.
+
+**How it works:**
+
+1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (e.g. `feat:`, `fix:`)
+2. release-please automatically opens/updates a "Release PR" that bumps the version in `package.json` and `manifest.json`, and maintains a `CHANGELOG.md`
+3. Merging the Release PR triggers the publish workflow: build, test (QUnit + E2E), then `npm publish` with provenance
+
+**One-time setup (after first merge):**
+
+1. Create an **Automation** token on [npmjs.com](https://www.npmjs.com) (Access Tokens → Generate New Token → Automation)
+2. Add it as `NPM_TOKEN` in the repo's Settings → Secrets and variables → Actions
+
+**Configuration files:**
+
+| File                            | Purpose                                            |
+| ------------------------------- | -------------------------------------------------- |
+| `.github/workflows/ci.yml`      | CI pipeline (lint, format, typecheck, build, test) |
+| `.github/workflows/release.yml` | Release-please + npm publish                       |
+| `release-please-config.json`    | Package path, extra version files                  |
+| `.release-please-manifest.json` | Current version tracker                            |
 
 ## License
 

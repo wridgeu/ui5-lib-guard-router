@@ -6,7 +6,7 @@ This document analyzes the actual implementation of TanStack Router's navigation
 
 ## Key Finding: TanStack Router is Fully Async
 
-**TanStack Router's `beforeLoad` is truly async.** Unlike `ui5.ext.routing` which uses a sync-first design with async fallback, TanStack Router's entire navigation pipeline runs inside an async function. There is no synchronous fast path.
+**TanStack Router's `beforeLoad` is truly async.** Unlike `ui5.guard.router` which uses a sync-first design with async fallback, TanStack Router's entire navigation pipeline runs inside an async function. There is no synchronous fast path.
 
 ### How Navigation Works (Source Code Walkthrough)
 
@@ -100,7 +100,7 @@ The actual route-level `beforeLoad` hooks run inside `loadMatches()` (imported f
 
 ## Blocking Mechanism: History-Level, Not Router-Level
 
-Unlike Vue Router or `ui5.ext.routing` where blocking happens in the routing layer, TanStack Router delegates blocking entirely to the history library:
+Unlike Vue Router or `ui5.guard.router` where blocking happens in the routing layer, TanStack Router delegates blocking entirely to the history library:
 
 ```
 Navigate call
@@ -132,21 +132,21 @@ if (!rest.ignoreBlocker) {
 }
 ```
 
-### Implications for ui5.ext.routing
+### Implications for ui5.guard.router
 
-TanStack Router's approach of delegating blocking to the history layer is fundamentally different from `ui5.ext.routing`'s approach of intercepting `parse()`. In UI5:
+TanStack Router's approach of delegating blocking to the history layer is fundamentally different from `ui5.guard.router`'s approach of intercepting `parse()`. In UI5:
 
 - The `HashChanger` is UI5's history abstraction
 - There is no blocker API on the `HashChanger`
 - `parse()` is the earliest interception point in the router
 
-So `ui5.ext.routing`'s approach of blocking in `parse()` is the UI5 equivalent of TanStack's history-level blocking.
+So `ui5.guard.router`'s approach of blocking in `parse()` is the UI5 equivalent of TanStack's history-level blocking.
 
 ---
 
 ## Concurrent Navigation Handling: No Generation Counter
 
-TanStack Router does **not** use a generation counter like `ui5.ext.routing`'s `_parseGeneration`. Instead, it uses three mechanisms:
+TanStack Router does **not** use a generation counter like `ui5.guard.router`'s `_parseGeneration`. Instead, it uses three mechanisms:
 
 ### 1. AbortController per Match
 
@@ -214,16 +214,16 @@ this.commitLocationPromise = createControlledPromise<void>(() => {
 
 New commit promises resolve old ones, creating a chain where only the latest commit matters.
 
-### Comparison with ui5.ext.routing's Generation Counter
+### Comparison with ui5.guard.router's Generation Counter
 
-| Mechanism       | TanStack Router                  | ui5.ext.routing                        |
+| Mechanism       | TanStack Router                  | ui5.guard.router                       |
 | --------------- | -------------------------------- | -------------------------------------- |
 | Stale detection | `AbortController.signal.aborted` | `generation !== this._parseGeneration` |
 | Cancel pending  | `cancelMatches()` → `abort()`    | Generation increment invalidates       |
 | Latest wins     | `latestLoadPromise` loop         | Generation check after each `await`    |
 | Granularity     | Per-match AbortController        | Single router-wide generation counter  |
 
-**TanStack's approach is more granular** (per-match cancellation), while **ui5.ext.routing's is simpler** (single counter). Both achieve the same goal: only the latest navigation wins.
+**TanStack's approach is more granular** (per-match cancellation), while **ui5.guard.router's is simpler** (single counter). Both achieve the same goal: only the latest navigation wins.
 
 ---
 
@@ -252,7 +252,7 @@ catch (err) {
 }
 ```
 
-**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). This is analogous to `ui5.ext.routing`'s `_redirecting` flag, which also bypasses guards during redirects.
+**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). This is analogous to `ui5.guard.router`'s `_redirecting` flag, which also bypasses guards during redirects.
 
 ---
 
@@ -296,15 +296,15 @@ onReady: async () => {
 
 ---
 
-## What ui5.ext.routing Can Learn from TanStack Router
+## What ui5.guard.router Can Learn from TanStack Router
 
 ### 1. Blocking at the Right Layer
 
-TanStack delegates blocking to the history library. In UI5, the equivalent would be intercepting at the `HashChanger` level. However, `ui5.ext.routing` already found that `parse()` is a better interception point (see `docs/alt/02-hashchanger-interception.md`). The `parse()` approach is actually more reliable in UI5's architecture.
+TanStack delegates blocking to the history library. In UI5, the equivalent would be intercepting at the `HashChanger` level. However, `ui5.guard.router` already found that `parse()` is a better interception point (see `docs/alt/02-hashchanger-interception.md`). The `parse()` approach is actually more reliable in UI5's architecture.
 
 ### 2. AbortController for Async Guards ✅ Implemented
 
-~~Currently, `ui5.ext.routing` uses a generation counter for staleness.~~ **This has been implemented.** `ui5.ext.routing` now creates an `AbortController` per `parse()` call, aborts it when a newer navigation starts or the router is destroyed, and exposes `signal: AbortSignal` on the `GuardContext`. This runs alongside the generation counter — the signal provides cooperative cancellation for async operations (e.g., `fetch`), while the generation counter provides the hard staleness check after each `await`.
+~~Currently, `ui5.guard.router` uses a generation counter for staleness.~~ **This has been implemented.** `ui5.guard.router` now creates an `AbortController` per `parse()` call, aborts it when a newer navigation starts or the router is destroyed, and exposes `signal: AbortSignal` on the `GuardContext`. This runs alongside the generation counter — the signal provides cooperative cancellation for async operations (e.g., `fetch`), while the generation counter provides the hard staleness check after each `await`.
 
 ```typescript
 // Actual GuardContext (implemented):
@@ -328,7 +328,7 @@ The generation counter remains the primary staleness mechanism (checked after ea
 
 ### 3. `ignoreBlocker` for Redirects
 
-TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.ext.routing` achieves the same with `_redirecting = true`. Both prevent infinite redirect loops.
+TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.guard.router` achieves the same with `_redirecting = true`. Both prevent infinite redirect loops.
 
 ### 4. Match Caching
 
@@ -336,7 +336,7 @@ TanStack caches route matches (`cachedMatches`) so that revisiting a recently-le
 
 ### 5. View Transitions
 
-TanStack integrates with the View Transitions API (`document.startViewTransition()`). This is orthogonal to guards but could be a nice enhancement for `ui5.ext.routing`.
+TanStack integrates with the View Transitions API (`document.startViewTransition()`). This is orthogonal to guards but could be a nice enhancement for `ui5.guard.router`.
 
 ---
 
@@ -356,7 +356,7 @@ TanStack Router:
               → route.loader() hooks
             → onReady() [commit to state]
 
-ui5.ext.routing:
+ui5.guard.router:
   navTo() / hashChange / URL bar
     → HashChanger fires hashChanged
       → parse(newHash)                      ← BLOCKING + GUARDING happens here
@@ -369,13 +369,13 @@ ui5.ext.routing:
             → route matching + target loading
 ```
 
-**Key architectural difference**: TanStack separates blocking (history layer) from guarding (load layer). `ui5.ext.routing` combines both in `parse()`. The combined approach is simpler and more reliable for UI5's architecture, where the `HashChanger` doesn't support blocking.
+**Key architectural difference**: TanStack separates blocking (history layer) from guarding (load layer). `ui5.guard.router` combines both in `parse()`. The combined approach is simpler and more reliable for UI5's architecture, where the `HashChanger` doesn't support blocking.
 
 ---
 
 ## Summary
 
-| Aspect               | TanStack Router                       | ui5.ext.routing                    |
+| Aspect               | TanStack Router                       | ui5.guard.router                   |
 | -------------------- | ------------------------------------- | ---------------------------------- |
 | **Async model**      | Fully async (everything in Promises)  | Sync-first, async fallback         |
 | **Blocking layer**   | History library (`@tanstack/history`) | Router `parse()` override          |
@@ -386,7 +386,7 @@ ui5.ext.routing:
 | **State management** | `@tanstack/store` (reactive)          | Internal properties on router      |
 | **Match caching**    | `cachedMatches` array                 | Delegated to UI5 target caching    |
 
-**Bottom line**: TanStack Router is more complex and feature-rich (view transitions, match caching, SSR, preloading), but `ui5.ext.routing`'s simpler sync-first design is better suited to UI5's synchronous event model. The generation counter is lighter than per-match AbortControllers for the common case where guards are synchronous. The `AbortSignal` on `GuardContext` (implemented) provides cooperative cancellation for async guards without the overhead of per-match controllers.
+**Bottom line**: TanStack Router is more complex and feature-rich (view transitions, match caching, SSR, preloading), but `ui5.guard.router`'s simpler sync-first design is better suited to UI5's synchronous event model. The generation counter is lighter than per-match AbortControllers for the common case where guards are synchronous. The `AbortSignal` on `GuardContext` (implemented) provides cooperative cancellation for async guards without the overhead of per-match controllers.
 
 > **Note (2025):** TanStack Router's `navigate` function within `beforeLoad` context is now deprecated. The recommended pattern is `throw redirect({ to: '/somewhere' })`. TanStack Router now has official packages for React, Solid, and Vue.
 

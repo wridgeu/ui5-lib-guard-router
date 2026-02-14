@@ -32,7 +32,7 @@
 			"libs": {
 				"sap.m": {},
 				"sap.ui.core": {},
-				"ui5.ext.routing": {}
+				"ui5.guard.router": {}
 			}
 		},
 		"models": {
@@ -48,7 +48,7 @@
 		},
 		"routing": {
 			"config": {
-				"routerClass": "ui5.ext.routing.Router",
+				"routerClass": "ui5.guard.router.Router",
 				"type": "View",
 				"viewType": "XML",
 				"path": "demo.app.view",

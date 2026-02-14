@@ -101,7 +101,7 @@ To actually prevent navigation, you must either:
 
 ## Comparison with This Library
 
-| Aspect                  | Native NavContainer `navigate`   | This Library (`ui5.ext.routing`)    |
+| Aspect                  | Native NavContainer `navigate`   | This Library (`ui5.guard.router`)   |
 | ----------------------- | -------------------------------- | ----------------------------------- |
 | Intercept layer         | NavContainer (after route match) | Router.parse() (before route match) |
 | Prevents route matching | No                               | Yes                                 |
@@ -160,4 +160,4 @@ The native `navigate` event approach has fundamental architectural limitations:
 
 4. **Wrong abstraction**: NavContainer is a UI control for page transitions. Navigation guards belong at the routing layer.
 
-This library (`ui5.ext.routing`) addresses all of these by intercepting at `Router.parse()`, the single entry point for all navigation, before any route matching begins.
+This library (`ui5.guard.router`) addresses all of these by intercepting at `Router.parse()`, the single entry point for all navigation, before any route matching begins.

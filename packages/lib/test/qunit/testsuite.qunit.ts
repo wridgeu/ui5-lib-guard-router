@@ -1,5 +1,5 @@
 export default {
-	name: "QUnit TestSuite for ui5.ext.routing",
+	name: "QUnit TestSuite for ui5.guard.router",
 	defaults: {
 		qunit: {
 			version: 2,
@@ -11,23 +11,23 @@ export default {
 			useFakeTimers: false,
 		},
 		ui5: {
-			libs: "ui5.ext.routing,sap.m",
+			libs: "ui5.guard.router,sap.m",
 			theme: "sap_horizon",
 		},
 		coverage: {
-			only: "ui5/ext/routing/",
-			never: "test-resources/ui5/ext/routing/",
+			only: "ui5/guard/router/",
+			never: "test-resources/ui5/guard/router/",
 		},
 		loader: {
 			paths: {
-				"ui5/ext/routing": "resources/ui5/ext/routing",
+				"ui5/guard/router": "resources/ui5/guard/router",
 			},
 		},
 		module: "./{name}.qunit",
 	},
 	tests: {
 		Router: {
-			title: "QUnit Tests for ui5.ext.routing.Router",
+			title: "QUnit Tests for ui5.guard.router.Router",
 		},
 		NativeRouterCompat: {
 			title: "QUnit Tests for Native Router Compatibility",

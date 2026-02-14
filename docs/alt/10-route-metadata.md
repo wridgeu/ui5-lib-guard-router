@@ -77,7 +77,7 @@ Store route metadata in a custom section of `manifest.json`, keyed by route name
 			]
 		}
 	},
-	"ui5.ext.routing": {
+	"ui5.guard.router": {
 		"routeMeta": {
 			"admin": {
 				"requiresAuth": true,
@@ -99,7 +99,7 @@ Store route metadata in a custom section of `manifest.json`, keyed by route name
 ```typescript
 // In Component.ts
 const router = this.getRouter() as RouterInstance;
-const manifest = this.getManifestEntry("ui5.ext.routing") as RouteMetaConfig;
+const manifest = this.getManifestEntry("ui5.guard.router") as RouteMetaConfig;
 
 // One guard handles all auth logic
 router.addGuard((context) => {
@@ -123,7 +123,7 @@ The router could provide a helper to read metadata:
 // Router method
 getRouteMeta(routeName: string): Record<string, unknown> {
     const component = this.getOwnerComponent();
-    const config = component.getManifestEntry("ui5.ext.routing") as RouteMetaConfig;
+    const config = component.getManifestEntry("ui5.guard.router") as RouteMetaConfig;
     return config?.routeMeta?.[routeName] || {};
 }
 
@@ -263,7 +263,7 @@ Combine Approaches A and B: defaults in manifest, overrides in code.
 
 ```json
 {
-	"ui5.ext.routing": {
+	"ui5.guard.router": {
 		"routeMeta": {
 			"admin": { "requiresAuth": true, "roles": ["admin"] },
 			"profile": { "requiresAuth": true }
@@ -300,7 +300,7 @@ _getManifestRouteMeta(this: RouterInstance, routeName: string): Record<string, u
     try {
         const component = this._oOwner;  // Owner component
         if (!component) return {};
-        const config = component.getManifestEntry("ui5.ext.routing");
+        const config = component.getManifestEntry("ui5.guard.router");
         return (config as any)?.routeMeta?.[routeName] || {};
     } catch {
         return {};
@@ -394,7 +394,7 @@ This is fully backward-compatible:
 
 ```json
 {
-	"ui5.ext.routing": {
+	"ui5.guard.router": {
 		"routeMeta": {
 			"home": { "public": true },
 			"login": { "public": true },

@@ -1,13 +1,13 @@
 import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import coreLibrary from "sap/ui/core/library";
-import type { GuardRouter } from "ui5/ext/routing/types";
+import type { GuardRouter } from "ui5/guard/router/types";
 import { GuardRouterClass, initHashChanger, nextTick } from "./testHelpers";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 /**
- * Verify that ui5.ext.routing.Router is a true drop-in replacement
+ * Verify that ui5.guard.router.Router is a true drop-in replacement
  * for sap.m.routing.Router: same API surface, same route matching.
  */
 

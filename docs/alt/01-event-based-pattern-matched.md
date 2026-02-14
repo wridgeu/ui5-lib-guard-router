@@ -64,7 +64,7 @@ init(): void {
 
 ## Comparison with This Repository's Approach
 
-| Aspect                 | Event-Based                  | `ui5.ext.routing`          |
+| Aspect                 | Event-Based                  | `ui5.guard.router`         |
 | ---------------------- | ---------------------------- | -------------------------- |
 | View creation on block | Yes (flash)                  | No                         |
 | History entry on block | Yes                          | No                         |

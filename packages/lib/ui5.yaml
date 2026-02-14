@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-    name: ui5.ext.routing
+    name: ui5.guard.router
 type: library
 framework:
     name: OpenUI5

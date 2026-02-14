@@ -95,7 +95,7 @@ This is described in detail in [wridgeu/ui5-poc-ewm-one-login#1](https://github.
 
 ## Comparison with This Repository's Approach
 
-| Aspect                  | Conditional Rendering    | `ui5.ext.routing`             |
+| Aspect                  | Conditional Rendering    | `ui5.guard.router`            |
 | ----------------------- | ------------------------ | ----------------------------- |
 | History pollution       | None                     | None (guards use replaceHash) |
 | Flash of content        | None                     | None                          |

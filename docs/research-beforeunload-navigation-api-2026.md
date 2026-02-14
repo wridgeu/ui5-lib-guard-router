@@ -335,7 +335,7 @@ chrome://flags/#deprecate-unload
 
 ### Current Approach
 
-UI5-ext-routing implements async navigation guards that can prevent navigation based on business logic (e.g., unsaved changes, authentication checks).
+ui5-lib-guard-router implements async navigation guards that can prevent navigation based on business logic (e.g., unsaved changes, authentication checks).
 
 ### Browser Compatibility Issues
 

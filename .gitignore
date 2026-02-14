@@ -6,6 +6,9 @@ coverage/
 *.d.ts
 *.d.ts.map
 
+# Generated LICENSE copy for npm publish
+packages/lib/LICENSE
+
 # Build output in src directories
 packages/lib/src/**/*.js
 packages/demo-app/webapp/**/*.js

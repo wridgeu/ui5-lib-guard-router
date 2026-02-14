@@ -4,7 +4,7 @@
 		"rootDir": ".",
 		"baseUrl": ".",
 		"paths": {
-			"ui5/ext/routing/*": ["./src/*"]
+			"ui5/guard/router/*": ["./src/*"]
 		},
 		"types": ["@openui5/types", "@types/qunit"]
 	},
