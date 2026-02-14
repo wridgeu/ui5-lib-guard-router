@@ -7,10 +7,10 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 > **Related resources**:
 >
 > - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research-native-router-navigate-event.md) (detailed comparison with this library)
+> - [Research: Native NavContainer navigate event](../../docs/research-native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!WARNING]
-> This library is **experimental**. The API may change without notice. Pin your version and review changes before upgrading.
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk — make sure to pin your version and review changes before upgrading.
 
 ## Why
 
@@ -296,7 +296,7 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 - Use **leave guards** for in-app route changes (e.g., navigating from an edit form to a list within your app)
 - Use **`setDirtyFlag`** or **`registerDirtyStateProvider`** for FLP-level navigation (cross-app, browser close, home button)
 
-See the [FLP Dirty State Research](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
+See the [FLP Dirty State Research](../../docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
 ## Limitations
 
@@ -379,4 +379,4 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 
 ## License
 
-[MIT](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/LICENSE)
+[MIT](../../LICENSE)
