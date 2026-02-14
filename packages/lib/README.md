@@ -3,6 +3,11 @@
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation — preventing flashes of unauthorized content and polluted browser history.
 
 > Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5.
+>
+> **Related resources**:
+>
+> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
+> - [Research: Native NavContainer navigate event](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research-native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!WARNING]
 > This library is **experimental**. The API may change without notice. Pin your version and review changes before upgrading.
@@ -78,7 +83,9 @@ export default class Component extends UIComponent {
 
 ## How it works
 
-The library extends `sap.m.routing.Router` and overrides `parse()`, the single method through which all navigation flows (programmatic `navTo`, browser back/forward, direct URL changes). Guards run before any route matching, target loading, or view creation.
+The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/api/sap.m.routing.Router) and overrides `parse()`, the single method through which all navigation flows (programmatic `navTo`, browser back/forward, direct URL changes). Guards run before any route matching, target loading, or view creation.
+
+Because it extends the mobile router directly, all existing `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) works unchanged.
 
 The guard pipeline stays **synchronous when all guards return plain values** and only becomes async when a guard returns a Promise. A generation counter discards stale async results when navigations overlap, and an `AbortSignal` is passed to each guard so async work (like `fetch`) can be cancelled early.
 
@@ -204,6 +211,21 @@ router.addRouteGuard("editOrder", {
 });
 ```
 
+### Dynamic guard registration
+
+Guards can be added or removed at any point during the router's lifetime:
+
+```typescript
+const logGuard: GuardFn = (ctx) => {
+	console.log(`Navigation: ${ctx.fromRoute} → ${ctx.toRoute}`);
+	return true;
+};
+
+router.addGuard(logGuard);
+// later...
+router.removeGuard(logGuard);
+```
+
 ### Leave guard with controller lifecycle
 
 ```typescript
@@ -229,9 +251,50 @@ export default class EditOrderController extends Controller {
 }
 ```
 
+> [!TIP]
 > **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash. There is no built-in confirmation dialog. Show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) to make the block visible.
 
-> **Guard cleanup**: The router's `destroy()` method automatically clears all guards when the component is destroyed. Controller-registered guards persist across in-app navigations (since UI5 caches views), which is typically desired for route-specific guards tied to view state.
+> [!NOTE]
+> **Guard cleanup and lifecycle**
+>
+> **Component level**: The router's `destroy()` method automatically clears all registered guards when the component is destroyed (including during FLP navigation).
+>
+> **Controller level**: UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away. Controller-registered guards therefore persist across in-app navigations. This is typically the desired behavior for route-specific guards tied to view state.
+>
+> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
+
+### Native alternative for leave guards: Fiori Launchpad data loss prevention
+
+If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
+
+**`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog when the user attempts cross-app navigation (home button, other tiles), browser back/forward out of the app, or page refresh/close:
+
+```typescript
+sap.ushell.Container.setDirtyFlag(true); // mark unsaved changes
+sap.ushell.Container.setDirtyFlag(false); // clear after save
+```
+
+**`registerDirtyStateProvider(fn)`** (since 1.31.0): Registers a callback that FLP calls during navigation to dynamically determine dirty state. The callback receives a `NavigationContext` with `isCrossAppNavigation` (boolean) and `innerAppRoute` (string), allowing the provider to distinguish between cross-app and in-app navigation:
+
+```typescript
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation) {
+		return formModel.getProperty("/isDirty");
+	}
+	return false; // let in-app routing handle it
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+
+// Clean up (since 1.67.0)
+sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
+```
+
+**How the two approaches complement each other**: FLP's data loss protection operates at the shell navigation filter level, intercepting navigation _before_ the hash change reaches your app's router. Leave guards operate _inside_ your app's router, intercepting route-to-route navigation. For complete coverage:
+
+- Use **leave guards** for in-app route changes (e.g., navigating from an edit form to a list within your app)
+- Use **`setDirtyFlag`** or **`registerDirtyStateProvider`** for FLP-level navigation (cross-app, browser close, home button)
+
+See the [FLP Dirty State Research](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
 ## Limitations
 
@@ -269,9 +332,10 @@ router.addRouteGuard("dashboard", async (context) => {
 
 ## Compatibility
 
-- **Minimum UI5 version**: 1.118 (requires [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib))
-- **Router APIs**: depends on [`getRouteInfoByHash`](https://sdk.openui5.org/api/sap.ui.core.routing.Router%23methods/getRouteInfoByHash) (since 1.75)
-- **Developed and tested against**: OpenUI5 1.144.0
+> [!IMPORTANT]
+> **Minimum UI5 version: 1.118**
+>
+> The library uses [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib) for library initialization, which was introduced in **UI5 1.118**. The Router itself only depends on APIs available since 1.75 (notably [`getRouteInfoByHash`](https://sdk.openui5.org/api/sap.ui.core.routing.Router%23methods/getRouteInfoByHash)), but the library packaging sets the effective floor. Developed and tested against OpenUI5 1.144.0.
 
 ## License
 
