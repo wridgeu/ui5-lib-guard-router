@@ -57,8 +57,8 @@ async function main() {
 				{
 					compilerOptions: {
 						target: "ES2022",
-						module: "ES2022",
-						moduleResolution: "Node",
+						module: "NodeNext",
+						moduleResolution: "NodeNext",
 						strict: true,
 						skipLibCheck: true,
 						types: ["@openui5/types"],

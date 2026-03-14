@@ -138,7 +138,7 @@ npm run fmt:check    # oxfmt
 npm run check        # all of the above
 ```
 
-The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages.
+The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
 ### Build
 

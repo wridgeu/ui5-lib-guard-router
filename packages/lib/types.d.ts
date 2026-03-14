@@ -1,5 +1,4 @@
 export type {
-	Awaitable,
 	GuardContext,
 	GuardFn,
 	GuardRedirect,

@@ -188,6 +188,19 @@ QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (
 	assert.ok(true, "Invalid runtime guard input was ignored");
 });
 
+QUnit.test("addRouteGuard object form ignores invalid leave guard input", async function (assert: Assert) {
+	router.addRouteGuard("protected", {
+		beforeLeave: "nope" as any,
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	router.navTo("home");
+	await waitForRoute(router, "home");
+	assert.ok(true, "Invalid leave guard input was ignored");
+});
+
 QUnit.test("destroy cleans up guards so they no longer run", async function (assert: Assert) {
 	let guardCalled = false;
 	router.addGuard(() => {

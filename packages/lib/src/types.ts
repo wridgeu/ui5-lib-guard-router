@@ -13,8 +13,6 @@ export interface GuardRedirect {
 	componentTargetInfo?: Record<string, ComponentTargetParameters>;
 }
 
-export type Awaitable<T> = T | PromiseLike<T>;
-
 /**
  * Result of a guard check.
  *
@@ -54,7 +52,7 @@ export interface GuardContext {
 /**
  * A guard function. It can be synchronous or asynchronous.
  */
-export type GuardFn = (context: GuardContext) => Awaitable<GuardResult>;
+export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>;
 
 /**
  * A leave guard function. It can be synchronous or asynchronous.
@@ -62,7 +60,7 @@ export type GuardFn = (context: GuardContext) => Awaitable<GuardResult>;
  * Leave guards answer the question "can I leave this route?" and return
  * only a boolean. They cannot redirect. Use enter guards for that.
  */
-export type LeaveGuardFn = (context: GuardContext) => Awaitable<boolean>;
+export type LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>;
 
 /**
  * Configuration object for registering enter and/or leave guards on a route.

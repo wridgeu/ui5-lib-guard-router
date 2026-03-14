@@ -88,6 +88,10 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 * Register a global guard that runs for every navigation.
 	 */
 	addGuard(this: RouterInternal, guard: GuardFn): GuardRouter {
+		if (typeof guard !== "function") {
+			Log.warning("addGuard called with invalid guard, ignoring", undefined, LOG_COMPONENT);
+			return this;
+		}
 		this._globalGuards.push(guard);
 		return this;
 	},
@@ -96,6 +100,10 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 * Remove a previously registered global guard.
 	 */
 	removeGuard(this: RouterInternal, guard: GuardFn): GuardRouter {
+		if (typeof guard !== "function") {
+			Log.warning("removeGuard called with invalid guard, ignoring", undefined, LOG_COMPONENT);
+			return this;
+		}
 		const index = this._globalGuards.indexOf(guard);
 		if (index !== -1) {
 			this._globalGuards.splice(index, 1);
@@ -111,22 +119,24 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 */
 	addRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter {
 		if (isRouteGuardConfig(guard)) {
-			const beforeEnter = typeof guard.beforeEnter === "function" ? guard.beforeEnter : undefined;
-			const beforeLeave = typeof guard.beforeLeave === "function" ? guard.beforeLeave : undefined;
+			let hasHandler = false;
 
-			if (!beforeEnter && !beforeLeave) {
+			if (guard.beforeEnter !== undefined) {
+				hasHandler = true;
+				this.addRouteGuard(routeName, guard.beforeEnter as GuardFn);
+			}
+			if (guard.beforeLeave !== undefined) {
+				hasHandler = true;
+				this.addLeaveGuard(routeName, guard.beforeLeave as LeaveGuardFn);
+			}
+
+			if (!hasHandler) {
 				Log.info(
-					"addRouteGuard called with config missing valid beforeEnter/beforeLeave handlers",
+					"addRouteGuard called with config missing both beforeEnter and beforeLeave",
 					routeName,
 					LOG_COMPONENT,
 				);
 				return this;
-			}
-			if (beforeEnter) {
-				this.addRouteGuard(routeName, beforeEnter);
-			}
-			if (beforeLeave) {
-				this.addLeaveGuard(routeName, beforeLeave);
 			}
 			return this;
 		}
@@ -171,6 +181,10 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 * "can I leave?" and return only a boolean (no redirects).
 	 */
 	addLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): GuardRouter {
+		if (typeof guard !== "function") {
+			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			return this;
+		}
 		addToGuardMap(this._leaveGuards, routeName, guard);
 		return this;
 	},
@@ -179,6 +193,10 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 * Remove a leave guard from a specific route.
 	 */
 	removeLeaveGuard(this: RouterInternal, routeName: string, guard: LeaveGuardFn): GuardRouter {
+		if (typeof guard !== "function") {
+			Log.warning("removeLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			return this;
+		}
 		removeFromGuardMap(this._leaveGuards, routeName, guard);
 		return this;
 	},
