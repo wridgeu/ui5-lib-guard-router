@@ -37,6 +37,16 @@ import type { GuardRouter } from "ui5-lib-guard-router/types";
 
 This `./types` subpath is a package-level TypeScript bridge. The generated UI5 declarations still expose `ui5/guard/router/*` modules, but the npm subpath is the simplest supported option for consumers because it does not require extra `tsconfig` wiring or a side-effect import.
 
+If you prefer pure UI5 module names for types, add `ui5-lib-guard-router` to `compilerOptions.types` and keep using `ui5/guard/router/types`:
+
+```json
+{
+	"compilerOptions": {
+		"types": ["@openui5/types", "ui5-lib-guard-router"]
+	}
+}
+```
+
 UI5 runtime module names stay `ui5/guard/router/*`.
 
 ### 2. Configure manifest.json
