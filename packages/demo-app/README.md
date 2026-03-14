@@ -42,11 +42,13 @@ npm run typecheck
 
 ## E2E tests
 
-From the monorepo root (requires the demo-app server running on port 8080):
+From the monorepo root:
 
 ```bash
 npm run test:e2e
 ```
+
+The command starts and stops the demo server on port 8080 for you.
 
 Test files are in `test/e2e/`:
 

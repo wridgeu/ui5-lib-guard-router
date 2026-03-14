@@ -231,7 +231,7 @@ We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` becaus
 
 ### 2.7 Minimum UI5 Version
 
-**1.118** required due to [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib) used for library initialization (introduced in 1.118). The Router itself only depends on APIs available since 1.75 (notably `getRouteInfoByHash`), but the library packaging sets the effective floor. Developed and tested against OpenUI5 1.144.0.
+The current published package declares and tests against **1.144.0**. The implementation itself only depends on APIs available since **1.118** because it uses [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
 
 ---
 

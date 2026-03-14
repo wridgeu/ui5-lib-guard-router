@@ -16,16 +16,25 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
-function isGuardRedirect(value: GuardResult): value is GuardRedirect {
-	return typeof value === "object" && value !== null;
+function isGuardRedirect(value: unknown): value is GuardRedirect {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as GuardRedirect).route === "string" &&
+		(value as GuardRedirect).route.length > 0
+	);
 }
 
-function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
-	return value instanceof Promise;
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+	return (
+		(typeof value === "object" || typeof value === "function") &&
+		value !== null &&
+		typeof (value as PromiseLike<T>).then === "function"
+	);
 }
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
-	return typeof guard === "object";
+	return typeof guard === "object" && guard !== null;
 }
 
 function addToGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): void {
@@ -71,7 +80,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		this._pendingHash = null;
 		this._redirecting = false;
 		this._parseGeneration = 0;
-		this._suppressNextParse = false;
+		this._suppressedHash = null;
 		this._abortController = null;
 	},
 
@@ -102,19 +111,27 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 */
 	addRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter {
 		if (isRouteGuardConfig(guard)) {
-			if (!guard.beforeEnter && !guard.beforeLeave) {
+			const beforeEnter = typeof guard.beforeEnter === "function" ? guard.beforeEnter : undefined;
+			const beforeLeave = typeof guard.beforeLeave === "function" ? guard.beforeLeave : undefined;
+
+			if (!beforeEnter && !beforeLeave) {
 				Log.info(
-					"addRouteGuard called with config missing both beforeEnter and beforeLeave",
+					"addRouteGuard called with config missing valid beforeEnter/beforeLeave handlers",
 					routeName,
 					LOG_COMPONENT,
 				);
+				return this;
 			}
-			if (guard.beforeEnter) {
-				this.addRouteGuard(routeName, guard.beforeEnter);
+			if (beforeEnter) {
+				this.addRouteGuard(routeName, beforeEnter);
 			}
-			if (guard.beforeLeave) {
-				this.addLeaveGuard(routeName, guard.beforeLeave);
+			if (beforeLeave) {
+				this.addLeaveGuard(routeName, beforeLeave);
 			}
+			return this;
+		}
+		if (typeof guard !== "function") {
+			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		addToGuardMap(this._enterGuards, routeName, guard);
@@ -130,12 +147,16 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 */
 	removeRouteGuard(this: RouterInternal, routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter {
 		if (isRouteGuardConfig(guard)) {
-			if (guard.beforeEnter) {
+			if (typeof guard.beforeEnter === "function") {
 				this.removeRouteGuard(routeName, guard.beforeEnter);
 			}
-			if (guard.beforeLeave) {
+			if (typeof guard.beforeLeave === "function") {
 				this.removeLeaveGuard(routeName, guard.beforeLeave);
 			}
+			return this;
+		}
+		if (typeof guard !== "function") {
+			Log.warning("removeRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		removeFromGuardMap(this._enterGuards, routeName, guard);
@@ -174,9 +195,12 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 * @override sap.ui.core.routing.Router#parse
 	 */
 	parse(this: RouterInternal, newHash: string): void {
-		if (this._suppressNextParse) {
-			this._suppressNextParse = false;
-			return;
+		if (this._suppressedHash !== null) {
+			if (newHash === this._suppressedHash) {
+				this._suppressedHash = null;
+				return;
+			}
+			this._suppressedHash = null;
 		}
 
 		if (this._redirecting) {
@@ -234,7 +258,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		const runEnterGuards = (): void => {
 			const enterResult = this._runEnterGuards(this._globalGuards, toRoute, context);
 
-			if (isPromise(enterResult)) {
+			if (isPromiseLike(enterResult)) {
 				enterResult
 					.then((guardResult: GuardResult) => {
 						if (generation !== this._parseGeneration) {
@@ -249,7 +273,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 						if (guardResult === true) {
 							this._commitNavigation(newHash, toRoute);
 						} else if (guardResult === false) {
-							this._blockNavigation();
+							this._blockNavigation(newHash);
 						} else {
 							this._redirect(guardResult);
 						}
@@ -261,7 +285,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 							String(error),
 							LOG_COMPONENT,
 						);
-						this._blockNavigation();
+						this._blockNavigation(newHash);
 					});
 				return;
 			}
@@ -269,7 +293,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 			if (enterResult === true) {
 				this._commitNavigation(newHash, toRoute);
 			} else if (enterResult === false) {
-				this._blockNavigation();
+				this._blockNavigation(newHash);
 			} else {
 				this._redirect(enterResult);
 			}
@@ -279,7 +303,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		if (hasLeaveGuards) {
 			const leaveResult = this._runLeaveGuards(context);
 
-			if (isPromise(leaveResult)) {
+			if (isPromiseLike(leaveResult)) {
 				leaveResult
 					.then((allowed: boolean) => {
 						if (generation !== this._parseGeneration) {
@@ -291,7 +315,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 							return;
 						}
 						if (allowed !== true) {
-							this._blockNavigation();
+							this._blockNavigation(newHash);
 							return;
 						}
 						runEnterGuards();
@@ -303,12 +327,12 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 							String(error),
 							LOG_COMPONENT,
 						);
-						this._blockNavigation();
+						this._blockNavigation(newHash);
 					});
 				return;
 			}
 			if (leaveResult !== true) {
-				this._blockNavigation();
+				this._blockNavigation(newHash);
 				return;
 			}
 		}
@@ -332,7 +356,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
-				if (isPromise(result)) {
+				if (isPromiseLike(result)) {
 					return this._continueGuardsAsync(
 						result,
 						guards,
@@ -379,7 +403,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	): GuardResult | Promise<GuardResult> {
 		const globalResult = this._runGuards(globalGuards, context);
 
-		if (isPromise(globalResult)) {
+		if (isPromiseLike(globalResult)) {
 			return globalResult.then((r: GuardResult) => {
 				if (r !== true) return r;
 				if (context.signal.aborted) return false;
@@ -408,7 +432,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
-				if (isPromise(result)) {
+				if (isPromiseLike(result)) {
 					return this._continueGuardsAsync(
 						result,
 						guards,
@@ -443,11 +467,11 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	 */
 	async _continueGuardsAsync(
 		this: RouterInternal,
-		pendingResult: Promise<GuardResult>,
-		guards: Array<(context: GuardContext) => GuardResult | Promise<GuardResult>>,
+		pendingResult: PromiseLike<GuardResult>,
+		guards: GuardFn[],
 		currentIndex: number,
 		context: GuardContext,
-		onBlock: (result: GuardResult) => GuardResult,
+		onBlock: (result: unknown) => GuardResult,
 		label: string,
 		isLeaveGuard: boolean,
 	): Promise<GuardResult> {
@@ -477,7 +501,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	},
 
 	/** Validate a non-true guard result; invalid values become false. */
-	_validateGuardResult(this: RouterInternal, result: GuardResult): GuardResult {
+	_validateGuardResult(this: RouterInternal, result: unknown): GuardResult {
 		if (typeof result === "string" || typeof result === "boolean" || isGuardRedirect(result)) {
 			return result;
 		}
@@ -501,25 +525,28 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 	},
 
 	/** Clear pending state and restore the previous hash. */
-	_blockNavigation(this: RouterInternal): void {
+	_blockNavigation(this: RouterInternal, attemptedHash?: string): void {
 		this._pendingHash = null;
-		this._restoreHash();
+		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
+			this._restoreHash("", false);
+			return;
+		}
+		this._restoreHash(this._currentHash ?? "");
 	},
 
 	/**
 	 * Restore the previous hash without creating a history entry.
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
-	 * Note: _currentRoute intentionally stays unchanged — the blocked navigation
+	 * Note: _currentRoute intentionally stays unchanged. The blocked navigation
 	 * never committed, so the user remains on the same logical route.
 	 */
-	_restoreHash(this: RouterInternal): void {
+	_restoreHash(this: RouterInternal, hash: string, suppressParse = true): void {
 		const hashChanger = this.getHashChanger();
 		if (hashChanger) {
-			this._suppressNextParse = true;
-			hashChanger.replaceHash(this._currentHash ?? "", HistoryDirection.Unknown);
-			if (this._suppressNextParse) {
-				// replaceHash was a no-op (same hash) - reset to prevent leak
-				this._suppressNextParse = false;
+			this._suppressedHash = suppressParse ? hash : null;
+			hashChanger.replaceHash(hash, HistoryDirection.Unknown);
+			if (this._suppressedHash === hash) {
+				this._suppressedHash = null;
 			}
 		}
 	},
