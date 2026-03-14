@@ -1568,11 +1568,11 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Navigate to "protected" — async leave guard is now pending
+		// Navigate to "protected". Async leave guard is now pending.
 		router.navTo("protected");
 		await nextTick(10);
 
-		// Navigate to "forbidden" instead — supersedes the first navigation.
+		// Navigate to "forbidden" instead. This supersedes the first navigation.
 		// Both navigations leave "home", so the guard fires twice.
 		router.navTo("forbidden");
 		await nextTick(10);
@@ -1582,7 +1582,7 @@ QUnit.test(
 		await waitForRoute(router, "forbidden");
 		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "Second navigation reached forbidden");
 
-		// Now resolve the first (stale) guard — should have no effect
+		// Now resolve the first stale guard. It should have no effect.
 		resolvers[0](true);
 		await nextTick(100);
 

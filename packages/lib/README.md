@@ -10,7 +10,7 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 > - [Research: Native NavContainer navigate event](../../docs/research-native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!WARNING]
-> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk — make sure to pin your version and review changes before upgrading.
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
 ## Why
 
@@ -154,7 +154,7 @@ Every guard receives a `GuardContext` object:
 | `{ route, parameters?, componentTargetInfo? }` | Redirect with route parameters                  |
 | anything else (`null`, `undefined`)            | Treated as block                                |
 
-Only strict `true` allows navigation — no truthy coercion.
+Only strict `true` allows navigation. There is no truthy coercion.
 
 On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 

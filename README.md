@@ -14,7 +14,7 @@ UI5 Router extension with async navigation guards. Drop-in replacement for `sap.
 UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to guard logic in `attachPatternMatched` callbacks, which causes **flashes of unauthorized content**, **pollutes browser history**, and **scatters guard logic** across controllers. This library solves all three by extending `sap.m.routing.Router` and overriding `parse()`, the single entry point for all navigation, so guards run before any route matching or view creation begins.
 
 > [!WARNING]
-> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk — make sure to pin your version and review changes before upgrading.
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
