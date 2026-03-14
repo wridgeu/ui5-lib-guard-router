@@ -5,9 +5,11 @@ coverage/
 *.js.map
 *.d.ts
 *.d.ts.map
+!packages/lib/types.d.ts
 
-# Generated LICENSE copy for npm publish
+# Package-level license copy
 packages/lib/LICENSE
+!packages/lib/LICENSE
 
 # Build output in src directories
 packages/lib/src/**/*.js
