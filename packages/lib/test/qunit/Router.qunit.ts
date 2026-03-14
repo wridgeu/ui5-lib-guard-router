@@ -526,6 +526,12 @@ QUnit.test("Blocked initial navigation falls back to the default hash", async fu
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Blocked initial navigation restored the default hash");
 });
 
+QUnit.test("Blocked default route on initial navigation stays blocked", async function (assert: Assert) {
+	router.addRouteGuard("home", () => false);
+	await assertBlocked(assert, router, "home", () => router.initialize(), "Blocked default route did not match");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash stays on the default target");
+});
+
 // ============================================================
 // Module: Hash change simulation (direct URL entry)
 // ============================================================
