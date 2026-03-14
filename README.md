@@ -35,6 +35,8 @@ TypeScript imports should use the npm package path:
 import type { GuardRouter } from "ui5-lib-guard-router/types";
 ```
 
+This `./types` subpath is a package-level TypeScript bridge. The generated UI5 declarations still expose `ui5/guard/router/*` modules, but the npm subpath is the simplest supported option for consumers because it does not require extra `tsconfig` wiring or a side-effect import.
+
 UI5 runtime module names stay `ui5/guard/router/*`.
 
 ### 2. Configure manifest.json
@@ -93,6 +95,8 @@ export default class Component extends UIComponent {
 ```
 
 That's it. All existing routes, targets, and navigation calls continue to work unchanged.
+
+If a non-empty initial hash is blocked on first load, the router restores `""` and continues with the app's default route. If the default route itself is blocked, it stays blocked. For a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
 For the full API reference, usage examples, limitations, and FLP integration guidance, see the **[library documentation](packages/lib/README.md)**.
 

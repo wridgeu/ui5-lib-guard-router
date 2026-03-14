@@ -30,6 +30,8 @@ TypeScript imports should use the npm package path:
 import type { GuardRouter } from "ui5-lib-guard-router/types";
 ```
 
+This `./types` subpath is a package-level TypeScript bridge. The generated UI5 declarations still expose `ui5/guard/router/*` modules, but the npm subpath is the simplest supported option for consumers because it does not require extra `tsconfig` wiring or a side-effect import.
+
 UI5 runtime module names stay `ui5/guard/router/*`.
 
 ## Setup
@@ -145,6 +147,8 @@ Every guard receives a `GuardContext` object:
 | anything else (`null`, `undefined`)            | Treated as block                                |
 
 Only strict `true` allows navigation — no truthy coercion.
+
+On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
 **Leave guards** (`addLeaveGuard`):
 
