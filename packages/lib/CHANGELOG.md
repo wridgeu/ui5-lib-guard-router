@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.0.1...v1.0.2) (2026-03-14)
+
+
+### Bug Fixes
+
+* harden guard runtime handling and packaging ([#17](https://github.com/wridgeu/ui5-lib-guard-router/issues/17)) ([1023ee8](https://github.com/wridgeu/ui5-lib-guard-router/commit/1023ee867e6dfd57cd013e281602cf4f42842dfc))
+
 ## [1.0.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.0.0...v1.0.1) (2026-02-16)
 
 
