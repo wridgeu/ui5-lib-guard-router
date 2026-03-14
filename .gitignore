@@ -5,7 +5,6 @@ coverage/
 *.js.map
 *.d.ts
 *.d.ts.map
-!packages/lib/types.d.ts
 
 # Package-level license copy
 packages/lib/LICENSE

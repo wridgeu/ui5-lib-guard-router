@@ -57,11 +57,11 @@ async function main() {
 				{
 					compilerOptions: {
 						target: "ES2022",
-						module: "NodeNext",
-						moduleResolution: "NodeNext",
+						module: "ES2022",
+						moduleResolution: "Node",
 						strict: true,
 						skipLibCheck: true,
-						types: ["@openui5/types"],
+						types: ["@openui5/types", "ui5-lib-guard-router"],
 					},
 					include: ["consumer.ts"],
 				},
@@ -72,7 +72,7 @@ async function main() {
 		await writeFile(
 			path.join(tempDir, "consumer.ts"),
 			[
-				'import type { GuardRouter } from "ui5-lib-guard-router/types";',
+				'import type { GuardRouter } from "ui5/guard/router/types";',
 				"",
 				"const router = null as unknown as GuardRouter;",
 				"void router;",
@@ -93,7 +93,20 @@ async function main() {
 		);
 
 		await access(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "LICENSE"));
-		await access(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "types.d.ts"));
+		await access(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "dist", "index.d.ts"));
+		await access(
+			path.join(
+				tempDir,
+				"node_modules",
+				"ui5-lib-guard-router",
+				"dist",
+				"resources",
+				"ui5",
+				"guard",
+				"router",
+				"types.d.ts",
+			),
+		);
 
 		run(npmCommand, [...npmBaseArgs, "exec", "tsc", "--", "--noEmit", "-p", "tsconfig.json"], { cwd: tempDir });
 	} finally {

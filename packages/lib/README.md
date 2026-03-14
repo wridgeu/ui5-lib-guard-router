@@ -24,15 +24,7 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
-TypeScript imports should use the npm package path:
-
-```typescript
-import type { GuardRouter } from "ui5-lib-guard-router/types";
-```
-
-This `./types` subpath is a package-level TypeScript bridge. The generated UI5 declarations still expose `ui5/guard/router/*` modules, but the npm subpath is the simplest supported option for consumers because it does not require extra `tsconfig` wiring or a side-effect import.
-
-If you prefer pure UI5 module names for types, add `ui5-lib-guard-router` to `compilerOptions.types` and keep using `ui5/guard/router/types`:
+TypeScript types follow the UI5 module names. Add the package to `compilerOptions.types`:
 
 ```json
 {
@@ -40,6 +32,12 @@ If you prefer pure UI5 module names for types, add `ui5-lib-guard-router` to `co
 		"types": ["@openui5/types", "ui5-lib-guard-router"]
 	}
 }
+```
+
+Then import the types from the UI5 module path:
+
+```typescript
+import type { GuardRouter } from "ui5/guard/router/types";
 ```
 
 UI5 runtime module names stay `ui5/guard/router/*`.
@@ -71,7 +69,7 @@ All existing routes, targets, and navigation calls continue to work unchanged.
 
 ```typescript
 import UIComponent from "sap/ui/core/UIComponent";
-import type { GuardRouter } from "ui5-lib-guard-router/types";
+import type { GuardRouter } from "ui5/guard/router/types";
 
 export default class Component extends UIComponent {
 	static metadata = {
@@ -209,7 +207,7 @@ router.addGuard((context) => {
 ```typescript
 // guards.ts
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5-lib-guard-router/types";
+import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export function createAuthGuard(authModel: JSONModel): GuardFn {
 	return (context: GuardContext): GuardResult => {
@@ -251,7 +249,7 @@ router.removeGuard(logGuard);
 ### Leave guard with controller lifecycle
 
 ```typescript
-import type { GuardRouter, LeaveGuardFn } from "ui5-lib-guard-router/types";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 import { createDirtyFormGuard } from "./guards";
 
 export default class EditOrderController extends Controller {
