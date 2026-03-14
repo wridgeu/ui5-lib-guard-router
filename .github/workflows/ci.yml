@@ -11,9 +11,78 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    ci:
+    validate:
         runs-on: ubuntu-latest
-        timeout-minutes: 10
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: Cache UI5 framework resources
+              uses: actions/cache@v4
+              with:
+                  path: ~/.ui5
+                  key: ui5-24-${{ hashFiles('packages/*/ui5.yaml') }}
+                  restore-keys: |
+                      ui5-24-
+                      ui5-
+
+            - run: npm ci
+
+            - name: Commitlint
+              if: github.event_name == 'pull_request'
+              run: npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}" --verbose
+
+            - name: Check formatting
+              run: npm run fmt:check
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Typecheck
+              run: npm run typecheck
+
+            - name: Pack check
+              run: npm run pack:check
+
+    node22-pack-smoke:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Cache UI5 framework resources
+              uses: actions/cache@v4
+              with:
+                  path: ~/.ui5
+                  key: ui5-22-${{ hashFiles('packages/*/ui5.yaml') }}
+                  restore-keys: |
+                      ui5-22-
+                      ui5-
+
+            - run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            - name: Pack smoke
+              run: npm run pack:smoke
+
+    tests:
+        needs: validate
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
         steps:
             - uses: actions/checkout@v4
 
@@ -26,28 +95,30 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.ui5
-                  key: ui5-${{ hashFiles('packages/*/ui5.yaml') }}
-                  restore-keys: ui5-
+                  key: ui5-tests-${{ hashFiles('packages/*/ui5.yaml') }}
+                  restore-keys: ui5-tests-
 
             - run: npm ci
 
-            - name: Check formatting
-              run: npm run fmt:check
+            - name: Run browser tests
+              run: npm test
 
-            - name: Lint
-              run: npm run lint
+    windows-smoke:
+        needs: validate
+        runs-on: windows-latest
+        timeout-minutes: 25
+        steps:
+            - uses: actions/checkout@v4
 
-            - name: Typecheck
-              run: npm run typecheck
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
 
-            - name: Build
-              run: npm run build
+            - run: npm ci
 
-            - name: Pack check
-              run: npm run pack:check
-
-            - name: QUnit tests
+            - name: QUnit smoke test
               run: npm run test:qunit
 
-            - name: E2E tests
+            - name: E2E smoke test
               run: npm run test:e2e

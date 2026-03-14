@@ -1,6 +1,6 @@
 # ui5-lib-guard-router
 
-Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation — preventing flashes of unauthorized content and polluted browser history.
+Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
 > Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5.
 >
@@ -14,7 +14,7 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 
 ## Why
 
-UI5's router has no way to block or redirect navigation before views render. The usual workaround — scattering guard logic across `attachPatternMatched` callbacks — causes flashes of unauthorized content, polluted browser history, and scattered guard logic across controllers.
+UI5's router has no way to block or redirect navigation before views render. The usual workaround, scattering guard logic across `attachPatternMatched` callbacks, causes flashes of unauthorized content, polluted browser history, and scattered guard logic across controllers.
 
 This library solves all three by intercepting at the router level, before any route matching begins.
 
@@ -23,6 +23,24 @@ This library solves all three by intercepting at the router level, before any ro
 ```bash
 npm install ui5-lib-guard-router
 ```
+
+TypeScript types follow the UI5 module names. Add the package to `compilerOptions.types`:
+
+```json
+{
+	"compilerOptions": {
+		"types": ["@openui5/types", "ui5-lib-guard-router"]
+	}
+}
+```
+
+Then import the types from the UI5 module path:
+
+```typescript
+import type { GuardRouter } from "ui5/guard/router/types";
+```
+
+UI5 runtime module names stay `ui5/guard/router/*`.
 
 ## Setup
 
@@ -63,12 +81,12 @@ export default class Component extends UIComponent {
 		super.init();
 		const router = this.getRouter() as unknown as GuardRouter;
 
-		// Route-specific guard — redirect when not logged in
+		// Route-specific guard: redirect when not logged in
 		router.addRouteGuard("protected", (context) => {
 			return isLoggedIn() ? true : "home";
 		});
 
-		// Global guard — runs for every navigation
+		// Global guard: runs for every navigation
 		router.addGuard((context) => {
 			if (context.toRoute === "admin" && !isAdmin()) {
 				return "home";
@@ -137,6 +155,8 @@ Every guard receives a `GuardContext` object:
 | anything else (`null`, `undefined`)            | Treated as block                                |
 
 Only strict `true` allows navigation — no truthy coercion.
+
+On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
 **Leave guards** (`addLeaveGuard`):
 
@@ -373,10 +393,10 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 ## Compatibility
 
 > [!IMPORTANT]
-> **Minimum UI5 version: 1.118**
+> **Shipped UI5 baseline: 1.144.0**
 >
-> The library uses [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib) for library initialization, which was introduced in **UI5 1.118**. The Router itself only depends on APIs available since 1.75 (notably [`getRouteInfoByHash`](https://sdk.openui5.org/api/sap.ui.core.routing.Router%23methods/getRouteInfoByHash)), but the library packaging sets the effective floor. Developed and tested against OpenUI5 1.144.0.
+> The published package currently declares `minUI5Version: 1.144.0` and CI tests that version. The implementation itself only depends on APIs available since UI5 1.118, so older baselines may be possible, but they are not shipped or verified yet.
 
 ## License
 
-[MIT](../../LICENSE)
+[MIT](LICENSE)

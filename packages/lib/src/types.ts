@@ -20,10 +20,10 @@ export interface GuardRedirect {
  * non-boolean values) block or redirect. This avoids accidental allow from
  * falsy/truthy coercion.
  *
- * - `true`            → allow navigation to proceed
- * - `false`           → block navigation (stay on current route, no history entry)
- * - `string`          → redirect to this route name (replaceHash, no history entry)
- * - `GuardRedirect`   → redirect with route name, parameters, and optional component target info
+ * - `true`            -> allow navigation to proceed
+ * - `false`           -> block navigation (stay on current route, no history entry)
+ * - `string`          -> redirect to this route name (replaceHash, no history entry)
+ * - `GuardRedirect`   -> redirect with route name, parameters, and optional component target info
  */
 export type GuardResult = boolean | string | GuardRedirect;
 
@@ -50,17 +50,17 @@ export interface GuardContext {
 }
 
 /**
- * A guard function - can be synchronous or asynchronous.
+ * A guard function. It can be synchronous or asynchronous.
  */
-export type GuardFn = (context: GuardContext) => GuardResult | Promise<GuardResult>;
+export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>;
 
 /**
- * A leave guard function - can be synchronous or asynchronous.
+ * A leave guard function. It can be synchronous or asynchronous.
  *
  * Leave guards answer the question "can I leave this route?" and return
- * only a boolean. They cannot redirect — use enter guards for that.
+ * only a boolean. They cannot redirect. Use enter guards for that.
  */
-export type LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>;
+export type LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>;
 
 /**
  * Configuration object for registering enter and/or leave guards on a route.
@@ -108,7 +108,7 @@ export interface RouterInternal extends GuardRouter {
 	_pendingHash: string | null;
 	_redirecting: boolean;
 	_parseGeneration: number;
-	_suppressNextParse: boolean;
+	_suppressedHash: string | null;
 	_abortController: AbortController | null;
 
 	_commitNavigation(hash: string, route?: string): void;
@@ -121,16 +121,16 @@ export interface RouterInternal extends GuardRouter {
 	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
 	_runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
 	_continueGuardsAsync(
-		pendingResult: Promise<GuardResult>,
-		guards: Array<(context: GuardContext) => GuardResult | Promise<GuardResult>>,
+		pendingResult: PromiseLike<GuardResult>,
+		guards: GuardFn[],
 		currentIndex: number,
 		context: GuardContext,
-		onBlock: (result: GuardResult) => GuardResult,
+		onBlock: (result: unknown) => GuardResult,
 		label: string,
 		isLeaveGuard: boolean,
 	): Promise<GuardResult>;
-	_validateGuardResult(result: GuardResult): GuardResult;
+	_validateGuardResult(result: unknown): GuardResult;
 	_redirect(target: string | GuardRedirect): void;
-	_blockNavigation(): void;
-	_restoreHash(): void;
+	_blockNavigation(attemptedHash?: string): void;
+	_restoreHash(hash: string, suppressParse?: boolean): void;
 }

@@ -16,18 +16,22 @@
 		"clean": "npm run clean --workspaces",
 		"fmt": "oxfmt .",
 		"fmt:check": "oxfmt --check .",
-		"lint": "oxlint packages/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-		"lint:fix": "oxlint packages/ --tsconfig tsconfig.base.json --import-plugin --fix",
+		"lint": "oxlint packages/ scripts/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+		"lint:fix": "oxlint packages/ scripts/ --tsconfig tsconfig.base.json --import-plugin --fix",
 		"check": "npm run fmt:check && npm run lint && npm run typecheck",
 		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.json",
 		"build": "npm run build --workspace=packages/lib",
 		"start": "npm start --workspace=packages/demo-app",
 		"start:lib": "npm start --workspace=packages/lib",
 		"serve:demo": "npm run serve --workspace=packages/demo-app",
+		"wdio:qunit": "wdio run packages/lib/test/wdio-qunit.conf.ts",
+		"wdio:e2e": "wdio run packages/demo-app/test/wdio.conf.ts",
 		"test": "npm run test:qunit && npm run test:e2e",
-		"test:qunit": "start-server-and-test start:lib http://localhost:8080 \"npx wdio run packages/lib/test/wdio-qunit.conf.ts\"",
-		"test:e2e": "start-server-and-test serve:demo http://localhost:8080 \"npx wdio run packages/demo-app/test/wdio.conf.ts\"",
-		"pack:check": "npm pack -w packages/lib --dry-run",
+		"test:qunit": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit",
+		"test:e2e": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script serve:demo --test-script wdio:e2e",
+		"pack:smoke": "node ./scripts/pack-smoke.mjs",
+		"pack:check": "npm run pack:check --workspace=packages/lib && npm run pack:smoke",
+		"commitlint": "commitlint --last",
 		"prepare": "husky"
 	},
 	"lint-staged": {
@@ -35,9 +39,15 @@
 			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
 			"oxfmt"
 		],
+		"scripts/**/*.{js,mjs,ts}": [
+			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+			"oxfmt"
+		],
 		"*.{json,md,yaml,yml}": "oxfmt"
 	},
 	"devDependencies": {
+		"@commitlint/cli": "^20.1.0",
+		"@commitlint/config-conventional": "^20.0.0",
 		"@openui5/types": "1.144.0",
 		"@wdio/cli": "^9.0.0",
 		"@wdio/local-runner": "^9.0.0",
@@ -48,7 +58,6 @@
 		"oxfmt": "^0.28.0",
 		"oxlint": "^1.43.0",
 		"rimraf": "^6.0.0",
-		"start-server-and-test": "^2.1.3",
 		"typescript": "~5.7.0",
 		"wdio-qunit-service": "^2.0.0",
 		"wdio-ui5-service": "^3.0.0"
