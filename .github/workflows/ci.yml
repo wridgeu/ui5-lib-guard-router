@@ -55,6 +55,9 @@ jobs:
             - name: Build
               run: npm run build
 
+            - name: Pack smoke
+              run: npm run pack:smoke
+
             - name: Pack check
               if: matrix.node-version == 24
               run: npm run pack:check

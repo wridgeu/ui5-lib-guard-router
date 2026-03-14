@@ -3,6 +3,13 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
 const DEFAULT_TIMEOUT_MS = 120000;
+const SIGNAL_EXIT_CODES = {
+	SIGINT: 130,
+	SIGTERM: 143,
+};
+
+let activeServer = null;
+let stopActiveServerPromise = null;
 
 function getOption(name) {
 	const index = process.argv.indexOf(name);
@@ -103,7 +110,39 @@ async function stopServer(server) {
 	}
 }
 
+async function stopActiveServer() {
+	if (!activeServer) {
+		return;
+	}
+
+	if (!stopActiveServerPromise) {
+		stopActiveServerPromise = stopServer(activeServer).finally(() => {
+			activeServer = null;
+			stopActiveServerPromise = null;
+		});
+	}
+
+	await stopActiveServerPromise;
+}
+
+function registerSignalHandlers() {
+	const stopAndExit = (signal) => {
+		void stopActiveServer().finally(() => {
+			process.exit(SIGNAL_EXIT_CODES[signal] ?? 1);
+		});
+	};
+
+	process.once("SIGINT", () => {
+		stopAndExit("SIGINT");
+	});
+	process.once("SIGTERM", () => {
+		stopAndExit("SIGTERM");
+	});
+}
+
 async function main() {
+	registerSignalHandlers();
+
 	const readyUrl = getOption("--ready-url");
 	const serverScript = getOption("--server-script");
 	const testScript = getOption("--test-script");
@@ -113,15 +152,15 @@ async function main() {
 		throw new Error("Invalid --timeout-ms value");
 	}
 
-	const server = spawnNpmScript(serverScript, {
+	activeServer = spawnNpmScript(serverScript, {
 		detached: process.platform !== "win32",
 	});
 
 	try {
-		await waitForUrl(readyUrl, timeoutMs, serverScript, server);
+		await waitForUrl(readyUrl, timeoutMs, serverScript, activeServer);
 		await runNpmScript(testScript);
 	} finally {
-		await stopServer(server);
+		await stopActiveServer();
 	}
 }
 
