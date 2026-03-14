@@ -17,20 +17,20 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
 function isGuardRedirect(value: unknown): value is GuardRedirect {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		typeof (value as GuardRedirect).route === "string" &&
-		(value as GuardRedirect).route.length > 0
-	);
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const { route } = value as GuardRedirect;
+	return typeof route === "string" && route.length > 0;
 }
 
 function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-	return (
-		(typeof value === "object" || typeof value === "function") &&
-		value !== null &&
-		typeof (value as PromiseLike<T>).then === "function"
-	);
+	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+		return false;
+	}
+
+	return typeof (value as PromiseLike<T>).then === "function";
 }
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
