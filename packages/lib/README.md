@@ -24,7 +24,7 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
-If your app uses TypeScript and does not already include the UI5 typings, add:
+If your app uses TypeScript and does not already depend on the UI5 typings, install them too:
 
 ```bash
 npm install -D @openui5/types
