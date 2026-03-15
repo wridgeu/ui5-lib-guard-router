@@ -263,11 +263,15 @@ export async function triggerHomeNavigationThroughFlp(): Promise<void> {
 	}
 }
 
-export async function waitForDirtyStatePrompt(): Promise<void> {
+export async function waitForAndDismissDirtyStatePrompt(): Promise<void> {
 	await browser.waitUntil(
 		async () => {
 			try {
-				return await browser.isAlertOpen();
+				if (!(await browser.isAlertOpen())) {
+					return false;
+				}
+				await browser.dismissAlert();
+				return true;
 			} catch {
 				return false;
 			}

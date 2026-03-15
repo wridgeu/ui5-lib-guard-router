@@ -4,7 +4,7 @@ import {
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	triggerHomeNavigationThroughFlp,
-	waitForDirtyStatePrompt,
+	waitForAndDismissDirtyStatePrompt,
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
@@ -30,9 +30,7 @@ describe("FLP preview integration", () => {
 		await setDirtyStateInFlp(true);
 
 		await triggerHomeNavigationThroughFlp();
-		await waitForDirtyStatePrompt();
-
-		await browser.dismissAlert();
+		await waitForAndDismissDirtyStatePrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
