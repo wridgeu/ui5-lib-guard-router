@@ -3,8 +3,7 @@ import {
 	loginAndGoToProtectedInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
-	triggerHomeNavigationThroughFlp,
-	waitForAndDismissDirtyStatePrompt,
+	triggerFlpCrossAppNavigationAndExpectDirtyPrompt,
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
@@ -29,8 +28,7 @@ describe("FLP preview integration", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		await triggerHomeNavigationThroughFlp();
-		await waitForAndDismissDirtyStatePrompt();
+		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});

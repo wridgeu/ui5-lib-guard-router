@@ -211,49 +211,45 @@ async function resetDirtyState(): Promise<void> {
 	});
 }
 
-export async function triggerHomeNavigationThroughFlp(): Promise<void> {
-	const triggered = await browser.execute(() => {
+/**
+ * Intercept window.confirm so the dirty-state prompt is captured
+ * synchronously, then trigger FLP cross-app navigation.
+ *
+ * Headless Chrome auto-answers confirm() before WebDriver can see the
+ * alert, so polling isAlertOpen() is unreliable. Monkey-patching
+ * confirm() captures the call in the same JS tick and returns false
+ * (simulating "Cancel" / stay on the page).
+ */
+export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
+	const result = await browser.execute(() => {
+		let confirmCalled = false;
+		const originalConfirm = window.confirm;
+		window.confirm = (_message?: string): boolean => {
+			confirmCalled = true;
+			window.confirm = originalConfirm;
+			return false;
+		};
+
 		const Container = sap.ui.require("sap/ushell/Container");
 		const navService = Container?.getService("CrossApplicationNavigation");
 
 		if (!navService?.toExternal) {
-			return false;
+			window.confirm = originalConfirm;
+			return { triggered: false, confirmCalled: false };
 		}
 
 		navService.toExternal({ target: { shellHash: "Shell-home" } });
-		return true;
+		return { triggered: true, confirmCalled };
 	});
 
-	if (!triggered) {
+	if (!result.triggered) {
 		throw new Error("FLP CrossApplicationNavigation service was not available");
 	}
-}
-
-export async function waitForAndDismissDirtyStatePrompt(): Promise<void> {
-	let alertSeen = false;
-
-	await browser.waitUntil(
-		async () => {
-			try {
-				if (await browser.isAlertOpen()) {
-					alertSeen = true;
-					await browser.dismissAlert();
-					return true;
-				}
-			} catch {
-				// isAlertOpen saw the alert but dismissAlert found it already gone.
-				// Headless Chrome auto-dismisses confirm() dialogs before WebDriver
-				// can act on them. The alert was present, so the provider fired.
-				if (alertSeen) return true;
-			}
-			return alertSeen;
-		},
-		{
-			timeout: 5000,
-			timeoutMsg:
-				"FLP dirty-state confirmation dialog did not appear — registerDirtyStateProvider may not have fired",
-		},
-	);
+	if (!result.confirmCalled) {
+		throw new Error(
+			"FLP dirty-state provider did not call window.confirm — registerDirtyStateProvider may not have fired",
+		);
+	}
 }
 
 export async function waitForProtectedPageInFlp(): Promise<void> {
