@@ -18,14 +18,8 @@ server:
               transpileDependencies: true
         - name: ui5-middleware-livereload
           afterMiddleware: compression
-        - name: fiori-tools-servestatic
-          afterMiddleware: ui5-middleware-livereload
-          configuration:
-              paths:
-                  - path: /resources/ui5/guard/router
-                    src: ../lib/dist/resources/ui5/guard/router
         - name: fiori-tools-preview
-          afterMiddleware: fiori-tools-servestatic
+          afterMiddleware: ui5-middleware-livereload
           configuration:
               flp:
                   path: /test/flp.html

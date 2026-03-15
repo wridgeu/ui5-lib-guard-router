@@ -78,5 +78,5 @@ Test files are in `test/e2e/`:
 - OpenUI5 1.144.0
 - TypeScript via `ui5-tooling-transpile`
 - `ui5-middleware-livereload` for dev server
-- `fiori-tools-preview` and `fiori-tools-proxy` for local FLP preview
+- `fiori-tools-preview` for local FLP preview
 - wdio v9 + wdi5 v3 for E2E tests

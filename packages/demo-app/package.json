@@ -12,7 +12,6 @@
 	"type": "module",
 	"scripts": {
 		"clean": "rimraf dist .ui5",
-		"prestart:flp": "npm --prefix ../.. run build --workspace=packages/lib",
 		"serve": "ui5 serve",
 		"start": "ui5 serve --open /index.html",
 		"start:flp": "ui5 serve --config ui5-flp.yaml --open /test/flp.html#app-preview",
