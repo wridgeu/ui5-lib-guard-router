@@ -7,7 +7,6 @@ import type {
 	LeaveGuardFn,
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
-import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	addGuardUnsafe,
@@ -22,10 +21,6 @@ import {
 	removeRouteGuardUnsafe,
 	waitForRoute,
 } from "./testHelpers";
-
-interface DetailRouteArguments {
-	id: string;
-}
 
 function createRouter(): GuardRouter {
 	return new GuardRouterClass(
@@ -85,40 +80,35 @@ QUnit.test("Router is an instance of sap.m.routing.Router", function (assert: As
 QUnit.test("navTo navigates to named route", async function (assert: Assert) {
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.ok(true, "Protected route matched");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Hash updated to protected");
 });
 
 QUnit.test("navTo with parameters", async function (assert: Assert) {
-	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		assert.strictEqual(
-			(event.getParameter("arguments") as DetailRouteArguments).id,
-			"42",
-			"Route parameter extracted correctly",
-		);
-		done();
-	});
 	router.navTo("detail", { id: "42" });
+	await waitForRoute(router, "detail");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/42", "Hash contains route parameter");
 });
 
 QUnit.test("routeMatched event fires", async function (assert: Assert) {
-	const done = assert.async();
+	let firedForProtected = false;
 	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
 		if (event.getParameter("name") === "protected") {
-			assert.ok(true, "routeMatched fired for protected route");
-			done();
+			firedForProtected = true;
 		}
 	});
 	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(firedForProtected, "routeMatched fired for protected route");
 });
 
 QUnit.test("beforeRouteMatched event fires", async function (assert: Assert) {
-	const done = assert.async();
+	let fired = false;
 	router.attachBeforeRouteMatched(() => {
-		assert.ok(true, "beforeRouteMatched fired");
-		done();
+		fired = true;
 	});
 	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(fired, "beforeRouteMatched fired");
 });
 
 QUnit.test("getRoute returns route by name", function (assert: Assert) {
@@ -381,6 +371,50 @@ QUnit.test(
 );
 
 // ============================================================
+// Module: Router lifecycle
+// ============================================================
+QUnit.module("Router - Lifecycle", standardHooks);
+
+QUnit.test("Guards still work after stop and re-initialize", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Guard blocks before stop
+	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Guard blocks before stop");
+
+	// Stop and re-initialize
+	router.stop();
+	assert.notOk(router.isInitialized(), "Router stopped");
+	router.initialize();
+	assert.ok(router.isInitialized(), "Router re-initialized");
+
+	// Guard should still block after restart
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Guard still blocks after stop and re-initialize",
+	);
+});
+
+QUnit.test("Double initialize is safe and guards still work", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	router.initialize(); // second call should be a no-op
+	await waitForRoute(router, "home");
+
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Guard blocks after double initialize",
+	);
+});
+
+// ============================================================
 // Module: Guard allows navigation
 // ============================================================
 QUnit.module("Router - Guard allows navigation", standardHooks);
@@ -390,7 +424,7 @@ QUnit.test("Guard returning true allows navigation", async function (assert: Ass
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.ok(true, "Navigation allowed through guard");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Guard allowed navigation to protected");
 });
 
 QUnit.test("Async guard returning true allows navigation", async function (assert: Assert) {
@@ -401,7 +435,7 @@ QUnit.test("Async guard returning true allows navigation", async function (asser
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.ok(true, "Async guard allowed navigation");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Async guard allowed navigation");
 });
 
 QUnit.test("Promise-like guard returning true allows navigation", async function (assert: Assert) {
@@ -666,17 +700,9 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 		}),
 	);
 	router.initialize();
-
-	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		assert.strictEqual(
-			(event.getParameter("arguments") as DetailRouteArguments).id,
-			"error-403",
-			"Redirect includes route parameters",
-		);
-		done();
-	});
 	router.navTo("forbidden");
+	await waitForRoute(router, "detail");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/error-403", "Redirect landed with correct params");
 });
 
 QUnit.test("Async guard returning GuardRedirect works", async function (assert: Assert) {
@@ -1211,17 +1237,13 @@ QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at targ
 		}),
 	);
 	router.initialize();
-
-	const done = assert.async();
-	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		assert.strictEqual(
-			(event.getParameter("arguments") as DetailRouteArguments).id,
-			"cti-1",
-			"Redirect with componentTargetInfo landed on correct route with params",
-		);
-		done();
-	});
 	router.navTo("forbidden");
+	await waitForRoute(router, "detail");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"detail/cti-1",
+		"Redirect with componentTargetInfo landed with correct params",
+	);
 });
 
 // ============================================================
