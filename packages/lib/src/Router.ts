@@ -119,11 +119,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
-				this.addRouteGuard(routeName, guard.beforeEnter as GuardFn);
+				this.addRouteGuard(routeName, guard.beforeEnter);
 			}
 			if (guard.beforeLeave !== undefined) {
 				hasHandler = true;
-				this.addLeaveGuard(routeName, guard.beforeLeave as LeaveGuardFn);
+				this.addLeaveGuard(routeName, guard.beforeLeave);
 			}
 
 			if (!hasHandler) {
@@ -344,7 +344,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Stop listening to hash changes and invalidate pending async guards.
 	 *
 	 * Ensures an already-running guard cannot commit a stale navigation
-	 * after the router has been stopped.
+	 * after the router has been stopped. Route state (`_currentRoute`,
+	 * `_currentHash`) is intentionally preserved so that a subsequent
+	 * `initialize()` avoids a redundant initial navigation when the hash
+	 * has not changed while the router was stopped.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
 	 */

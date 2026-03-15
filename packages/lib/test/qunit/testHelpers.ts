@@ -89,7 +89,7 @@ export async function assertBlocked(
 	routeName: string,
 	navigate: () => void,
 	message: string,
-	timeout = 500,
+	timeout = 150,
 ): Promise<void> {
 	let matched = false;
 	const route = router.getRoute(routeName)!;
