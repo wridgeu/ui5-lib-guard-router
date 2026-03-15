@@ -60,7 +60,7 @@ describe("FLP preview integration", () => {
 		});
 		expect(triggered).toBe(true);
 
-		// Wait for the FLP to complete cross-app navigation — the hash changes
+		// Wait for the FLP to complete cross-app navigation -- the hash changes
 		// to Shell-home when _handleDataLoss allows navigation through.
 		// This proves the dirty-state filter ran without calling confirm().
 		await browser.waitUntil(

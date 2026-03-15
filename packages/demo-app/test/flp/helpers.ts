@@ -214,7 +214,7 @@ async function resetDirtyState(): Promise<void> {
  * alert, so polling isAlertOpen() is unreliable. Monkey-patching
  * confirm() captures the call and returns false (stay on page).
  *
- * toExternal() schedules navigation asynchronously — the FLP's
+ * toExternal() schedules navigation asynchronously: the FLP's
  * _handleDataLoss filter runs on the next hash change, not in the
  * same tick. So we install the intercept, trigger navigation, then
  * poll for the flag in a separate execute.
@@ -255,7 +255,7 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 		{
 			timeout: 5000,
 			timeoutMsg:
-				"FLP dirty-state provider did not call window.confirm — registerDirtyStateProvider may not have fired",
+				"FLP dirty-state provider did not call window.confirm - registerDirtyStateProvider may not have fired",
 		},
 	);
 

@@ -25,7 +25,7 @@ export function createNavigationLogger(): GuardFn {
  * Guard that requires the user to be logged in.
  * Redirects to "home" if not authenticated.
  *
- * **Reference implementation** — demonstrates a synchronous auth guard.
+ * **Reference implementation** - demonstrates a synchronous auth guard.
  * The demo app uses the async variant {@link createAsyncPermissionGuard} instead.
  *
  * Handles edge case where model property might be undefined (e.g., model not yet loaded).
@@ -128,7 +128,7 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * registered via `sap.ushell.Container.registerDirtyStateProvider`, which
  * shows its own confirmation popup. Without this check the two mechanisms
  * conflict: the FLP popup fires, the user confirms, but the router's leave
- * guard still blocks the hash change and restores the old hash — making it
+ * guard still blocks the hash change and restores the old hash, making it
  * impossible to leave the app.
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
