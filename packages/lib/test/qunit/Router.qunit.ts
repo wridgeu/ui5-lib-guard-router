@@ -1387,6 +1387,21 @@ QUnit.test("Async leave guard returning true allows navigation", async function 
 	assert.ok(true, "Async leave guard allowed navigation");
 });
 
+QUnit.test("Promise-like leave guard returning true allows navigation", async function (assert: Assert) {
+	router.addLeaveGuard("home", (() => ({
+		// oxlint-disable-next-line unicorn/no-thenable
+		then(resolve: (result: boolean) => void) {
+			setTimeout(() => resolve(true), 10);
+		},
+	})) as any);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Promise-like leave guard allowed navigation");
+});
+
 QUnit.test("Async leave guard returning false blocks navigation", async function (assert: Assert) {
 	const leaveGuard: LeaveGuardFn = async () => {
 		await nextTick(10);
