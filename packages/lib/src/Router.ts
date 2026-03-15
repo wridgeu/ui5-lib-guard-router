@@ -69,16 +69,16 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
  * @extends sap.m.routing.Router
  */
 export default class Router extends MobileRouter implements GuardRouter {
-	_globalGuards: GuardFn[] = [];
-	_enterGuards = new Map<string, GuardFn[]>();
-	_leaveGuards = new Map<string, LeaveGuardFn[]>();
-	_currentRoute = "";
-	_currentHash: string | null = null;
-	_pendingHash: string | null = null;
-	_redirecting = false;
-	_parseGeneration = 0;
-	_suppressedHash: string | null = null;
-	_abortController: AbortController | null = null;
+	private _globalGuards: GuardFn[] = [];
+	private _enterGuards = new Map<string, GuardFn[]>();
+	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
+	private _currentRoute = "";
+	private _currentHash: string | null = null;
+	private _pendingHash: string | null = null;
+	private _redirecting = false;
+	private _parseGeneration = 0;
+	private _suppressedHash: string | null = null;
+	private _abortController: AbortController | null = null;
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -375,7 +375,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	_runLeaveGuards(context: GuardContext): boolean | Promise<boolean> {
+	private _runLeaveGuards(context: GuardContext): boolean | Promise<boolean> {
 		const registered = this._leaveGuards.get(this._currentRoute);
 		if (!registered || registered.length === 0) return true;
 
@@ -414,7 +414,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * (e.g., routeMatched) trigger nested navigation, the leave guards will
 	 * run for the correct (new) route rather than the old one.
 	 */
-	_commitNavigation(hash: string, route?: string): void {
+	private _commitNavigation(hash: string, route?: string): void {
 		this._pendingHash = null;
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
@@ -422,7 +422,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Run global guards, then route-specific guards. Stays sync when possible. */
-	_runEnterGuards(
+	private _runEnterGuards(
 		globalGuards: GuardFn[],
 		toRoute: string,
 		context: GuardContext,
@@ -441,7 +441,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Run route-specific guards if any are registered. */
-	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
+	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._enterGuards.has(toRoute)) return true;
 		return this._runGuards(this._enterGuards.get(toRoute)!, context);
 	}
@@ -453,7 +453,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	_runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+	private _runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
 		guards = guards.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
@@ -491,7 +491,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
 	 */
-	async _continueGuardsAsync(
+	private async _continueGuardsAsync(
 		pendingResult: PromiseLike<GuardResult>,
 		guards: GuardFn[],
 		currentIndex: number,
@@ -526,7 +526,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Validate a non-true guard result; invalid values become false. */
-	_validateGuardResult(result: unknown): GuardResult {
+	private _validateGuardResult(result: unknown): GuardResult {
 		if (typeof result === "string" || typeof result === "boolean" || isGuardRedirect(result)) {
 			return result;
 		}
@@ -535,7 +535,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Perform a guard redirect (string route name or GuardRedirect object). */
-	_redirect(target: string | GuardRedirect): void {
+	private _redirect(target: string | GuardRedirect): void {
 		this._pendingHash = null;
 		this._redirecting = true;
 		try {
@@ -550,7 +550,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Clear pending state and restore the previous hash. */
-	_blockNavigation(attemptedHash?: string): void {
+	private _blockNavigation(attemptedHash?: string): void {
 		this._pendingHash = null;
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
@@ -565,7 +565,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Note: _currentRoute intentionally stays unchanged. The blocked navigation
 	 * never committed, so the user remains on the same logical route.
 	 */
-	_restoreHash(hash: string, suppressParse = true): void {
+	private _restoreHash(hash: string, suppressParse = true): void {
 		const hashChanger = this.getHashChanger();
 		if (hashChanger) {
 			this._suppressedHash = suppressParse ? hash : null;

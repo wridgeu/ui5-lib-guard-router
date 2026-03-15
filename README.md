@@ -29,7 +29,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 npm install ui5-lib-guard-router
 ```
 
-If your app uses TypeScript and does not already depend on the UI5 typings, install them too:
+If your app uses TypeScript and does not already depend on the UI5 typings, install them too (`@sapui5/types` works as well):
 
 ```bash
 npm install -D @openui5/types

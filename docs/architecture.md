@@ -127,7 +127,7 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressNextParse?}
+    start(["parse(newHash)"]) --> suppress{_suppressedHash?}
     suppress -- "yes" --> ret(["return"])
     suppress -- "no" --> redir{_redirecting?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
@@ -165,12 +165,12 @@ a newer navigation started, the stale result is discarded.
    navigation completes. When all guards are synchronous (the common case), the entire
    guard-check + route-activation happens in the same tick.
 
-2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressNextParse` mechanism
-   depends on this: `_restoreHash()` sets the flag, calls `replaceHash`, and the resulting
-   synchronous `parse()` sees the flag and returns immediately. If UI5 ever changes
-   `replaceHash` to fire `hashChanged` asynchronously, the flag would be reset before
-   `parse()` can check it, causing a double navigation. A QUnit test validates this
-   assumption.
+2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressedHash` mechanism
+   depends on this: `_restoreHash()` stores the hash to suppress, calls `replaceHash`,
+   and the resulting synchronous `parse()` sees the stored hash and returns immediately.
+   If UI5 ever changes `replaceHash` to fire `hashChanged` asynchronously, the stored
+   hash would be cleared before `parse()` can check it, causing a double navigation.
+   A QUnit test validates this assumption.
 
 3. **Redirect targets bypass guards.** When a guard redirects from route A to route B,
    the resulting `navTo` triggers a re-entrant `parse()` with `_redirecting = true`,
@@ -264,18 +264,18 @@ that was running when the user navigated back to the original hash.
 
 ## Internal State
 
-| Field                | Type                          | Purpose                                       |
-| -------------------- | ----------------------------- | --------------------------------------------- |
-| `_globalGuards`      | `GuardFn[]`                   | Guards that run for every navigation          |
-| `_enterGuards`       | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
-| `_leaveGuards`       | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
-| `_currentRoute`      | `string`                      | Name of the currently active route            |
-| `_currentHash`       | `string \| null`              | Hash of the active route, `null` before first |
-| `_pendingHash`       | `string \| null`              | Hash being evaluated by async guards          |
-| `_redirecting`       | `boolean`                     | True during guard-triggered redirect          |
-| `_parseGeneration`   | `number`                      | Monotonic counter for async invalidation      |
-| `_suppressNextParse` | `boolean`                     | Suppresses parse from `_restoreHash`          |
-| `_abortController`   | `AbortController \| null`     | Aborted when navigation is superseded         |
+| Field              | Type                          | Purpose                                       |
+| ------------------ | ----------------------------- | --------------------------------------------- |
+| `_globalGuards`    | `GuardFn[]`                   | Guards that run for every navigation          |
+| `_enterGuards`     | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
+| `_leaveGuards`     | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
+| `_currentRoute`    | `string`                      | Name of the currently active route            |
+| `_currentHash`     | `string \| null`              | Hash of the active route, `null` before first |
+| `_pendingHash`     | `string \| null`              | Hash being evaluated by async guards          |
+| `_redirecting`     | `boolean`                     | True during guard-triggered redirect          |
+| `_parseGeneration` | `number`                      | Monotonic counter for async invalidation      |
+| `_suppressedHash`  | `string \| null`              | Hash to suppress in the next `parse()` call   |
+| `_abortController` | `AbortController \| null`     | Aborted when navigation is superseded         |
 
 ## Monorepo Tooling
 

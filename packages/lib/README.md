@@ -24,7 +24,7 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
-If your app uses TypeScript and does not already depend on the UI5 typings, install them too:
+If your app uses TypeScript and does not already depend on the UI5 typings, install them too (`@sapui5/types` works as well):
 
 ```bash
 npm install -D @openui5/types
@@ -139,14 +139,14 @@ All methods return `this` for chaining.
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                         |
-| ------------- | -------------------------------------------------- | --------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)               |
-| `toHash`      | `string`                                           | Raw hash being navigated to                         |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                             |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)      |
-| `fromHash`    | `string`                                           | Current hash                                        |
-| `signal`      | `AbortSignal`                                      | Aborted when a newer navigation supersedes this one |
+| Property      | Type                                               | Description                                                       |
+| ------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| `toRoute`     | `string`                                           | Target route name (empty if no match)                             |
+| `toHash`      | `string`                                           | Raw hash being navigated to                                       |
+| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                           |
+| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                    |
+| `fromHash`    | `string`                                           | Current hash                                                      |
+| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()` |
 
 ### Return values
 

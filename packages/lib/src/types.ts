@@ -43,7 +43,7 @@ export interface GuardContext {
 	fromHash: string;
 	/**
 	 * Abort signal for this navigation. Aborted when a newer navigation
-	 * supersedes this one or when the router is destroyed.
+	 * supersedes this one, or when the router is stopped or destroyed.
 	 * Pass to `fetch()` or other cancellable APIs to avoid wasted work.
 	 */
 	signal: AbortSignal;
