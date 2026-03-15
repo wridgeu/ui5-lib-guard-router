@@ -325,41 +325,34 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-When you combine FLP dirty-state handling with a route leave guard, coordinate them so the leave guard only bypasses when the FLP dirty provider has actually fired. A bare `if (context.toRoute === "") return true` is too broad -- it would also let dirty users escape to invalid hashes:
+#### Combining leave guards with FLP dirty-state protection
+
+When you use both a route leave guard and `registerDirtyStateProvider`, the two handle separate scopes and do not need to coordinate in application code:
+
+- **Leave guard** protects **in-app** navigation (route to route within your app)
+- **Dirty-state provider** protects **cross-app** navigation (shell home, other tiles, browser close)
+
+In production FLP, `ShellNavigationHashChanger` intercepts cross-app navigation **before** it reaches the app router, so the leave guard never runs for cross-app hashes. The two mechanisms never overlap:
 
 ```typescript
-let flpDirtyNavPending = false;
+// 1. Leave guard: blocks in-app navigation when dirty
+router.addRouteGuard("editOrder", {
+	beforeLeave: () => formModel.getProperty("/isDirty") !== true,
+});
 
-// 1. Dirty-state provider: tells FLP about unsaved changes
+// 2. Dirty-state provider: tells FLP about unsaved changes for cross-app
 const dirtyProvider = (navigationContext) => {
 	if (navigationContext?.isCrossAppNavigation === false) {
 		return false; // in-app navigation handled by leave guard
 	}
-	const isDirty = formModel.getProperty("/isDirty") === true;
-	if (isDirty) {
-		flpDirtyNavPending = true;
-		setTimeout(() => {
-			flpDirtyNavPending = false;
-		}, 0);
-	}
-	return isDirty;
+	return formModel.getProperty("/isDirty") === true;
 };
 sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-
-// 2. Leave guard: blocks in-app dirty navigation, defers to FLP for cross-app
-router.addRouteGuard("editOrder", {
-	beforeLeave: (context) => {
-		if (context.toRoute === "" && flpDirtyNavPending) {
-			return true; // FLP dirty provider handled this cross-app navigation
-		}
-		return formModel.getProperty("/isDirty") !== true;
-	},
-});
 ```
 
-The flag works because the dirty provider, `confirm()`, hash change, and guard all execute in the same synchronous chain. `setTimeout(..., 0)` clears the flag on the next microtask.
+No `toRoute` check or FLP detection is needed in the leave guard. The leave guard protects in-app route changes; the FLP dirty-state provider protects cross-app navigation, browser close, and the shell home button. They never overlap in production.
 
-This split keeps responsibilities clear: leave guards protect in-app route changes, while FLP APIs protect cross-app navigation, browser close, and the shell home button.
+> **FLP sandbox note**: The `fiori-tools-preview` sandbox used during local development has a simplified hash changer that passes cross-app hashes to the app router, unlike production FLP. This can cause a "double-block" where the user confirms in the FLP dialog but the leave guard also blocks. This is a sandbox limitation, not something application code should work around. See `docs/architecture.md` for details.
 
 See the [FLP Dirty State Research](../../docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
 

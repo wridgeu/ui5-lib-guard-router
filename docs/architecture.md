@@ -280,52 +280,48 @@ mechanisms coexist:
 | Router leave guard           | In-app navigation | Silent block + hash restore   |
 | `registerDirtyStateProvider` | Cross-app (FLP)   | Native FLP confirmation popup |
 
-**Key design rule:** leave guards must not block cross-app navigation. The FLP
-handles that case with its own confirmation dialog via `registerDirtyStateProvider`.
-If a leave guard also blocks the hash change triggered by the FLP, the two
-mechanisms conflict: the user confirms in the FLP popup, but the router restores
-the hash, making it impossible to leave the app.
+**Key design rule:** the leave guard and the dirty-state provider handle
+different scopes and do not need to coordinate in application code.
 
-To avoid the double-block conflict, the leave guard must allow through only
-when the FLP dirty-state provider has actually fired for this navigation.
-A simple `context.toRoute === ""` check is not enough -- it would also let
-dirty users escape to invalid hashes. Instead, coordinate with the dirty
-provider via a synchronous flag:
+### Production FLP
+
+In production, `ShellNavigationHashChanger` intercepts cross-app navigation
+**before** it reaches the app router. The leave guard's `parse()` is never
+called for cross-app hashes, so no conflict arises. The dirty-state provider
+handles cross-app dirty UX, the leave guard handles in-app dirty UX, and
+the two never overlap:
 
 ```ts
-let flpDirtyNavPending = false;
-
-// Dirty-state provider: called by FLP before confirm() dialog
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) return false;
-	const isDirty = formModel.getProperty("/isDirty") === true;
-	if (isDirty) {
-		flpDirtyNavPending = true;
-		setTimeout(() => {
-			flpDirtyNavPending = false;
-		}, 0);
-	}
-	return isDirty;
-};
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-
-// Leave guard: only bypasses when the dirty provider actually fired
+// Leave guard: blocks in-app navigation when dirty
 const leaveGuard: LeaveGuardFn = (context) => {
-	if (context.toRoute === "" && flpDirtyNavPending) {
-		return true; // FLP confirmed this cross-app navigation
-	}
 	return !formModel.getProperty("/isDirty");
 };
+
+// Dirty-state provider: tells FLP about unsaved changes for cross-app
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) return false;
+	return formModel.getProperty("/isDirty") === true;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 ```
 
-The flag works because the dirty provider, `confirm()`, hash change, and
-`parse()` all run in the same synchronous chain. `setTimeout(..., 0)` clears
-the flag on the next microtask, after the guard has already read it.
+No `toRoute` check, no flags, no FLP detection -- just a simple dirty check.
 
-The `toRoute` value is derived from `getRouteInfoByHash()`. When the FLP changes
-the hash to an intent like `Shell-home`, no route matches, so `toRoute` is the
-empty string. In standalone mode or for invalid hashes within FLP, the dirty
-provider never fires and the guard blocks normally.
+### FLP sandbox/preview (development only)
+
+The `fiori-tools-preview` middleware creates a simplified FLP sandbox for local
+development. Unlike production, its hash changer **does** pass cross-app hashes
+to the app router's `parse()`. This means a leave guard that blocks when dirty
+would also block after the user confirms the FLP dirty dialog, creating a
+double-block where the user can never leave.
+
+This is a known limitation of the FLP preview sandbox, not something apps need
+to work around. The sandbox's simplified hash changer does not match production
+behavior, and adding bypass logic (e.g., checking `sap.ushell.Container` or
+`context.toRoute === ""`) would weaken the guard for invalid hashes in all
+environments. The demo app's E2E tests are designed around this: the dirty
+cross-app test has `confirm()` return `false` (user cancels), which avoids
+the double-block scenario entirely.
 
 ## Internal State
 

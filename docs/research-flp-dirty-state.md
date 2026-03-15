@@ -320,41 +320,31 @@ Because of the sandbox behavior, leave guards that block unconditionally create 
 3. The router's `parse()` fires → leave guard blocks → restores the hash
 4. The user can never leave the app
 
-The fix is to coordinate the leave guard with the dirty-state provider via a synchronous flag. A bare `if (context.toRoute === "") return true` is too broad -- it would also let dirty users escape to invalid hashes in the FLP sandbox. Instead, the dirty-state provider sets a flag when FLP calls it for a dirty form, and the leave guard only bypasses when that flag is set:
+The fix is straightforward: no workaround is needed in the leave guard. In **production FLP**, `ShellNavigationHashChanger` intercepts cross-app navigation before it reaches the app router. The leave guard never runs for cross-app hashes, so no conflict arises. The leave guard and dirty-state provider handle different scopes and never overlap:
 
 ```typescript
-let flpDirtyNavPending = false;
-
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) return false;
-	const isDirty = formModel.getProperty("/isDirty") === true;
-	if (isDirty) {
-		flpDirtyNavPending = true;
-		setTimeout(() => {
-			flpDirtyNavPending = false;
-		}, 0);
-	}
-	return isDirty;
-};
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-
+// Leave guard: blocks in-app navigation when dirty
 const leaveGuard: LeaveGuardFn = (context) => {
-	if (context.toRoute === "" && flpDirtyNavPending) {
-		return true; // FLP dirty provider handled this
-	}
 	return !formModel.getProperty("/isDirty");
 };
+
+// Dirty-state provider: tells FLP about unsaved changes for cross-app
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) return false;
+	return formModel.getProperty("/isDirty") === true;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 ```
 
-The flag works because the entire chain -- dirty provider, `confirm()`, hash change, `parse()`, guard -- executes synchronously. `setTimeout(..., 0)` clears the flag on the next microtask.
+No `toRoute` check, no flags, no FLP detection in the leave guard.
 
-| Environment         | Cross-app navigation triggers `parse()`? | `toRoute` value | Leave guard behavior     |
-| ------------------- | ---------------------------------------- | --------------- | ------------------------ |
-| Production FLP      | No (`ShellNavigationHashChanger` blocks) | N/A             | Never reached            |
-| FLP sandbox         | Yes (simplified hash changer)            | `""`            | Allows if provider fired |
-| Standalone (no FLP) | Only via manual hash change              | `""`            | Blocks if dirty          |
+| Environment         | Cross-app navigation triggers `parse()`? | `toRoute` value | Leave guard behavior |
+| ------------------- | ---------------------------------------- | --------------- | -------------------- |
+| Production FLP      | No (`ShellNavigationHashChanger` blocks) | N/A             | Never reached        |
+| FLP sandbox         | Yes (simplified hash changer)            | `""`            | Blocks if dirty      |
+| Standalone (no FLP) | Only via manual hash change              | `""`            | Blocks if dirty      |
 
-The `toRoute` value is derived from `Router.getRouteInfoByHash()`, a stable public API on `sap.ui.core.routing.Router`. Any hash that does not match a configured route pattern produces an empty string.
+In the **FLP sandbox/preview** used during development, the simplified hash changer does pass cross-app hashes to `parse()`, which can cause a double-block when the user confirms the FLP dirty dialog but the leave guard also blocks. This is a known limitation of the sandbox's simplified hash changer, not something application code should work around. Adding bypass logic (e.g., `if (context.toRoute === "") return true`) would weaken the guard for invalid hashes in all environments.
 
 ## Complementary Usage Pattern
 
@@ -369,38 +359,23 @@ init(): void {
     const formModel = new JSONModel({ isDirty: false });
     this.setModel(formModel, "form");
 
-    // Synchronous flag: set by the dirty provider, read by the leave guard.
-    // Cleared on the next microtask after the synchronous guard chain.
-    let flpDirtyNavPending = false;
+    // 1. Leave guard: protects in-app navigation
+    router.addRouteGuard("editOrder", {
+        beforeLeave: () => !formModel.getProperty("/isDirty"),
+    });
 
-    // 1. FLP dirty state provider: protects cross-app navigation
-    //    Sets the flag when dirty so the leave guard knows FLP is handling it.
+    // 2. FLP dirty state provider: protects cross-app navigation
+    //    In production FLP, ShellNavigationHashChanger ensures cross-app
+    //    hashes never reach the app router, so the two never conflict.
     if (sap.ushell?.Container) {
         this._dirtyProvider = (navigationContext) => {
             if (navigationContext?.isCrossAppNavigation === false) {
                 return false;
             }
-            const isDirty = formModel.getProperty("/isDirty") === true;
-            if (isDirty) {
-                flpDirtyNavPending = true;
-                setTimeout(() => { flpDirtyNavPending = false; }, 0);
-            }
-            return isDirty;
+            return formModel.getProperty("/isDirty") === true;
         };
         sap.ushell.Container.registerDirtyStateProvider(this._dirtyProvider);
     }
-
-    // 2. Leave guard: protects in-app navigation
-    //    Only bypasses when the dirty provider actually fired for this
-    //    navigation cycle, avoiding false bypass for invalid hashes.
-    router.addRouteGuard("editOrder", {
-        beforeLeave: (context) => {
-            if (context.toRoute === "" && flpDirtyNavPending) {
-                return true;
-            }
-            return !formModel.getProperty("/isDirty");
-        },
-    });
 
     router.initialize();
 }

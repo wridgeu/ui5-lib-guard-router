@@ -1,5 +1,5 @@
 import JSONModel from "sap/ui/model/json/JSONModel";
-import { markFlpDirtyNavPending, registerDirtyStateProvider } from "../flp/ContainerAdapter";
+import { registerDirtyStateProvider } from "../flp/ContainerAdapter";
 import { syncRuntimeModel } from "../model/runtime";
 import { attachHashChanged } from "../routing/hashNavigation";
 
@@ -13,11 +13,7 @@ export default class RuntimeCoordinator {
 			return false;
 		}
 
-		const isDirty = this._formModel.getProperty("/isDirty") === true;
-		if (isDirty) {
-			markFlpDirtyNavPending();
-		}
-		return isDirty;
+		return this._formModel.getProperty("/isDirty") === true;
 	};
 
 	private _detachHashChanged: (() => void) | null = null;

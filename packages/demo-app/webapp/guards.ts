@@ -1,7 +1,6 @@
 import Log from "sap/base/Log";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard/router/types";
-import { isFlpDirtyNavPending } from "./flp/ContainerAdapter";
 
 const LOG_COMPONENT = "demo.app.guards";
 
@@ -124,23 +123,20 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * Only bypasses the dirty check when the FLP dirty-state provider has
- * actually fired for this navigation cycle (`isFlpDirtyNavPending()`).
- * This means:
- * - FLP cross-app navigation where the user confirmed the dirty dialog
- *   is allowed through (FLP already handled the UX).
- * - Invalid hashes (no route match) are blocked when dirty, even inside
- *   FLP, because the dirty provider does not fire for manual hash edits.
- * - Standalone mode always blocks when dirty (no FLP provider to fire).
+ * No FLP-specific bypass is needed here. In production FLP, cross-app
+ * navigation is intercepted by the `ShellNavigationHashChanger` before
+ * it reaches the app router, so this guard never runs for cross-app
+ * hashes. The FLP dirty-state provider (registered separately via
+ * `registerDirtyStateProvider`) handles cross-app dirty UX with its
+ * own confirmation popup.
+ *
+ * In the FLP sandbox/preview used during development, the simplified
+ * hash changer does pass cross-app hashes to `parse()`. See
+ * docs/architecture.md for a detailed explanation of the production
+ * vs sandbox difference and why no workaround is needed in app code.
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
-		// The FLP dirty-state provider sets this flag synchronously before
-		// the leave guard runs. If it fired, FLP is handling the cross-app
-		// dirty UX -- allow through to avoid double-blocking.
-		if (context.toRoute === "" && isFlpDirtyNavPending()) {
-			return true;
-		}
 		const isDirty = formModel.getProperty("/isDirty");
 		if (isDirty === true) {
 			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
