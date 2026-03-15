@@ -1,8 +1,8 @@
 # Research: FLP Data Loss Prevention (Dirty State)
 
-> **Date**: 2026-02-08
+> **Date**: 2026-02-08 (updated 2026-03-15)
 > **UI5 version analyzed**: SAPUI5 1.144.0
-> **Context**: Understanding how FLP's built-in dirty state protection works, its scope, and how it complements the leave guards in this library.
+> **Context**: Understanding how FLP's built-in dirty state protection works, its scope, and how it complements the leave guards in this library. Updated with production FLP vs sandbox preview behavior and the leave guard interaction pattern.
 
 ## Summary
 
@@ -167,6 +167,64 @@ When the hash changes but the intent stays the same (inner-app navigation), the 
 
 This is by design — FLP assumes apps handle their own internal routing. This is exactly the gap that leave guards fill.
 
+## Production FLP vs Sandbox Preview
+
+The `ShellNavigationHashChanger` replacement is central to understanding how leave guards behave in each environment.
+
+### Production FLP
+
+In production, the FLP replaces the default `sap.ui.core.routing.HashChanger` with its own `ShellNavigationHashChanger`. This hash changer splits the URL into two parts:
+
+- **Shell hash**: `#SemanticObject-action` — managed by the FLP
+- **App hash**: the fragment after `&/` — managed by the app's router
+
+The app's router only receives the app hash portion. When the user clicks the FLP home button or a different app tile, the shell hash changes but the app hash does not. The app's `Router.parse()` is never called for cross-app navigation. The FLP's `_disableSourceAppRouter` explicitly prevents the source app's router from reacting.
+
+**Consequence**: Leave guards are never triggered by cross-app navigation in production. The FLP's `_handleDataLoss` filter handles dirty state before the hash changes.
+
+### FLP Sandbox Preview (`fiori-tools-preview`)
+
+The sandbox preview provided by `@sap/ux-ui5-tooling` is a lightweight FLP emulation. It boots `sap.ushell` with a mock container and minimal shell services. The hash changer behavior differs from production:
+
+- The sandbox does not fully replicate the `ShellNavigationHashChanger` split
+- Cross-app navigation (like returning to the sandbox home) changes the hash in a way that the app's router **does** see via `parse()`
+- The hash changes to an FLP-internal value (e.g., `Shell-home`) that does not match any of the app's configured routes
+
+**Consequence**: Leave guards ARE triggered by cross-app navigation in the sandbox. The guard receives a `GuardContext` where `toRoute` is the empty string (no route matched the FLP's internal hash).
+
+### Detecting cross-app navigation in leave guards
+
+Because of the sandbox behavior, leave guards that block unconditionally create a conflict with the FLP's dirty state mechanism:
+
+1. FLP calls `registerDirtyStateProvider` callback → returns `true` → shows confirmation popup
+2. User confirms → FLP changes the hash
+3. The router's `parse()` fires → leave guard blocks → restores the hash
+4. The user can never leave the app
+
+The fix is to check `context.toRoute` in the leave guard. When the hash does not match any configured route, `getRouteInfoByHash()` returns no match and `toRoute` is the empty string. This reliably identifies navigation targets outside the app's route table — whether that is an FLP intent, a browser back to a previous app, or any other external hash change.
+
+```typescript
+const leaveGuard: LeaveGuardFn = (context) => {
+	// Empty toRoute = hash doesn't match any configured route.
+	// This is cross-app navigation (FLP shell back, tile click, etc.)
+	// or an external hash change. Let the FLP handle it.
+	if (context.toRoute === "") {
+		return true;
+	}
+	return !formModel.getProperty("/isDirty");
+};
+```
+
+This check is not specific to the FLP sandbox — it works identically in all environments:
+
+| Environment         | Cross-app navigation triggers `parse()`? | `toRoute` value | Leave guard behavior    |
+| ------------------- | ---------------------------------------- | --------------- | ----------------------- |
+| Production FLP      | No (`ShellNavigationHashChanger` blocks) | N/A             | Never reached           |
+| FLP sandbox         | Yes (simplified hash changer)            | `""`            | Returns `true` (allows) |
+| Standalone (no FLP) | Only via manual hash change              | `""`            | Returns `true` (allows) |
+
+The `toRoute` value is derived from `Router.getRouteInfoByHash()`, a stable public API on `sap.ui.core.routing.Router`. Any hash that does not match a configured route pattern produces an empty string.
+
 ## Complementary Usage Pattern
 
 For complete data loss prevention in a Fiori Launchpad app:
@@ -175,19 +233,33 @@ For complete data loss prevention in a Fiori Launchpad app:
 // Component.ts
 init(): void {
     super.init();
-    const router = this.getRouter() as unknown as GuardRouter;
+    const router = this.getRouter() as GuardRouter;
 
     // 1. Leave guard: protects in-app navigation
+    //    Allows cross-app navigation (toRoute === "") so the FLP
+    //    dirty state provider handles that case without conflict.
     const formModel = new JSONModel({ isDirty: false });
     this.setModel(formModel, "form");
 
-    router.addLeaveGuard("editOrder", (context) => {
-        return !formModel.getProperty("/isDirty");
+    router.addRouteGuard("editOrder", {
+        beforeLeave: (context) => {
+            if (context.toRoute === "") {
+                return true;
+            }
+            return !formModel.getProperty("/isDirty");
+        },
     });
 
     // 2. FLP dirty state provider: protects cross-app navigation
+    //    Only reports dirty for cross-app navigation; inner-app
+    //    navigation is handled by the leave guard above.
     if (sap.ushell?.Container) {
-        this._dirtyProvider = () => formModel.getProperty("/isDirty");
+        this._dirtyProvider = (navigationContext) => {
+            if (navigationContext?.isCrossAppNavigation === false) {
+                return false;
+            }
+            return formModel.getProperty("/isDirty") === true;
+        };
         sap.ushell.Container.registerDirtyStateProvider(this._dirtyProvider);
     }
 
@@ -205,10 +277,13 @@ destroy(): void {
 
 ## Verification Sources
 
-All findings were verified by reading the actual source code from the UI5 CDN:
+All findings were verified by reading the unminified debug source files hosted on the public SAPUI5 CDN. Each link below opens directly in the browser. Use the browser's find function (`Ctrl+F`) with the search terms listed.
 
-- [`sap/ushell/Container-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/Container-dbg.js) — `setDirtyFlag`, `getDirtyFlag`, `registerDirtyStateProvider`, `deregisterDirtyStateProvider`, `getDirtyFlagsAsync`, `setAsyncDirtyStateProvider`
-- [`sap/ushell/renderer/Shell-dbg.controller.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js) — `_handleDataLoss`, `_disableSourceAppRouter`
-- [`sap/ushell/services/ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js) — `NavigationFilterStatus`, `treatHashChanged`, inner-app vs cross-app detection
+- [`sap/ushell/Container-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/Container-dbg.js)
+  Search for: `setDirtyFlag`, `getDirtyFlag`, `registerDirtyStateProvider`, `deregisterDirtyStateProvider`, `getDirtyFlagsAsync`, `setAsyncDirtyStateProvider`, `NavigationContext`
+- [`sap/ushell/renderer/Shell-dbg.controller.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js)
+  Search for: `_handleDataLoss`, `_disableSourceAppRouter`, `NavigationFilterStatus`
+- [`sap/ushell/services/ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js)
+  Search for: `isInnerAppNavigation`, `treatHashChanged`, `NavigationFilterStatus`
 
-> **Note**: `sap.ushell` is part of SAPUI5 / Fiori Launchpad, not OpenUI5. The UI5 MCP API reference tool cannot resolve `sap.ushell` symbols since this project uses OpenUI5. All API details were obtained from the debug source files on the CDN.
+> **Note**: `sap.ushell` is part of SAPUI5, not OpenUI5. These debug files are publicly accessible on the CDN without authentication. The `-dbg.js` suffix indicates the unminified, readable version of the source.
