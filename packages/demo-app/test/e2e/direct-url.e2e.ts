@@ -84,7 +84,12 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/protected";
 		});
 
-		// Should end up on Home (all guarded while logged out)
+		// Should end up on Home (all guarded while logged out).
+		// waitForPage checks DOM visibility + router settled (_pendingHash null).
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		// Verify hash settled to a home-route value (not stuck on a guarded route)
+		const hash = await browser.execute(() => window.location.hash);
+		expect(["", "#", "#/"].includes(hash)).toBe(true);
 	});
 });

@@ -303,24 +303,11 @@ The app's router only receives the app hash portion. When the user clicks the FL
 
 ### FLP Sandbox Preview (`fiori-tools-preview`)
 
-The sandbox preview provided by `@sap/ux-ui5-tooling` is a lightweight FLP emulation. It boots `sap.ushell` with a mock container and minimal shell services. The hash changer behavior differs from production:
+The sandbox preview provided by `@sap/ux-ui5-tooling` is a lightweight FLP emulation. It boots `sap.ushell` with a mock container and minimal shell services. While the sandbox does not fully replicate the `ShellNavigationHashChanger` split, cross-app navigation via `toExternal()` (FLP home button, tile clicks) still operates at the shell level and does not pass through the app router's `parse()`.
 
-- The sandbox does not fully replicate the `ShellNavigationHashChanger` split
-- Cross-app navigation (like returning to the sandbox home) changes the hash in a way that the app's router **does** see via `parse()`
-- The hash changes to an FLP-internal value (e.g., `Shell-home`) that does not match any of the app's configured routes
+### Leave guards and cross-app navigation
 
-**Consequence**: Leave guards ARE triggered by cross-app navigation in the sandbox. The guard receives a `GuardContext` where `toRoute` is the empty string (no route matched the FLP's internal hash).
-
-### Detecting cross-app navigation in leave guards
-
-Because of the sandbox behavior, leave guards that block unconditionally create a conflict with the FLP's dirty state mechanism:
-
-1. FLP calls `registerDirtyStateProvider` callback → returns `true` → shows confirmation popup
-2. User confirms → FLP changes the hash
-3. The router's `parse()` fires → leave guard blocks → restores the hash
-4. The user can never leave the app
-
-The fix is straightforward: no workaround is needed in the leave guard. In **production FLP**, `ShellNavigationHashChanger` intercepts cross-app navigation before it reaches the app router. The leave guard never runs for cross-app hashes, so no conflict arises. The leave guard and dirty-state provider handle different scopes and never overlap:
+No bypass logic or FLP detection is needed in leave guards. In both production and sandbox, `toExternal()` navigates at the shell level, so the leave guard never runs for cross-app hashes. The leave guard and dirty-state provider handle different scopes and never overlap:
 
 ```typescript
 // Leave guard: blocks in-app navigation when dirty

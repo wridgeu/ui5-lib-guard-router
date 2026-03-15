@@ -52,7 +52,15 @@ export function nextTick(ms = 50): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Wait for a single patternMatched on `routeName`, then detach. */
+/**
+ * Wait for a single patternMatched on `routeName`, then detach.
+ *
+ * Note: this waits for future events only. Tests must call `waitForRoute`
+ * before or immediately after `navTo()`. This is safe because the router
+ * config uses `async: true`, which defers patternMatched to a microtask.
+ * If the config were changed to sync routing, the event would fire inside
+ * `navTo()` before the listener is attached, and these tests would hang.
+ */
 export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1000): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const route = router.getRoute(routeName);

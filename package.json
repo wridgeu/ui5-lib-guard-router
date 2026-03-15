@@ -16,8 +16,8 @@
 		"clean": "npm run clean --workspaces",
 		"fmt": "oxfmt .",
 		"fmt:check": "oxfmt --check .",
-		"lint": "oxlint packages/ scripts/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-		"lint:fix": "oxlint packages/ scripts/ --tsconfig tsconfig.base.json --import-plugin --fix",
+		"lint": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+		"lint:fix": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --fix",
 		"check": "npm run fmt:check && npm run lint && npm run typecheck",
 		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.test.json",
 		"build": "npm run build --workspace=packages/lib",
@@ -46,6 +46,10 @@
 			"oxfmt"
 		],
 		"scripts/**/*.{js,mjs,ts}": [
+			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+			"oxfmt"
+		],
+		"tools/**/*.{js,mjs,ts}": [
 			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
 			"oxfmt"
 		],
