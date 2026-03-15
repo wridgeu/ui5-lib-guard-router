@@ -453,30 +453,24 @@ QUnit.test("Double initialize is safe and guards still work", async function (as
 	);
 });
 
-QUnit.test(
-	"Re-initialize after stop skips redundant initial navigation for unchanged hash",
-	async function (assert: Assert) {
-		router.initialize();
-		await waitForRoute(router, "home");
+QUnit.test("Re-initialize after stop fires routeMatched like native router", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
 
-		router.stop();
-		assert.notOk(router.isInitialized(), "Router stopped");
+	router.stop();
+	assert.notOk(router.isInitialized(), "Router stopped");
 
-		let homeMatchedAgain = false;
-		const homeRoute = router.getRoute("home")!;
-		const handler = (): void => {
-			homeMatchedAgain = true;
-		};
-		homeRoute.attachPatternMatched(handler);
+	router.initialize();
+	assert.ok(router.isInitialized(), "Router re-initialized");
 
-		router.initialize();
-		assert.ok(router.isInitialized(), "Router re-initialized");
-
-		await nextTick(150);
-		homeRoute.detachPatternMatched(handler);
-		assert.notOk(homeMatchedAgain, "Re-initialize with unchanged hash did not fire redundant routeMatched");
-	},
-);
+	// Native router fires routeMatched on re-init; guard router must match.
+	await waitForRoute(router, "home");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"",
+		"Re-initialize fires routeMatched for current hash (native parity)",
+	);
+});
 
 // ============================================================
 // Module: Guard allows navigation

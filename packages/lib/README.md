@@ -176,10 +176,10 @@ Leave guards cannot redirect. For redirection logic, use enter guards on the tar
 
 ### Lifecycle
 
-| Method      | Behavior                                                                                                                                                                   |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets internal flags, preserves route state so a subsequent `initialize()` avoids a redundant initial navigation |
-| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                            |
+| Method      | Behavior                                                                                                                                                                                      |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets guard state. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
+| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                               |
 
 ### Execution order
 

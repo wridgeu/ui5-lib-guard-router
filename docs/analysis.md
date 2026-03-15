@@ -288,7 +288,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 ### 3.4 Guard API
 
 ```typescript
-const router = this.getRouter() as unknown as GuardRouter;
+const router = this.getRouter() as GuardRouter;
 
 // Global guard: runs for every navigation
 router.addGuard((context) => {

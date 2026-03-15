@@ -167,6 +167,31 @@ QUnit.test("initialize/stop behavior matches", function (assert: Assert) {
 	assert.notOk(nativeRouter.isInitialized(), "native router stopped");
 });
 
+QUnit.test("stop + initialize fires routeMatched identically", async function (assert: Assert) {
+	extRouter.initialize();
+	nativeRouter.initialize();
+	await nextTick(100);
+
+	extRouter.stop();
+	nativeRouter.stop();
+
+	let extFired = false;
+	let nativeFired = false;
+	extRouter.attachRouteMatched(() => {
+		extFired = true;
+	});
+	nativeRouter.attachRouteMatched(() => {
+		nativeFired = true;
+	});
+
+	extRouter.initialize();
+	nativeRouter.initialize();
+	await nextTick(100);
+
+	assert.ok(nativeFired, "native router fires routeMatched on re-init");
+	assert.ok(extFired, "guard router fires routeMatched on re-init (native parity)");
+});
+
 // ============================================================
 // Module: Event firing parity
 // ============================================================

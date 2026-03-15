@@ -14,13 +14,17 @@ describe("FLP cross-app navigation (isolated session)", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// Monkey-patch confirm to return true (user confirms). Headless Chrome
-		// returns false for confirm() by default, so without this the FLP
-		// dialog would block the navigation.
+		// Monkey-patch confirm to return true (user confirms) and track
+		// whether it was called. Headless Chrome returns false for confirm()
+		// by default, so without this the FLP dialog would block.
 		await browser.execute(() => {
-			const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
+			const w = window as Window & { __flpConfirmCalled?: boolean; __flpOriginalConfirm?: typeof confirm };
+			w.__flpConfirmCalled = false;
 			w.__flpOriginalConfirm = window.confirm;
-			window.confirm = (): boolean => true;
+			window.confirm = (): boolean => {
+				w.__flpConfirmCalled = true;
+				return true;
+			};
 		});
 
 		try {
@@ -36,6 +40,17 @@ describe("FLP cross-app navigation (isolated session)", () => {
 			});
 			expect(triggered).toBe(true);
 
+			// Verify the dirty-state provider actually triggered the confirm dialog.
+			await browser.waitUntil(
+				async () => {
+					return browser.execute(() => {
+						return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
+					});
+				},
+				{ timeout: 5000, timeoutMsg: "FLP dirty-state provider did not call window.confirm" },
+			);
+
+			// Cross-app navigation completes to Shell-home after confirmation.
 			await browser.waitUntil(
 				async () => {
 					const hash = await browser.execute(() => window.location.hash);

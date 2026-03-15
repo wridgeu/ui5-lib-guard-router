@@ -342,13 +342,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Stop listening to hash changes and invalidate pending async guards.
+	 * Stop listening to hash changes and reset guard state.
 	 *
-	 * Ensures an already-running guard cannot commit a stale navigation
-	 * after the router has been stopped. Route state (`_currentRoute`,
-	 * `_currentHash`) is intentionally preserved so that a subsequent
-	 * `initialize()` avoids a redundant initial navigation when the hash
-	 * has not changed while the router was stopped.
+	 * Resets `_currentRoute` and `_currentHash` so that a subsequent
+	 * `initialize()` re-parses the current hash and fires `routeMatched`,
+	 * matching the native `sap.m.routing.Router` behavior.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
 	 */
@@ -356,6 +354,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
+		this._currentRoute = "";
+		this._currentHash = null;
 		super.stop();
 		return this;
 	}
