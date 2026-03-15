@@ -20,15 +20,23 @@ ui5-lib-guard-router/
     |       |-- wdio-qunit.conf.ts  runs QUnit in headless Chrome
     |
     |-- demo-app/                   demo application
-        |-- ui5.yaml                serves lib + app with transpile
+        |-- ui5.yaml                serves lib + app with transpile (OpenUI5)
+        |-- ui5-flp.yaml            FLP preview config (SAPUI5, sap.ushell)
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
-        |   |-- controller/         Home, Protected, Forbidden
+        |   |-- controller/         Home, Protected, Forbidden, NotFound
         |   |-- view/               XML views
+        |   |-- guards.ts           guard factories (auth, dirty form, forbidden)
+        |   |-- demo/               RuntimeCoordinator, ScenarioRunner
+        |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
+        |   |-- model/              runtime model factory
+        |   |-- routing/            hashNavigation helpers
         |-- test/
-            |-- e2e/                wdi5 e2e tests
-            |-- wdio.conf.ts
+            |-- e2e/                wdi5 e2e tests (standalone)
+            |-- flp/                wdi5 FLP preview smoke tests
+            |-- wdio.conf.ts        standalone e2e config
+            |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
 
 ## High-Level Overview
@@ -365,11 +373,26 @@ navigation.
   - Error handling              - Rapid hash changes
   - API parity with native      - Multi-step user flows
   - Leave guard pipeline        - Leave guard dirty form
+
+  Additional CI lanes (not part of `npm test`):
+
+  test:e2e:flp                    test:qunit:compat:118
+       |                               |
+  packages/demo-app/test/flp/    packages/lib/test/qunit/
+       |                          (same suite, OpenUI5 1.118.0)
+  +---------------------------+
+  | flp-preview.e2e.ts        |   Verifies the core library's
+  |   FLP runtime detection   |   guard pipeline works on
+  |   In-app nav inside FLP   |   the older UI5 runtime.
+  |   FLP dirty-state prompt  |
+  +---------------------------+
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.
 E2e tests run against the demo-app served by `ui5 serve`, exercising real browser
 navigation, hash changes, and the full UI5 component lifecycle.
+FLP preview tests run the demo-app under `ui5 serve --config ui5-flp.yaml` (SAPUI5),
+verifying that the ushell integration, dirty-state provider, and leave guard coexistence work.
 
 ## Demo App Integration
 

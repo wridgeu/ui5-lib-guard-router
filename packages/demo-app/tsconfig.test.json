@@ -1,0 +1,7 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": ["@openui5/types", "@wdio/globals/types", "mocha"]
+	},
+	"include": ["test/**/*.ts"]
+}
