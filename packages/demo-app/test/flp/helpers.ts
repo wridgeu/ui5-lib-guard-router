@@ -239,42 +239,44 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 		};
 	});
 
-	// Step 2: trigger cross-app navigation
-	const triggered = await browser.execute(() => {
-		const Container = sap.ui.require("sap/ushell/Container");
-		const navService = Container?.getService("CrossApplicationNavigation");
-		if (!navService?.toExternal) return false;
+	try {
+		// Step 2: trigger cross-app navigation
+		const triggered = await browser.execute(() => {
+			const Container = sap.ui.require("sap/ushell/Container");
+			const navService = Container?.getService("CrossApplicationNavigation");
+			if (!navService?.toExternal) return false;
 
-		navService.toExternal({ target: { shellHash: "Shell-home" } });
-		return true;
-	});
+			navService.toExternal({ target: { shellHash: "Shell-home" } });
+			return true;
+		});
 
-	if (!triggered) {
-		throw new Error("FLP CrossApplicationNavigation service was not available");
-	}
-
-	// Step 3: wait for the dirty-state provider to call confirm()
-	await browser.waitUntil(
-		async () => {
-			return browser.execute(() => {
-				return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-			});
-		},
-		{
-			timeout: 5000,
-			timeoutMsg:
-				"FLP dirty-state provider did not call window.confirm - registerDirtyStateProvider may not have fired",
-		},
-	);
-
-	// Step 4: restore original confirm
-	await browser.execute(() => {
-		const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
-		if (w.__flpOriginalConfirm) {
-			window.confirm = w.__flpOriginalConfirm;
-			delete w.__flpOriginalConfirm;
+		if (!triggered) {
+			throw new Error("FLP CrossApplicationNavigation service was not available");
 		}
-	});
+
+		// Step 3: wait for the dirty-state provider to call confirm()
+		await browser.waitUntil(
+			async () => {
+				return browser.execute(() => {
+					return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
+				});
+			},
+			{
+				timeout: 5000,
+				timeoutMsg:
+					"FLP dirty-state provider did not call window.confirm - registerDirtyStateProvider may not have fired",
+			},
+		);
+	} finally {
+		// Always restore original confirm, even if steps 2-3 fail
+		await browser.execute(() => {
+			const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
+			if (w.__flpOriginalConfirm) {
+				window.confirm = w.__flpOriginalConfirm;
+				delete w.__flpOriginalConfirm;
+			}
+		});
+	}
 }
 
 export async function waitForProtectedPageInFlp(): Promise<void> {

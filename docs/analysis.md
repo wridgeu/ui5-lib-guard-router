@@ -275,15 +275,15 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 
 ### 3.3 Design Decisions
 
-| Decision                               | Rationale                                                                                                                     |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Override `parse()` not `navTo()`       | `navTo()` doesn't catch browser back/forward or direct URL changes                                                            |
-| Synchronous-first pipeline             | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync. |
-| Async fallback with generation counter | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.             |
-| `_redirecting` flag bypasses guards    | Prevents infinite loops when a guard redirects to another guarded route                                                       |
-| `_suppressedHash` for hash restoration | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                          |
-| Strict `true` for allow                | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.  |
-| ES class (not `.extend()`)             | UI5 resolves `routerClass` by module path, not the class registry; an ES class with default export works                      |
+| Decision                               | Rationale                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Override `parse()` not `navTo()`       | `navTo()` doesn't catch browser back/forward or direct URL changes                                                             |
+| Synchronous-first pipeline             | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync.  |
+| Async fallback with generation counter | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.              |
+| `_redirecting` flag bypasses guards    | Prevents infinite loops when a guard redirects to another guarded route                                                        |
+| `_suppressedHash` for hash restoration | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                           |
+| Strict `true` for allow                | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.   |
+| ES class with `@namespace` JSDoc       | `@namespace` triggers `babel-plugin-transform-modules-ui5` to emit `.extend()`, giving the class its own UI5 metadata identity |
 
 ### 3.4 Guard API
 

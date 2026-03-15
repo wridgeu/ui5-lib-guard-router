@@ -77,41 +77,44 @@ describe("FLP preview integration", () => {
 			};
 		});
 
-		const triggered = await browser.execute(() => {
-			const Container = sap.ui.require("sap/ushell/Container");
-			const navService = Container?.getService("CrossApplicationNavigation");
-			if (!navService?.toExternal) return false;
-			navService.toExternal({ target: { shellHash: "Shell-home" } });
-			return true;
-		});
-		expect(triggered).toBe(true);
+		try {
+			const triggered = await browser.execute(() => {
+				const Container = sap.ui.require("sap/ushell/Container");
+				const navService = Container?.getService("CrossApplicationNavigation");
+				if (!navService?.toExternal) return false;
+				navService.toExternal({ target: { shellHash: "Shell-home" } });
+				return true;
+			});
+			expect(triggered).toBe(true);
 
-		// Wait for the FLP to complete cross-app navigation -- the hash changes
-		// to Shell-home when _handleDataLoss allows navigation through.
-		// This proves the dirty-state filter ran without calling confirm().
-		await browser.waitUntil(
-			async () => {
-				const hash = await browser.execute(() => window.location.hash);
-				return hash.includes("Shell-home");
-			},
-			{
-				timeout: 5000,
-				timeoutMsg: "FLP did not complete cross-app navigation to Shell-home (dirty provider may have blocked)",
-			},
-		);
+			// Wait for the FLP to complete cross-app navigation -- the hash changes
+			// to Shell-home when _handleDataLoss allows navigation through.
+			// This proves the dirty-state filter ran without calling confirm().
+			await browser.waitUntil(
+				async () => {
+					const hash = await browser.execute(() => window.location.hash);
+					return hash.includes("Shell-home");
+				},
+				{
+					timeout: 5000,
+					timeoutMsg:
+						"FLP did not complete cross-app navigation to Shell-home (dirty provider may have blocked)",
+				},
+			);
 
-		const confirmWasCalled = await browser.execute(() => {
-			return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-		});
-		expect(confirmWasCalled).toBe(false);
-
-		// Restore original confirm
-		await browser.execute(() => {
-			const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
-			if (w.__flpOriginalConfirm) {
-				window.confirm = w.__flpOriginalConfirm;
-				delete w.__flpOriginalConfirm;
-			}
-		});
+			const confirmWasCalled = await browser.execute(() => {
+				return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
+			});
+			expect(confirmWasCalled).toBe(false);
+		} finally {
+			// Always restore original confirm, even if assertions fail
+			await browser.execute(() => {
+				const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
+				if (w.__flpOriginalConfirm) {
+					window.confirm = w.__flpOriginalConfirm;
+					delete w.__flpOriginalConfirm;
+				}
+			});
+		}
 	});
 });

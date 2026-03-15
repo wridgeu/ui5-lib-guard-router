@@ -77,6 +77,15 @@ QUnit.test("Router is an instance of sap.m.routing.Router", function (assert: As
 	assert.ok(router.isA("sap.m.routing.Router"), "Router extends sap.m.routing.Router");
 });
 
+QUnit.test("Router has its own UI5 class identity", function (assert: Assert) {
+	assert.ok(router.isA("ui5.guard.router.Router"), "isA() recognises the guard router class");
+	assert.strictEqual(
+		router.getMetadata().getName(),
+		"ui5.guard.router.Router",
+		"getMetadata().getName() returns the fully qualified class name",
+	);
+});
+
 QUnit.test("navTo navigates to named route", async function (assert: Assert) {
 	router.navTo("protected");
 	await waitForRoute(router, "protected");

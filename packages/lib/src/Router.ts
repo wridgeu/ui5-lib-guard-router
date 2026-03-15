@@ -66,6 +66,7 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
  * - `replaceHash` fires `hashChanged` synchronously (validated by test).
  * - Redirect targets bypass guards to prevent infinite loops.
  *
+ * @namespace ui5.guard.router
  * @extends sap.m.routing.Router
  */
 export default class Router extends MobileRouter implements GuardRouter {
