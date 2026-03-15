@@ -16,8 +16,24 @@ export function addGuardUnsafe(router: GuardRouter, guard: unknown): void {
 	getRouterMethod(router, "addGuard")(guard);
 }
 
+export function removeGuardUnsafe(router: GuardRouter, guard: unknown): void {
+	getRouterMethod(router, "removeGuard")(guard);
+}
+
 export function addRouteGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
 	getRouterMethod(router, "addRouteGuard")(routeName, guard);
+}
+
+export function removeRouteGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
+	getRouterMethod(router, "removeRouteGuard")(routeName, guard);
+}
+
+export function addLeaveGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
+	getRouterMethod(router, "addLeaveGuard")(routeName, guard);
+}
+
+export function removeLeaveGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
+	getRouterMethod(router, "removeLeaveGuard")(routeName, guard);
 }
 
 /**

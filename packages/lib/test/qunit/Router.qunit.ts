@@ -11,11 +11,15 @@ import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	addGuardUnsafe,
+	addLeaveGuardUnsafe,
 	addRouteGuardUnsafe,
 	assertBlocked,
 	GuardRouterClass,
 	initHashChanger,
 	nextTick,
+	removeGuardUnsafe,
+	removeLeaveGuardUnsafe,
+	removeRouteGuardUnsafe,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -228,6 +232,153 @@ QUnit.test("destroy cleans up guards so they no longer run", async function (ass
 	await waitForRoute(router, "protected");
 	assert.notOk(guardCalled, "Guards from destroyed router instance were not called");
 });
+
+QUnit.test("addGuard ignores non-function input", async function (assert: Assert) {
+	addGuardUnsafe(router, null);
+	addGuardUnsafe(router, 42);
+	addGuardUnsafe(router, "not a function");
+	router.initialize();
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Non-function inputs to addGuard were ignored");
+});
+
+QUnit.test("removeGuard ignores non-function input", async function (assert: Assert) {
+	// Register a real blocking guard, then try to remove it with invalid input
+	const guard: GuardFn = () => false;
+	router.addGuard(guard);
+	removeGuardUnsafe(router, null);
+	removeGuardUnsafe(router, "not a function");
+	router.initialize();
+	// Guard should still be active because invalid removes were no-ops
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Guard still blocks after invalid removeGuard calls",
+	);
+});
+
+QUnit.test("removeGuard for a never-added guard is a no-op", async function (assert: Assert) {
+	const neverAdded: GuardFn = () => false;
+	router.removeGuard(neverAdded);
+	router.initialize();
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Removing a never-added guard did not break anything");
+});
+
+QUnit.test("addLeaveGuard ignores non-function input", async function (assert: Assert) {
+	addLeaveGuardUnsafe(router, "home", null);
+	addLeaveGuardUnsafe(router, "home", 42);
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Non-function inputs to addLeaveGuard were ignored");
+});
+
+QUnit.test("removeLeaveGuard ignores non-function input", async function (assert: Assert) {
+	// Register a blocking leave guard, then try to remove with invalid input
+	router.addLeaveGuard("home", () => false);
+	removeLeaveGuardUnsafe(router, "home", null);
+	removeLeaveGuardUnsafe(router, "home", "not a function");
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Leave guard still blocks after invalid removeLeaveGuard calls",
+	);
+});
+
+QUnit.test("removeLeaveGuard for a never-added guard is a no-op", async function (assert: Assert) {
+	const neverAdded: LeaveGuardFn = () => false;
+	router.removeLeaveGuard("home", neverAdded);
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Removing a never-added leave guard did not break anything");
+});
+
+QUnit.test("removeRouteGuard ignores non-function input", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	removeRouteGuardUnsafe(router, "protected", null);
+	removeRouteGuardUnsafe(router, "protected", "not a function");
+	router.initialize();
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Route guard still blocks after invalid removeRouteGuard calls",
+	);
+});
+
+QUnit.test("removeRouteGuard for a never-added guard is a no-op", async function (assert: Assert) {
+	const neverAdded: GuardFn = () => false;
+	router.removeRouteGuard("protected", neverAdded);
+	router.initialize();
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Removing a never-added route guard did not break anything");
+});
+
+QUnit.test("addRouteGuard with empty config object is a no-op", async function (assert: Assert) {
+	addRouteGuardUnsafe(router, "protected", {});
+	router.initialize();
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Empty config object registered no guards");
+});
+
+QUnit.test(
+	"addRouteGuard object form with only beforeEnter registers enter guard only",
+	async function (assert: Assert) {
+		let enterCalled = false;
+		router.addRouteGuard("protected", {
+			beforeEnter: () => {
+				enterCalled = true;
+				return true;
+			},
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		assert.ok(enterCalled, "beforeEnter ran");
+
+		// Navigate away: no leave guard should block
+		router.navTo("home");
+		await waitForRoute(router, "home");
+		assert.ok(true, "No leave guard registered, navigation away succeeded");
+	},
+);
+
+QUnit.test(
+	"addRouteGuard object form with only beforeLeave registers leave guard only",
+	async function (assert: Assert) {
+		let leaveCalled = false;
+		router.addRouteGuard("home", {
+			beforeLeave: () => {
+				leaveCalled = true;
+				return true;
+			},
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		// No enter guard on "home", so navigate to protected and back without issue
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		assert.ok(leaveCalled, "beforeLeave ran when leaving home");
+	},
+);
 
 // ============================================================
 // Module: Guard allows navigation
