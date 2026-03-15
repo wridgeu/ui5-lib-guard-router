@@ -25,6 +25,9 @@ export function createNavigationLogger(): GuardFn {
  * Guard that requires the user to be logged in.
  * Redirects to "home" if not authenticated.
  *
+ * **Reference implementation** — demonstrates a synchronous auth guard.
+ * The demo app uses the async variant {@link createAsyncPermissionGuard} instead.
+ *
  * Handles edge case where model property might be undefined (e.g., model not yet loaded).
  */
 export function createAuthGuard(authModel: JSONModel): GuardFn {

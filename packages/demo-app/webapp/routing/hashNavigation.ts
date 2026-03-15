@@ -1,4 +1,4 @@
-import Event from "sap/ui/base/Event";
+import type Event from "sap/ui/base/Event";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 
 function normalizeHash(hash: string): string {

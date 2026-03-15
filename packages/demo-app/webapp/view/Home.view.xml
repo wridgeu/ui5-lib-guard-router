@@ -2,10 +2,9 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Home">
-	<Page id="homePage" title="Home">
+	<Page id="homePage" title="Home" titleAlignment="Center">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
-				<Title text="UI5 Enhanced Router Demo" level="H2" class="sapUiSmallMarginBottom" />
 				<MessageStrip
 					text="Compare router navigation, direct hash changes, and FLP preview state. Protected uses an async enter guard and a dirty-form leave guard."
 					type="Information"

@@ -119,8 +119,9 @@ For the full API reference, usage examples, limitations, and FLP integration gui
 ```
 packages/
   lib/          ui5.guard.router library (Router + types)
-  demo-app/     Demo app with auth guards (home, protected, forbidden routes)
-docs/           Design research and feature proposals
+  demo-app/     Demo app with auth guards, FLP preview, and guided scenarios
+docs/           Architecture docs, design research, and feature proposals
+scripts/        CI and test infrastructure (server runner, pack smoke test)
 ```
 
 ## Development
@@ -145,6 +146,7 @@ npm test              # run all tests (QUnit + E2E, sequentially)
 npm run test:qunit    # unit tests only
 npm run test:qunit:compat:118 # core library QUnit suite on OpenUI5 1.118.0
 npm run test:e2e      # integration tests only
+npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
 ```
 
 Each test command automatically starts and stops the appropriate server (port 8080).
@@ -155,7 +157,10 @@ Each test command automatically starts and stops the appropriate server (port 80
 npm run typecheck    # TypeScript strict mode
 npm run lint         # oxlint
 npm run fmt:check    # oxfmt
-npm run check        # all of the above
+npm run check        # all of the above (fmt:check + lint + typecheck)
+npm run fmt          # auto-format all files
+npm run lint:fix     # auto-fix lint issues
+npm run pack:check   # build + dry-run pack + consumer smoke test
 ```
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
@@ -164,6 +169,7 @@ The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint`
 
 ```bash
 npm run build        # library → packages/lib/dist/
+npm run clean        # remove dist and .ui5 caches in all packages
 ```
 
 ### Releases
@@ -172,7 +178,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `CHANGELOG.md`
-3. Merging the Release PR triggers: build, test (QUnit + E2E), then `npm publish` with provenance via OIDC
+3. Merging the Release PR triggers: build, test (QUnit + standalone E2E + FLP preview smoke), then `npm publish` with provenance via OIDC
 
 | File                            | Purpose                                            |
 | ------------------------------- | -------------------------------------------------- |

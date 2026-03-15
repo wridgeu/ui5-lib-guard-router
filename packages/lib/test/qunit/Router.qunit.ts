@@ -1145,6 +1145,36 @@ QUnit.test("Guard returning undefined is treated as block", async function (asse
 	);
 });
 
+QUnit.test("Async guard returning invalid value treats as block", async function (assert: Assert) {
+	addGuardUnsafe(router, async () => {
+		await nextTick(10);
+		return 42;
+	});
+	router.initialize();
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Async invalid guard return treated as block",
+	);
+});
+
+QUnit.test("Async guard returning invalid redirect object treats as block", async function (assert: Assert) {
+	addGuardUnsafe(router, async () => {
+		await nextTick(10);
+		return { route: "" };
+	});
+	router.initialize();
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Async invalid redirect object treated as block",
+	);
+});
+
 // ============================================================
 // Module: Rapid sequential navigations
 // ============================================================

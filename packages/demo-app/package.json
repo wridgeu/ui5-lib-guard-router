@@ -13,6 +13,7 @@
 	"scripts": {
 		"clean": "rimraf dist .ui5",
 		"serve": "ui5 serve",
+		"serve:flp": "ui5 serve --config ui5-flp.yaml",
 		"start": "ui5 serve --open /index.html",
 		"start:flp": "ui5 serve --config ui5-flp.yaml --open /test/flp.html#app-preview",
 		"build": "ui5 build",

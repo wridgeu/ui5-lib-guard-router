@@ -103,6 +103,30 @@ jobs:
             - name: Run browser tests
               run: npm test
 
+    flp-preview-tests:
+        needs: validate
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: Cache UI5 framework resources
+              uses: actions/cache@v4
+              with:
+                  path: ~/.ui5
+                  key: ui5-flp-tests-${{ hashFiles('packages/*/ui5*.yaml') }}
+                  restore-keys: ui5-flp-tests-
+
+            - run: npm ci
+
+            - name: Run FLP preview smoke tests
+              run: npm run test:e2e:flp
+
     compatibility-ui5-118:
         needs: validate
         runs-on: ubuntu-latest

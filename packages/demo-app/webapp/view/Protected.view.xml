@@ -2,7 +2,7 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Protected">
-	<Page id="protectedPage" title="Protected Page" showNavButton="true" navButtonPress=".onNavBack">
+	<Page id="protectedPage" title="Protected Page" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavBack">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
 				<MessageStrip

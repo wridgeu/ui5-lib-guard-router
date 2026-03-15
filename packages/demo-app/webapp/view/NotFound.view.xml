@@ -1,0 +1,18 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.controller.NotFound">
+	<MessagePage
+		id="notFoundPage"
+		title="Not Found"
+		titleAlignment="Center"
+		text="Page Not Found"
+		description="The requested page does not exist in this demo application."
+		icon="sap-icon://document"
+		showNavButton="true"
+		navButtonPress=".onNavHome">
+		<buttons>
+			<Button text="Go to Home" type="Emphasized" press=".onNavHome" />
+		</buttons>
+	</MessagePage>
+</mvc:View>

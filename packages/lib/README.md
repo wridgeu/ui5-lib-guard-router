@@ -43,7 +43,8 @@ TypeScript types follow the UI5 module names. Add the package to `compilerOption
 Then import the types from the UI5 module path:
 
 ```typescript
-import type { GuardRouter } from "ui5/guard/router/types";
+import type { GuardRouter, GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
+import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
 
 UI5 runtime module names stay `ui5/guard/router/*`.
@@ -172,6 +173,13 @@ On first load, blocking a non-empty hash restores `""` and continues with the ap
 | `false` (or any non-`true` value) | Block                           |
 
 Leave guards cannot redirect. For redirection logic, use enter guards on the target route.
+
+### Lifecycle
+
+| Method      | Behavior                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets internal flags, preserves route state so a subsequent `initialize()` avoids a redundant initial navigation |
+| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                            |
 
 ### Execution order
 
@@ -304,10 +312,10 @@ sap.ushell.Container.setDirtyFlag(false); // clear after save
 
 ```typescript
 const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation) {
-		return formModel.getProperty("/isDirty");
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false; // let in-app routing handle it
 	}
-	return false; // let in-app routing handle it
+	return formModel.getProperty("/isDirty") === true;
 };
 sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 
@@ -317,10 +325,29 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-**How the two approaches complement each other**: FLP's data loss protection operates at the shell navigation filter level, intercepting navigation _before_ the hash change reaches your app's router. Leave guards operate _inside_ your app's router, intercepting route-to-route navigation. For complete coverage:
+When you combine FLP dirty-state handling with a route leave guard, allow unmatched hashes to pass through the router so cross-app navigation stays under FLP control:
 
-- Use **leave guards** for in-app route changes (e.g., navigating from an edit form to a list within your app)
-- Use **`setDirtyFlag`** or **`registerDirtyStateProvider`** for FLP-level navigation (cross-app, browser close, home button)
+```typescript
+router.addRouteGuard("editOrder", {
+	beforeLeave: (context) => {
+		if (context.toRoute === "") {
+			return true; // FLP shell or other external hash
+		}
+		return formModel.getProperty("/isDirty") !== true;
+	},
+});
+
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false;
+	}
+	return formModel.getProperty("/isDirty") === true;
+};
+
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+```
+
+This split keeps responsibilities clear: leave guards protect in-app route changes, while FLP APIs protect cross-app navigation, browser close, and the shell home button.
 
 See the [FLP Dirty State Research](../../docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
 

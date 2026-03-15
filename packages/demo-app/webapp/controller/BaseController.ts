@@ -3,7 +3,6 @@ import Controller from "sap/ui/core/mvc/Controller";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type Router from "sap/ui/core/routing/Router";
 import type Model from "sap/ui/model/Model";
-import type DemoScenarioRunner from "../demo/ScenarioRunner";
 import ScenarioRunner from "../demo/ScenarioRunner";
 
 /**
@@ -28,7 +27,7 @@ export default abstract class BaseController extends Controller {
 		return model as T;
 	}
 
-	protected getDemoScenarioRunner(): DemoScenarioRunner {
+	protected getDemoScenarioRunner(): ScenarioRunner {
 		return new ScenarioRunner(this.getModel<JSONModel>("runtime"));
 	}
 }
