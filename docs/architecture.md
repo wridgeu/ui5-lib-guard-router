@@ -286,14 +286,16 @@ If a leave guard also blocks the hash change triggered by the FLP, the two
 mechanisms conflict: the user confirms in the FLP popup, but the router restores
 the hash, making it impossible to leave the app.
 
-To detect cross-app navigation in a leave guard, check `context.toRoute`:
+To detect unmatched hashes (including cross-app navigation in FLP) in a leave
+guard, check `context.toRoute`:
 
 ```ts
 const leaveGuard: LeaveGuardFn = (context) => {
-	// toRoute is empty when the hash doesn't match any known route —
-	// this is a cross-app navigation (e.g. FLP shell back button)
+	// toRoute is empty when the target hash doesn't match any known route.
+	// In FLP this signals cross-app navigation (e.g. Shell-home intent);
+	// in standalone mode it can also mean a mistyped or invalid hash.
 	if (context.toRoute === "") {
-		return true; // let the FLP handle it
+		return true; // unmatched hash — let FLP or the app handle it
 	}
 	return !formModel.getProperty("/isDirty");
 };
@@ -301,8 +303,8 @@ const leaveGuard: LeaveGuardFn = (context) => {
 
 The `toRoute` value is derived from `getRouteInfoByHash()`. When the FLP changes
 the hash to an intent like `Shell-home`, no route matches, so `toRoute` is the
-empty string. This is a reliable signal to distinguish in-app from cross-app
-navigation.
+empty string. In FLP, this reliably signals cross-app navigation. In standalone
+mode, an empty `toRoute` can also result from invalid or manually entered hashes.
 
 ## Internal State
 

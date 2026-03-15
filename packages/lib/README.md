@@ -325,13 +325,13 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-When you combine FLP dirty-state handling with a route leave guard, allow unmatched hashes to pass through the router so cross-app navigation stays under FLP control:
+When you combine FLP dirty-state handling with a route leave guard, allow unmatched hashes to pass through the router. An empty `toRoute` means no route matched the target hash — in FLP this signals cross-app navigation, in standalone mode it may indicate an invalid URL:
 
 ```typescript
 router.addRouteGuard("editOrder", {
 	beforeLeave: (context) => {
 		if (context.toRoute === "") {
-			return true; // FLP shell or other external hash
+			return true; // no route matched — external or invalid hash
 		}
 		return formModel.getProperty("/isDirty") !== true;
 	},

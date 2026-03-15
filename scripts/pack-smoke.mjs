@@ -60,6 +60,8 @@ async function main() {
 						module: "ES2022",
 						moduleResolution: "Node",
 						strict: true,
+						// Required: @openui5/types references JQuery and QUnit
+						// globals that are not installed in a minimal consumer project.
 						skipLibCheck: true,
 						types: ["@openui5/types", "ui5-lib-guard-router"],
 					},

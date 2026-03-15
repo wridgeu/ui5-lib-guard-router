@@ -255,7 +255,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
                     ┌─────────────────────────────────────┐
                     │           parse(newHash)             │
                     │  ┌─────────────────────────────────┐ │
-                    │  │ _suppressNextParse?  → return   │ │
+                    │  │ _suppressedHash?     → return   │ │
                     │  │ _redirecting?        → commit   │ │
                     │  │ same hash?           → return   │ │
                     │  │                                 │ │
@@ -275,15 +275,15 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 
 ### 3.3 Design Decisions
 
-| Decision                                  | Rationale                                                                                                                     |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Override `parse()` not `navTo()`          | `navTo()` doesn't catch browser back/forward or direct URL changes                                                            |
-| Synchronous-first pipeline                | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync. |
-| Async fallback with generation counter    | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.             |
-| `_redirecting` flag bypasses guards       | Prevents infinite loops when a guard redirects to another guarded route                                                       |
-| `_suppressNextParse` for hash restoration | `replaceHash()` fires `hashChanged` synchronously; the flag prevents double-processing                                        |
-| Strict `true` for allow                   | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.  |
-| `.extend()` pattern, not ES6 class        | Required for UI5 class registry; enables `"routerClass": "ui5.guard.router.Router"` in manifest.json                          |
+| Decision                               | Rationale                                                                                                                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Override `parse()` not `navTo()`       | `navTo()` doesn't catch browser back/forward or direct URL changes                                                            |
+| Synchronous-first pipeline             | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync. |
+| Async fallback with generation counter | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.             |
+| `_redirecting` flag bypasses guards    | Prevents infinite loops when a guard redirects to another guarded route                                                       |
+| `_suppressedHash` for hash restoration | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                          |
+| Strict `true` for allow                | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.  |
+| ES class (not `.extend()`)             | UI5 resolves `routerClass` by module path, not the class registry; an ES class with default export works                      |
 
 ### 3.4 Guard API
 
@@ -431,9 +431,12 @@ During async guard evaluation, the browser's URL bar shows the target hash (e.g.
 
 **Mitigation**: Keep async guards fast. Use sync guards for instant decisions; reserve async for backend calls.
 
-### 5.4 Initial navigation block leaves blank app
+### 5.4 Initial navigation block behavior
 
-If a guard returns `false` (block) on the very first navigation (where `_currentHash` is `null`), no view is loaded and the app appears blank. This is because there's no "previous" route to restore to.
+If a guard blocks the very first navigation (where `_currentHash` is `null`):
+
+- **Non-empty hash blocked**: The hash is restored to `""` with `suppressParse=false`, so the default route still loads. The app is not left blank.
+- **Empty hash (default route) blocked**: No view is loaded and the app appears blank, because there is no alternative route to fall back to.
 
 **Mitigation**: On initial navigation, prefer redirecting (`return "login"`) rather than blocking (`return false`). The demo app demonstrates this pattern.
 

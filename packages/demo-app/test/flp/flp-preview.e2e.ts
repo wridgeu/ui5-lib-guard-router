@@ -8,6 +8,11 @@ import {
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
+// Test order matters: the "non-dirty cross-app" test navigates to Shell-home,
+// which leaves the FLP preview sandbox in a state that cannot be recovered
+// without a full page reload (wdi5/OPA5 does not reliably reconnect after
+// a mid-session reload). That test must run last in the suite.
+
 describe("FLP preview integration", () => {
 	beforeEach(async () => {
 		await resetFlpDemo();
@@ -34,6 +39,27 @@ describe("FLP preview integration", () => {
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 
+	it("allows in-app navigation without dirty-state prompt even when dirty", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+
+		// In-app navigation (navigating to home) should go through the router's
+		// leave guard, not the FLP dirty-state provider. The dirty form leave guard
+		// blocks in-app navigation silently, so we stay on the protected page.
+		await browser.execute(() => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const all = Component.registry.all() as Record<string, UIComponent>;
+			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+			component?.getRouter().navTo("home", {}, undefined, true);
+		});
+
+		// The dirty form guard should block in-app navigation, keeping us on protected
+		await waitForProtectedPageInFlp();
+		await expectControlText("protectedCurrentHashText", "#/protected");
+	});
+
+	// This test navigates to Shell-home, leaving the FLP sandbox in an
+	// unrecoverable state. It MUST be the last test in the suite.
 	it("does not trigger dirty-state prompt on cross-app navigation when not dirty", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(false);
@@ -87,24 +113,5 @@ describe("FLP preview integration", () => {
 				delete w.__flpOriginalConfirm;
 			}
 		});
-	});
-
-	it("allows in-app navigation without dirty-state prompt even when dirty", async () => {
-		await loginAndGoToProtectedInFlp();
-		await setDirtyStateInFlp(true);
-
-		// In-app navigation (navigating to home) should go through the router's
-		// leave guard, not the FLP dirty-state provider. The dirty form leave guard
-		// blocks in-app navigation silently, so we stay on the protected page.
-		await browser.execute(() => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			const all = Component.registry.all() as Record<string, UIComponent>;
-			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-			component?.getRouter().navTo("home", {}, undefined, true);
-		});
-
-		// The dirty form guard should block in-app navigation, keeping us on protected
-		await waitForProtectedPageInFlp();
-		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 });

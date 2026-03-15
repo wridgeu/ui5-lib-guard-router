@@ -438,6 +438,31 @@ QUnit.test("Double initialize is safe and guards still work", async function (as
 	);
 });
 
+QUnit.test(
+	"Re-initialize after stop skips redundant initial navigation for unchanged hash",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.stop();
+		assert.notOk(router.isInitialized(), "Router stopped");
+
+		let homeMatchedAgain = false;
+		const homeRoute = router.getRoute("home")!;
+		const handler = (): void => {
+			homeMatchedAgain = true;
+		};
+		homeRoute.attachPatternMatched(handler);
+
+		router.initialize();
+		assert.ok(router.isInitialized(), "Router re-initialized");
+
+		await nextTick(150);
+		homeRoute.detachPatternMatched(handler);
+		assert.notOk(homeMatchedAgain, "Re-initialize with unchanged hash did not fire redundant routeMatched");
+	},
+);
+
 // ============================================================
 // Module: Guard allows navigation
 // ============================================================
@@ -1314,6 +1339,34 @@ QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at targ
 		"detail/cti-1",
 		"Redirect with componentTargetInfo landed with correct params",
 	);
+});
+
+QUnit.test("GuardRedirect forwards non-empty componentTargetInfo to navTo", async function (assert: Assert) {
+	const expectedCTI = { detail: { route: "sub", parameters: { subId: "x" } } };
+	const calls: unknown[][] = [];
+	const originalNavTo = Reflect.get(router, "navTo") as (...args: unknown[]) => unknown;
+	Reflect.set(router, "navTo", function (this: unknown, ...args: unknown[]) {
+		calls.push(args);
+		return Reflect.apply(originalNavTo, this, args);
+	});
+
+	router.addRouteGuard(
+		"forbidden",
+		(): GuardRedirect => ({
+			route: "detail",
+			parameters: { id: "cti-2" },
+			componentTargetInfo: expectedCTI,
+		}),
+	);
+	router.initialize();
+	router.navTo("forbidden");
+	await waitForRoute(router, "detail");
+
+	// First call: router.navTo("forbidden") from the test
+	// Second call: this.navTo("detail", ...) from _redirect()
+	assert.ok(calls.length >= 2, "navTo called at least twice (trigger + redirect)");
+	const redirectCall = calls[calls.length - 1];
+	assert.deepEqual(redirectCall[2], expectedCTI, "Non-empty componentTargetInfo forwarded to navTo during redirect");
 });
 
 // ============================================================
