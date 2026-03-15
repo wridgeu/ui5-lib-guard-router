@@ -1,7 +1,10 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import Controller from "sap/ui/core/mvc/Controller";
+import JSONModel from "sap/ui/model/json/JSONModel";
 import type Router from "sap/ui/core/routing/Router";
 import type Model from "sap/ui/model/Model";
+import type DemoScenarioRunner from "../demo/ScenarioRunner";
+import ScenarioRunner from "../demo/ScenarioRunner";
 
 /**
  * Shared controller helpers for the demo app.
@@ -25,11 +28,7 @@ export default abstract class BaseController extends Controller {
 		return model as T;
 	}
 
-	protected setModel(model: Model, name?: string): void {
-		const view = this.getView();
-		if (!view) {
-			throw new Error("View is not available for this controller");
-		}
-		view.setModel(model, name);
+	protected getDemoScenarioRunner(): DemoScenarioRunner {
+		return new ScenarioRunner(this.getModel<JSONModel>("runtime"));
 	}
 }

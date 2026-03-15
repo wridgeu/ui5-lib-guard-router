@@ -2,6 +2,8 @@
 
 Demo application showcasing `ui5.guard.router.Router` with authentication-based navigation guards.
 
+The demo supports both standalone preview and a local FLP sandbox preview served from a virtual endpoint.
+
 ## Routes
 
 | Route       | Pattern       | Guard behavior                                                      |
@@ -16,6 +18,7 @@ From the monorepo root:
 
 ```bash
 npm start
+npm run start:flp
 ```
 
 Or from this directory:
@@ -23,15 +26,21 @@ Or from this directory:
 ```bash
 npm start
 # => opens http://localhost:8080/index.html
+
+npm run start:flp
+# => opens http://localhost:8080/test/flp.html#app-preview
 ```
 
-Toggle the login button on the Home page and try navigating to the Protected and Forbidden routes to see guards in action.
+The UI includes a few demo-only helpers to exercise hash-driven scenarios and FLP runtime visibility. They are isolated inside the demo app and are not part of the library contract for consumers.
 
 ## Scripts
 
 ```bash
-# Start dev server with livereload
+# Start dev server with livereload and open the standalone app
 npm start
+
+# Start dev server with livereload and open the FLP sandbox preview
+npm run start:flp
 
 # Build
 npm run build
@@ -69,4 +78,5 @@ Test files are in `test/e2e/`:
 - OpenUI5 1.144.0
 - TypeScript via `ui5-tooling-transpile`
 - `ui5-middleware-livereload` for dev server
+- `fiori-tools-preview` and `fiori-tools-proxy` for local FLP preview
 - wdio v9 + wdi5 v3 for E2E tests

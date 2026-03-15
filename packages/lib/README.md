@@ -401,7 +401,7 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package currently declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline yet, but it provides a concrete verification signal for consumers evaluating older runtimes.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline yet, but it provides a concrete verification signal for consumers evaluating older runtimes.
 
 If you maintain an app on an older UI5 stack and want to validate locally, run the dedicated compatibility check from the monorepo root:
 

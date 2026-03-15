@@ -22,6 +22,7 @@
 		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.json",
 		"build": "npm run build --workspace=packages/lib",
 		"start": "npm start --workspace=packages/demo-app",
+		"start:flp": "npm run start:flp --workspace=packages/demo-app",
 		"start:lib": "npm start --workspace=packages/lib",
 		"start:lib:compat:118": "npm run start:compat:118 --workspace=packages/lib",
 		"serve:demo": "npm run serve --workspace=packages/demo-app",

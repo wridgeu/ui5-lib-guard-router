@@ -19,7 +19,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package currently declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline yet, but it provides a concrete verification signal for consumers evaluating older runtimes.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline yet, but it provides a concrete verification signal for consumers evaluating older runtimes.
 
 ## Quick start
 
@@ -135,6 +135,7 @@ docs/           Design research and feature proposals
 ```bash
 npm install       # install all dependencies
 npm start         # demo app at http://localhost:8080/index.html
+npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/flp.html#app-preview
 ```
 
 ### Tests

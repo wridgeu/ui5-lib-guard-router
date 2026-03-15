@@ -7,6 +7,19 @@
 			"version": "1.0.0"
 		},
 		"title": "UI5 Enhanced Router Demo",
+		"crossNavigation": {
+			"inbounds": {
+				"guarddemo-display": {
+					"semanticObject": "guarddemo",
+					"action": "display",
+					"title": "UI5 Enhanced Router Demo",
+					"signature": {
+						"parameters": {},
+						"additionalParameters": "allowed"
+					}
+				}
+			}
+		},
 		"dataSources": {
 			"auth": {
 				"type": "JSON",
