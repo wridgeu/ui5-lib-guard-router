@@ -9,7 +9,15 @@ import type {
 } from "ui5/guard/router/types";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
-import { GuardRouterClass, initHashChanger, nextTick, waitForRoute, assertBlocked } from "./testHelpers";
+import {
+	addGuardUnsafe,
+	addRouteGuardUnsafe,
+	assertBlocked,
+	GuardRouterClass,
+	initHashChanger,
+	nextTick,
+	waitForRoute,
+} from "./testHelpers";
 
 interface DetailRouteArguments {
 	id: string;
@@ -181,7 +189,7 @@ QUnit.test("addRouteGuard returns this for chaining", function (assert: Assert) 
 });
 
 QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (assert: Assert) {
-	router.addRouteGuard("protected", null as any);
+	addRouteGuardUnsafe(router, "protected", null);
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
@@ -189,8 +197,8 @@ QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (
 });
 
 QUnit.test("addRouteGuard object form ignores invalid leave guard input", async function (assert: Assert) {
-	router.addRouteGuard("protected", {
-		beforeLeave: "nope" as any,
+	addRouteGuardUnsafe(router, "protected", {
+		beforeLeave: "nope",
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -246,17 +254,37 @@ QUnit.test("Async guard returning true allows navigation", async function (asser
 });
 
 QUnit.test("Promise-like guard returning true allows navigation", async function (assert: Assert) {
-	router.addGuard((() => ({
+	const promiseLike: PromiseLike<boolean> = {
 		// oxlint-disable-next-line unicorn/no-thenable
-		then(resolve: (result: boolean) => void) {
-			setTimeout(() => resolve(true), 10);
+		then(onfulfilled, onrejected) {
+			return Promise.resolve(true).then(onfulfilled, onrejected);
 		},
-	})) as any);
+	};
+	router.addGuard(() => promiseLike);
 	router.initialize();
 	await waitForRoute(router, "home");
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.ok(true, "Promise-like guard allowed navigation");
+});
+
+QUnit.test("Promise-like guard returning false blocks navigation", async function (assert: Assert) {
+	const promiseLike: PromiseLike<boolean> = {
+		// oxlint-disable-next-line unicorn/no-thenable
+		then(onfulfilled, onrejected) {
+			return Promise.resolve(false).then(onfulfilled, onrejected);
+		},
+	};
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => promiseLike);
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Promise-like guard blocked navigation",
+	);
 });
 
 QUnit.test("Route-specific guard returning true allows navigation", async function (assert: Assert) {
@@ -439,7 +467,7 @@ QUnit.test("No guards behaves identically to native router", async function (ass
 QUnit.module("Router - Guard invalid values", standardHooks);
 
 QUnit.test("Guard returning invalid value treats as block", async function (assert: Assert) {
-	router.addGuard((() => 42) as any);
+	addGuardUnsafe(router, () => 42);
 	router.initialize();
 	await assertBlocked(
 		assert,
@@ -451,7 +479,7 @@ QUnit.test("Guard returning invalid value treats as block", async function (asse
 });
 
 QUnit.test("Guard returning invalid redirect object treats as block", async function (assert: Assert) {
-	router.addRouteGuard("protected", (() => ({ route: "" })) as any);
+	addRouteGuardUnsafe(router, "protected", () => ({ route: "" }));
 	router.initialize();
 	await waitForRoute(router, "home");
 	await assertBlocked(
@@ -917,7 +945,7 @@ QUnit.test("Async route guard redirects", async function (assert: Assert) {
 });
 
 QUnit.test("Guard returning null is treated as block", async function (assert: Assert) {
-	router.addGuard((() => null) as any);
+	addGuardUnsafe(router, () => null);
 	router.initialize();
 	await assertBlocked(
 		assert,
@@ -929,7 +957,7 @@ QUnit.test("Guard returning null is treated as block", async function (assert: A
 });
 
 QUnit.test("Guard returning undefined is treated as block", async function (assert: Assert) {
-	router.addGuard((() => undefined) as any);
+	addGuardUnsafe(router, () => undefined);
 	router.initialize();
 	await assertBlocked(
 		assert,
@@ -1074,6 +1102,43 @@ QUnit.test(
 		// Wait for the guard promise to resolve in the background
 		await nextTick(300);
 		assert.notOk(routeMatched, "Navigation did not complete after destroy");
+	},
+);
+
+// ============================================================
+// Module: Stop during pending async guard
+// ============================================================
+QUnit.module("Router - Stop during pending async guard", safeDestroyHooks);
+
+QUnit.test(
+	"Stopping router while async guard is pending aborts and prevents navigation",
+	async function (assert: Assert) {
+		let capturedSignal: AbortSignal | null = null;
+		let routeMatched = false;
+
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.addGuard(async (context: GuardContext) => {
+			capturedSignal = context.signal;
+			await nextTick(200);
+			return true;
+		});
+
+		router.getRoute("protected")!.attachPatternMatched(() => {
+			routeMatched = true;
+		});
+
+		router.navTo("protected");
+		await nextTick(50);
+		router.stop();
+
+		assert.ok(capturedSignal, "Signal was captured");
+		assert.ok(capturedSignal!.aborted, "Signal was aborted on stop");
+		assert.notOk(router.isInitialized(), "Router stayed stopped");
+
+		await nextTick(250);
+		assert.notOk(routeMatched, "Navigation did not complete after stop");
 	},
 );
 
@@ -1385,6 +1450,41 @@ QUnit.test("Async leave guard returning true allows navigation", async function 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.ok(true, "Async leave guard allowed navigation");
+});
+
+QUnit.test("Promise-like leave guard returning true allows navigation", async function (assert: Assert) {
+	const promiseLike: PromiseLike<boolean> = {
+		// oxlint-disable-next-line unicorn/no-thenable
+		then(onfulfilled, onrejected) {
+			return Promise.resolve(true).then(onfulfilled, onrejected);
+		},
+	};
+	router.addLeaveGuard("home", () => promiseLike);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "Promise-like leave guard allowed navigation");
+});
+
+QUnit.test("Promise-like leave guard returning false blocks navigation", async function (assert: Assert) {
+	const promiseLike: PromiseLike<boolean> = {
+		// oxlint-disable-next-line unicorn/no-thenable
+		then(onfulfilled, onrejected) {
+			return Promise.resolve(false).then(onfulfilled, onrejected);
+		},
+	};
+	router.addLeaveGuard("home", () => promiseLike);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(
+		assert,
+		router,
+		"protected",
+		() => router.navTo("protected"),
+		"Promise-like leave guard blocked navigation",
+	);
 });
 
 QUnit.test("Async leave guard returning false blocks navigation", async function (assert: Assert) {

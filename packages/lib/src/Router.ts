@@ -54,6 +54,13 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
 	if (guards.length === 0) map.delete(key);
 }
 
+function cancelPendingNavigation(router: RouterInternal): void {
+	++router._parseGeneration;
+	router._pendingHash = null;
+	router._abortController?.abort();
+	router._abortController = null;
+}
+
 /**
  * Router with navigation guard support.
  *
@@ -228,10 +235,7 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 
 		// Same-hash dedup: also invalidates any pending async guard
 		if (this._currentHash !== null && newHash === this._currentHash) {
-			this._pendingHash = null;
-			++this._parseGeneration;
-			this._abortController?.abort();
-			this._abortController = null;
+			cancelPendingNavigation(this);
 			return;
 		}
 
@@ -244,9 +248,8 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		const toRoute = routeInfo?.name ?? "";
 
 		// Invalidate any pending async guards from a previous navigation
-		this._abortController?.abort();
-		this._abortController = null;
-		const generation = ++this._parseGeneration;
+		cancelPendingNavigation(this);
+		const generation = this._parseGeneration;
 
 		this._pendingHash = newHash;
 
@@ -357,6 +360,21 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 
 		// Enter guards (leave guards passed or were absent)
 		runEnterGuards();
+	},
+
+	/**
+	 * Stop listening to hash changes and invalidate pending async guards.
+	 *
+	 * Mirrors native router lifecycle behavior while ensuring an already-running
+	 * guard cannot commit a stale navigation after the router has been stopped.
+	 *
+	 * @override sap.ui.core.routing.Router#stop
+	 */
+	stop(this: RouterInternal): GuardRouter {
+		cancelPendingNavigation(this);
+		this._redirecting = false;
+		this._suppressedHash = null;
+		return MobileRouter.prototype.stop.call(this) as GuardRouter;
 	},
 
 	/**
@@ -574,10 +592,9 @@ const Router = MobileRouter.extend("ui5.guard.router.Router", {
 		this._globalGuards = [];
 		this._enterGuards.clear();
 		this._leaveGuards.clear();
-		++this._parseGeneration;
-		this._pendingHash = null;
-		this._abortController?.abort();
-		this._abortController = null;
+		cancelPendingNavigation(this);
+		this._redirecting = false;
+		this._suppressedHash = null;
 		return MobileRouter.prototype.destroy.call(this);
 	},
 });
