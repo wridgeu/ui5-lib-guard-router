@@ -8,16 +8,8 @@
 	"plugins": ["typescript", "oxc", "unicorn", "import"],
 	"jsPlugins": [
 		{
-			"name": "code-quality",
-			"specifier": "./tools/eslint-plugin-code-quality.mjs"
-		},
-		{
-			"name": "comment-quality",
-			"specifier": "./tools/eslint-plugin-comment-quality.mjs"
-		},
-		{
-			"name": "test-guardrails",
-			"specifier": "./tools/eslint-plugin-test-guardrails.mjs"
+			"name": "guardrails",
+			"specifier": "./tools/eslint-plugin-guardrails.mjs"
 		}
 	],
 	"rules": {
@@ -30,30 +22,22 @@
 		"unicorn/no-static-only-class": "off",
 		"unicorn/prefer-global-this": "off",
 		"unicorn/consistent-function-scoping": "off",
-		"code-quality/no-double-type-assertion": "error",
-		"code-quality/no-console-only-catch": "warn",
-		"code-quality/no-redundant-boolean-return": "warn",
-		"code-quality/no-em-dash-in-string": "warn",
-		"comment-quality/no-obvious-comment": "warn",
-		"comment-quality/no-narrator-comment": "warn",
-		"comment-quality/no-section-divider": "warn",
-		"comment-quality/no-placeholder-comment": "warn",
-		"comment-quality/no-hedging-comment": "warn",
-		"comment-quality/no-em-dash-in-comment": "warn"
+		"guardrails/no-em-dash-in-string": "warn",
+		"guardrails/no-em-dash-in-comment": "warn",
+		"guardrails/no-double-type-assertion": "error"
 	},
 	"overrides": [
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
-				"code-quality/no-double-type-assertion": "off",
-				"comment-quality/no-section-divider": "off",
-				"test-guardrails/no-browser-pause": "error"
+				"guardrails/no-double-type-assertion": "off",
+				"guardrails/no-browser-pause": "error"
 			}
 		},
 		{
 			"files": ["packages/*/test/e2e/**/*.ts", "packages/*/test/flp/**/*.ts"],
 			"rules": {
-				"test-guardrails/no-hard-wait": "error"
+				"guardrails/no-hard-wait": "error"
 			}
 		}
 	],
