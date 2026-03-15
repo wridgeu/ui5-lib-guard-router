@@ -1,12 +1,8 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type MobileRouter from "sap/m/routing/Router";
 import Router from "ui5/guard/router/Router";
 import type { GuardRouter } from "ui5/guard/router/types";
 
-/** Typed constructor so test files don't need `as any` casts. */
-type GuardRouterConstructor = new (...args: ConstructorParameters<typeof MobileRouter>) => GuardRouter;
-
-export const GuardRouterClass = Router as GuardRouterConstructor;
+export const GuardRouterClass = Router;
 
 function getRouterMethod(router: GuardRouter, methodName: string): (...args: unknown[]) => unknown {
 	const method = Reflect.get(router, methodName);
