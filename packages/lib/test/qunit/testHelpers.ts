@@ -41,13 +41,29 @@ export function nextTick(ms = 50): Promise<void> {
 }
 
 /** Wait for a single patternMatched on `routeName`, then detach. */
-export function waitForRoute(router: GuardRouter, routeName: string): Promise<void> {
-	return new Promise((resolve) => {
-		const route = router.getRoute(routeName)!;
-		route.attachPatternMatched(function handler() {
-			route.detachPatternMatched(handler);
+export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1000): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const route = router.getRoute(routeName);
+		if (!route) {
+			reject(new Error(`Route "${routeName}" is not available`));
+			return;
+		}
+		const matchedRoute = route;
+
+		const timer = setTimeout(() => {
+			matchedRoute.detachPatternMatched(handler);
+			reject(
+				new Error(`Timed out waiting for route "${routeName}", hash="${HashChanger.getInstance().getHash()}"`),
+			);
+		}, timeout);
+
+		function handler(): void {
+			clearTimeout(timer);
+			matchedRoute.detachPatternMatched(handler);
 			resolve();
-		});
+		}
+
+		matchedRoute.attachPatternMatched(handler);
 	});
 }
 

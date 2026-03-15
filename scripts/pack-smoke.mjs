@@ -72,9 +72,13 @@ async function main() {
 		await writeFile(
 			path.join(tempDir, "consumer.ts"),
 			[
+				'import Router from "ui5/guard/router/Router";',
+				'import library from "ui5/guard/router/library";',
 				'import type { GuardRouter } from "ui5/guard/router/types";',
 				"",
 				"declare const router: GuardRouter;",
+				"void Router;",
+				"void library;",
 				"void router;",
 				"",
 			].join("\n"),
