@@ -8,6 +8,7 @@ import type {
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
+import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import {
 	addGuardUnsafe,
 	addLeaveGuardUnsafe,
@@ -93,9 +94,14 @@ QUnit.test("navTo navigates to named route", async function (assert: Assert) {
 });
 
 QUnit.test("navTo with parameters", async function (assert: Assert) {
+	let matchedArgs: Record<string, string> = {};
+	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
+		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+	});
 	router.navTo("detail", { id: "42" });
 	await waitForRoute(router, "detail");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/42", "Hash contains route parameter");
+	assert.strictEqual(matchedArgs.id, "42", "Route argument propagated to matched event");
 });
 
 QUnit.test("routeMatched event fires", async function (assert: Assert) {
@@ -750,6 +756,10 @@ QUnit.test("Guard returning GuardRedirect object redirects to route", async func
 });
 
 QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", async function (assert: Assert) {
+	let matchedArgs: Record<string, string> = {};
+	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
+		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+	});
 	router.addRouteGuard(
 		"forbidden",
 		(): GuardRedirect => ({
@@ -761,6 +771,7 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/error-403", "Redirect landed with correct params");
+	assert.strictEqual(matchedArgs.id, "error-403", "Redirect parameters propagated to matched event");
 });
 
 QUnit.test("Async guard returning GuardRedirect works", async function (assert: Assert) {

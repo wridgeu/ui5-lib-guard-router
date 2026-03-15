@@ -316,9 +316,11 @@ navigation bypasses the app router's `parse()`. The dirty-state provider fires
 and the FLP shows its own confirm dialog. If the user confirms, the shell
 completes the navigation. If the user cancels, the hash stays unchanged.
 
-The demo app's FLP E2E tests pin this behavior: dirty + cancel (FLP blocks,
-user stays), dirty + confirm (navigation completes to Shell-home), and
-non-dirty (no dialog, navigation completes).
+The demo app's FLP E2E tests pin this behavior in two spec files:
+`flp-preview.e2e.ts` covers the cancel path (dirty provider fires, headless
+`confirm()` returns `false`, user stays on page) and in-app dirty blocking;
+`flp-cross-app.e2e.ts` covers the confirm path (dirty + `confirm()` returns
+`true`, navigation completes to Shell-home) in an isolated browser session.
 
 ## Internal State
 

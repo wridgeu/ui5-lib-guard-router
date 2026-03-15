@@ -82,10 +82,13 @@ const noEmDashInComment = {
 						node: comment,
 						messageId: "found",
 						fix(fixer) {
-							const prefix = comment.type === "Line" ? "//" : "/*";
-							const suffix = comment.type === "Line" ? "" : "*/";
+							// Replace only the content between delimiters to preserve
+							// the original prefix (/** for JSDoc vs /* for block).
 							const fixed = comment.value.replace(EM_DASH_RE, "--");
-							return fixer.replaceTextRange(comment.range, `${prefix}${fixed}${suffix}`);
+							if (comment.type === "Line") {
+								return fixer.replaceTextRange([comment.range[0] + 2, comment.range[1]], fixed);
+							}
+							return fixer.replaceTextRange([comment.range[0] + 2, comment.range[1] - 2], fixed);
 						},
 					});
 				}

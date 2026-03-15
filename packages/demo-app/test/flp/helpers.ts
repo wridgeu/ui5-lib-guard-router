@@ -218,9 +218,10 @@ async function resetDirtyState(): Promise<void> {
  * Intercept window.confirm, trigger FLP cross-app navigation, then
  * verify the dirty-state provider fired.
  *
- * Headless Chrome auto-answers confirm() before WebDriver can see the
- * alert, so polling isAlertOpen() is unreliable. Monkey-patching
- * confirm() captures the call and returns false (stay on page).
+ * Headless Chrome returns false for confirm() by default, so the
+ * navigation would be cancelled without an intercept. The monkey-patch
+ * captures the call (proving the provider fired) and returns false
+ * (same as headless default, but now we can assert it was called).
  *
  * toExternal() schedules navigation asynchronously: the FLP's
  * _handleDataLoss filter runs on the next hash change, not in the

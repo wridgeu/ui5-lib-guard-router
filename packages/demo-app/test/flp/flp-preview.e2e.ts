@@ -29,9 +29,10 @@ describe("FLP preview integration", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// The monkey-patch intercepts confirm() to return false (user cancels).
-		// This is needed because headless Chrome auto-confirms, which would
-		// navigate to Shell-home and destroy the sandbox session.
+		// The monkey-patch intercepts confirm() to return false (user cancels)
+		// and to verify the dirty-state provider actually called confirm().
+		// Headless Chrome returns false for confirm() by default, but without
+		// the intercept we cannot assert that the dialog was triggered.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
