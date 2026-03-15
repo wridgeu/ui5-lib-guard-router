@@ -1,21 +1,19 @@
 import { loginAndGoToProtectedInFlp, resetFlpDemo, setDirtyStateInFlp } from "./helpers";
 
 /**
- * Cross-app navigation test that leaves the FLP sandbox in an unrecoverable
- * state (Shell-home). Isolated in its own spec file so wdio gives it a fresh
- * browser session -- no ordering constraints on the main FLP suite.
+ * Non-dirty cross-app navigation. Isolated spec file because toExternal()
+ * navigates to Shell-home (home button, tile click, etc.), which leaves the
+ * FLP sandbox in an unrecoverable state for the browser session.
  */
-describe("FLP cross-app navigation (isolated session)", () => {
-	beforeEach(async () => {
+describe("FLP cross-app navigation -- clean form", () => {
+	before(async () => {
 		await resetFlpDemo();
 	});
 
-	it("does not trigger dirty-state prompt on cross-app navigation when not dirty", async () => {
+	it("completes cross-app navigation without dirty prompt when form is clean", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(false);
 
-		// Cross-app navigation while not dirty should not show a confirm prompt.
-		// Install an intercept to verify confirm is NOT called.
 		await browser.execute(() => {
 			const w = window as Window & { __flpConfirmCalled?: boolean };
 			w.__flpConfirmCalled = false;
@@ -37,9 +35,6 @@ describe("FLP cross-app navigation (isolated session)", () => {
 			});
 			expect(triggered).toBe(true);
 
-			// Wait for the FLP to complete cross-app navigation -- the hash changes
-			// to Shell-home when _handleDataLoss allows navigation through.
-			// This proves the dirty-state filter ran without calling confirm().
 			await browser.waitUntil(
 				async () => {
 					const hash = await browser.execute(() => window.location.hash);
@@ -47,8 +42,7 @@ describe("FLP cross-app navigation (isolated session)", () => {
 				},
 				{
 					timeout: 5000,
-					timeoutMsg:
-						"FLP did not complete cross-app navigation to Shell-home (dirty provider may have blocked)",
+					timeoutMsg: "FLP did not complete cross-app navigation to Shell-home",
 				},
 			);
 
@@ -57,7 +51,6 @@ describe("FLP cross-app navigation (isolated session)", () => {
 			});
 			expect(confirmWasCalled).toBe(false);
 		} finally {
-			// Always restore original confirm, even if assertions fail
 			await browser.execute(() => {
 				const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
 				if (w.__flpOriginalConfirm) {

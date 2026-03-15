@@ -310,18 +310,15 @@ No `toRoute` check, no flags, no FLP detection -- just a simple dirty check.
 ### FLP sandbox/preview (development only)
 
 The `fiori-tools-preview` middleware creates a simplified FLP sandbox for local
-development. Unlike production, its hash changer **does** pass cross-app hashes
-to the app router's `parse()`. This means a leave guard that blocks when dirty
-would also block after the user confirms the FLP dirty dialog, creating a
-double-block where the user can never leave.
+development. Cross-app navigation via `toExternal()` operates at the shell level
+in both sandbox and production: the leave guard does not interfere because the
+navigation bypasses the app router's `parse()`. The dirty-state provider fires
+and the FLP shows its own confirm dialog. If the user confirms, the shell
+completes the navigation. If the user cancels, the hash stays unchanged.
 
-This is a known limitation of the FLP preview sandbox, not something apps need
-to work around. The sandbox's simplified hash changer does not match production
-behavior, and adding bypass logic (e.g., checking `sap.ushell.Container` or
-`context.toRoute === ""`) would weaken the guard for invalid hashes in all
-environments. The demo app's E2E tests are designed around this: the dirty
-cross-app test has `confirm()` return `false` (user cancels), which avoids
-the double-block scenario entirely.
+The demo app's FLP E2E tests pin this behavior: dirty + cancel (FLP blocks,
+user stays), dirty + confirm (navigation completes to Shell-home), and
+non-dirty (no dialog, navigation completes).
 
 ## Internal State
 

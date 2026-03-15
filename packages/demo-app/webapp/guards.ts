@@ -123,17 +123,12 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * No FLP-specific bypass is needed here. In production FLP, cross-app
- * navigation is intercepted by the `ShellNavigationHashChanger` before
- * it reaches the app router, so this guard never runs for cross-app
- * hashes. The FLP dirty-state provider (registered separately via
+ * No FLP-specific bypass is needed here. Cross-app navigation via
+ * `toExternal()` operates at the shell level in both production and
+ * the FLP sandbox, so the leave guard never runs for cross-app hashes.
+ * The FLP dirty-state provider (registered separately via
  * `registerDirtyStateProvider`) handles cross-app dirty UX with its
- * own confirmation popup.
- *
- * In the FLP sandbox/preview used during development, the simplified
- * hash changer does pass cross-app hashes to `parse()`. See
- * docs/architecture.md for a detailed explanation of the production
- * vs sandbox difference and why no workaround is needed in app code.
+ * own confirmation popup independently of the router.
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {

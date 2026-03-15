@@ -338,13 +338,13 @@ sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 
 No `toRoute` check, no flags, no FLP detection in the leave guard.
 
-| Environment         | Cross-app navigation triggers `parse()`? | `toRoute` value | Leave guard behavior |
-| ------------------- | ---------------------------------------- | --------------- | -------------------- |
-| Production FLP      | No (`ShellNavigationHashChanger` blocks) | N/A             | Never reached        |
-| FLP sandbox         | Yes (simplified hash changer)            | `""`            | Blocks if dirty      |
-| Standalone (no FLP) | Only via manual hash change              | `""`            | Blocks if dirty      |
+| Environment         | Cross-app via `toExternal()` triggers `parse()`? | Leave guard behavior |
+| ------------------- | ------------------------------------------------ | -------------------- |
+| Production FLP      | No (`ShellNavigationHashChanger` intercepts)     | Never reached        |
+| FLP sandbox         | No (`toExternal` operates at shell level)        | Never reached        |
+| Standalone (no FLP) | N/A (no ushell)                                  | N/A                  |
 
-In the **FLP sandbox/preview** used during development, the simplified hash changer does pass cross-app hashes to `parse()`, which can cause a double-block when the user confirms the FLP dirty dialog but the leave guard also blocks. This is a known limitation of the sandbox's simplified hash changer, not something application code should work around. Adding bypass logic (e.g., `if (context.toRoute === "") return true`) would weaken the guard for invalid hashes in all environments.
+In both production and sandbox, `toExternal()` navigates at the shell level, bypassing the app router's `parse()`. The leave guard never interferes with cross-app navigation. The dirty-state provider handles the confirmation UX independently.
 
 ## Complementary Usage Pattern
 
