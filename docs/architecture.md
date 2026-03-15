@@ -336,7 +336,7 @@ navigation.
 
 - **TypeScript**: strict mode, ES2022 target, composite project references
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Lint**: `oxlint` — correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
+- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
 - **Type check**: `tsc --noEmit` against both package tsconfigs
 
 ## Test Architecture
