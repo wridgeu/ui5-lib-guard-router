@@ -325,27 +325,39 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-When you combine FLP dirty-state handling with a route leave guard, allow unmatched hashes to pass through the router. An empty `toRoute` means no route matched the target hash — in FLP this signals cross-app navigation, in standalone mode it may indicate an invalid URL:
+When you combine FLP dirty-state handling with a route leave guard, coordinate them so the leave guard only bypasses when the FLP dirty provider has actually fired. A bare `if (context.toRoute === "") return true` is too broad -- it would also let dirty users escape to invalid hashes:
 
 ```typescript
+let flpDirtyNavPending = false;
+
+// 1. Dirty-state provider: tells FLP about unsaved changes
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false; // in-app navigation handled by leave guard
+	}
+	const isDirty = formModel.getProperty("/isDirty") === true;
+	if (isDirty) {
+		flpDirtyNavPending = true;
+		setTimeout(() => {
+			flpDirtyNavPending = false;
+		}, 0);
+	}
+	return isDirty;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+
+// 2. Leave guard: blocks in-app dirty navigation, defers to FLP for cross-app
 router.addRouteGuard("editOrder", {
 	beforeLeave: (context) => {
-		if (context.toRoute === "") {
-			return true; // no route matched — external or invalid hash
+		if (context.toRoute === "" && flpDirtyNavPending) {
+			return true; // FLP dirty provider handled this cross-app navigation
 		}
 		return formModel.getProperty("/isDirty") !== true;
 	},
 });
-
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) {
-		return false;
-	}
-	return formModel.getProperty("/isDirty") === true;
-};
-
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 ```
+
+The flag works because the dirty provider, `confirm()`, hash change, and guard all execute in the same synchronous chain. `setTimeout(..., 0)` clears the flag on the next microtask.
 
 This split keeps responsibilities clear: leave guards protect in-app route changes, while FLP APIs protect cross-app navigation, browser close, and the shell home button.
 

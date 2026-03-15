@@ -8,11 +8,6 @@ import {
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
-// Test order matters: the "non-dirty cross-app" test navigates to Shell-home,
-// which leaves the FLP preview sandbox in a state that cannot be recovered
-// without a full page reload (wdi5/OPA5 does not reliably reconnect after
-// a mid-session reload). That test must run last in the suite.
-
 describe("FLP preview integration", () => {
 	beforeEach(async () => {
 		await resetFlpDemo();
@@ -56,65 +51,5 @@ describe("FLP preview integration", () => {
 		// The dirty form guard should block in-app navigation, keeping us on protected
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
-	});
-
-	// This test navigates to Shell-home, leaving the FLP sandbox in an
-	// unrecoverable state. It MUST be the last test in the suite.
-	it("does not trigger dirty-state prompt on cross-app navigation when not dirty", async () => {
-		await loginAndGoToProtectedInFlp();
-		await setDirtyStateInFlp(false);
-
-		// Cross-app navigation while not dirty should not show a confirm prompt.
-		// Install an intercept to verify confirm is NOT called.
-		await browser.execute(() => {
-			const w = window as Window & { __flpConfirmCalled?: boolean };
-			w.__flpConfirmCalled = false;
-			const originalConfirm = window.confirm;
-			(window as Window & { __flpOriginalConfirm?: typeof confirm }).__flpOriginalConfirm = originalConfirm;
-			window.confirm = (_message?: string): boolean => {
-				w.__flpConfirmCalled = true;
-				return false;
-			};
-		});
-
-		try {
-			const triggered = await browser.execute(() => {
-				const Container = sap.ui.require("sap/ushell/Container");
-				const navService = Container?.getService("CrossApplicationNavigation");
-				if (!navService?.toExternal) return false;
-				navService.toExternal({ target: { shellHash: "Shell-home" } });
-				return true;
-			});
-			expect(triggered).toBe(true);
-
-			// Wait for the FLP to complete cross-app navigation -- the hash changes
-			// to Shell-home when _handleDataLoss allows navigation through.
-			// This proves the dirty-state filter ran without calling confirm().
-			await browser.waitUntil(
-				async () => {
-					const hash = await browser.execute(() => window.location.hash);
-					return hash.includes("Shell-home");
-				},
-				{
-					timeout: 5000,
-					timeoutMsg:
-						"FLP did not complete cross-app navigation to Shell-home (dirty provider may have blocked)",
-				},
-			);
-
-			const confirmWasCalled = await browser.execute(() => {
-				return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-			});
-			expect(confirmWasCalled).toBe(false);
-		} finally {
-			// Always restore original confirm, even if assertions fail
-			await browser.execute(() => {
-				const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
-				if (w.__flpOriginalConfirm) {
-					window.confirm = w.__flpOriginalConfirm;
-					delete w.__flpOriginalConfirm;
-				}
-			});
-		}
 	});
 });

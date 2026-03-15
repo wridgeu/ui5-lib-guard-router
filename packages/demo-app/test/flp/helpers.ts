@@ -157,11 +157,11 @@ export async function launchFlpApp(): Promise<void> {
 	if (!currentHash.includes("app-preview")) {
 		// We're outside the app (e.g. at Shell-home after cross-app navigation).
 		// The FLP preview sandbox and wdi5 do not reliably recover from a
-		// mid-session page reload, so tests that navigate away from the app
-		// (like the cross-app non-dirty test) must run last in the suite.
+		// mid-session page reload. Tests that navigate away from the app
+		// must live in their own spec file (see flp-cross-app.e2e.ts).
 		throw new Error(
 			`Cannot reset FLP app from hash "${currentHash}". ` +
-				"Tests that navigate away from the app must be ordered last in the suite.",
+				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
 		);
 	}
 

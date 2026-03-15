@@ -286,25 +286,46 @@ If a leave guard also blocks the hash change triggered by the FLP, the two
 mechanisms conflict: the user confirms in the FLP popup, but the router restores
 the hash, making it impossible to leave the app.
 
-To detect unmatched hashes (including cross-app navigation in FLP) in a leave
-guard, check `context.toRoute`:
+To avoid the double-block conflict, the leave guard must allow through only
+when the FLP dirty-state provider has actually fired for this navigation.
+A simple `context.toRoute === ""` check is not enough -- it would also let
+dirty users escape to invalid hashes. Instead, coordinate with the dirty
+provider via a synchronous flag:
 
 ```ts
+let flpDirtyNavPending = false;
+
+// Dirty-state provider: called by FLP before confirm() dialog
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) return false;
+	const isDirty = formModel.getProperty("/isDirty") === true;
+	if (isDirty) {
+		flpDirtyNavPending = true;
+		setTimeout(() => {
+			flpDirtyNavPending = false;
+		}, 0);
+	}
+	return isDirty;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+
+// Leave guard: only bypasses when the dirty provider actually fired
 const leaveGuard: LeaveGuardFn = (context) => {
-	// toRoute is empty when the target hash doesn't match any known route.
-	// In FLP this signals cross-app navigation (e.g. Shell-home intent);
-	// in standalone mode it can also mean a mistyped or invalid hash.
-	if (context.toRoute === "") {
-		return true; // unmatched hash — let FLP or the app handle it
+	if (context.toRoute === "" && flpDirtyNavPending) {
+		return true; // FLP confirmed this cross-app navigation
 	}
 	return !formModel.getProperty("/isDirty");
 };
 ```
 
+The flag works because the dirty provider, `confirm()`, hash change, and
+`parse()` all run in the same synchronous chain. `setTimeout(..., 0)` clears
+the flag on the next microtask, after the guard has already read it.
+
 The `toRoute` value is derived from `getRouteInfoByHash()`. When the FLP changes
 the hash to an intent like `Shell-home`, no route matches, so `toRoute` is the
-empty string. In FLP, this reliably signals cross-app navigation. In standalone
-mode, an empty `toRoute` can also result from invalid or manually entered hashes.
+empty string. In standalone mode or for invalid hashes within FLP, the dirty
+provider never fires and the guard blocks normally.
 
 ## Internal State
 

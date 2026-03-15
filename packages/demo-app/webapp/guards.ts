@@ -1,7 +1,7 @@
 import Log from "sap/base/Log";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard/router/types";
-import { hasUshellContainer } from "./flp/ContainerAdapter";
+import { isFlpDirtyNavPending } from "./flp/ContainerAdapter";
 
 const LOG_COMPONENT = "demo.app.guards";
 
@@ -124,27 +124,22 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * When running inside FLP and the target hash does not match any known
- * route (`toRoute === ""`), navigation is allowed so the FLP's own
- * dirty-state provider (registered via `registerDirtyStateProvider`) can
- * show its confirmation popup. Without this bypass the two mechanisms
- * conflict: the FLP popup fires, the user confirms, but the router's
- * leave guard still blocks the hash change and restores the old hash,
- * making it impossible to leave the app.
- *
- * In standalone mode (no FLP), unmatched hashes are blocked when dirty
- * just like any other navigation, preventing users from bypassing the
- * guard by entering an invalid URL.
+ * Only bypasses the dirty check when the FLP dirty-state provider has
+ * actually fired for this navigation cycle (`isFlpDirtyNavPending()`).
+ * This means:
+ * - FLP cross-app navigation where the user confirmed the dirty dialog
+ *   is allowed through (FLP already handled the UX).
+ * - Invalid hashes (no route match) are blocked when dirty, even inside
+ *   FLP, because the dirty provider does not fire for manual hash edits.
+ * - Standalone mode always blocks when dirty (no FLP provider to fire).
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
-		if (context.toRoute === "") {
-			// In FLP, unmatched hashes signal cross-app navigation (e.g. Shell-home).
-			// Let the FLP dirty-state provider handle it via its own confirm dialog.
-			// In standalone mode, treat unmatched hashes like any other route.
-			if (hasUshellContainer()) {
-				return true;
-			}
+		// The FLP dirty-state provider sets this flag synchronously before
+		// the leave guard runs. If it fired, FLP is handling the cross-app
+		// dirty UX -- allow through to avoid double-blocking.
+		if (context.toRoute === "" && isFlpDirtyNavPending()) {
+			return true;
 		}
 		const isDirty = formModel.getProperty("/isDirty");
 		if (isDirty === true) {

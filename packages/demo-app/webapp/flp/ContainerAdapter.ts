@@ -25,6 +25,27 @@ export function hasUshellContainer(): boolean {
 	return getContainer() !== null;
 }
 
+/**
+ * Tracks whether the FLP dirty-state provider was called for the current
+ * navigation. Set by the dirty provider callback when the form is dirty;
+ * auto-cleared on the next microtask (after the synchronous guard chain
+ * completes). This lets the leave guard distinguish a genuine FLP
+ * cross-app navigation (provider fired) from an invalid in-app hash
+ * (provider not called).
+ */
+let _flpDirtyNavPending = false;
+
+export function markFlpDirtyNavPending(): void {
+	_flpDirtyNavPending = true;
+	setTimeout(() => {
+		_flpDirtyNavPending = false;
+	}, 0);
+}
+
+export function isFlpDirtyNavPending(): boolean {
+	return _flpDirtyNavPending;
+}
+
 export function registerDirtyStateProvider(provider: FlpDirtyStateProvider): (() => void) | null {
 	const container = getContainer();
 	if (!container?.registerDirtyStateProvider || !container?.deregisterDirtyStateProvider) {
