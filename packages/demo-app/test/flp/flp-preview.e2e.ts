@@ -60,8 +60,19 @@ describe("FLP preview integration", () => {
 		});
 		expect(triggered).toBe(true);
 
-		// Give the FLP time to process the navigation
-		await browser.pause(2000);
+		// Wait for the FLP to complete cross-app navigation — the hash changes
+		// to Shell-home when _handleDataLoss allows navigation through.
+		// This proves the dirty-state filter ran without calling confirm().
+		await browser.waitUntil(
+			async () => {
+				const hash = await browser.execute(() => window.location.hash);
+				return hash.includes("Shell-home");
+			},
+			{
+				timeout: 5000,
+				timeoutMsg: "FLP did not complete cross-app navigation to Shell-home (dirty provider may have blocked)",
+			},
+		);
 
 		const confirmWasCalled = await browser.execute(() => {
 			return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
