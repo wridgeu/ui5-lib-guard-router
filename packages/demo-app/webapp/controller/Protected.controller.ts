@@ -1,5 +1,4 @@
-import Controller from "sap/ui/core/mvc/Controller";
-import UIComponent from "sap/ui/core/UIComponent";
+import BaseController from "./BaseController";
 
 /**
  * Controller for the Protected view.
@@ -11,8 +10,8 @@ import UIComponent from "sap/ui/core/UIComponent";
  *
  * @namespace demo.app.controller
  */
-export default class ProtectedController extends Controller {
+export default class ProtectedController extends BaseController {
 	onNavBack(): void {
-		UIComponent.getRouterFor(this).navTo("home");
+		this.getRouter().navTo("home");
 	}
 }

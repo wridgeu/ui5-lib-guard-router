@@ -1,7 +1,6 @@
-import Controller from "sap/ui/core/mvc/Controller";
-import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
 
 /**
@@ -18,7 +17,7 @@ import { createHomeLeaveLogger } from "../guards";
  *
  * @namespace demo.app.controller
  */
-export default class HomeController extends Controller {
+export default class HomeController extends BaseController {
 	/** Reference to the leave guard for cleanup in onExit */
 	private _leaveGuard: LeaveGuardFn | null = null;
 
@@ -28,23 +27,23 @@ export default class HomeController extends Controller {
 		// Demonstrates the standalone addLeaveGuard() API
 		// Guard is registered when controller initializes
 		// ============================================================
-		const router = UIComponent.getRouterFor(this) as GuardRouter;
+		const router = this.getRouter<GuardRouter>();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
 
 	onToggleLogin(): void {
-		const model = (this.getOwnerComponent() as UIComponent).getModel("auth") as JSONModel;
+		const model = this.getModel<JSONModel>("auth");
 		const isLoggedIn = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
 	}
 
 	onNavToProtected(): void {
-		UIComponent.getRouterFor(this).navTo("protected");
+		this.getRouter().navTo("protected");
 	}
 
 	onNavToForbidden(): void {
-		UIComponent.getRouterFor(this).navTo("forbidden");
+		this.getRouter().navTo("forbidden");
 	}
 
 	/**
@@ -59,7 +58,7 @@ export default class HomeController extends Controller {
 	 */
 	onExit(): void {
 		if (this._leaveGuard) {
-			const router = UIComponent.getRouterFor(this) as GuardRouter;
+			const router = this.getRouter<GuardRouter>();
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}
