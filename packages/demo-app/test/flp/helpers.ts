@@ -1,26 +1,6 @@
 import type { wdi5Selector } from "wdio-ui5-service";
-import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 import type UIComponent from "sap/ui/core/UIComponent";
 import type JSONModel from "sap/ui/model/json/JSONModel";
-
-type DemoComponentLike = UIComponent;
-
-type ComponentRegistryLike = Pick<ComponentRegistry, "all">;
-
-type CrossApplicationNavigationLike = {
-	toExternal?: (parameters: { target: { shellHash: string } }) => void;
-};
-
-type SapGlobalLike = {
-	ui?: {
-		require?: (moduleName: string) => unknown;
-	};
-	ushell?: {
-		Container?: {
-			getService?: (serviceName: string) => CrossApplicationNavigationLike | undefined;
-		};
-	};
-};
 
 const SELECTORS = {
 	homePage: {
@@ -155,22 +135,22 @@ async function waitForPage(name: "homePage" | "protectedPage", expectedTitle: st
 	);
 }
 
+/**
+ * Find the demo app component instance by manifest ID.
+ * Runs in browser context via sap.ui.require — used inside browser.execute() callbacks.
+ */
+function findDemoComponent(): UIComponent | undefined {
+	const Component = sap.ui.require("sap/ui/core/Component");
+	const all = Component.registry.all() as Record<string, UIComponent>;
+	return Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+}
+
 async function navigateHomeWithinApp(): Promise<void> {
 	const navigated = await browser.execute(() => {
-		const sapGlobal = (globalThis as { sap?: SapGlobalLike }).sap;
-		const componentRegistry = sapGlobal?.ui?.require?.("sap/ui/core/ComponentRegistry") as
-			| ComponentRegistryLike
-			| undefined;
-		const demoComponent = Object.values(componentRegistry?.all?.() ?? {}).find((candidate) => {
-			return candidate?.getManifestEntry?.("sap.app")?.id === "demo.app";
-		}) as DemoComponentLike | undefined;
-		const router = demoComponent?.getRouter?.();
+		const component = findDemoComponent();
+		if (!component) return false;
 
-		if (!router?.navTo) {
-			return false;
-		}
-
-		router.navTo("home", {}, undefined, true);
+		component.getRouter().navTo("home", {}, undefined, true);
 		return true;
 	});
 
@@ -226,35 +206,21 @@ export async function expectControlText(name: SelectorName, expected: string): P
 
 async function resetDirtyState(): Promise<void> {
 	await browser.execute(() => {
-		const sapGlobal = (globalThis as { sap?: SapGlobalLike }).sap;
-		const componentRegistry = sapGlobal?.ui?.require?.("sap/ui/core/ComponentRegistry") as
-			| ComponentRegistryLike
-			| undefined;
-		const demoComponent = Object.values(componentRegistry?.all?.() ?? {}).find((candidate) => {
-			return candidate?.getManifestEntry?.("sap.app")?.id === "demo.app";
-		}) as DemoComponentLike | undefined;
-
-		const formModel = demoComponent?.getModel("form") as JSONModel | null | undefined;
-		formModel?.setProperty("/isDirty", false);
+		const component = findDemoComponent();
+		(component?.getModel("form") as JSONModel | undefined)?.setProperty("/isDirty", false);
 	});
 }
 
 export async function triggerHomeNavigationThroughFlp(): Promise<void> {
 	const triggered = await browser.execute(() => {
-		const sapGlobal = (globalThis as { sap?: SapGlobalLike }).sap;
-		const container = sapGlobal?.ushell?.Container;
-		const navigationService = container?.getService?.("CrossApplicationNavigation");
+		const Container = sap.ui.require("sap/ushell/Container");
+		const navService = Container?.getService("CrossApplicationNavigation");
 
-		if (!navigationService?.toExternal) {
+		if (!navService?.toExternal) {
 			return false;
 		}
 
-		navigationService.toExternal({
-			target: {
-				shellHash: "Shell-home",
-			},
-		});
-
+		navService.toExternal({ target: { shellHash: "Shell-home" } });
 		return true;
 	});
 
@@ -264,17 +230,23 @@ export async function triggerHomeNavigationThroughFlp(): Promise<void> {
 }
 
 export async function waitForAndDismissDirtyStatePrompt(): Promise<void> {
+	let alertSeen = false;
+
 	await browser.waitUntil(
 		async () => {
 			try {
-				if (!(await browser.isAlertOpen())) {
-					return false;
+				if (await browser.isAlertOpen()) {
+					alertSeen = true;
+					await browser.dismissAlert();
+					return true;
 				}
-				await browser.dismissAlert();
-				return true;
 			} catch {
-				return false;
+				// isAlertOpen saw the alert but dismissAlert found it already gone.
+				// Headless Chrome auto-dismisses confirm() dialogs before WebDriver
+				// can act on them. The alert was present, so the provider fired.
+				if (alertSeen) return true;
 			}
+			return alertSeen;
 		},
 		{
 			timeout: 5000,
