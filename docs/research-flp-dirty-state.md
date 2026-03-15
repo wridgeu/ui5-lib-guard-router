@@ -141,7 +141,126 @@ Used by navigation filters to communicate their decision:
 - **Inner-app navigation**: Same semantic object and action, different app route (e.g., `#Order-display&/list` → `#Order-display&/detail/123`). The `&/...` suffix is the inner-app route.
 - **Cross-app navigation**: Different semantic object/action (e.g., `#Order-display` → `#Product-manage`).
 
-The `isInnerAppNavigation(newHash, oldHash)` method on the hash changer determines this by comparing the intent portions of the hashes.
+Classification happens in `treatHashChanged` using `UrlParsing.compareHashes()`, which returns `{ sameIntent, sameParameters }`. The public `isInnerAppNavigation(newHash, oldHash)` method provides the same logic as a utility but is not used internally by `treatHashChanged`.
+
+## Hash Changer Architecture
+
+The browser URL always contains a single hash fragment. The FLP uses the `&/` convention to pack two logical hashes into one physical hash:
+
+```
+#Order-display&/detail/42
+ └── shell hash ──┘└─ app hash ─┘
+```
+
+The browser sees one `hashchange` event. The FLP's hash changer infrastructure splits this into separate concerns, so the app's router only ever sees the app hash portion (`detail/42`).
+
+### How the FLP replaces the default HashChanger
+
+During FLP boot, `ShellNavigationInternal.init()` calls:
+
+```js
+HashChanger.replaceHashChanger(shellNavigationHashChanger);
+```
+
+This static method on [`HashChanger`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/HashChanger-dbg.js) replaces the global singleton. It transfers the existing `RouterHashChanger` from the old instance to the new one and re-parents it:
+
+```js
+oHashChanger._oRouterHashChanger = _oHashChanger._oRouterHashChanger;
+oHashChanger._oRouterHashChanger.parent = oHashChanger;
+```
+
+From this point on, `HashChanger.getInstance()` returns the `ShellNavigationHashChanger`. Every `Router` that later calls `createRouterHashChanger()` gets a child whose parent is the shell hash changer.
+
+The replacement also overrides `getHash()`:
+
+```js
+ShellNavigationHashChanger.prototype.getHash = function () {
+	return this.getAppHash(); // returns ONLY the inner-app portion
+};
+```
+
+Any code calling `hashChanger.getHash()` — including `Router.initialize()` — sees only the app-specific route, never the shell prefix.
+
+### Event chain: browser hashchange → Router.parse()
+
+```
+Browser hashchange (one event for the full fragment)
+  → hasher library captures it
+    → ShellNavigationHashChanger.treatHashChanged(newHash, oldHash)
+      → _splitHash() decomposes at &/
+      → UrlParsing.compareHashes() classifies the change
+        │
+        ├─ Inner-app (sameIntent && sameParameters, different appSpecificRoute)
+        │    → fireEvent("hashChanged", {newHash: "detail/42", ...})
+        │      → HashChanger._onHashChangedForRouterHashChanger(eventInfo, event)
+        │        → paramMapping resolves "newHash" → "detail/42"
+        │        → RouterHashChanger.fireHashChanged("detail/42", subHashMap, false)
+        │          → fireEvent("hashChanged", {newHash: "detail/42"})
+        │            → Router.fnHashChanged → Router.parse("detail/42")
+        │
+        └─ Cross-app (different intent)
+             → fireEvent("shellHashChanged", {..., updateHashOnly: true})
+             │  → HashChanger._onHashChangedForRouterHashChanger(eventInfo, event)
+             │    → paramMapping resolves "newHash" from "newAppSpecificRouteNoSeparator"
+             │    → RouterHashChanger.fireHashChanged(appHash, subHashMap, true)
+             │      → if (!bUpdateHashOnly && sHash !== sOldHash) — CONDITION FAILS
+             │      → fireEvent is SKIPPED — Router.parse() is never called
+             │
+             → _fnShellCallback(newShellHash, newAppRoute, oldShellHash, oldAppRoute)
+               → FLP shell destroys old component, loads new app
+```
+
+The `updateHashOnly: true` flag in the `shellHashChanged` event definition is the mechanism that prevents the old app's router from reacting to cross-app navigation. The [`RouterHashChanger.fireHashChanged`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/RouterHashChanger-dbg.js) method silently updates the stored hash without firing the `"hashChanged"` event:
+
+```js
+RouterHashChanger.prototype.fireHashChanged = function (sHash, oSubHashMap, bUpdateHashOnly) {
+	var sOldHash = this.hash;
+	this.hash = sHash;
+	if (!bUpdateHashOnly && sHash !== sOldHash) {
+		this.fireEvent("hashChanged", { newHash: sHash, oldHash: sOldHash });
+	}
+};
+```
+
+### Event chain: Router.navTo() → browser URL
+
+When the app calls `router.navTo("detail", {id: "42"})`:
+
+```
+Router.navTo("detail", {id: "42"})
+  → resolves route pattern → hash string "detail/42"
+  → RouterHashChanger.setHash("detail/42")
+    → fires "hashSet" event upward
+      → ShellNavigationHashChanger._onHashModified catches it
+        → _reconstructHash() joins sub-hashes with &/
+        → setHash(fullHash) → toAppHash("detail/42", true)
+          → _constructHash(appHashPrefix + "detail/42")
+            → _getCurrentShellHash() returns "Order-display"
+            → result: "Order-display&/detail/42"
+          → hasher.setHash("Order-display&/detail/42")
+            → browser URL updates to #Order-display&/detail/42
+```
+
+The app's router only knows about `"detail/42"`. The `ShellNavigationHashChanger` transparently handles prefixing it with the shell hash and the `&/` separator.
+
+### Layer summary
+
+| Layer    | Component                    | Sees                                     | Responsibility                            |
+| -------- | ---------------------------- | ---------------------------------------- | ----------------------------------------- |
+| Browser  | `window.onhashchange`        | `#Order-display&/detail/42`              | Raw hash change event                     |
+| Library  | `hasher`                     | `Order-display&/detail/42`               | Normalizes, fires `changed` signal        |
+| FLP      | `ShellNavigationHashChanger` | Shell: `Order-display`, App: `detail/42` | Splits at `&/`, classifies, routes events |
+| UI5 Core | `RouterHashChanger`          | `detail/42`                              | Receives app hash only, fires to Router   |
+| App      | `Router`                     | `detail/42`                              | Matches routes, calls `parse()`           |
+
+### Source references
+
+All method signatures and event definitions verified against the unminified SAPUI5 1.144.0 source files:
+
+- [`ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js) — `treatHashChanged`, `_splitHash`, `getHash`/`getAppHash`, `setHash`/`toAppHash`/`_constructHash`, `getRelevantEventsInfo` (defines `O_EVENT` with `updateHashOnly`), `_fnShellCallback`, `isInnerAppNavigation`
+- [`HashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/HashChanger-dbg.js) — `replaceHashChanger` (re-parents `_oRouterHashChanger`), `_onHashChangedForRouterHashChanger` (uses `paramMapping`), `_registerListenerToRelevantEvents`
+- [`RouterHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/RouterHashChanger-dbg.js) — `fireHashChanged` (`bUpdateHashOnly` check), `setHash` (fires `"hashSet"` upward)
+- [`Router-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/Router-dbg.js) — `initialize` (attaches `"hashChanged"` handler that calls `parse()`)
 
 ## Scope and Limitations
 
