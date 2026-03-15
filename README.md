@@ -19,7 +19,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package currently declares `minUI5Version: 1.144.0` and CI tests that version. The implementation itself only depends on APIs available since UI5 1.118, so older baselines may be possible, but they are not shipped or verified yet.
+> The published package currently declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline yet, but it provides a concrete verification signal for consumers evaluating older runtimes.
 
 ## Quick start
 
@@ -88,7 +88,7 @@ export default class Component extends UIComponent {
 
 	init(): void {
 		super.init();
-		const router = this.getRouter() as unknown as GuardRouter;
+		const router = this.getRouter() as GuardRouter;
 
 		// Route-specific guard: redirects to "home" when not logged in
 		router.addRouteGuard("protected", (context) => {
@@ -142,6 +142,7 @@ npm start         # demo app at http://localhost:8080/index.html
 ```bash
 npm test              # run all tests (QUnit + E2E, sequentially)
 npm run test:qunit    # unit tests only
+npm run test:qunit:compat:118 # core library QUnit suite on OpenUI5 1.118.0
 npm run test:e2e      # integration tests only
 ```
 

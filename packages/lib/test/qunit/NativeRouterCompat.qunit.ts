@@ -11,7 +11,7 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
  * for sap.m.routing.Router: same API surface, same route matching.
  */
 
-function createRouterConfig(): [object[], object] {
+function createRouterConfig(): ConstructorParameters<typeof MobileRouter> {
 	const routes = [
 		{ name: "home", pattern: "" },
 		{ name: "page1", pattern: "page1" },
@@ -50,14 +50,8 @@ QUnit.test("Both routers are instances of sap.m.routing.Router", function (asser
 QUnit.test("Both routers have the same public routing methods", function (assert: Assert) {
 	const methods = ["navTo", "getRoute", "getRouteInfoByHash", "match", "initialize", "stop", "destroy"];
 	for (const method of methods) {
-		assert.ok(
-			typeof (extRouter as unknown as Record<string, unknown>)[method] === "function",
-			`ext router has ${method}`,
-		);
-		assert.ok(
-			typeof (nativeRouter as unknown as Record<string, unknown>)[method] === "function",
-			`native router has ${method}`,
-		);
+		assert.ok(typeof Reflect.get(extRouter, method) === "function", `ext router has ${method}`);
+		assert.ok(typeof Reflect.get(nativeRouter, method) === "function", `native router has ${method}`);
 	}
 });
 

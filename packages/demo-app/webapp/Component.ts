@@ -31,7 +31,7 @@ export default class Component extends UIComponent {
 	init(): void {
 		super.init();
 
-		const router = this.getRouter() as unknown as GuardRouter;
+		const router = this.getRouter() as GuardRouter;
 		const authModel = this.getModel("auth") as JSONModel;
 
 		// Create a form model for dirty state tracking
@@ -76,7 +76,7 @@ export default class Component extends UIComponent {
 	 * navigating to the launchpad home page, not when switching between apps.
 	 */
 	destroy(): void {
-		const router = this.getRouter() as unknown as GuardRouter;
+		const router = this.getRouter() as GuardRouter;
 
 		// Remove global guard
 		if (this._navigationLogger) {

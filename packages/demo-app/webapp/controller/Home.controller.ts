@@ -28,7 +28,7 @@ export default class HomeController extends Controller {
 		// Demonstrates the standalone addLeaveGuard() API
 		// Guard is registered when controller initializes
 		// ============================================================
-		const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+		const router = UIComponent.getRouterFor(this) as GuardRouter;
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
@@ -40,11 +40,11 @@ export default class HomeController extends Controller {
 	}
 
 	onNavToProtected(): void {
-		(this.getOwnerComponent() as UIComponent).getRouter().navTo("protected");
+		UIComponent.getRouterFor(this).navTo("protected");
 	}
 
 	onNavToForbidden(): void {
-		(this.getOwnerComponent() as UIComponent).getRouter().navTo("forbidden");
+		UIComponent.getRouterFor(this).navTo("forbidden");
 	}
 
 	/**
@@ -59,7 +59,7 @@ export default class HomeController extends Controller {
 	 */
 	onExit(): void {
 		if (this._leaveGuard) {
-			const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+			const router = UIComponent.getRouterFor(this) as GuardRouter;
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}

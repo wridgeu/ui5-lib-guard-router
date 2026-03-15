@@ -74,7 +74,7 @@ async function main() {
 			[
 				'import type { GuardRouter } from "ui5/guard/router/types";',
 				"",
-				"const router = null as unknown as GuardRouter;",
+				"declare const router: GuardRouter;",
 				"void router;",
 				"",
 			].join("\n"),

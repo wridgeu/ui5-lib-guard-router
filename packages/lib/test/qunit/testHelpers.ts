@@ -1,9 +1,28 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type MobileRouter from "sap/m/routing/Router";
 import Router from "ui5/guard/router/Router";
 import type { GuardRouter } from "ui5/guard/router/types";
 
 /** Typed constructor so test files don't need `as any` casts. */
-export const GuardRouterClass = Router as unknown as new (routes: object[], config: object) => GuardRouter;
+type GuardRouterConstructor = new (...args: ConstructorParameters<typeof MobileRouter>) => GuardRouter;
+
+export const GuardRouterClass = Router as GuardRouterConstructor;
+
+function getRouterMethod(router: GuardRouter, methodName: string): (...args: unknown[]) => unknown {
+	const method = Reflect.get(router, methodName);
+	if (typeof method !== "function") {
+		throw new Error(`Router method "${methodName}" is not available`);
+	}
+	return (...args: unknown[]) => Reflect.apply(method, router, args);
+}
+
+export function addGuardUnsafe(router: GuardRouter, guard: unknown): void {
+	getRouterMethod(router, "addGuard")(guard);
+}
+
+export function addRouteGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
+	getRouterMethod(router, "addRouteGuard")(routeName, guard);
+}
 
 /**
  * Initialize HashChanger for tests (idempotent).

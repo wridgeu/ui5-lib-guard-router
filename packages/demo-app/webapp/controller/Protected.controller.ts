@@ -13,6 +13,6 @@ import UIComponent from "sap/ui/core/UIComponent";
  */
 export default class ProtectedController extends Controller {
 	onNavBack(): void {
-		(this.getOwnerComponent() as UIComponent).getRouter().navTo("home");
+		UIComponent.getRouterFor(this).navTo("home");
 	}
 }
