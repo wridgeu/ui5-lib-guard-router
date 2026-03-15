@@ -45,7 +45,7 @@ Guard registration happens in two places:
 
 ### Controllers
 
-All controllers extend `BaseController`, which provides shared helpers (`getRouter()`, `getModel()`, `getDemoScenarioRunner()`).
+All controllers extend `BaseController`, which provides shared helpers (`getRouter()`, `getModel()`, `createScenarioRunner()`).
 
 | File                                 | Purpose                                                                 |
 | ------------------------------------ | ----------------------------------------------------------------------- |

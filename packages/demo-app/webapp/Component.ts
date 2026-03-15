@@ -47,13 +47,11 @@ export default class Component extends UIComponent {
 	}
 
 	override destroy(): void {
-		const router = this.getRouter() as GuardRouter;
-
 		this._runtimeCoordinator?.destroy();
 		this._runtimeCoordinator = null;
 
 		if (this._navigationLogger) {
-			router.removeGuard(this._navigationLogger);
+			(this.getRouter() as GuardRouter).removeGuard(this._navigationLogger);
 			this._navigationLogger = null;
 		}
 

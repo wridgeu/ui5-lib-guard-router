@@ -155,7 +155,8 @@ export async function launchFlpApp(): Promise<void> {
 	await browser.goTo({ sHash: "" });
 	try {
 		await waitForPage("homePage", "Home", 5000);
-	} catch {
+	} catch (initialError) {
+		console.warn("Initial FLP page load failed, falling back to programmatic navigation:", initialError);
 		await navigateHomeWithinApp();
 		await waitForPage("homePage", "Home");
 	}
@@ -219,14 +220,13 @@ async function resetDirtyState(): Promise<void> {
  * poll for the flag in a separate execute.
  */
 export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
-	// Step 1: install the confirm intercept
+	// Step 1: install the confirm intercept (stays active until explicitly restored)
 	await browser.execute(() => {
-		const w = window as Window & { __flpConfirmCalled?: boolean };
+		const w = window as Window & { __flpConfirmCalled?: boolean; __flpOriginalConfirm?: typeof confirm };
 		w.__flpConfirmCalled = false;
-		const originalConfirm = window.confirm;
+		w.__flpOriginalConfirm = window.confirm;
 		window.confirm = (_message?: string): boolean => {
 			w.__flpConfirmCalled = true;
-			window.confirm = originalConfirm;
 			return false;
 		};
 	});
@@ -258,6 +258,15 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 				"FLP dirty-state provider did not call window.confirm — registerDirtyStateProvider may not have fired",
 		},
 	);
+
+	// Step 4: restore original confirm
+	await browser.execute(() => {
+		const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
+		if (w.__flpOriginalConfirm) {
+			window.confirm = w.__flpOriginalConfirm;
+			delete w.__flpOriginalConfirm;
+		}
+	});
 }
 
 export async function waitForProtectedPageInFlp(): Promise<void> {

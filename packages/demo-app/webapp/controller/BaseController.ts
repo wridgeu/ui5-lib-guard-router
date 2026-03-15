@@ -27,7 +27,7 @@ export default abstract class BaseController extends Controller {
 		return model as T;
 	}
 
-	protected getDemoScenarioRunner(): ScenarioRunner {
+	protected createScenarioRunner(): ScenarioRunner {
 		return new ScenarioRunner(this.getModel<JSONModel>("runtime"));
 	}
 }

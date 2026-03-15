@@ -55,15 +55,15 @@ export function nextTick(ms = 50): Promise<void> {
 /** Wait for a single patternMatched on `routeName`, then detach. */
 export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1000): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const route = router.getRoute(routeName);
-		if (!route) {
+		const maybeRoute = router.getRoute(routeName);
+		if (!maybeRoute) {
 			reject(new Error(`Route "${routeName}" is not available`));
 			return;
 		}
-		const matchedRoute = route;
+		const route = maybeRoute;
 
 		const timer = setTimeout(() => {
-			matchedRoute.detachPatternMatched(handler);
+			route.detachPatternMatched(handler);
 			reject(
 				new Error(`Timed out waiting for route "${routeName}", hash="${HashChanger.getInstance().getHash()}"`),
 			);
@@ -71,11 +71,11 @@ export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1
 
 		function handler(): void {
 			clearTimeout(timer);
-			matchedRoute.detachPatternMatched(handler);
+			route.detachPatternMatched(handler);
 			resolve();
 		}
 
-		matchedRoute.attachPatternMatched(handler);
+		route.attachPatternMatched(handler);
 	});
 }
 
@@ -89,6 +89,9 @@ export async function assertBlocked(
 	routeName: string,
 	navigate: () => void,
 	message: string,
+	// Sync guards resolve in the same tick; async test guards settle within
+	// ~10 ms.  150 ms gives a 15x margin while saving ~11 s wall-time vs the
+	// previous 500 ms default.
 	timeout = 150,
 ): Promise<void> {
 	let matched = false;

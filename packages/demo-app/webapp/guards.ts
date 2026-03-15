@@ -55,6 +55,10 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 	return async (context: GuardContext): Promise<GuardResult> => {
 		Log.info(`Async permission check started for "${context.toRoute}"`, "", LOG_COMPONENT);
 
+		if (context.signal.aborted) {
+			return false;
+		}
+
 		// Simulate an async API call with abort support
 		// In real apps, pass context.signal to fetch() or other cancellable APIs
 		try {

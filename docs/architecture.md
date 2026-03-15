@@ -95,14 +95,14 @@ matching, target loading, or event firing occurs.
 All types are defined in `types.ts` and exported for consumer use.
 
 ```
-GuardFn      = (context: GuardContext) => GuardResult | Promise<GuardResult>
-LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>
+GuardFn      = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>
+LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>
 
 GuardContext                        GuardResult
 +--------------+                   +---------------------------+
 | toRoute      |  string           | true    -> allow          |
 | toHash       |  string           | false   -> block          |
-| toArguments  |  Record           | string  -> redirect       |
+| toArguments  |  RouteInfo["arguments"] | string  -> redirect  |
 | fromRoute    |  string           | GuardRedirect -> redirect |
 | fromHash     |  string           |   with params & targets   |
 | signal       |  AbortSignal      +---------------------------+
@@ -140,7 +140,7 @@ flowchart TD
     suppress -- "no" --> redir{_redirecting?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
-    samehash -- "yes" --> ret
+    samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
     samehash -- "no" --> pending{same as _pendingHash?}
     pending -- "yes" --> ret
     pending -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
@@ -336,7 +336,7 @@ navigation.
 
 - **TypeScript**: strict mode, ES2022 target, composite project references
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Lint**: `oxlint` with `eqeqeq`, `no-var`, `prefer-const` rules
+- **Lint**: `oxlint` — correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
 - **Type check**: `tsc --noEmit` against both package tsconfigs
 
 ## Test Architecture
@@ -386,6 +386,10 @@ navigation.
   |   In-app nav inside FLP   |   the older UI5 runtime.
   |   FLP dirty-state prompt  |
   +---------------------------+
+
+  CI also runs:
+  - node22-pack-smoke: build + pack + consumer type smoke on Node 22
+  - windows-smoke: QUnit + E2E on windows-latest
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.

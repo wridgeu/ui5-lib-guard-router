@@ -50,6 +50,7 @@ jobs:
               run: npm run pack:check
 
     node22-pack-smoke:
+        needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 15
         steps:

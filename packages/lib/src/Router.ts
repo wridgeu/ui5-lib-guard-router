@@ -419,6 +419,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _commitNavigation(hash: string, route?: string): void {
 		this._pendingHash = null;
+		this._abortController = null;
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
 		super.parse(hash);
@@ -492,6 +493,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * determines what to return for non-true results: leave guards always
 	 * return `false`, enter guards validate and may return redirects.
 	 *
+	 * Note: `guards` is typed as `GuardFn[]` for reuse. Leave guard callers
+	 * pass `LeaveGuardFn[]` which is assignable (narrower return type).
+	 *
 	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
 	 */
 	private async _continueGuardsAsync(
@@ -530,9 +534,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/** Validate a non-true guard result; invalid values become false. */
 	private _validateGuardResult(result: unknown): GuardResult {
-		if (typeof result === "string" || typeof result === "boolean" || isGuardRedirect(result)) {
-			return result;
-		}
+		if (typeof result === "boolean") return result;
+		if (typeof result === "string" && result.length > 0) return result;
+		if (isGuardRedirect(result)) return result;
 		Log.warning("Guard returned invalid value, treating as block", String(result), LOG_COMPONENT);
 		return false;
 	}
@@ -555,6 +559,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** Clear pending state and restore the previous hash. */
 	private _blockNavigation(attemptedHash?: string): void {
 		this._pendingHash = null;
+		this._abortController = null;
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
 			return;

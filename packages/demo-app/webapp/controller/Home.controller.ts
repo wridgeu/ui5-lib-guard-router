@@ -31,33 +31,33 @@ export default class HomeController extends BaseController {
 		const model = this.getModel<JSONModel>("auth");
 		const isLoggedIn = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
-		this.getDemoScenarioRunner().recordAction(isLoggedIn ? "User logged out" : "User logged in");
+		this.createScenarioRunner().recordAction(isLoggedIn ? "User logged out" : "User logged in");
 	}
 
 	onNavToProtected(): void {
-		this.getDemoScenarioRunner().recordAction('Triggered router.navTo("protected")');
+		this.createScenarioRunner().recordAction('Triggered router.navTo("protected")');
 		this.getRouter().navTo("protected");
 	}
 
 	onNavToForbidden(): void {
-		this.getDemoScenarioRunner().recordAction('Triggered router.navTo("forbidden")');
+		this.createScenarioRunner().recordAction('Triggered router.navTo("forbidden")');
 		this.getRouter().navTo("forbidden");
 	}
 
 	onDirectHashToProtected(): void {
-		this.getDemoScenarioRunner().goToProtectedByHash();
+		this.createScenarioRunner().goToProtectedByHash();
 	}
 
 	onDirectHashToForbidden(): void {
-		this.getDemoScenarioRunner().goToForbiddenByHash();
+		this.createScenarioRunner().goToForbiddenByHash();
 	}
 
 	onDirectHashToMissing(): void {
-		this.getDemoScenarioRunner().goToMissingRouteByHash();
+		this.createScenarioRunner().goToMissingRouteByHash();
 	}
 
 	onRapidHashSequence(): void {
-		this.getDemoScenarioRunner().runRapidHashSequence();
+		this.createScenarioRunner().runRapidHashSequence();
 	}
 
 	/**
