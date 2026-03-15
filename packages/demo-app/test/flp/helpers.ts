@@ -135,19 +135,11 @@ async function waitForPage(name: "homePage" | "protectedPage", expectedTitle: st
 	);
 }
 
-/**
- * Find the demo app component instance by manifest ID.
- * Runs in browser context via sap.ui.require — used inside browser.execute() callbacks.
- */
-function findDemoComponent(): UIComponent | undefined {
-	const Component = sap.ui.require("sap/ui/core/Component");
-	const all = Component.registry.all() as Record<string, UIComponent>;
-	return Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-}
-
 async function navigateHomeWithinApp(): Promise<void> {
 	const navigated = await browser.execute(() => {
-		const component = findDemoComponent();
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const all = Component.registry.all() as Record<string, UIComponent>;
+		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
 		if (!component) return false;
 
 		component.getRouter().navTo("home", {}, undefined, true);
@@ -206,7 +198,9 @@ export async function expectControlText(name: SelectorName, expected: string): P
 
 async function resetDirtyState(): Promise<void> {
 	await browser.execute(() => {
-		const component = findDemoComponent();
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const all = Component.registry.all() as Record<string, UIComponent>;
+		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
 		(component?.getModel("form") as JSONModel | undefined)?.setProperty("/isDirty", false);
 	});
 }
