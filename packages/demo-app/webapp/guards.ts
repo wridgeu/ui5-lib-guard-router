@@ -116,12 +116,20 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * Handles edge case where model property might be undefined.
+ * Only blocks in-app navigation (toRoute matches a known route). Cross-app
+ * navigation (toRoute is empty) is left to the FLP's dirty-state provider
+ * registered via `sap.ushell.Container.registerDirtyStateProvider`, which
+ * shows its own confirmation popup. Without this check the two mechanisms
+ * conflict: the FLP popup fires, the user confirms, but the router's leave
+ * guard still blocks the hash change and restores the old hash — making it
+ * impossible to leave the app.
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
+		if (context.toRoute === "") {
+			return true;
+		}
 		const isDirty = formModel.getProperty("/isDirty");
-		// Explicitly check for true to handle undefined safely
 		if (isDirty === true) {
 			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
 			return false;

@@ -262,6 +262,40 @@ stale result is silently discarded. This ensures only the latest navigation wins
 The generation is also bumped on same-hash dedup, invalidating any pending async guard
 that was running when the user navigated back to the original hash.
 
+## FLP Integration
+
+When the router runs inside a Fiori Launchpad (FLP), two independent dirty-state
+mechanisms coexist:
+
+| Mechanism                    | Scope             | UX                            |
+| ---------------------------- | ----------------- | ----------------------------- |
+| Router leave guard           | In-app navigation | Silent block + hash restore   |
+| `registerDirtyStateProvider` | Cross-app (FLP)   | Native FLP confirmation popup |
+
+**Key design rule:** leave guards must not block cross-app navigation. The FLP
+handles that case with its own confirmation dialog via `registerDirtyStateProvider`.
+If a leave guard also blocks the hash change triggered by the FLP, the two
+mechanisms conflict: the user confirms in the FLP popup, but the router restores
+the hash, making it impossible to leave the app.
+
+To detect cross-app navigation in a leave guard, check `context.toRoute`:
+
+```ts
+const leaveGuard: LeaveGuardFn = (context) => {
+	// toRoute is empty when the hash doesn't match any known route —
+	// this is a cross-app navigation (e.g. FLP shell back button)
+	if (context.toRoute === "") {
+		return true; // let the FLP handle it
+	}
+	return !formModel.getProperty("/isDirty");
+};
+```
+
+The `toRoute` value is derived from `getRouteInfoByHash()`. When the FLP changes
+the hash to an intent like `Shell-home`, no route matches, so `toRoute` is the
+empty string. This is a reliable signal to distinguish in-app from cross-app
+navigation.
+
 ## Internal State
 
 | Field              | Type                          | Purpose                                       |

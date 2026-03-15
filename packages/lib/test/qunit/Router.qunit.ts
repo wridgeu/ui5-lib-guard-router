@@ -2032,6 +2032,78 @@ QUnit.test("removeRouteGuard with object form returns router for chaining", func
 });
 
 // ============================================================
+// Module: Leave guards with unmatched routes (FLP cross-app navigation)
+// ============================================================
+QUnit.module("Router - Leave guards with unmatched routes", standardHooks);
+
+QUnit.test("Leave guard runs for navigation to an unmatched hash", async function (assert: Assert) {
+	let guardCalled = false;
+	router.addLeaveGuard("home", (context: GuardContext) => {
+		guardCalled = true;
+		assert.strictEqual(context.toRoute, "", "toRoute is empty for unmatched hash");
+		assert.strictEqual(context.toHash, "some/unknown/path", "toHash is the raw hash");
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	await nextTick(50);
+	assert.ok(guardCalled, "Leave guard was called for unmatched hash navigation");
+});
+
+QUnit.test("Leave guard can block navigation to an unmatched hash", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	await nextTick(150);
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after leave guard blocked");
+});
+
+QUnit.test("Leave guard can allow navigation to an unmatched hash", async function (assert: Assert) {
+	let guardCalled = false;
+	router.addLeaveGuard("home", () => {
+		guardCalled = true;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	await nextTick(50);
+	assert.ok(guardCalled, "Leave guard ran");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"some/unknown/path",
+		"Navigation to unmatched hash proceeded",
+	);
+});
+
+QUnit.test("Guard context has empty toRoute for unmatched hash but valid fromRoute", async function (assert: Assert) {
+	let capturedContext: GuardContext | null = null;
+	router.addLeaveGuard("protected", (context: GuardContext) => {
+		capturedContext = context;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	HashChanger.getInstance().setHash("cross-app-intent");
+	await nextTick(50);
+
+	assert.ok(capturedContext, "Guard context was captured");
+	assert.strictEqual(capturedContext!.fromRoute, "protected", "fromRoute is the current route");
+	assert.strictEqual(capturedContext!.fromHash, "protected", "fromHash is the current hash");
+	assert.strictEqual(capturedContext!.toRoute, "", "toRoute is empty for unmatched hash");
+	assert.strictEqual(capturedContext!.toHash, "cross-app-intent", "toHash is the raw intent hash");
+});
+
+// ============================================================
 // Module: Nested navigation from routeMatched handler
 // ============================================================
 QUnit.module("Router - Nested navigation from routeMatched handler", standardHooks);
