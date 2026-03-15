@@ -206,44 +206,58 @@ async function resetDirtyState(): Promise<void> {
 }
 
 /**
- * Intercept window.confirm so the dirty-state prompt is captured
- * synchronously, then trigger FLP cross-app navigation.
+ * Intercept window.confirm, trigger FLP cross-app navigation, then
+ * verify the dirty-state provider fired.
  *
  * Headless Chrome auto-answers confirm() before WebDriver can see the
  * alert, so polling isAlertOpen() is unreliable. Monkey-patching
- * confirm() captures the call in the same JS tick and returns false
- * (simulating "Cancel" / stay on the page).
+ * confirm() captures the call and returns false (stay on page).
+ *
+ * toExternal() schedules navigation asynchronously — the FLP's
+ * _handleDataLoss filter runs on the next hash change, not in the
+ * same tick. So we install the intercept, trigger navigation, then
+ * poll for the flag in a separate execute.
  */
 export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
-	const result = await browser.execute(() => {
-		let confirmCalled = false;
+	// Step 1: install the confirm intercept
+	await browser.execute(() => {
+		const w = window as Window & { __flpConfirmCalled?: boolean };
+		w.__flpConfirmCalled = false;
 		const originalConfirm = window.confirm;
 		window.confirm = (_message?: string): boolean => {
-			confirmCalled = true;
+			w.__flpConfirmCalled = true;
 			window.confirm = originalConfirm;
 			return false;
 		};
-
-		const Container = sap.ui.require("sap/ushell/Container");
-		const navService = Container?.getService("CrossApplicationNavigation");
-
-		if (!navService?.toExternal) {
-			window.confirm = originalConfirm;
-			return { triggered: false, confirmCalled: false };
-		}
-
-		navService.toExternal({ target: { shellHash: "Shell-home" } });
-		return { triggered: true, confirmCalled };
 	});
 
-	if (!result.triggered) {
+	// Step 2: trigger cross-app navigation
+	const triggered = await browser.execute(() => {
+		const Container = sap.ui.require("sap/ushell/Container");
+		const navService = Container?.getService("CrossApplicationNavigation");
+		if (!navService?.toExternal) return false;
+
+		navService.toExternal({ target: { shellHash: "Shell-home" } });
+		return true;
+	});
+
+	if (!triggered) {
 		throw new Error("FLP CrossApplicationNavigation service was not available");
 	}
-	if (!result.confirmCalled) {
-		throw new Error(
-			"FLP dirty-state provider did not call window.confirm — registerDirtyStateProvider may not have fired",
-		);
-	}
+
+	// Step 3: wait for the dirty-state provider to call confirm()
+	await browser.waitUntil(
+		async () => {
+			return browser.execute(() => {
+				return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
+			});
+		},
+		{
+			timeout: 5000,
+			timeoutMsg:
+				"FLP dirty-state provider did not call window.confirm — registerDirtyStateProvider may not have fired",
+		},
+	);
 }
 
 export async function waitForProtectedPageInFlp(): Promise<void> {
