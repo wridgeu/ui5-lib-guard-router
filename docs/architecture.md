@@ -73,7 +73,7 @@ matching, target loading, or event firing occurs.
 |                             +---------------------------+            |
 +----------------------------------------------------------------------+
          |
-         | MobileRouter.prototype.parse.call(this, hash)
+         | super.parse(hash)
          v
 +----------------------------------------------------------------------+
 |                      sap.m.routing.Router                            |
@@ -100,12 +100,12 @@ GuardContext                        GuardResult
 | signal       |  AbortSignal      +---------------------------+
 +--------------+
 
-GuardRouter (public interface)      RouterInternal (internal interface)
-  extends sap.m.routing.Router        extends GuardRouter
-  + 6 public guard methods             + 10 state fields
-    addGuard / removeGuard             + 10 internal methods
-    addRouteGuard / removeRouteGuard     (incl. _runRouteGuards,
-    addLeaveGuard / removeLeaveGuard      _validateGuardResult)
+GuardRouter (public interface)      Router (ES6 class)
+  extends sap.m.routing.Router        extends sap.m.routing.Router
+  + 6 public guard methods             implements GuardRouter
+    addGuard / removeGuard             + internal state fields
+    addRouteGuard / removeRouteGuard   + private _cancelPendingNavigation()
+    addLeaveGuard / removeLeaveGuard   + override parse(), stop(), destroy()
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -115,10 +115,10 @@ GuardRouter (public interface)      RouterInternal (internal interface)
 Only strict `true` allows navigation. Truthy non-boolean values (numbers, objects, etc.)
 are treated as blocks. This prevents accidental allow from coercion.
 
-The `RouterInternal` interface exists because the Router uses UI5's `.extend()` pattern
-(not ES6 `class extends`). Each method body declares `this: RouterInternal` as an explicit
-this-parameter for full type safety. Application code casts to `GuardRouter` (the public
-interface); `RouterInternal` is used only inside the Router method bodies.
+The Router is an ES6 class that extends `sap.m.routing.Router` and implements the
+`GuardRouter` interface. Application code casts `getRouter()` to `GuardRouter` for
+type-safe access to the guard management methods. Internal state and methods live
+directly on the class as typed fields; no separate internal interface is needed.
 
 ## parse() Override - The Core Mechanism
 

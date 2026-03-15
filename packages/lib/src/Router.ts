@@ -9,7 +9,6 @@ import type {
 	GuardRouter,
 	LeaveGuardFn,
 	RouteGuardConfig,
-	RouterInternal,
 } from "./types";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
@@ -52,13 +51,6 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
 	const index = guards.indexOf(guard);
 	if (index !== -1) guards.splice(index, 1);
 	if (guards.length === 0) map.delete(key);
-}
-
-function cancelPendingNavigation(router: RouterInternal): void {
-	++router._parseGeneration;
-	router._pendingHash = null;
-	router._abortController?.abort();
-	router._abortController = null;
 }
 
 /**
@@ -216,7 +208,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @override sap.ui.core.routing.Router#parse
 	 */
-	parse(newHash: string): void {
+	override parse(newHash: string): void {
 		if (this._suppressedHash !== null) {
 			if (newHash === this._suppressedHash) {
 				this._suppressedHash = null;
@@ -231,7 +223,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 
 		if (this._currentHash !== null && newHash === this._currentHash) {
-			cancelPendingNavigation(this);
+			this._cancelPendingNavigation();
 			return;
 		}
 
@@ -242,7 +234,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const routeInfo = this.getRouteInfoByHash(newHash);
 		const toRoute = routeInfo?.name ?? "";
 
-		cancelPendingNavigation(this);
+		this._cancelPendingNavigation();
 		const generation = this._parseGeneration;
 
 		this._pendingHash = newHash;
@@ -351,16 +343,29 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Stop listening to hash changes and invalidate pending async guards.
 	 *
-	 * Mirrors native router lifecycle behavior while ensuring an already-running
-	 * guard cannot commit a stale navigation after the router has been stopped.
+	 * Ensures an already-running guard cannot commit a stale navigation
+	 * after the router has been stopped.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
 	 */
-	stop(): this {
-		cancelPendingNavigation(this);
+	override stop(): this {
+		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
-		return super.stop() as this;
+		super.stop();
+		return this;
+	}
+
+	/**
+	 * Invalidate any in-flight async guard work. Bumps the generation counter
+	 * so pending `.then()` callbacks see they are stale, aborts the signal,
+	 * and clears the pending hash.
+	 */
+	private _cancelPendingNavigation(): void {
+		++this._parseGeneration;
+		this._pendingHash = null;
+		this._abortController?.abort();
+		this._abortController = null;
 	}
 
 	/**
@@ -572,13 +577,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
-	destroy(): this {
+	override destroy(): this {
 		this._globalGuards = [];
 		this._enterGuards.clear();
 		this._leaveGuards.clear();
-		cancelPendingNavigation(this);
+		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
-		return super.destroy() as this;
+		super.destroy();
+		return this;
 	}
 }
