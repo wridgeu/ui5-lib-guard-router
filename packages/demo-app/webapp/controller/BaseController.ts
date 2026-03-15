@@ -4,20 +4,32 @@ import type Router from "sap/ui/core/routing/Router";
 import type Model from "sap/ui/model/Model";
 
 /**
- * Shared controller base modeled after the standard UI5 sample pattern.
+ * Shared controller helpers for the demo app.
  *
  * @namespace demo.app.controller
  */
 export default abstract class BaseController extends Controller {
 	protected getRouter<T extends Router = Router>(): T {
-		return UIComponent.getRouterFor(this) as T;
+		const router = UIComponent.getRouterFor(this);
+		if (!router) {
+			throw new Error("Router is not available for this controller");
+		}
+		return router as T;
 	}
 
 	protected getModel<T extends Model = Model>(name?: string): T {
-		return (this.getView()?.getModel(name) ?? this.getOwnerComponent()?.getModel(name)) as T;
+		const model = this.getView()?.getModel(name) ?? this.getOwnerComponent()?.getModel(name);
+		if (!model) {
+			throw new Error(`Model "${name ?? "default"}" is not available`);
+		}
+		return model as T;
 	}
 
 	protected setModel(model: Model, name?: string): void {
-		this.getView()?.setModel(model, name);
+		const view = this.getView();
+		if (!view) {
+			throw new Error("View is not available for this controller");
+		}
+		view.setModel(model, name);
 	}
 }
