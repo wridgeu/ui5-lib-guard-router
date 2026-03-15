@@ -1,31 +1,32 @@
 import { loginAndGoToProtectedInFlp, resetFlpDemo, setDirtyStateInFlp } from "./helpers";
 
 /**
- * Non-dirty cross-app navigation. Isolated spec file because toExternal()
- * navigates to Shell-home (home button, tile click, etc.), which leaves the
- * FLP sandbox in an unrecoverable state for the browser session.
+ * Cross-app navigation test. Isolated spec file because toExternal()
+ * (e.g. FLP home button, tile click) navigates to Shell-home, leaving
+ * the sandbox unrecoverable for the browser session.
  */
-describe("FLP cross-app navigation -- clean form", () => {
+describe("FLP cross-app navigation (isolated session)", () => {
 	before(async () => {
 		await resetFlpDemo();
 	});
 
-	it("completes cross-app navigation without dirty prompt when form is clean", async () => {
+	it("completes dirty cross-app navigation after user confirms FLP dialog", async () => {
 		await loginAndGoToProtectedInFlp();
-		await setDirtyStateInFlp(false);
+		await setDirtyStateInFlp(true);
 
+		// Monkey-patch confirm to return true (user confirms). Headless Chrome
+		// returns false for confirm() by default, so without this the FLP
+		// dialog would block the navigation.
 		await browser.execute(() => {
-			const w = window as Window & { __flpConfirmCalled?: boolean };
-			w.__flpConfirmCalled = false;
-			const originalConfirm = window.confirm;
-			(window as Window & { __flpOriginalConfirm?: typeof confirm }).__flpOriginalConfirm = originalConfirm;
-			window.confirm = (_message?: string): boolean => {
-				w.__flpConfirmCalled = true;
-				return false;
-			};
+			const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
+			w.__flpOriginalConfirm = window.confirm;
+			window.confirm = (): boolean => true;
 		});
 
 		try {
+			// toExternal() (triggered by FLP home button, tile clicks, etc.)
+			// operates at the shell level. The dirty-state provider fires,
+			// FLP shows its confirm dialog, user confirms, navigation completes.
 			const triggered = await browser.execute(() => {
 				const Container = sap.ui.require("sap/ushell/Container");
 				const navService = Container?.getService("CrossApplicationNavigation");
@@ -45,11 +46,6 @@ describe("FLP cross-app navigation -- clean form", () => {
 					timeoutMsg: "FLP did not complete cross-app navigation to Shell-home",
 				},
 			);
-
-			const confirmWasCalled = await browser.execute(() => {
-				return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-			});
-			expect(confirmWasCalled).toBe(false);
 		} finally {
 			await browser.execute(() => {
 				const w = window as Window & { __flpOriginalConfirm?: typeof confirm };

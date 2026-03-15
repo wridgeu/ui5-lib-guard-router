@@ -25,22 +25,24 @@ describe("FLP preview integration", () => {
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 
-	it("triggers FLP dirty-state prompt on cross-app navigation and stays on page after dismissal", async () => {
+	it("triggers FLP dirty-state prompt on cross-app navigation and stays on page after cancel", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
+		// The monkey-patch intercepts confirm() to return false (user cancels).
+		// This is needed because headless Chrome auto-confirms, which would
+		// navigate to Shell-home and destroy the sandbox session.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 
-	it("allows in-app navigation without dirty-state prompt even when dirty", async () => {
+	it("blocks dirty in-app navigation via leave guard", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// In-app navigation (navigating to home) should go through the router's
-		// leave guard, not the FLP dirty-state provider. The dirty form leave guard
-		// blocks in-app navigation silently, so we stay on the protected page.
+		// In-app navigation goes through the router's leave guard.
+		// The dirty form leave guard blocks silently.
 		await browser.execute(() => {
 			const Component = sap.ui.require("sap/ui/core/Component");
 			const all = Component.registry.all() as Record<string, UIComponent>;
@@ -48,7 +50,6 @@ describe("FLP preview integration", () => {
 			component?.getRouter().navTo("home", {}, undefined, true);
 		});
 
-		// The dirty form guard should block in-app navigation, keeping us on protected
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
