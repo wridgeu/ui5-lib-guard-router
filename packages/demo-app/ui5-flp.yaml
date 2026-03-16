@@ -25,6 +25,7 @@ server:
                   path: /test/flp.html
                   theme: sap_horizon
                   libs: true
+                  enhancedHomePage: true
 resources:
     configuration:
         paths:

@@ -425,6 +425,9 @@ sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 
 No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation via `toExternal()` operates at the shell level in both production and the FLP sandbox, so the leave guard never runs for cross-app hashes. The leave guard protects in-app route changes; the FLP dirty-state provider protects cross-app navigation, browser close, and the shell home button.
 
+> [!TIP]
+> **Testing with the FLP preview**: The `fiori-tools-preview` middleware supports `enhancedHomePage: true` (UI5 >= 1.123.0), which uses CDM-based bootstrap for a more complete UShell service layer. This is recommended for testing dirty-state provider integration, as it provides `ShellNavigationHashChanger` and `CrossApplicationNavigation` behavior closer to production FLP.
+
 See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
 ## Limitations
