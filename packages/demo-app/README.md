@@ -165,11 +165,11 @@ Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashT
 
 FLP-specific coverage lives in `test/flp/` and is split across three spec files:
 
-| File                         | Purpose                                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `flp-preview.e2e.ts`         | Runtime state, in-app navigation, dirty prompt (cancel), in-app dirty block (no confirm), independence |
-| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()` -- user confirms, navigation completes                   |
-| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()` -- no dirty prompt, navigation completes                 |
+| File                         | Purpose                                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, dirty-state separation, browser history, independence |
+| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()` -- user confirms, navigation completes                 |
+| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()` -- no dirty prompt, navigation completes               |
 
 The cross-app specs are isolated because `toExternal()` navigates to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
 
