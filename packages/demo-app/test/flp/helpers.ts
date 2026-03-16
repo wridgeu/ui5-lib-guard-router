@@ -164,19 +164,12 @@ export async function launchFlpApp(): Promise<void> {
 	// than sandbox.js mode. Wait for the demo component to mount before
 	// proceeding. If it never mounts, the test is likely running after a
 	// cross-app navigation that left the sandbox unrecoverable.
-	try {
-		await browser.waitUntil(() => isDemoAppMounted(), {
-			timeout: 30000,
-			timeoutMsg:
-				"Cannot reset FLP app because the demo component is no longer mounted. " +
-				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
-		});
-	} catch {
-		throw new Error(
-			"Cannot reset FLP app because the demo component is no longer mounted. " +
-				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
-		);
-	}
+	await browser.waitUntil(() => isDemoAppMounted(), {
+		timeout: 15000,
+		timeoutMsg:
+			"Demo component did not mount. If this follows a cross-app navigation (toExternal), " +
+			"move the test to a separate spec file so it gets its own browser session.",
+	});
 
 	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
 	await resetDirtyState();
@@ -343,21 +336,19 @@ export async function navigateToRouteInFlp(routeName: string): Promise<void> {
 
 /**
  * Wait for the app-specific hash fragment to settle to the expected value.
- * In FLP, the full hash includes the shell intent (e.g. "#app-preview&/protected"),
- * but the app only sees its own route fragment.
+ *
+ * In FLP, `window.location.hash` includes the shell intent (e.g.
+ * "#app-preview&/protected"). `HashChanger.getInstance().getHash()` is the
+ * public UI5 API that returns only the app-specific portion ("protected").
+ * The ShellNavigationHashChanger overrides this method to split shell hash
+ * from app hash automatically.
  */
 export async function expectAppHashToBe(expected: string, timeout = 5000): Promise<void> {
 	await browser.waitUntil(
 		async () => {
 			return browser.execute((exp: string) => {
-				const Component = sap.ui.require("sap/ui/core/Component");
-				const all = Component.registry.all() as Record<string, UIComponent>;
-				const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-				const router = component?.getRouter();
-				// Wait for any pending guard evaluation to complete
-				if (router?._pendingHash !== null) return false;
-
-				const hash = router?._currentHash ?? "";
+				const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
+				const hash = HashChanger?.getInstance()?.getHash() ?? "";
 				return hash === exp;
 			}, expected);
 		},
