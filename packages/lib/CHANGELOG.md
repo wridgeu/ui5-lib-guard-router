@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.0.2...v1.1.0) (2026-03-16)
+
+
+### Features
+
+* ship UI5 build manifest, document library consumption ([d5efc52](https://github.com/wridgeu/ui5-lib-guard-router/commit/d5efc523fed093e0d57197e41fb09145e7e7973a))
+
+
+### Code Refactoring
+
+* typed router class, lifecycle hardening, compat lane ([#20](https://github.com/wridgeu/ui5-lib-guard-router/issues/20)) ([e6f72cb](https://github.com/wridgeu/ui5-lib-guard-router/commit/e6f72cbecfb8c4521a8a86990aae6aa4e3013caa))
+
 ## [1.0.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.0.1...v1.0.2) (2026-03-14)
 
 
