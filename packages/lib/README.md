@@ -24,13 +24,15 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
+### TypeScript (optional)
+
 If your app uses TypeScript and does not already depend on the UI5 typings, install them too (`@sapui5/types` works as well):
 
 ```bash
 npm install -D @openui5/types
 ```
 
-TypeScript types follow the UI5 module names. Add the package to `compilerOptions.types`:
+Add both packages to `compilerOptions.types`:
 
 ```json
 {
@@ -47,7 +49,58 @@ import type { GuardRouter, GuardFn, LeaveGuardFn, GuardContext, GuardResult } fr
 import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
 
-UI5 runtime module names stay `ui5/guard/router/*`.
+### Serving the library
+
+The npm package ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`). There are three ways to serve the library in your app:
+
+#### Option A: Pre-built (recommended)
+
+The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it automatically and serves the pre-built JavaScript from `dist/` with no extra configuration:
+
+```bash
+npm install ui5-lib-guard-router
+# That's it. `ui5 serve` picks up the build manifest.
+```
+
+No transpile tooling, no middleware, no additional `ui5.yaml` changes.
+
+#### Option B: Transpile from source
+
+If you prefer to serve from TypeScript sources (e.g. for debugging with source maps), install [`ui5-tooling-transpile`](https://github.com/nicholasmackey/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
+
+```bash
+npm install -D ui5-tooling-transpile
+```
+
+```yaml
+# ui5.yaml
+server:
+    customMiddleware:
+        - name: ui5-tooling-transpile-middleware
+          afterMiddleware: compression
+          configuration:
+              transpileDependencies: true
+```
+
+This transpiles the library's `.ts` sources on the fly during `ui5 serve`.
+
+#### Option C: Static serving (workaround)
+
+If neither option works for your setup, you can mount the pre-built resources manually using [`ui5-middleware-servestatic`](https://github.com/nicholasmackey/ui5-middleware-servestatic) (or a similar community middleware) and point it at the `dist/resources` folder in `node_modules`:
+
+```bash
+npm install -D ui5-middleware-servestatic
+```
+
+```yaml
+# ui5.yaml
+server:
+    customMiddleware:
+        - name: ui5-middleware-servestatic
+          afterMiddleware: compression
+          configuration:
+              rootPath: node_modules/ui5-lib-guard-router/dist/resources
+```
 
 ## Setup
 

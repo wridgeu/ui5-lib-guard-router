@@ -43,7 +43,7 @@
 	],
 	"scripts": {
 		"clean": "rimraf dist .ui5",
-		"build": "ui5 build",
+		"build": "ui5 build --create-build-manifest",
 		"prepublishOnly": "npm run build",
 		"start": "ui5 serve",
 		"start:compat:118": "ui5 serve --config ui5.compat-1.118.yaml",

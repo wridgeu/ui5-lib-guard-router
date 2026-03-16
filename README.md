@@ -53,6 +53,8 @@ import type { GuardRouter } from "ui5/guard/router/types";
 
 UI5 runtime module names stay `ui5/guard/router/*`.
 
+The package ships pre-built distributables with a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md), so `ui5 serve` picks them up automatically. See the [library README](packages/lib/README.md#serving-the-library) for alternative serving options (transpile from source, static middleware).
+
 ### 2. Configure manifest.json
 
 Add the library dependency and set the router class:
