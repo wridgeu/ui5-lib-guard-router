@@ -4,5 +4,5 @@ import { config as baseConfig } from "./wdio.conf";
 export const config: wdi5Config = {
 	...baseConfig,
 	specs: ["./flp/**/*.e2e.ts"],
-	baseUrl: "http://localhost:8080/test/flp.html#app-preview",
+	baseUrl: "http://localhost:8080/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
 };

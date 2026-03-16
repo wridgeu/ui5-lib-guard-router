@@ -34,7 +34,7 @@
 		"test:qunit": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit",
 		"test:qunit:compat:118": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib:compat:118 --test-script wdio:qunit",
 		"test:e2e": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script serve:demo --test-script wdio:e2e",
-		"test:e2e:flp": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080/test/flp.html --server-script serve:demo:flp --test-script wdio:e2e:flp",
+		"test:e2e:flp": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp --test-script wdio:e2e:flp",
 		"pack:smoke": "node ./scripts/pack-smoke.mjs",
 		"pack:check": "npm run pack:check --workspace=packages/lib && npm run pack:smoke",
 		"commitlint": "commitlint --last",

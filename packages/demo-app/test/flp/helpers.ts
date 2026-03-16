@@ -151,16 +151,22 @@ async function navigateHomeWithinApp(): Promise<void> {
 	}
 }
 
-export async function launchFlpApp(): Promise<void> {
-	const currentHash = await browser.execute(() => window.location.hash);
+async function isDemoAppMounted(): Promise<boolean> {
+	return browser.execute(() => {
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const all = Component?.registry?.all?.() as Record<string, UIComponent> | undefined;
+		return Object.values(all ?? {}).some((component) => component.getManifestEntry("sap.app")?.id === "demo.app");
+	});
+}
 
-	if (!currentHash.includes("app-preview")) {
+export async function launchFlpApp(): Promise<void> {
+	if (!(await isDemoAppMounted())) {
 		// We're outside the app (e.g. at Shell-home after cross-app navigation).
 		// The FLP preview sandbox and wdi5 do not reliably recover from a
 		// mid-session page reload. Tests that navigate away from the app
 		// must live in their own spec file (see flp-cross-app.e2e.ts).
 		throw new Error(
-			`Cannot reset FLP app from hash "${currentHash}". ` +
+			"Cannot reset FLP app because the demo component is no longer mounted. " +
 				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
 		);
 	}
