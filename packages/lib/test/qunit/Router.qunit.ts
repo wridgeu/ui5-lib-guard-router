@@ -2304,3 +2304,90 @@ QUnit.test("navTo from routeMatched handler runs leave guards for the NEW route"
 		"Protected leave guard ran exactly once (protected → forbidden from routeMatched handler)",
 	);
 });
+
+// ============================================================
+// Module: Abort controller cleanup (leak prevention)
+// ============================================================
+QUnit.module("Router - Abort controller cleanup", standardHooks);
+
+QUnit.test(
+	"Signal from a committed navigation is not retroactively aborted by the next navigation",
+	async function (assert: Assert) {
+		let firstSignal: AbortSignal | null = null;
+		let callCount = 0;
+		router.addGuard((context: GuardContext) => {
+			callCount++;
+			if (callCount === 1) {
+				firstSignal = context.signal;
+			}
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		callCount = 0;
+
+		// First navigation commits successfully
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		assert.ok(firstSignal, "Signal was captured from first navigation");
+		assert.notOk(firstSignal!.aborted, "Signal was not aborted after successful commit");
+
+		// Second navigation should NOT retroactively abort the first signal
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+		assert.notOk(firstSignal!.aborted, "First signal stays clean after second navigation commits");
+	},
+);
+
+QUnit.test(
+	"Signal from a blocked navigation is not retroactively aborted by the next navigation",
+	async function (assert: Assert) {
+		let blockedSignal: AbortSignal | null = null;
+		let callCount = 0;
+		router.addRouteGuard("protected", (context: GuardContext) => {
+			callCount++;
+			if (callCount === 1) {
+				blockedSignal = context.signal;
+			}
+			return false;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		callCount = 0;
+
+		// First navigation is blocked
+		router.navTo("protected");
+		await nextTick(150);
+		assert.ok(blockedSignal, "Signal was captured from blocked navigation");
+		assert.notOk(blockedSignal!.aborted, "Blocked signal is not aborted (guard ran to completion)");
+
+		// Navigate to an unguarded route; the stale controller must not leak
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+		assert.notOk(blockedSignal!.aborted, "Blocked signal stays clean after unguarded navigation");
+	},
+);
+
+QUnit.test(
+	"Signal from a redirected navigation is not retroactively aborted by the next navigation",
+	async function (assert: Assert) {
+		let redirectedSignal: AbortSignal | null = null;
+		router.addRouteGuard("forbidden", (context: GuardContext) => {
+			redirectedSignal = context.signal;
+			return "home";
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		// Navigation triggers redirect
+		router.navTo("forbidden");
+		await waitForRoute(router, "home");
+		assert.ok(redirectedSignal, "Signal was captured from redirected navigation");
+		assert.notOk(redirectedSignal!.aborted, "Signal was not aborted after redirect");
+
+		// Subsequent navigation must not retroactively abort the old signal
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		assert.notOk(redirectedSignal!.aborted, "Redirected signal stays clean after subsequent navigation");
+	},
+);

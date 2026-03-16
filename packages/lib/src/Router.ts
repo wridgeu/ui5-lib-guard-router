@@ -545,6 +545,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** Perform a guard redirect (string route name or GuardRedirect object). */
 	private _redirect(target: string | GuardRedirect): void {
 		this._pendingHash = null;
+		this._abortController = null;
 		this._redirecting = true;
 		try {
 			if (typeof target === "string") {
