@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.0...v1.1.1) (2026-03-16)
+
+
+### Bug Fixes
+
+* bump version to 1.1.1 to skip burned 1.1.0 on npm ([b711a43](https://github.com/wridgeu/ui5-lib-guard-router/commit/b711a4316b21032aa6a6fbf2fe10953d3ddd1f1d))
+
 ## [1.1.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.0.2...v1.1.0) (2026-03-16)
 
 
