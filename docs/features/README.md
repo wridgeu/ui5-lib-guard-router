@@ -1,6 +1,6 @@
 # Feature Proposals
 
-Proposed enhancements for `ui5.guard.router.Router`, derived from framework comparison analysis (docs/alt/) and TanStack Router source code study.
+Proposed enhancements for `ui5.guard.router.Router`, derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
 
 ## Current State
 

@@ -119,10 +119,10 @@ For the full API reference, usage examples, limitations, and FLP integration gui
 ## Repository structure
 
 ```
+docs/           Docs index plus reference, research, explorations, and feature proposals
 packages/
   lib/          ui5.guard.router library (Router + types)
   demo-app/     Demo app with auth guards, FLP preview, and guided scenarios
-docs/           Architecture docs, design research, and feature proposals
 scripts/        CI and test infrastructure (server runner, pack smoke test)
 tools/          Custom oxlint JS plugins (guardrails)
 ```

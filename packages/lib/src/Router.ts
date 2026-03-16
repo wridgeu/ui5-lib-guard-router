@@ -60,7 +60,7 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
  * registered guard functions before any route matching, target loading,
  * or event firing occurs.
  *
- * Key assumptions (see docs/architecture.md for full rationale):
+ * Key assumptions (see docs/reference/architecture.md for full rationale):
  * - `parse()` is intentionally NOT async. Sync guards execute in the
  *   same tick; async guards fall back to a deferred path.
  * - `replaceHash` fires `hashChanged` synchronously (validated by test).

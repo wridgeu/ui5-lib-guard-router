@@ -7,7 +7,7 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 > **Related resources**:
 >
 > - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](../../docs/research-native-router-navigate-event.md) (detailed comparison with this library)
+> - [Research: Native NavContainer navigate event](../../docs/research/native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!WARNING]
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
@@ -405,7 +405,7 @@ sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 
 No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation via `toExternal()` operates at the shell level in both production and the FLP sandbox, so the leave guard never runs for cross-app hashes. The leave guard protects in-app route changes; the FLP dirty-state provider protects cross-app navigation, browser close, and the shell home button.
 
-See the [FLP Dirty State Research](../../docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
+See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
 ## Limitations
 

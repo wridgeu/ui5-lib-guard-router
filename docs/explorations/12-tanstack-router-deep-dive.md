@@ -300,7 +300,7 @@ onReady: async () => {
 
 ### 1. Blocking at the Right Layer
 
-TanStack delegates blocking to the history library. In UI5, the equivalent would be intercepting at the `HashChanger` level. However, `ui5.guard.router` already found that `parse()` is a better interception point (see `docs/alt/02-hashchanger-interception.md`). The `parse()` approach is actually more reliable in UI5's architecture.
+TanStack delegates blocking to the history library. In UI5, the equivalent would be intercepting at the `HashChanger` level. However, `ui5.guard.router` already found that `parse()` is a better interception point (see `./02-hashchanger-interception.md`). The `parse()` approach is actually more reliable in UI5's architecture.
 
 ### 2. AbortController for Async Guards ✅ Implemented
 
