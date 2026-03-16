@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.1...v1.1.2) (2026-03-16)
+
+
+### Bug Fixes
+
+* mark TypeScript setup as required in library README ([b6e682c](https://github.com/wridgeu/ui5-lib-guard-router/commit/b6e682c3a18a82803faa86aec16047214c1f3764))
+
 ## [1.1.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.0...v1.1.1) (2026-03-16)
 
 
