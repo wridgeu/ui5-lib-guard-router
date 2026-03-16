@@ -135,15 +135,17 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressedHash?}
-    suppress -- "yes" --> ret(["return"])
+    start(["parse(newHash)"]) --> suppress{_suppressedHash set?}
+    suppress -- "yes" --> smatch{hash matches?}
+    smatch -- "yes" --> sclear["clear flag"] --> ret(["return"])
+    smatch -- "no" --> sclear2["clear flag"] --> redir
     suppress -- "no" --> redir{_redirecting?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
     samehash -- "no" --> pending{same as _pendingHash?}
     pending -- "yes" --> ret
-    pending -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
+    pending -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
 
     setup --> guards{guards registered?}
     guards -- "no" --> commit(["_commitNavigation()"])
@@ -162,7 +164,7 @@ flowchart TD
 ```
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
-remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked—if
+remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked; if
 a newer navigation started, the stale result is discarded.
 
 **Critical design decisions:**
