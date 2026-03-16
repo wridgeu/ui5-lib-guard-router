@@ -42,10 +42,16 @@ Add both packages to `compilerOptions.types`:
 }
 ```
 
-Then import the types from the UI5 module path:
+Then import types from the UI5 module path as needed:
 
 ```typescript
-import type { GuardRouter, GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
+// Core: router interface and guard function signatures
+import type { GuardRouter, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
+
+// Guard pipeline: context passed to guards, and the result union they return
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+// Advanced: object form for redirect-with-parameters and enter+leave registration
 import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
 
@@ -202,30 +208,35 @@ Every guard receives a `GuardContext` object:
 | `fromHash`    | `string`                                           | Current hash                                                      |
 | `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()` |
 
-### Return values
+### Return values (`GuardResult`)
 
-**Enter guards** (`addGuard`, `addRouteGuard`):
+Enter guards return `GuardResult`, a union of four outcomes:
 
-| Return                                         | Effect                                          |
-| ---------------------------------------------- | ----------------------------------------------- |
-| `true`                                         | Allow navigation                                |
-| `false`                                        | Block (stay on current route, no history entry) |
-| `"routeName"`                                  | Redirect to named route (replaces history)      |
-| `{ route, parameters?, componentTargetInfo? }` | Redirect with route parameters                  |
-| anything else (`null`, `undefined`)            | Treated as block                                |
+```
+GuardResult = boolean | string | GuardRedirect
+```
 
-Only strict `true` allows navigation. There is no truthy coercion.
+| Return                                         | Type            | When to use                                             | Effect                                          |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------- |
+| `true`                                         | `boolean`       | Guard condition passes                                  | Allow navigation                                |
+| `false`                                        | `boolean`       | Guard condition fails, no specific destination          | Block (stay on current route, no history entry) |
+| `"routeName"`                                  | `string`        | Redirect to a fixed route (no parameters needed)        | Redirect to named route (replaces history)      |
+| `{ route, parameters?, componentTargetInfo? }` | `GuardRedirect` | Redirect and pass route parameters or component targets | Redirect with parameters (replaces history)     |
+
+`GuardRedirect` is the object form of a redirect. Use it when you need to pass route parameters (`parameters`) or nested component targets (`componentTargetInfo`). For simple redirects without parameters, the string shorthand (`return "home"`) is equivalent and shorter.
+
+Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only strict `true` allows navigation -- there is no truthy coercion.
 
 On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
-**Leave guards** (`addLeaveGuard`):
+**Leave guards** (`addLeaveGuard`) return `boolean` only:
 
 | Return                            | Effect                          |
 | --------------------------------- | ------------------------------- |
 | `true`                            | Allow leaving the current route |
 | `false` (or any non-`true` value) | Block                           |
 
-Leave guards cannot redirect. For redirection logic, use enter guards on the target route.
+Leave guards answer "can I leave?" and cannot redirect. For redirection logic, use enter guards on the target route.
 
 ### Lifecycle
 
@@ -246,19 +257,23 @@ Leave guards cannot redirect. For redirection logic, use enter guards on the tar
 ### Async guard with AbortSignal
 
 ```typescript
-router.addRouteGuard("dashboard", async (context) => {
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+router.addRouteGuard("dashboard", async (context: GuardContext): Promise<GuardResult> => {
 	const res = await fetch(`/api/access/${context.toRoute}`, {
-		signal: context.signal,
+		signal: context.signal, // cancelled when a newer navigation supersedes this one
 	});
 	const { allowed } = await res.json();
 	return allowed ? true : "forbidden";
 });
 ```
 
-### Redirect with parameters
+### Redirect with parameters (GuardRedirect)
 
 ```typescript
-router.addGuard((context) => {
+import type { GuardRedirect } from "ui5/guard/router/types";
+
+router.addGuard((context): GuardRedirect | true => {
 	if (context.toRoute === "old-detail") {
 		return {
 			route: "detail",
@@ -289,13 +304,18 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 }
 ```
 
-### Object form (enter + leave)
+### Object form with RouteGuardConfig
 
 ```typescript
-router.addRouteGuard("editOrder", {
+import type { RouteGuardConfig } from "ui5/guard/router/types";
+
+const orderGuards: RouteGuardConfig = {
 	beforeEnter: createAuthGuard(authModel),
 	beforeLeave: createDirtyFormGuard(formModel),
-});
+};
+
+router.addRouteGuard("editOrder", orderGuards);
+// later: router.removeRouteGuard("editOrder", orderGuards);
 ```
 
 ### Dynamic guard registration
