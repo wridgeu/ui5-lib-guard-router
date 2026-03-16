@@ -1,11 +1,13 @@
-import type UIComponent from "sap/ui/core/UIComponent";
 import {
+	expectAppHashToBe,
 	expectControlText,
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
+	navigateToRouteInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigationAndExpectDirtyPrompt,
+	waitForHomePageInFlp,
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
@@ -39,26 +41,13 @@ describe("FLP preview integration", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// Install a dialog handler to detect whether FLP's confirm fires.
-		// The leave guard should block in-app navigation silently --
-		// without involving the FLP dirty-state provider at all.
 		const { record, cleanup } = installDialogHandler(true);
 
 		try {
-			await browser.execute(() => {
-				const Component = sap.ui.require("sap/ui/core/Component");
-				const all = Component.registry.all() as Record<string, UIComponent>;
-				const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-				component?.getRouter().navTo("home", {}, undefined, true);
-			});
+			await navigateToRouteInFlp("home");
 
-			// Page stays on Protected -- leave guard blocked the navigation.
 			await waitForProtectedPageInFlp();
 			await expectControlText("protectedCurrentHashText", "#/protected");
-
-			// The dialog handler intercepts at the WebDriver BiDi protocol
-			// level, so any confirm() call is captured synchronously during
-			// the navigation. No confirm dialog was triggered.
 			expect(record.called).toBe(false);
 		} finally {
 			cleanup();
@@ -73,12 +62,7 @@ describe("FLP preview integration", () => {
 		const { record: inAppRecord, cleanup: inAppCleanup } = installDialogHandler(true);
 
 		try {
-			await browser.execute(() => {
-				const Component = sap.ui.require("sap/ui/core/Component");
-				const all = Component.registry.all() as Record<string, UIComponent>;
-				const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-				component?.getRouter().navTo("home", {}, undefined, true);
-			});
+			await navigateToRouteInFlp("home");
 
 			await waitForProtectedPageInFlp();
 			expect(inAppRecord.called).toBe(false);
@@ -87,11 +71,125 @@ describe("FLP preview integration", () => {
 		}
 
 		// PART 2: Same dirty state, cross-app navigation -- FLP confirm fires.
-		// The dirty-state provider calls confirm(); we dismiss (cancel) so we
-		// stay on the page. This proves the two mechanisms handle separate
-		// scopes and do not interfere with each other.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
+	});
+});
+
+describe("FLP guard router hardening", () => {
+	beforeEach(async () => {
+		await resetFlpDemo();
+	});
+
+	// --- Enter guard tests ---
+
+	it("blocks navigation to protected route when logged out", async () => {
+		// Logged out (resetFlpDemo ensures this). Try to navigate to protected.
+		await navigateToRouteInFlp("protected");
+
+		// Guard should redirect back to home.
+		await waitForHomePageInFlp();
+		await expectAppHashToBe("");
+	});
+
+	it("redirects forbidden route to home", async () => {
+		await navigateToRouteInFlp("forbidden");
+
+		await waitForHomePageInFlp();
+		await expectAppHashToBe("");
+	});
+
+	it("allows navigation to protected route when logged in", async () => {
+		await loginAndGoToProtectedInFlp();
+		await expectAppHashToBe("protected");
+	});
+
+	// --- Leave guard tests ---
+
+	it("allows leaving protected page when form is clean", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(false);
+
+		await navigateToRouteInFlp("home");
+
+		await waitForHomePageInFlp();
+		await expectAppHashToBe("");
+	});
+
+	it("allows leaving after clearing dirty state", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+		await setDirtyStateInFlp(false);
+
+		await navigateToRouteInFlp("home");
+
+		await waitForHomePageInFlp();
+		await expectAppHashToBe("");
+	});
+
+	// --- Browser history tests ---
+
+	it("handles browser back from protected to home", async () => {
+		await loginAndGoToProtectedInFlp();
+
+		await browser.back();
+
+		await waitForHomePageInFlp();
+	});
+
+	it("blocks browser back when form is dirty", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+
+		await browser.execute(() => window.history.back());
+
+		// Leave guard should block -- page stays on protected.
+		await waitForProtectedPageInFlp();
+		await expectAppHashToBe("protected");
+	});
+
+	it("re-evaluates enter guard on browser forward after logout", async () => {
+		// Login and navigate to protected.
+		await loginAndGoToProtectedInFlp();
+
+		// Go back to home.
+		await browser.back();
+		await waitForHomePageInFlp();
+
+		// Logout.
+		const toggleLoginButton = await browser.asControl({
+			selector: {
+				id: /^toggleLoginBtn$/,
+				viewName: "demo.app.view.Home",
+				controlType: "sap.m.Button",
+			},
+			forceSelect: true,
+		});
+		await toggleLoginButton.press();
+		await expectControlText("authStatus", "Logged Out");
+
+		// Browser forward toward previously visited #/protected.
+		await browser.execute(() => window.history.forward());
+
+		// Enter guard should block and redirect back to home.
+		await waitForHomePageInFlp();
+		await expectAppHashToBe("");
+	});
+
+	it("handles back/forward cycles with guards", async () => {
+		await loginAndGoToProtectedInFlp();
+
+		// Back to home
+		await browser.back();
+		await waitForHomePageInFlp();
+
+		// Forward to protected (still logged in -- guard allows)
+		await browser.execute(() => window.history.forward());
+		await waitForProtectedPageInFlp();
+
+		// Back to home again
+		await browser.back();
+		await waitForHomePageInFlp();
 	});
 });

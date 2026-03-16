@@ -317,3 +317,50 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 export async function waitForProtectedPageInFlp(): Promise<void> {
 	await waitForPage("protectedPage", "Protected Page");
 }
+
+export async function waitForHomePageInFlp(): Promise<void> {
+	await waitForPage("homePage", "Home");
+}
+
+/**
+ * Navigate to a route programmatically via the demo app's router.
+ */
+export async function navigateToRouteInFlp(routeName: string): Promise<void> {
+	const navigated = await browser.execute((route: string) => {
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const all = Component.registry.all() as Record<string, UIComponent>;
+		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+		if (!component) return false;
+
+		component.getRouter().navTo(route, {}, undefined, true);
+		return true;
+	}, routeName);
+
+	if (!navigated) {
+		throw new Error(`Demo router was not available to navigate to "${routeName}"`);
+	}
+}
+
+/**
+ * Wait for the app-specific hash fragment to settle to the expected value.
+ * In FLP, the full hash includes the shell intent (e.g. "#app-preview&/protected"),
+ * but the app only sees its own route fragment.
+ */
+export async function expectAppHashToBe(expected: string, timeout = 5000): Promise<void> {
+	await browser.waitUntil(
+		async () => {
+			return browser.execute((exp: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				const all = Component.registry.all() as Record<string, UIComponent>;
+				const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+				const router = component?.getRouter();
+				// Wait for any pending guard evaluation to complete
+				if (router?._pendingHash !== null) return false;
+
+				const hash = router?._currentHash ?? "";
+				return hash === exp;
+			}, expected);
+		},
+		{ timeout, timeoutMsg: `App hash did not settle to "${expected}"` },
+	);
+}
