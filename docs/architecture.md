@@ -20,15 +20,23 @@ ui5-lib-guard-router/
     |       |-- wdio-qunit.conf.ts  runs QUnit in headless Chrome
     |
     |-- demo-app/                   demo application
-        |-- ui5.yaml                serves lib + app with transpile
+        |-- ui5.yaml                serves lib + app with transpile (OpenUI5)
+        |-- ui5-flp.yaml            FLP preview config (SAPUI5, sap.ushell)
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
-        |   |-- controller/         Home, Protected, Forbidden
+        |   |-- controller/         Home, Protected, Forbidden, NotFound
         |   |-- view/               XML views
+        |   |-- guards.ts           guard factories (auth, dirty form, forbidden)
+        |   |-- demo/               RuntimeCoordinator, ScenarioRunner
+        |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
+        |   |-- model/              runtime model factory
+        |   |-- routing/            hashNavigation helpers
         |-- test/
-            |-- e2e/                wdi5 e2e tests
-            |-- wdio.conf.ts
+            |-- e2e/                wdi5 e2e tests (standalone)
+            |-- flp/                wdi5 FLP preview smoke tests
+            |-- wdio.conf.ts        standalone e2e config
+            |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
 
 ## High-Level Overview
@@ -73,7 +81,7 @@ matching, target loading, or event firing occurs.
 |                             +---------------------------+            |
 +----------------------------------------------------------------------+
          |
-         | MobileRouter.prototype.parse.call(this, hash)
+         | super.parse(hash)
          v
 +----------------------------------------------------------------------+
 |                      sap.m.routing.Router                            |
@@ -87,25 +95,25 @@ matching, target loading, or event firing occurs.
 All types are defined in `types.ts` and exported for consumer use.
 
 ```
-GuardFn      = (context: GuardContext) => GuardResult | Promise<GuardResult>
-LeaveGuardFn = (context: GuardContext) => boolean | Promise<boolean>
+GuardFn      = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>
+LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>
 
 GuardContext                        GuardResult
 +--------------+                   +---------------------------+
 | toRoute      |  string           | true    -> allow          |
 | toHash       |  string           | false   -> block          |
-| toArguments  |  Record           | string  -> redirect       |
+| toArguments  |  RouteInfo["arguments"] | string  -> redirect  |
 | fromRoute    |  string           | GuardRedirect -> redirect |
 | fromHash     |  string           |   with params & targets   |
 | signal       |  AbortSignal      +---------------------------+
 +--------------+
 
-GuardRouter (public interface)      RouterInternal (internal interface)
-  extends sap.m.routing.Router        extends GuardRouter
-  + 6 public guard methods             + 10 state fields
-    addGuard / removeGuard             + 10 internal methods
-    addRouteGuard / removeRouteGuard     (incl. _runRouteGuards,
-    addLeaveGuard / removeLeaveGuard      _validateGuardResult)
+GuardRouter (public interface)      Router (ES6 class)
+  extends sap.m.routing.Router        extends sap.m.routing.Router
+  + 6 public guard methods             implements GuardRouter
+    addGuard / removeGuard             + internal state fields
+    addRouteGuard / removeRouteGuard   + private _cancelPendingNavigation()
+    addLeaveGuard / removeLeaveGuard   + override parse(), stop(), destroy()
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -115,10 +123,10 @@ GuardRouter (public interface)      RouterInternal (internal interface)
 Only strict `true` allows navigation. Truthy non-boolean values (numbers, objects, etc.)
 are treated as blocks. This prevents accidental allow from coercion.
 
-The `RouterInternal` interface exists because the Router uses UI5's `.extend()` pattern
-(not ES6 `class extends`). Each method body declares `this: RouterInternal` as an explicit
-this-parameter for full type safety. Application code casts to `GuardRouter` (the public
-interface); `RouterInternal` is used only inside the Router method bodies.
+The Router is an ES6 class that extends `sap.m.routing.Router` and implements the
+`GuardRouter` interface. Application code casts `getRouter()` to `GuardRouter` for
+type-safe access to the guard management methods. Internal state and methods live
+directly on the class as typed fields; no separate internal interface is needed.
 
 ## parse() Override - The Core Mechanism
 
@@ -127,15 +135,17 @@ guards before the parent router processes the hash.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressNextParse?}
-    suppress -- "yes" --> ret(["return"])
+    start(["parse(newHash)"]) --> suppress{_suppressedHash set?}
+    suppress -- "yes" --> smatch{hash matches?}
+    smatch -- "yes" --> sclear["clear flag"] --> ret(["return"])
+    smatch -- "no" --> sclear2["clear flag"] --> redir
     suppress -- "no" --> redir{_redirecting?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
-    samehash -- "yes" --> ret
+    samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
     samehash -- "no" --> pending{same as _pendingHash?}
     pending -- "yes" --> ret
-    pending -- "no" --> setup["resolve route<br/>bump _parseGeneration"]
+    pending -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
 
     setup --> guards{guards registered?}
     guards -- "no" --> commit(["_commitNavigation()"])
@@ -154,7 +164,7 @@ flowchart TD
 ```
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
-remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked—if
+remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked; if
 a newer navigation started, the stale result is discarded.
 
 **Critical design decisions:**
@@ -165,12 +175,12 @@ a newer navigation started, the stale result is discarded.
    navigation completes. When all guards are synchronous (the common case), the entire
    guard-check + route-activation happens in the same tick.
 
-2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressNextParse` mechanism
-   depends on this: `_restoreHash()` sets the flag, calls `replaceHash`, and the resulting
-   synchronous `parse()` sees the flag and returns immediately. If UI5 ever changes
-   `replaceHash` to fire `hashChanged` asynchronously, the flag would be reset before
-   `parse()` can check it, causing a double navigation. A QUnit test validates this
-   assumption.
+2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressedHash` mechanism
+   depends on this: `_restoreHash()` stores the hash to suppress, calls `replaceHash`,
+   and the resulting synchronous `parse()` sees the stored hash and returns immediately.
+   If UI5 ever changes `replaceHash` to fire `hashChanged` asynchronously, the stored
+   hash would be cleared before `parse()` can check it, causing a double navigation.
+   A QUnit test validates this assumption.
 
 3. **Redirect targets bypass guards.** When a guard redirects from route A to route B,
    the resulting `navTo` triggers a re-entrant `parse()` with `_redirecting = true`,
@@ -262,20 +272,72 @@ stale result is silently discarded. This ensures only the latest navigation wins
 The generation is also bumped on same-hash dedup, invalidating any pending async guard
 that was running when the user navigated back to the original hash.
 
+## FLP Integration
+
+When the router runs inside a Fiori Launchpad (FLP), two independent dirty-state
+mechanisms coexist:
+
+| Mechanism                    | Scope             | UX                            |
+| ---------------------------- | ----------------- | ----------------------------- |
+| Router leave guard           | In-app navigation | Silent block + hash restore   |
+| `registerDirtyStateProvider` | Cross-app (FLP)   | Native FLP confirmation popup |
+
+**Key design rule:** the leave guard and the dirty-state provider handle
+different scopes and do not need to coordinate in application code.
+
+### Production FLP
+
+In production, `ShellNavigationHashChanger` intercepts cross-app navigation
+**before** it reaches the app router. The leave guard's `parse()` is never
+called for cross-app hashes, so no conflict arises. The dirty-state provider
+handles cross-app dirty UX, the leave guard handles in-app dirty UX, and
+the two never overlap:
+
+```ts
+// Leave guard: blocks in-app navigation when dirty
+const leaveGuard: LeaveGuardFn = (context) => {
+	return !formModel.getProperty("/isDirty");
+};
+
+// Dirty-state provider: tells FLP about unsaved changes for cross-app
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) return false;
+	return formModel.getProperty("/isDirty") === true;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+```
+
+No `toRoute` check, no flags, no FLP detection -- just a simple dirty check.
+
+### FLP sandbox/preview (development only)
+
+The `fiori-tools-preview` middleware creates a simplified FLP sandbox for local
+development. Cross-app navigation via `toExternal()` operates at the shell level
+in both sandbox and production: the leave guard does not interfere because the
+navigation bypasses the app router's `parse()`. The dirty-state provider fires
+and the FLP shows its own confirm dialog. If the user confirms, the shell
+completes the navigation. If the user cancels, the hash stays unchanged.
+
+The demo app's FLP E2E tests pin this behavior in two spec files:
+`flp-preview.e2e.ts` covers the cancel path (dirty provider fires, headless
+`confirm()` returns `false`, user stays on page) and in-app dirty blocking;
+`flp-cross-app.e2e.ts` covers the confirm path (dirty + `confirm()` returns
+`true`, navigation completes to Shell-home) in an isolated browser session.
+
 ## Internal State
 
-| Field                | Type                          | Purpose                                       |
-| -------------------- | ----------------------------- | --------------------------------------------- |
-| `_globalGuards`      | `GuardFn[]`                   | Guards that run for every navigation          |
-| `_enterGuards`       | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
-| `_leaveGuards`       | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
-| `_currentRoute`      | `string`                      | Name of the currently active route            |
-| `_currentHash`       | `string \| null`              | Hash of the active route, `null` before first |
-| `_pendingHash`       | `string \| null`              | Hash being evaluated by async guards          |
-| `_redirecting`       | `boolean`                     | True during guard-triggered redirect          |
-| `_parseGeneration`   | `number`                      | Monotonic counter for async invalidation      |
-| `_suppressNextParse` | `boolean`                     | Suppresses parse from `_restoreHash`          |
-| `_abortController`   | `AbortController \| null`     | Aborted when navigation is superseded         |
+| Field              | Type                          | Purpose                                       |
+| ------------------ | ----------------------------- | --------------------------------------------- |
+| `_globalGuards`    | `GuardFn[]`                   | Guards that run for every navigation          |
+| `_enterGuards`     | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
+| `_leaveGuards`     | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
+| `_currentRoute`    | `string`                      | Name of the currently active route            |
+| `_currentHash`     | `string \| null`              | Hash of the active route, `null` before first |
+| `_pendingHash`     | `string \| null`              | Hash being evaluated by async guards          |
+| `_redirecting`     | `boolean`                     | True during guard-triggered redirect          |
+| `_parseGeneration` | `number`                      | Monotonic counter for async invalidation      |
+| `_suppressedHash`  | `string \| null`              | Hash to suppress in the next `parse()` call   |
+| `_abortController` | `AbortController \| null`     | Aborted when navigation is superseded         |
 
 ## Monorepo Tooling
 
@@ -294,7 +356,7 @@ that was running when the user navigated back to the original hash.
 
 - **TypeScript**: strict mode, ES2022 target, composite project references
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Lint**: `oxlint` with `eqeqeq`, `no-var`, `prefer-const` rules
+- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
 - **Type check**: `tsc --noEmit` against both package tsconfigs
 
 ## Test Architecture
@@ -331,11 +393,30 @@ that was running when the user navigated back to the original hash.
   - Error handling              - Rapid hash changes
   - API parity with native      - Multi-step user flows
   - Leave guard pipeline        - Leave guard dirty form
+
+  Additional CI lanes (not part of `npm test`):
+
+  test:e2e:flp                    test:qunit:compat:118
+       |                               |
+  packages/demo-app/test/flp/    packages/lib/test/qunit/
+       |                          (same suite, OpenUI5 1.118.0)
+  +---------------------------+
+  | flp-preview.e2e.ts        |   Verifies the core library's
+  |   FLP runtime detection   |   guard pipeline works on
+  |   In-app nav inside FLP   |   the older UI5 runtime.
+  |   FLP dirty-state prompt  |
+  +---------------------------+
+
+  CI also runs:
+  - node22-pack-smoke: build + pack + consumer type smoke on Node 22
+  - windows-smoke: QUnit + E2E on windows-latest
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.
 E2e tests run against the demo-app served by `ui5 serve`, exercising real browser
 navigation, hash changes, and the full UI5 component lifecycle.
+FLP preview tests run the demo-app under `ui5 serve --config ui5-flp.yaml` (SAPUI5),
+verifying that the ushell integration, dirty-state provider, and leave guard coexistence work.
 
 ## Demo App Integration
 

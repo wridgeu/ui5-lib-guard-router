@@ -43,7 +43,7 @@ export interface GuardContext {
 	fromHash: string;
 	/**
 	 * Abort signal for this navigation. Aborted when a newer navigation
-	 * supersedes this one or when the router is destroyed.
+	 * supersedes this one, or when the router is stopped or destroyed.
 	 * Pass to `fetch()` or other cancellable APIs to avoid wasted work.
 	 */
 	signal: AbortSignal;
@@ -89,48 +89,4 @@ export interface GuardRouter extends MobileRouter {
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
-}
-
-/**
- * Full internal instance shape including private state and methods.
- *
- * Used as the `this` type in Router method bodies to provide autocomplete
- * and catch property-name typos. Not intended for external consumption.
- *
- * @internal
- */
-export interface RouterInternal extends GuardRouter {
-	_globalGuards: GuardFn[];
-	_enterGuards: Map<string, GuardFn[]>;
-	_leaveGuards: Map<string, LeaveGuardFn[]>;
-	_currentRoute: string;
-	_currentHash: string | null;
-	_pendingHash: string | null;
-	_redirecting: boolean;
-	_parseGeneration: number;
-	_suppressedHash: string | null;
-	_abortController: AbortController | null;
-
-	_commitNavigation(hash: string, route?: string): void;
-	_runLeaveGuards(context: GuardContext): boolean | Promise<boolean>;
-	_runEnterGuards(
-		globalGuards: GuardFn[],
-		toRoute: string,
-		context: GuardContext,
-	): GuardResult | Promise<GuardResult>;
-	_runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult>;
-	_runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult>;
-	_continueGuardsAsync(
-		pendingResult: PromiseLike<GuardResult>,
-		guards: GuardFn[],
-		currentIndex: number,
-		context: GuardContext,
-		onBlock: (result: unknown) => GuardResult,
-		label: string,
-		isLeaveGuard: boolean,
-	): Promise<GuardResult>;
-	_validateGuardResult(result: unknown): GuardResult;
-	_redirect(target: string | GuardRedirect): void;
-	_blockNavigation(attemptedHash?: string): void;
-	_restoreHash(hash: string, suppressParse?: boolean): void;
 }

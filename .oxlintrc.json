@@ -6,6 +6,12 @@
 		"perf": "warn"
 	},
 	"plugins": ["typescript", "oxc", "unicorn", "import"],
+	"jsPlugins": [
+		{
+			"name": "guardrails",
+			"specifier": "./tools/eslint-plugin-guardrails.mjs"
+		}
+	],
 	"rules": {
 		"no-console": "off",
 		"no-await-in-loop": "off",
@@ -15,7 +21,25 @@
 		"unicorn/prefer-top-level-await": "off",
 		"unicorn/no-static-only-class": "off",
 		"unicorn/prefer-global-this": "off",
-		"unicorn/consistent-function-scoping": "off"
+		"unicorn/consistent-function-scoping": "off",
+		"guardrails/no-em-dash-in-string": "warn",
+		"guardrails/no-em-dash-in-comment": "warn",
+		"guardrails/no-double-type-assertion": "error"
 	},
+	"overrides": [
+		{
+			"files": ["packages/*/test/**/*.ts"],
+			"rules": {
+				"guardrails/no-double-type-assertion": "off",
+				"guardrails/no-browser-pause": "error"
+			}
+		},
+		{
+			"files": ["packages/*/test/e2e/**/*.ts", "packages/*/test/flp/**/*.ts"],
+			"rules": {
+				"guardrails/no-hard-wait": "error"
+			}
+		}
+	],
 	"ignorePatterns": ["**/dist/**", "**/node_modules/**"]
 }

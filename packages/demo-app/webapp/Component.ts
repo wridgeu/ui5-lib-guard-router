@@ -1,21 +1,12 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, GuardFn } from "ui5/guard/router/types";
+import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
+import RuntimeCoordinator from "./demo/RuntimeCoordinator";
 import { createNavigationLogger, createAsyncPermissionGuard, createDirtyFormGuard, forbiddenGuard } from "./guards";
+import { createRuntimeModel } from "./model/runtime";
 
 /**
- * Demo application showcasing guard registration patterns.
- *
- * **Component-level guards** (shown here):
- * - Global guards (addGuard) - run for every navigation
- * - Route-specific enter guards (addRouteGuard with function)
- * - Object form guards (addRouteGuard with { beforeEnter, beforeLeave })
- *
- * **Controller-level guards** (see Home.controller.ts):
- * - Standalone leave guards (addLeaveGuard) - tied to controller lifecycle
- *
- * Both patterns are valid. Component-level is good for app-wide concerns;
- * controller-level is good for view-specific state protection.
+ * Demo application component showcasing guard registration patterns.
  *
  * @namespace demo.app
  */
@@ -25,62 +16,42 @@ export default class Component extends UIComponent {
 		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 
-	/** Reference to the global navigation logger guard for cleanup */
 	private _navigationLogger: GuardFn | null = null;
 
-	init(): void {
+	private _runtimeCoordinator: RuntimeCoordinator | null = null;
+
+	override init(): void {
 		super.init();
 
-		const router = this.getRouter() as unknown as GuardRouter;
+		const router = this.getRouter() as GuardRouter;
 		const authModel = this.getModel("auth") as JSONModel;
-
-		// Create a form model for dirty state tracking
+		const runtimeModel = createRuntimeModel();
 		const formModel = new JSONModel({ isDirty: false });
+
+		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
-		// ============================================================
-		// Pattern 1: Global Guards (addGuard)
-		// Run for EVERY navigation, useful for logging or app-wide checks
-		// Multiple global guards execute in registration order
-		// ============================================================
+		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);
+
 		this._navigationLogger = createNavigationLogger();
 		router.addGuard(this._navigationLogger);
 
-		// ============================================================
-		// Pattern 2: Route-specific Enter Guard (addRouteGuard with function)
-		// Runs only when navigating TO this specific route
-		// ============================================================
 		router.addRouteGuard("forbidden", forbiddenGuard);
-
-		// ============================================================
-		// Pattern 3: Object Form Guard (addRouteGuard with config object)
-		// Registers both enter AND leave guards in a single call
-		// This is the recommended pattern when a route needs both guard types
-		// Uses async guard to demonstrate Promise-based permission checks
-		// ============================================================
 		router.addRouteGuard("protected", {
 			beforeEnter: createAsyncPermissionGuard(authModel),
 			beforeLeave: createDirtyFormGuard(formModel),
 		});
 
+		this._runtimeCoordinator.start();
 		router.initialize();
 	}
 
-	/**
-	 * Clean up registered guards on component destruction.
-	 *
-	 * Router.destroy() automatically clears all guards, so this explicit cleanup
-	 * is optional in most cases. It's shown here as a defensive best practice.
-	 *
-	 * Note: In FLP with sap-keep-alive enabled, destroy() is only called when
-	 * navigating to the launchpad home page, not when switching between apps.
-	 */
-	destroy(): void {
-		const router = this.getRouter() as unknown as GuardRouter;
+	override destroy(): void {
+		this._runtimeCoordinator?.destroy();
+		this._runtimeCoordinator = null;
 
-		// Remove global guard
 		if (this._navigationLogger) {
-			router.removeGuard(this._navigationLogger);
+			(this.getRouter() as GuardRouter).removeGuard(this._navigationLogger);
 			this._navigationLogger = null;
 		}
 

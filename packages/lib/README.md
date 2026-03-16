@@ -24,6 +24,12 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
+If your app uses TypeScript and does not already depend on the UI5 typings, install them too (`@sapui5/types` works as well):
+
+```bash
+npm install -D @openui5/types
+```
+
 TypeScript types follow the UI5 module names. Add the package to `compilerOptions.types`:
 
 ```json
@@ -37,7 +43,8 @@ TypeScript types follow the UI5 module names. Add the package to `compilerOption
 Then import the types from the UI5 module path:
 
 ```typescript
-import type { GuardRouter } from "ui5/guard/router/types";
+import type { GuardRouter, GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
+import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
 
 UI5 runtime module names stay `ui5/guard/router/*`.
@@ -79,7 +86,7 @@ export default class Component extends UIComponent {
 
 	init(): void {
 		super.init();
-		const router = this.getRouter() as unknown as GuardRouter;
+		const router = this.getRouter() as GuardRouter;
 
 		// Route-specific guard: redirect when not logged in
 		router.addRouteGuard("protected", (context) => {
@@ -133,14 +140,14 @@ All methods return `this` for chaining.
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                         |
-| ------------- | -------------------------------------------------- | --------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)               |
-| `toHash`      | `string`                                           | Raw hash being navigated to                         |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                             |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)      |
-| `fromHash`    | `string`                                           | Current hash                                        |
-| `signal`      | `AbortSignal`                                      | Aborted when a newer navigation supersedes this one |
+| Property      | Type                                               | Description                                                       |
+| ------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| `toRoute`     | `string`                                           | Target route name (empty if no match)                             |
+| `toHash`      | `string`                                           | Raw hash being navigated to                                       |
+| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                           |
+| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                    |
+| `fromHash`    | `string`                                           | Current hash                                                      |
+| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()` |
 
 ### Return values
 
@@ -166,6 +173,13 @@ On first load, blocking a non-empty hash restores `""` and continues with the ap
 | `false` (or any non-`true` value) | Block                           |
 
 Leave guards cannot redirect. For redirection logic, use enter guards on the target route.
+
+### Lifecycle
+
+| Method      | Behavior                                                                                                                                                                                      |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets guard state. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
+| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                               |
 
 ### Execution order
 
@@ -259,13 +273,13 @@ export default class EditOrderController extends Controller {
 		const formModel = new JSONModel({ isDirty: false });
 		this.getView()!.setModel(formModel, "form");
 
-		const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+		const router = UIComponent.getRouterFor(this) as GuardRouter;
 		this._leaveGuard = createDirtyFormGuard(formModel);
 		router.addLeaveGuard("editOrder", this._leaveGuard);
 	}
 
 	onExit(): void {
-		const router = (this.getOwnerComponent() as UIComponent).getRouter() as unknown as GuardRouter;
+		const router = UIComponent.getRouterFor(this) as GuardRouter;
 		router.removeLeaveGuard("editOrder", this._leaveGuard);
 	}
 }
@@ -298,10 +312,10 @@ sap.ushell.Container.setDirtyFlag(false); // clear after save
 
 ```typescript
 const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation) {
-		return formModel.getProperty("/isDirty");
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false; // let in-app routing handle it
 	}
-	return false; // let in-app routing handle it
+	return formModel.getProperty("/isDirty") === true;
 };
 sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 
@@ -311,10 +325,32 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
 
-**How the two approaches complement each other**: FLP's data loss protection operates at the shell navigation filter level, intercepting navigation _before_ the hash change reaches your app's router. Leave guards operate _inside_ your app's router, intercepting route-to-route navigation. For complete coverage:
+#### Combining leave guards with FLP dirty-state protection
 
-- Use **leave guards** for in-app route changes (e.g., navigating from an edit form to a list within your app)
-- Use **`setDirtyFlag`** or **`registerDirtyStateProvider`** for FLP-level navigation (cross-app, browser close, home button)
+When you use both a route leave guard and `registerDirtyStateProvider`, the two handle separate scopes and do not need to coordinate in application code:
+
+- **Leave guard** protects **in-app** navigation (route to route within your app)
+- **Dirty-state provider** protects **cross-app** navigation (shell home, other tiles, browser close)
+
+In production FLP, `ShellNavigationHashChanger` intercepts cross-app navigation **before** it reaches the app router, so the leave guard never runs for cross-app hashes. The two mechanisms never overlap:
+
+```typescript
+// 1. Leave guard: blocks in-app navigation when dirty
+router.addRouteGuard("editOrder", {
+	beforeLeave: () => formModel.getProperty("/isDirty") !== true,
+});
+
+// 2. Dirty-state provider: tells FLP about unsaved changes for cross-app
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false; // in-app navigation handled by leave guard
+	}
+	return formModel.getProperty("/isDirty") === true;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+```
+
+No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation via `toExternal()` operates at the shell level in both production and the FLP sandbox, so the leave guard never runs for cross-app hashes. The leave guard protects in-app route changes; the FLP dirty-state provider protects cross-app navigation, browser close, and the shell home button.
 
 See the [FLP Dirty State Research](../../docs/research-flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
@@ -395,7 +431,13 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package currently declares `minUI5Version: 1.144.0` and CI tests that version. The implementation itself only depends on APIs available since UI5 1.118, so older baselines may be possible, but they are not shipped or verified yet.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline, but it provides a concrete verification signal for consumers evaluating older runtimes.
+
+If you maintain an app on an older UI5 stack and want to validate locally, run the dedicated compatibility check from the monorepo root:
+
+```bash
+npm run test:qunit:compat:118
+```
 
 ## License
 

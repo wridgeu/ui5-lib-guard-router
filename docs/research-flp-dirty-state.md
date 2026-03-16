@@ -1,8 +1,8 @@
 # Research: FLP Data Loss Prevention (Dirty State)
 
-> **Date**: 2026-02-08
+> **Date**: 2026-02-08 (updated 2026-03-15)
 > **UI5 version analyzed**: SAPUI5 1.144.0
-> **Context**: Understanding how FLP's built-in dirty state protection works, its scope, and how it complements the leave guards in this library.
+> **Context**: Understanding how FLP's built-in dirty state protection works, its scope, and how it complements the leave guards in this library. Updated with production FLP vs sandbox preview behavior and the leave guard interaction pattern.
 
 ## Summary
 
@@ -141,7 +141,126 @@ Used by navigation filters to communicate their decision:
 - **Inner-app navigation**: Same semantic object and action, different app route (e.g., `#Order-display&/list` → `#Order-display&/detail/123`). The `&/...` suffix is the inner-app route.
 - **Cross-app navigation**: Different semantic object/action (e.g., `#Order-display` → `#Product-manage`).
 
-The `isInnerAppNavigation(newHash, oldHash)` method on the hash changer determines this by comparing the intent portions of the hashes.
+Classification happens in `treatHashChanged` using `UrlParsing.compareHashes()`, which returns `{ sameIntent, sameParameters }`. The public `isInnerAppNavigation(newHash, oldHash)` method provides the same logic as a utility but is not used internally by `treatHashChanged`.
+
+## Hash Changer Architecture
+
+The browser URL always contains a single hash fragment. The FLP uses the `&/` convention to pack two logical hashes into one physical hash:
+
+```
+#Order-display&/detail/42
+ └── shell hash ──┘└─ app hash ─┘
+```
+
+The browser sees one `hashchange` event. The FLP's hash changer infrastructure splits this into separate concerns, so the app's router only ever sees the app hash portion (`detail/42`).
+
+### How the FLP replaces the default HashChanger
+
+During FLP boot, `ShellNavigationInternal.init()` calls:
+
+```js
+HashChanger.replaceHashChanger(shellNavigationHashChanger);
+```
+
+This static method on [`HashChanger`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/HashChanger-dbg.js) replaces the global singleton. It transfers the existing `RouterHashChanger` from the old instance to the new one and re-parents it:
+
+```js
+oHashChanger._oRouterHashChanger = _oHashChanger._oRouterHashChanger;
+oHashChanger._oRouterHashChanger.parent = oHashChanger;
+```
+
+From this point on, `HashChanger.getInstance()` returns the `ShellNavigationHashChanger`. Every `Router` that later calls `createRouterHashChanger()` gets a child whose parent is the shell hash changer.
+
+The replacement also overrides `getHash()`:
+
+```js
+ShellNavigationHashChanger.prototype.getHash = function () {
+	return this.getAppHash(); // returns ONLY the inner-app portion
+};
+```
+
+Any code calling `hashChanger.getHash()` — including `Router.initialize()` — sees only the app-specific route, never the shell prefix.
+
+### Event chain: browser hashchange → Router.parse()
+
+```
+Browser hashchange (one event for the full fragment)
+  → hasher library captures it
+    → ShellNavigationHashChanger.treatHashChanged(newHash, oldHash)
+      → _splitHash() decomposes at &/
+      → UrlParsing.compareHashes() classifies the change
+        │
+        ├─ Inner-app (sameIntent && sameParameters, different appSpecificRoute)
+        │    → fireEvent("hashChanged", {newHash: "detail/42", ...})
+        │      → HashChanger._onHashChangedForRouterHashChanger(eventInfo, event)
+        │        → paramMapping resolves "newHash" → "detail/42"
+        │        → RouterHashChanger.fireHashChanged("detail/42", subHashMap, false)
+        │          → fireEvent("hashChanged", {newHash: "detail/42"})
+        │            → Router.fnHashChanged → Router.parse("detail/42")
+        │
+        └─ Cross-app (different intent)
+             → fireEvent("shellHashChanged", {..., updateHashOnly: true})
+             │  → HashChanger._onHashChangedForRouterHashChanger(eventInfo, event)
+             │    → paramMapping resolves "newHash" from "newAppSpecificRouteNoSeparator"
+             │    → RouterHashChanger.fireHashChanged(appHash, subHashMap, true)
+             │      → if (!bUpdateHashOnly && sHash !== sOldHash) — CONDITION FAILS
+             │      → fireEvent is SKIPPED — Router.parse() is never called
+             │
+             → _fnShellCallback(newShellHash, newAppRoute, oldShellHash, oldAppRoute)
+               → FLP shell destroys old component, loads new app
+```
+
+The `updateHashOnly: true` flag in the `shellHashChanged` event definition is the mechanism that prevents the old app's router from reacting to cross-app navigation. The [`RouterHashChanger.fireHashChanged`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/RouterHashChanger-dbg.js) method silently updates the stored hash without firing the `"hashChanged"` event:
+
+```js
+RouterHashChanger.prototype.fireHashChanged = function (sHash, oSubHashMap, bUpdateHashOnly) {
+	var sOldHash = this.hash;
+	this.hash = sHash;
+	if (!bUpdateHashOnly && sHash !== sOldHash) {
+		this.fireEvent("hashChanged", { newHash: sHash, oldHash: sOldHash });
+	}
+};
+```
+
+### Event chain: Router.navTo() → browser URL
+
+When the app calls `router.navTo("detail", {id: "42"})`:
+
+```
+Router.navTo("detail", {id: "42"})
+  → resolves route pattern → hash string "detail/42"
+  → RouterHashChanger.setHash("detail/42")
+    → fires "hashSet" event upward
+      → ShellNavigationHashChanger._onHashModified catches it
+        → _reconstructHash() joins sub-hashes with &/
+        → setHash(fullHash) → toAppHash("detail/42", true)
+          → _constructHash(appHashPrefix + "detail/42")
+            → _getCurrentShellHash() returns "Order-display"
+            → result: "Order-display&/detail/42"
+          → hasher.setHash("Order-display&/detail/42")
+            → browser URL updates to #Order-display&/detail/42
+```
+
+The app's router only knows about `"detail/42"`. The `ShellNavigationHashChanger` transparently handles prefixing it with the shell hash and the `&/` separator.
+
+### Layer summary
+
+| Layer    | Component                    | Sees                                     | Responsibility                            |
+| -------- | ---------------------------- | ---------------------------------------- | ----------------------------------------- |
+| Browser  | `window.onhashchange`        | `#Order-display&/detail/42`              | Raw hash change event                     |
+| Library  | `hasher`                     | `Order-display&/detail/42`               | Normalizes, fires `changed` signal        |
+| FLP      | `ShellNavigationHashChanger` | Shell: `Order-display`, App: `detail/42` | Splits at `&/`, classifies, routes events |
+| UI5 Core | `RouterHashChanger`          | `detail/42`                              | Receives app hash only, fires to Router   |
+| App      | `Router`                     | `detail/42`                              | Matches routes, calls `parse()`           |
+
+### Source references
+
+All method signatures and event definitions verified against the unminified SAPUI5 1.144.0 source files:
+
+- [`ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js) — `treatHashChanged`, `_splitHash`, `getHash`/`getAppHash`, `setHash`/`toAppHash`/`_constructHash`, `getRelevantEventsInfo` (defines `O_EVENT` with `updateHashOnly`), `_fnShellCallback`, `isInnerAppNavigation`
+- [`HashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/HashChanger-dbg.js) — `replaceHashChanger` (re-parents `_oRouterHashChanger`), `_onHashChangedForRouterHashChanger` (uses `paramMapping`), `_registerListenerToRelevantEvents`
+- [`RouterHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/RouterHashChanger-dbg.js) — `fireHashChanged` (`bUpdateHashOnly` check), `setHash` (fires `"hashSet"` upward)
+- [`Router-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ui/core/routing/Router-dbg.js) — `initialize` (attaches `"hashChanged"` handler that calls `parse()`)
 
 ## Scope and Limitations
 
@@ -167,6 +286,53 @@ When the hash changes but the intent stays the same (inner-app navigation), the 
 
 This is by design — FLP assumes apps handle their own internal routing. This is exactly the gap that leave guards fill.
 
+## Production FLP vs Sandbox Preview
+
+The `ShellNavigationHashChanger` replacement is central to understanding how leave guards behave in each environment.
+
+### Production FLP
+
+In production, the FLP replaces the default `sap.ui.core.routing.HashChanger` with its own `ShellNavigationHashChanger`. This hash changer splits the URL into two parts:
+
+- **Shell hash**: `#SemanticObject-action` — managed by the FLP
+- **App hash**: the fragment after `&/` — managed by the app's router
+
+The app's router only receives the app hash portion. When the user clicks the FLP home button or a different app tile, the shell hash changes but the app hash does not. The app's `Router.parse()` is never called for cross-app navigation. The FLP's `_disableSourceAppRouter` explicitly prevents the source app's router from reacting.
+
+**Consequence**: Leave guards are never triggered by cross-app navigation in production. The FLP's `_handleDataLoss` filter handles dirty state before the hash changes.
+
+### FLP Sandbox Preview (`fiori-tools-preview`)
+
+The sandbox preview provided by `@sap/ux-ui5-tooling` is a lightweight FLP emulation. It boots `sap.ushell` with a mock container and minimal shell services. While the sandbox does not fully replicate the `ShellNavigationHashChanger` split, cross-app navigation via `toExternal()` (FLP home button, tile clicks) still operates at the shell level and does not pass through the app router's `parse()`.
+
+### Leave guards and cross-app navigation
+
+No bypass logic or FLP detection is needed in leave guards. In both production and sandbox, `toExternal()` navigates at the shell level, so the leave guard never runs for cross-app hashes. The leave guard and dirty-state provider handle different scopes and never overlap:
+
+```typescript
+// Leave guard: blocks in-app navigation when dirty
+const leaveGuard: LeaveGuardFn = (context) => {
+	return !formModel.getProperty("/isDirty");
+};
+
+// Dirty-state provider: tells FLP about unsaved changes for cross-app
+const dirtyProvider = (navigationContext) => {
+	if (navigationContext?.isCrossAppNavigation === false) return false;
+	return formModel.getProperty("/isDirty") === true;
+};
+sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+```
+
+No `toRoute` check, no flags, no FLP detection in the leave guard.
+
+| Environment         | Cross-app via `toExternal()` triggers `parse()`? | Leave guard behavior |
+| ------------------- | ------------------------------------------------ | -------------------- |
+| Production FLP      | No (`ShellNavigationHashChanger` intercepts)     | Never reached        |
+| FLP sandbox         | No (`toExternal` operates at shell level)        | Never reached        |
+| Standalone (no FLP) | N/A (no ushell)                                  | N/A                  |
+
+In both production and sandbox, `toExternal()` navigates at the shell level, bypassing the app router's `parse()`. The leave guard never interferes with cross-app navigation. The dirty-state provider handles the confirmation UX independently.
+
 ## Complementary Usage Pattern
 
 For complete data loss prevention in a Fiori Launchpad app:
@@ -175,19 +341,26 @@ For complete data loss prevention in a Fiori Launchpad app:
 // Component.ts
 init(): void {
     super.init();
-    const router = this.getRouter() as unknown as GuardRouter;
+    const router = this.getRouter() as GuardRouter;
 
-    // 1. Leave guard: protects in-app navigation
     const formModel = new JSONModel({ isDirty: false });
     this.setModel(formModel, "form");
 
-    router.addLeaveGuard("editOrder", (context) => {
-        return !formModel.getProperty("/isDirty");
+    // 1. Leave guard: protects in-app navigation
+    router.addRouteGuard("editOrder", {
+        beforeLeave: () => !formModel.getProperty("/isDirty"),
     });
 
     // 2. FLP dirty state provider: protects cross-app navigation
+    //    In production FLP, ShellNavigationHashChanger ensures cross-app
+    //    hashes never reach the app router, so the two never conflict.
     if (sap.ushell?.Container) {
-        this._dirtyProvider = () => formModel.getProperty("/isDirty");
+        this._dirtyProvider = (navigationContext) => {
+            if (navigationContext?.isCrossAppNavigation === false) {
+                return false;
+            }
+            return formModel.getProperty("/isDirty") === true;
+        };
         sap.ushell.Container.registerDirtyStateProvider(this._dirtyProvider);
     }
 
@@ -205,10 +378,13 @@ destroy(): void {
 
 ## Verification Sources
 
-All findings were verified by reading the actual source code from the UI5 CDN:
+All findings were verified by reading the unminified debug source files hosted on the public SAPUI5 CDN. Each link below opens directly in the browser. Use the browser's find function (`Ctrl+F`) with the search terms listed.
 
-- [`sap/ushell/Container-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/Container-dbg.js) — `setDirtyFlag`, `getDirtyFlag`, `registerDirtyStateProvider`, `deregisterDirtyStateProvider`, `getDirtyFlagsAsync`, `setAsyncDirtyStateProvider`
-- [`sap/ushell/renderer/Shell-dbg.controller.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js) — `_handleDataLoss`, `_disableSourceAppRouter`
-- [`sap/ushell/services/ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js) — `NavigationFilterStatus`, `treatHashChanged`, inner-app vs cross-app detection
+- [`sap/ushell/Container-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/Container-dbg.js)
+  Search for: `setDirtyFlag`, `getDirtyFlag`, `registerDirtyStateProvider`, `deregisterDirtyStateProvider`, `getDirtyFlagsAsync`, `setAsyncDirtyStateProvider`, `NavigationContext`
+- [`sap/ushell/renderer/Shell-dbg.controller.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js)
+  Search for: `_handleDataLoss`, `_disableSourceAppRouter`, `NavigationFilterStatus`
+- [`sap/ushell/services/ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js)
+  Search for: `isInnerAppNavigation`, `treatHashChanged`, `NavigationFilterStatus`
 
-> **Note**: `sap.ushell` is part of SAPUI5 / Fiori Launchpad, not OpenUI5. The UI5 MCP API reference tool cannot resolve `sap.ushell` symbols since this project uses OpenUI5. All API details were obtained from the debug source files on the CDN.
+> **Note**: `sap.ushell` is part of SAPUI5, not OpenUI5. These debug files are publicly accessible on the CDN without authentication. The `-dbg.js` suffix indicates the unminified, readable version of the source.

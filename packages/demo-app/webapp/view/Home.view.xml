@@ -2,39 +2,114 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Home">
-	<Page id="homePage" title="Home">
+	<Page id="homePage" title="Home" titleAlignment="Center">
 		<content>
-			<VBox class="sapUiMediumMargin" alignItems="Start">
-				<Title text="UI5 Enhanced Router Demo" level="H2" class="sapUiSmallMarginBottom" />
-
-				<HBox alignItems="Center" class="sapUiSmallMarginBottom">
-					<Label text="Auth Status:" class="sapUiSmallMarginEnd" />
-					<ObjectStatus
-						text="{= ${auth>/isLoggedIn} ? 'Logged In' : 'Logged Out'}"
-						state="{= ${auth>/isLoggedIn} ? 'Success' : 'Error'}"
-						id="authStatus" />
-				</HBox>
-
-				<Button
-					id="toggleLoginBtn"
-					text="{= ${auth>/isLoggedIn} ? 'Logout' : 'Login'}"
-					type="Emphasized"
-					press=".onToggleLogin"
+			<VBox class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
+				<MessageStrip
+					text="Compare router navigation, direct hash changes, and FLP preview state. Protected uses an async enter guard and a dirty-form leave guard."
+					type="Information"
+					showIcon="true"
 					class="sapUiSmallMarginBottom" />
 
-				<Title text="Navigation" level="H3" class="sapUiSmallMarginBottom" />
+				<FlexBox wrap="Wrap" renderType="Bare">
+					<Panel headerText="Session &amp; Runtime" width="22rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+						<content>
+							<Text
+								text="Switch auth state and inspect the active hash, launch mode, and FLP availability while you navigate."
+								wrapping="true"
+								class="sapUiSmallMarginBottom" />
+							<HBox alignItems="Center" class="sapUiTinyMarginBottom">
+								<Label text="Auth" class="sapUiTinyMarginEnd" />
+								<ObjectStatus
+									id="authStatus"
+									text="{= ${auth>/isLoggedIn} ? 'Logged In' : 'Logged Out'}"
+									state="{= ${auth>/isLoggedIn} ? 'Success' : 'Error'}" />
+							</HBox>
+							<Button
+								id="toggleLoginBtn"
+								text="{= ${auth>/isLoggedIn} ? 'Logout' : 'Login'}"
+								type="Emphasized"
+								press=".onToggleLogin"
+								width="100%"
+								class="sapUiSmallMarginBottom" />
+							<HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+								<VBox width="9.5rem" renderType="Bare" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+									<Label text="Launch Mode" />
+									<Text id="launchModeText" text="{runtime>/launchMode}" />
+								</VBox>
+								<VBox width="10rem" renderType="Bare" class="sapUiTinyMarginBottom">
+									<Label text="Current Hash" />
+									<Text id="currentHashText" text="{= ${runtime>/currentHash} || '(empty hash)'}" />
+								</VBox>
+							</HBox>
+							<VBox class="sapUiTinyMarginBottom" renderType="Bare">
+								<Label text="Last Action" />
+								<Text id="lastActionText" text="{= ${runtime>/lastAction} || 'Ready'}" />
+							</VBox>
+							<ObjectStatus
+								id="ushellStatus"
+								text="{= ${runtime>/hasUshellContainer} ? 'sap.ushell.Container available' : 'sap.ushell.Container unavailable'}"
+								state="{= ${runtime>/hasUshellContainer} ? 'Success' : 'None'}"
+								class="sapUiTinyMarginBottom" />
+							<ObjectStatus
+								id="flpDirtyProviderStatus"
+								text="{= ${runtime>/flpDirtyProviderActive} ? 'FLP cross-app dirty protection active' : 'FLP cross-app dirty protection inactive'}"
+								state="{= ${runtime>/flpDirtyProviderActive} ? 'Success' : 'None'}" />
+						</content>
+					</Panel>
 
-				<Button
-					id="navProtectedBtn"
-					text="Go to Protected Page"
-					press=".onNavToProtected"
-					class="sapUiSmallMarginBottom" />
+					<Panel headerText="Router Navigation" width="22rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+						<content>
+							<Text
+								text="These buttons call router.navTo(...). Use them to compare allowed navigation, redirects, and leave-guard behavior."
+								wrapping="true"
+								class="sapUiSmallMarginBottom" />
+							<Button
+								id="navProtectedBtn"
+								text="Go to Protected Page"
+								press=".onNavToProtected"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="navForbiddenBtn"
+								text="Go to Forbidden Page (always blocked)"
+								press=".onNavToForbidden"
+								width="100%" />
+						</content>
+					</Panel>
 
-				<Button
-					id="navForbiddenBtn"
-					text="Go to Forbidden Page (always blocked)"
-					press=".onNavToForbidden"
-					class="sapUiSmallMarginBottom" />
+					<Panel headerText="Hash-Based Scenarios" width="22rem" class="sapUiSmallMarginBottom">
+						<content>
+							<Text
+								text="These demo-only helpers drive navigation through the UI5 hash APIs to show deep links, missing routes, and rapid hash updates."
+								wrapping="true"
+								class="sapUiSmallMarginBottom" />
+							<Button
+								id="directHashProtectedBtn"
+								text="Set Hash to Protected"
+								press=".onDirectHashToProtected"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="directHashForbiddenBtn"
+								text="Set Hash to Forbidden"
+								press=".onDirectHashToForbidden"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="directHashMissingBtn"
+								text="Set Hash to Missing Route"
+								press=".onDirectHashToMissing"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="rapidHashBtn"
+								text="Run Rapid Hash Sequence"
+								press=".onRapidHashSequence"
+								width="100%" />
+						</content>
+					</Panel>
+				</FlexBox>
 			</VBox>
 		</content>
 	</Page>

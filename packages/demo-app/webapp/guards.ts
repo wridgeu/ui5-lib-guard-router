@@ -25,6 +25,9 @@ export function createNavigationLogger(): GuardFn {
  * Guard that requires the user to be logged in.
  * Redirects to "home" if not authenticated.
  *
+ * **Reference implementation** - demonstrates a synchronous auth guard.
+ * The demo app uses the async variant {@link createAsyncPermissionGuard} instead.
+ *
  * Handles edge case where model property might be undefined (e.g., model not yet loaded).
  */
 export function createAuthGuard(authModel: JSONModel): GuardFn {
@@ -51,6 +54,10 @@ export function createAuthGuard(authModel: JSONModel): GuardFn {
 export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayMs = 50): GuardFn {
 	return async (context: GuardContext): Promise<GuardResult> => {
 		Log.info(`Async permission check started for "${context.toRoute}"`, "", LOG_COMPONENT);
+
+		if (context.signal.aborted) {
+			return false;
+		}
 
 		// Simulate an async API call with abort support
 		// In real apps, pass context.signal to fetch() or other cancellable APIs
@@ -116,12 +123,16 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * Handles edge case where model property might be undefined.
+ * No FLP-specific bypass is needed here. Cross-app navigation via
+ * `toExternal()` operates at the shell level in both production and
+ * the FLP sandbox, so the leave guard never runs for cross-app hashes.
+ * The FLP dirty-state provider (registered separately via
+ * `registerDirtyStateProvider`) handles cross-app dirty UX with its
+ * own confirmation popup independently of the router.
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
 		const isDirty = formModel.getProperty("/isDirty");
-		// Explicitly check for true to handle undefined safely
 		if (isDirty === true) {
 			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
 			return false;

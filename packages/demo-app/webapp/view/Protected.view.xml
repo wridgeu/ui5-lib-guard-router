@@ -2,25 +2,71 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Protected">
-	<Page id="protectedPage" title="Protected Page" showNavButton="true" navButtonPress=".onNavBack">
+	<Page id="protectedPage" title="Protected Page" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavBack">
 		<content>
-			<VBox class="sapUiMediumMargin" alignItems="Start">
+			<VBox class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
 				<MessageStrip
 					text="You are viewing a protected page. This is only visible when logged in."
 					type="Success"
 					showIcon="true"
 					class="sapUiSmallMarginBottom" />
-				<Text text="If you see this page, the guard allowed your navigation." class="sapUiSmallMarginBottom" />
-				<CheckBox
-					id="dirtyCheckbox"
-					text="Simulate unsaved changes (dirty form)"
-					selected="{form>/isDirty}"
+				<Text
+					text="If you see this page, the async enter guard allowed the navigation. Use the panels below to inspect leave-guard and FLP cross-app behavior."
+					wrapping="true"
 					class="sapUiSmallMarginBottom" />
-				<ObjectStatus
-					id="dirtyStatus"
-					text="{= ${form>/isDirty} ? 'Form has unsaved changes' : 'Form is clean'}"
-					state="{= ${form>/isDirty} ? 'Warning' : 'Success'}"
-					icon="{= ${form>/isDirty} ? 'sap-icon://warning' : 'sap-icon://accept'}" />
+				<FlexBox wrap="Wrap" renderType="Bare">
+					<Panel headerText="Dirty Form Guard" width="22rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
+						<content>
+							<Text
+								text="This route registers a beforeLeave guard. While the form is dirty, in-app navigation stays on this page and the previous hash is restored."
+								wrapping="true"
+								class="sapUiSmallMarginBottom" />
+							<CheckBox
+								id="dirtyCheckbox"
+								text="Simulate unsaved changes (dirty form)"
+								selected="{form>/isDirty}"
+								class="sapUiSmallMarginBottom" />
+							<ObjectStatus
+								id="dirtyStatus"
+								text="{= ${form>/isDirty} ? 'Form has unsaved changes' : 'Form is clean'}"
+								state="{= ${form>/isDirty} ? 'Warning' : 'Success'}"
+								icon="{= ${form>/isDirty} ? 'sap-icon://warning' : 'sap-icon://accept'}"
+								class="sapUiSmallMarginBottom" />
+							<Button
+								id="clearDirtyAndGoHomeBtn"
+								text="Clear Dirty State and Return Home"
+								press=".onClearDirtyAndNavHome"
+								width="100%" />
+						</content>
+					</Panel>
+
+					<Panel headerText="FLP Preview State" width="22rem" class="sapUiSmallMarginBottom">
+						<content>
+							<Text
+								text="In FLP preview, the demo also registers a sap.ushell dirty-state provider for cross-app navigation. Standalone mode keeps this inactive."
+								wrapping="true"
+								class="sapUiSmallMarginBottom" />
+							<ObjectStatus
+								id="protectedUshellStatus"
+								text="{= ${runtime>/hasUshellContainer} ? 'sap.ushell.Container available' : 'sap.ushell.Container unavailable'}"
+								state="{= ${runtime>/hasUshellContainer} ? 'Success' : 'None'}"
+								class="sapUiTinyMarginBottom" />
+							<ObjectStatus
+								id="protectedFlpDirtyProviderStatus"
+								text="{= ${runtime>/flpDirtyProviderActive} ? 'FLP cross-app dirty protection active' : 'FLP cross-app dirty protection inactive'}"
+								state="{= ${runtime>/flpDirtyProviderActive} ? 'Success' : 'None'}"
+								class="sapUiTinyMarginBottom" />
+							<VBox class="sapUiTinyMarginBottom" renderType="Bare">
+								<Label text="Current Hash" />
+								<Text id="protectedCurrentHashText" text="{= ${runtime>/currentHash} || '(empty hash)'}" />
+							</VBox>
+							<VBox renderType="Bare">
+								<Label text="Last Action" />
+								<Text id="protectedLastActionText" text="{= ${runtime>/lastAction} || 'Ready'}" />
+							</VBox>
+						</content>
+					</Panel>
+				</FlexBox>
 			</VBox>
 		</content>
 	</Page>

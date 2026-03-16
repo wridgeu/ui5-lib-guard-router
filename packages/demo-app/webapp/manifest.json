@@ -7,6 +7,19 @@
 			"version": "1.0.0"
 		},
 		"title": "UI5 Enhanced Router Demo",
+		"crossNavigation": {
+			"inbounds": {
+				"guarddemo-display": {
+					"semanticObject": "guarddemo",
+					"action": "display",
+					"title": "UI5 Enhanced Router Demo",
+					"signature": {
+						"parameters": {},
+						"additionalParameters": "allowed"
+					}
+				}
+			}
+		},
 		"dataSources": {
 			"auth": {
 				"type": "JSON",
@@ -53,7 +66,10 @@
 				"viewType": "XML",
 				"path": "demo.app.view",
 				"controlId": "appContainer",
-				"controlAggregation": "pages"
+				"controlAggregation": "pages",
+				"bypassed": {
+					"target": "notFound"
+				}
 			},
 			"routes": [
 				{
@@ -87,6 +103,11 @@
 					"name": "Forbidden",
 					"id": "forbiddenView",
 					"level": 2
+				},
+				"notFound": {
+					"name": "NotFound",
+					"id": "notFoundView",
+					"level": 3
 				}
 			}
 		}

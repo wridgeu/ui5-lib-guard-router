@@ -41,7 +41,7 @@ describe("Direct URL navigation with guards", () => {
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
 	});
 
-	it("should recover from navigating to a nonexistent route hash", async () => {
+	it("should show Not Found page for a nonexistent route hash", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
@@ -58,7 +58,10 @@ describe("Direct URL navigation with guards", () => {
 			{ timeout: 5000, timeoutMsg: "Hash did not settle to nonexistent route" },
 		);
 
-		// Verify the app is still functional by navigating back to a known route
+		// Verify the Not Found page is displayed
+		await waitForPage("container-demo.app---notFoundView--notFoundPage", "Not Found");
+
+		// Verify the app recovers by navigating back to a known route
 		await browser.execute(() => {
 			window.location.hash = "#/";
 		});
@@ -81,7 +84,12 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/protected";
 		});
 
-		// Should end up on Home (all guarded while logged out)
+		// Should end up on Home (all guarded while logged out).
+		// waitForPage checks DOM visibility + router settled (_pendingHash null).
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		// Verify hash settled to a home-route value (not stuck on a guarded route)
+		const hash = await browser.execute(() => window.location.hash);
+		expect(["", "#", "#/"].includes(hash)).toBe(true);
 	});
 });

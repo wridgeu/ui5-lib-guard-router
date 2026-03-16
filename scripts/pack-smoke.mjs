@@ -60,6 +60,8 @@ async function main() {
 						module: "ES2022",
 						moduleResolution: "Node",
 						strict: true,
+						// Required: @openui5/types references JQuery and QUnit
+						// globals that are not installed in a minimal consumer project.
 						skipLibCheck: true,
 						types: ["@openui5/types", "ui5-lib-guard-router"],
 					},
@@ -72,9 +74,21 @@ async function main() {
 		await writeFile(
 			path.join(tempDir, "consumer.ts"),
 			[
+				'import Router from "ui5/guard/router/Router";',
+				'import library from "ui5/guard/router/library";',
 				'import type { GuardRouter } from "ui5/guard/router/types";',
 				"",
-				"const router = null as unknown as GuardRouter;",
+				"type Assert<T extends true> = T;",
+				"type AssertFalse<T extends false> = T;",
+				"type IsAny<T> = 0 extends 1 & T ? true : false;",
+				"",
+				"type _routerIsTyped = AssertFalse<IsAny<typeof Router>>;",
+				"type _routerInstanceMatches = Assert<InstanceType<typeof Router> extends GuardRouter ? true : false>;",
+				"",
+				"declare const args: ConstructorParameters<typeof Router>;",
+				"const router: GuardRouter = new Router(...args);",
+				"void Router;",
+				"void library;",
 				"void router;",
 				"",
 			].join("\n"),
