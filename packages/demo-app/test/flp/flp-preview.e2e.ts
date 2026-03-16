@@ -4,6 +4,7 @@ import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	navigateToRouteInFlp,
+	pressToggleLoginInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigationAndExpectDirtyPrompt,
@@ -142,7 +143,7 @@ describe("FLP guard router hardening", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		await browser.execute(() => window.history.back());
+		await browser.back();
 
 		// Leave guard should block -- page stays on protected.
 		await waitForProtectedPageInFlp();
@@ -158,19 +159,11 @@ describe("FLP guard router hardening", () => {
 		await waitForHomePageInFlp();
 
 		// Logout.
-		const toggleLoginButton = await browser.asControl({
-			selector: {
-				id: /^toggleLoginBtn$/,
-				viewName: "demo.app.view.Home",
-				controlType: "sap.m.Button",
-			},
-			forceSelect: true,
-		});
-		await toggleLoginButton.press();
+		await pressToggleLoginInFlp();
 		await expectControlText("authStatus", "Logged Out");
 
 		// Browser forward toward previously visited #/protected.
-		await browser.execute(() => window.history.forward());
+		await browser.forward();
 
 		// Enter guard should block and redirect back to home.
 		await waitForHomePageInFlp();
@@ -185,7 +178,7 @@ describe("FLP guard router hardening", () => {
 		await waitForHomePageInFlp();
 
 		// Forward to protected (still logged in -- guard allows)
-		await browser.execute(() => window.history.forward());
+		await browser.forward();
 		await waitForProtectedPageInFlp();
 
 		// Back to home again

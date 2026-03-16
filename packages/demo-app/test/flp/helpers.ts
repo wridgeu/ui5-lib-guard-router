@@ -135,22 +135,6 @@ async function waitForPage(name: "homePage" | "protectedPage", expectedTitle: st
 	);
 }
 
-async function navigateHomeWithinApp(): Promise<void> {
-	const navigated = await browser.execute(() => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component.registry.all() as Record<string, UIComponent>;
-		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-		if (!component) return false;
-
-		component.getRouter().navTo("home", {}, undefined, true);
-		return true;
-	});
-
-	if (!navigated) {
-		throw new Error("Demo router was not available to navigate back to home");
-	}
-}
-
 async function isDemoAppMounted(): Promise<boolean> {
 	return browser.execute(() => {
 		const Component = sap.ui.require("sap/ui/core/Component");
@@ -173,7 +157,7 @@ export async function launchFlpApp(): Promise<void> {
 
 	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
 	await resetDirtyState();
-	await navigateHomeWithinApp();
+	await navigateToRouteInFlp("home");
 	await waitForPage("homePage", "Home");
 }
 
@@ -205,6 +189,11 @@ export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 	if (selected !== isDirty) {
 		await dirtyCheckbox.press();
 	}
+}
+
+export async function pressToggleLoginInFlp(): Promise<void> {
+	const toggleLoginButton = await getControl("toggleLoginButton");
+	await toggleLoginButton.press();
 }
 
 export async function expectControlText(name: SelectorName, expected: string): Promise<void> {
