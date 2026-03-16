@@ -1,4 +1,10 @@
-import { loginAndGoToProtectedInFlp, resetFlpDemo, setDirtyStateInFlp } from "./helpers";
+import {
+	installDialogHandler,
+	loginAndGoToProtectedInFlp,
+	resetFlpDemo,
+	setDirtyStateInFlp,
+	triggerFlpCrossAppNavigation,
+} from "./helpers";
 
 /**
  * Cross-app navigation test. Isolated spec file because toExternal()
@@ -14,41 +20,17 @@ describe("FLP cross-app navigation (isolated session)", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// Monkey-patch confirm to return true (user confirms) and track
-		// whether it was called. Headless Chrome returns false for confirm()
-		// by default, so without this the FLP dialog would block.
-		await browser.execute(() => {
-			const w = window as Window & { __flpConfirmCalled?: boolean; __flpOriginalConfirm?: typeof confirm };
-			w.__flpConfirmCalled = false;
-			w.__flpOriginalConfirm = window.confirm;
-			window.confirm = (): boolean => {
-				w.__flpConfirmCalled = true;
-				return true;
-			};
-		});
+		// Accept the FLP dirty-state confirm dialog (user confirms navigation).
+		const { record, cleanup } = installDialogHandler(true);
 
 		try {
-			// toExternal() (triggered by FLP home button, tile clicks, etc.)
-			// operates at the shell level. The dirty-state provider fires,
-			// FLP shows its confirm dialog, user confirms, navigation completes.
-			const triggered = await browser.execute(() => {
-				const Container = sap.ui.require("sap/ushell/Container");
-				const navService = Container?.getService("CrossApplicationNavigation");
-				if (!navService?.toExternal) return false;
-				navService.toExternal({ target: { shellHash: "Shell-home" } });
-				return true;
-			});
-			expect(triggered).toBe(true);
+			await triggerFlpCrossAppNavigation();
 
-			// Verify the dirty-state provider actually triggered the confirm dialog.
-			await browser.waitUntil(
-				async () => {
-					return browser.execute(() => {
-						return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-					});
-				},
-				{ timeout: 5000, timeoutMsg: "FLP dirty-state provider did not call window.confirm" },
-			);
+			// Verify the dirty-state provider triggered the confirm dialog.
+			await browser.waitUntil(() => record.called, {
+				timeout: 5000,
+				timeoutMsg: "FLP dirty-state provider did not trigger a confirm dialog",
+			});
 
 			// Cross-app navigation completes to Shell-home after confirmation.
 			await browser.waitUntil(
@@ -62,13 +44,7 @@ describe("FLP cross-app navigation (isolated session)", () => {
 				},
 			);
 		} finally {
-			await browser.execute(() => {
-				const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
-				if (w.__flpOriginalConfirm) {
-					window.confirm = w.__flpOriginalConfirm;
-					delete w.__flpOriginalConfirm;
-				}
-			});
+			cleanup();
 		}
 	});
 });

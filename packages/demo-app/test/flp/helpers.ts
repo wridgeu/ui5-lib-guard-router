@@ -160,11 +160,18 @@ async function isDemoAppMounted(): Promise<boolean> {
 }
 
 export async function launchFlpApp(): Promise<void> {
-	if (!(await isDemoAppMounted())) {
-		// We're outside the app (e.g. at Shell-home after cross-app navigation).
-		// The FLP preview sandbox and wdi5 do not reliably recover from a
-		// mid-session page reload. Tests that navigate away from the app
-		// must live in their own spec file (see flp-cross-app.e2e.ts).
+	// CDM-based FLP preview (enhancedHomePage) takes longer to bootstrap
+	// than sandbox.js mode. Wait for the demo component to mount before
+	// proceeding. If it never mounts, the test is likely running after a
+	// cross-app navigation that left the sandbox unrecoverable.
+	try {
+		await browser.waitUntil(() => isDemoAppMounted(), {
+			timeout: 30000,
+			timeoutMsg:
+				"Cannot reset FLP app because the demo component is no longer mounted. " +
+				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
+		});
+	} catch {
 		throw new Error(
 			"Cannot reset FLP app because the demo component is no longer mounted. " +
 				"Move this test to a separate spec file (like flp-cross-app.e2e.ts) so it gets its own browser session.",
@@ -220,69 +227,90 @@ async function resetDirtyState(): Promise<void> {
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Dialog helpers -- WDIO v9 native dialog API (browser.on('dialog'))
+//
+// WDIO v9 auto-dismisses native dialogs (confirm/alert/prompt) unless a
+// listener is registered. The dialog API intercepts at the WebDriver BiDi
+// protocol level, before the browser auto-resolves the dialog. This replaces
+// the older window.confirm monkey-patch approach.
+// ---------------------------------------------------------------------------
+
+type DialogRecord = {
+	called: boolean;
+	message: string;
+	type: string;
+};
+
 /**
- * Intercept window.confirm, trigger FLP cross-app navigation, then
- * verify the dirty-state provider fired.
+ * Register a dialog handler that records whether a dialog was shown and
+ * responds with the given value. Returns a cleanup function and a record
+ * object that tracks dialog calls.
  *
- * Headless Chrome returns false for confirm() by default, so the
- * navigation would be cancelled without an intercept. The monkey-patch
- * captures the call (proving the provider fired) and returns false
- * (same as headless default, but now we can assert it was called).
- *
- * toExternal() schedules navigation asynchronously: the FLP's
- * _handleDataLoss filter runs on the next hash change, not in the
- * same tick. So we install the intercept, trigger navigation, then
- * poll for the flag in a separate execute.
+ * Must be called BEFORE the action that triggers the dialog.
  */
-export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
-	// Step 1: install the confirm intercept (stays active until explicitly restored)
-	await browser.execute(() => {
-		const w = window as Window & { __flpConfirmCalled?: boolean; __flpOriginalConfirm?: typeof confirm };
-		w.__flpConfirmCalled = false;
-		w.__flpOriginalConfirm = window.confirm;
-		window.confirm = (_message?: string): boolean => {
-			w.__flpConfirmCalled = true;
-			return false;
-		};
+export function installDialogHandler(accept: boolean): { record: DialogRecord; cleanup: () => void } {
+	const record: DialogRecord = { called: false, message: "", type: "" };
+
+	const handler = async (dialog: WebdriverIO.Dialog): Promise<void> => {
+		record.called = true;
+		record.message = dialog.message();
+		record.type = dialog.type();
+
+		if (accept) {
+			await dialog.accept();
+		} else {
+			await dialog.dismiss();
+		}
+	};
+
+	browser.on("dialog", handler);
+
+	return {
+		record,
+		cleanup: () => {
+			browser.off("dialog", handler);
+		},
+	};
+}
+
+/**
+ * Trigger cross-app navigation via FLP's CrossApplicationNavigation service.
+ * Does not install a dialog handler -- callers must handle dialogs separately.
+ */
+export async function triggerFlpCrossAppNavigation(): Promise<void> {
+	const triggered = await browser.execute(() => {
+		const Container = sap.ui.require("sap/ushell/Container");
+		const navService = Container?.getService("CrossApplicationNavigation");
+		if (!navService?.toExternal) return false;
+
+		navService.toExternal({ target: { shellHash: "Shell-home" } });
+		return true;
 	});
 
+	if (!triggered) {
+		throw new Error("FLP CrossApplicationNavigation service was not available");
+	}
+}
+
+/**
+ * Trigger cross-app navigation and assert that the FLP dirty-state provider
+ * fires a confirm dialog. The dialog is dismissed (user cancels), so the
+ * app stays on the current page.
+ */
+export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
+	const { record, cleanup } = installDialogHandler(false);
+
 	try {
-		// Step 2: trigger cross-app navigation
-		const triggered = await browser.execute(() => {
-			const Container = sap.ui.require("sap/ushell/Container");
-			const navService = Container?.getService("CrossApplicationNavigation");
-			if (!navService?.toExternal) return false;
+		await triggerFlpCrossAppNavigation();
 
-			navService.toExternal({ target: { shellHash: "Shell-home" } });
-			return true;
+		await browser.waitUntil(() => record.called, {
+			timeout: 5000,
+			timeoutMsg:
+				"FLP dirty-state provider did not trigger a confirm dialog - registerDirtyStateProvider may not have fired",
 		});
-
-		if (!triggered) {
-			throw new Error("FLP CrossApplicationNavigation service was not available");
-		}
-
-		// Step 3: wait for the dirty-state provider to call confirm()
-		await browser.waitUntil(
-			async () => {
-				return browser.execute(() => {
-					return (window as Window & { __flpConfirmCalled?: boolean }).__flpConfirmCalled === true;
-				});
-			},
-			{
-				timeout: 5000,
-				timeoutMsg:
-					"FLP dirty-state provider did not call window.confirm - registerDirtyStateProvider may not have fired",
-			},
-		);
 	} finally {
-		// Always restore original confirm, even if steps 2-3 fail
-		await browser.execute(() => {
-			const w = window as Window & { __flpOriginalConfirm?: typeof confirm };
-			if (w.__flpOriginalConfirm) {
-				window.confirm = w.__flpOriginalConfirm;
-				delete w.__flpOriginalConfirm;
-			}
-		});
+		cleanup();
 	}
 }
 
