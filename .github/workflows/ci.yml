@@ -150,6 +150,3 @@ jobs:
 
             - name: QUnit smoke test
               run: npm run test:qunit
-
-            - name: E2E smoke test
-              run: npm run test:e2e

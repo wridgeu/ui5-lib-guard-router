@@ -113,9 +113,10 @@ GuardContext                        GuardResult
 NavigationOutcome (UI5 enum)        NavigationResult
 +----------------+                  +----------------------------+
 | Committed      |  "committed"    | status: NavigationOutcome   |
-| Blocked        |  "blocked"      | route:  string              |
-| Redirected     |  "redirected"   | hash:   string              |
-| Cancelled      |  "cancelled"    +----------------------------+
+| Bypassed       |  "bypassed"     | route:  string              |
+| Blocked        |  "blocked"      | hash:   string              |
+| Redirected     |  "redirected"   +----------------------------+
+| Cancelled      |  "cancelled"
 +----------------+
 
 GuardRouter (public interface)      Router (ES6 class)
@@ -300,7 +301,7 @@ flowchart TD
     pending -- "non-null" --> push["push resolver<br/>into _settlementResolvers"]
 
     subgraph "Guard pipeline terminal actions"
-        commit["_commitNavigation()"] -- "flush" --> fcommit["Committed or Redirected"]
+        commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
         redirect["_redirect()"] -- "flush (if target invalid)" --> fredirect["Blocked"]
@@ -322,7 +323,7 @@ outcome is that the user stays on the current route. This ensures:
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Resolvers fire before `super.parse()` (in commit) and before `_restoreHash()` (in block),
   so consumers see the outcome before `routeMatched` events or hash restoration
-- `_commitNavigation` uses the `_redirecting` flag to distinguish `Committed` from `Redirected`
+- `_commitNavigation` uses the `_redirecting` flag and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
 - `_cancelPendingNavigation` only flushes when `_pendingHash` is non-null, avoiding
   spurious settlement signals during initialization or when no navigation is in flight
 - `_lastSettlement` caches the most recent result so that `navigationSettled()` called
@@ -482,7 +483,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
   CI also runs:
   - node22-pack-smoke: build + pack + consumer type smoke on Node 22
-  - windows-smoke: QUnit + E2E on windows-latest
+  - windows-smoke: QUnit smoke on windows-latest
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.
