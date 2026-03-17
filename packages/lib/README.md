@@ -51,6 +51,10 @@ import type { GuardRouter, GuardFn, LeaveGuardFn } from "ui5/guard/router/types"
 // Guard pipeline: context passed to guards, and the result union they return
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
+// Settlement: outcome of a navigation after the guard pipeline finishes
+import type { NavigationResult } from "ui5/guard/router/types";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+
 // Advanced: object form for redirect-with-parameters and enter+leave registration
 import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
@@ -225,7 +229,7 @@ GuardResult = boolean | string | GuardRedirect
 
 `GuardRedirect` is the object form of a redirect. Use it when you need to pass route parameters (`parameters`) or nested component targets (`componentTargetInfo`). For simple redirects without parameters, the string shorthand (`return "home"`) is equivalent and shorter.
 
-Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only strict `true` allows navigation -- there is no truthy coercion.
+Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only strict `true` allows navigation; there is no truthy coercion.
 
 On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
@@ -244,6 +248,56 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets guard state. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
 | `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                               |
+
+### Navigation settlement
+
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The returned `NavigationResult` contains the outcome as a `NavigationOutcome` enum value, the active route name, and the active hash.
+
+```typescript
+import type { NavigationResult } from "ui5/guard/router/types";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+
+const result: NavigationResult = await router.navigationSettled();
+```
+
+| `result.status`                | Meaning                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active |
+| `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active   |
+| `NavigationOutcome.Redirected` | A guard redirected to a different route, which committed  |
+| `NavigationOutcome.Cancelled`  | A newer navigation superseded this one before it settled  |
+
+If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router (or after `stop()`/`destroy()`), this defaults to `Committed` with the current state. Multiple callers waiting on the same pending navigation all receive the same result.
+
+**App code: busy indicator during async guards**
+
+```typescript
+router.addRouteGuard("dashboard", async (context) => {
+	app.setBusy(true);
+	try {
+		const res = await fetch(`/api/access/${context.toRoute}`, { signal: context.signal });
+		return (await res.json()).allowed ? true : "home";
+	} finally {
+		app.setBusy(false);
+	}
+});
+
+// Show a global busy while the guard pipeline runs
+router.navTo("dashboard");
+const result = await router.navigationSettled();
+if (result.status === NavigationOutcome.Blocked) {
+	MessageToast.show("Access denied");
+}
+```
+
+**Test code: wait for guards deterministically**
+
+```typescript
+router.navTo("protected");
+const result = await router.navigationSettled();
+assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation was blocked");
+assert.strictEqual(result.route, "home", "User stays on home");
+```
 
 ### Execution order
 
@@ -507,12 +561,12 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.118.0` as a compatibility lane for the core router implementation. That extra lane does not change the published manifest baseline, but it provides a concrete verification signal for consumers evaluating older runtimes.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. That extra lane does not change the published manifest baseline, but it provides a concrete verification signal for consumers evaluating older runtimes.
 
 If you maintain an app on an older UI5 stack and want to validate locally, run the dedicated compatibility check from the monorepo root:
 
 ```bash
-npm run test:qunit:compat:118
+npm run test:qunit:compat:120
 ```
 
 ## License
