@@ -5,7 +5,7 @@ Demo application showcasing `ui5.guard.router.Router` with authentication-based 
 The demo supports both standalone preview and a local FLP sandbox preview served from a virtual endpoint.
 
 > [!CAUTION]
-> The auth and permission scenarios in this demo are illustrative client-side UX examples only. They do **not** enforce real security and do not replace backend authorization, service checks, or role validation.
+> The auth and permission scenarios in this demo are illustrative UX examples only. Keep real authorization and validation on the server.
 
 ## Routes
 

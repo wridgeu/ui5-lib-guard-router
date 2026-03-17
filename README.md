@@ -18,7 +18,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
 > [!CAUTION]
-> Navigation guards are a UX layer, not a security boundary. They can prevent unauthorized content flashes and steer client-side navigation, but they do **not** replace server-side authorization, backend validation, or service-level access control.
+> Navigation guards are a UX layer only. Keep authorization, validation, and access control on the server.
 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
@@ -168,6 +168,7 @@ npm run check        # all of the above (fmt:check + lint + typecheck)
 npm run fmt          # auto-format all files
 npm run lint:fix     # auto-fix lint issues
 npm run pack:check   # build + dry-run pack + consumer smoke test
+npm run release:plan # preview the next release-please version/PR locally
 ```
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
@@ -188,6 +189,8 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
 3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+
+For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, uses `gh auth token` automatically when available, and also honors `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`.
 
 Short maintainer conventions:
 

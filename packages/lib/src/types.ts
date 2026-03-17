@@ -96,11 +96,45 @@ export interface NavigationResult {
  * Use this type when casting `getRouter()` in application code.
  */
 export interface GuardRouter extends MobileRouter {
+	/**
+	 * Register a global guard that runs for every navigation.
+	 */
 	addGuard(guard: GuardFn): GuardRouter;
+	/**
+	 * Remove a previously registered global guard.
+	 */
 	removeGuard(guard: GuardFn): GuardRouter;
+	/**
+	 * Register a guard for a specific route.
+	 *
+	 * Accepts either an enter guard function or a configuration object with
+	 * `beforeEnter` and/or `beforeLeave` guards.
+	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
+	/**
+	 * Remove a guard from a specific route.
+	 *
+	 * Accepts the same forms as `addRouteGuard`: a guard function removes an
+	 * enter guard, while a configuration object removes `beforeEnter` and/or
+	 * `beforeLeave` by reference.
+	 */
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
+	/**
+	 * Register a leave guard for a specific route.
+	 *
+	 * Leave guards run when navigating away from the route. They can allow or
+	 * block the navigation, but they cannot redirect.
+	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	/**
+	 * Remove a previously registered leave guard from a specific route.
+	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	/**
+	 * Resolve when the current guard pipeline settles.
+	 *
+	 * If no navigation is pending, this resolves immediately with the most
+	 * recent settlement result.
+	 */
 	navigationSettled(): Promise<NavigationResult>;
 }

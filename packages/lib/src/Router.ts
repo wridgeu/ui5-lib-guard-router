@@ -29,12 +29,7 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
 /**
  * Promises/A+ thenable detection via duck typing.
  *
- * Uses the same approach as Angular (`@angular/core/src/util/lang.ts`),
- * TanStack Router (`packages/router-core/src/utils.ts`), and Ember's
- * router.js (`lib/router/utils.ts`). UI5 itself uses a similar pattern
- * in `sap/ui/base/SyncPromise.isThenable` (private API, not importable).
- *
- * We intentionally do NOT use `instanceof Promise` because that misses
+ * We intentionally do not use `instanceof Promise` because that misses
  * cross-realm Promises and PromiseLike/thenable objects.
  */
 function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {

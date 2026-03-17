@@ -128,23 +128,16 @@ export function createHomeLeaveLogger(): LeaveGuardFn {
 }
 
 /**
- * Reference-only guard factories.
- *
- * These stay in the same file for discoverability, but they are not registered
- * by the runnable demo application. The library README points to these exports
- * when its examples match one-to-one with demo code.
+ * Reference-only guard factories kept here for discoverability.
+ * They are not registered by the runnable demo application.
  */
 
 /**
  * Guard that requires the user to be logged in.
  * Redirects to "home" if not authenticated.
  *
- * Reference implementation: demonstrates a synchronous auth guard.
- * The runnable demo uses the async variant {@link createAsyncPermissionGuard}
- * instead.
- *
- * Handles edge case where model property might be undefined
- * (for example, model not yet loaded).
+ * Reference implementation: the runnable demo uses the async variant
+ * {@link createAsyncPermissionGuard} instead.
  */
 export function createAuthGuard(authModel: JSONModel): GuardFn {
 	return (context: GuardContext): GuardResult => {
@@ -183,11 +176,8 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
 /**
  * Guard that demonstrates error handling behavior.
  *
- * Reference implementation: not used in the runnable demo. Shows how guard
- * errors are handled by the router:
- * 1. Logs the error via sap/base/Log.error()
- * 2. Blocks the navigation (treats as if guard returned false)
- * 3. Does NOT propagate the error to the application
+ * Reference implementation: not used in the runnable demo. It shows that a
+ * thrown guard error is logged and treated like a blocked navigation.
  *
  * @example
  * // Register as global guard to block all navigation on error

@@ -40,6 +40,7 @@
 		"test:e2e:flp": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp:test --test-script wdio:e2e:flp --test-base-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
 		"pack:smoke": "node ./scripts/pack-smoke.mjs",
 		"pack:check": "npm run pack:check --workspace=packages/lib && npm run pack:smoke",
+		"release:plan": "node ./scripts/release-plan.mjs",
 		"commitlint": "commitlint --last",
 		"prepare": "husky"
 	},
@@ -71,6 +72,7 @@
 		"lint-staged": "^16.2.7",
 		"oxfmt": "^0.41.0",
 		"oxlint": "^1.56.0",
+		"release-please": "^17.3.0",
 		"rimraf": "^6.0.0",
 		"typescript": "~5.7.0",
 		"wdio-qunit-service": "^2.0.0",
