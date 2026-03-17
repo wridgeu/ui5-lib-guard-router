@@ -12,6 +12,9 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 > [!WARNING]
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
+> [!CAUTION]
+> Navigation guards are a UX layer, not a security boundary. They can prevent unauthorized content flashes and steer client-side navigation, but they do **not** replace server-side authorization, backend validation, or service-level access control.
+
 ## Why
 
 UI5's router has no way to block or redirect navigation before views render. The usual workaround, scattering guard logic across `attachPatternMatched` callbacks, causes flashes of unauthorized content, polluted browser history, and scattered guard logic across controllers.
@@ -349,7 +352,11 @@ router.addGuard((context): GuardRedirect | true => {
 });
 ```
 
+The demo app exposes the same redirect-with-parameters pattern as `createRedirectWithParamsGuard()` in `packages/demo-app/webapp/guards.ts`.
+
 ### Guard factories
+
+The demo app keeps matching reusable guard factories in `packages/demo-app/webapp/guards.ts`, including `createAuthGuard()` and `createDirtyFormGuard()`.
 
 ```typescript
 // guards.ts
@@ -370,6 +377,8 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 ```
 
 ### Object form with RouteGuardConfig
+
+The runnable demo uses the same object form in `packages/demo-app/webapp/Component.ts`, paired with factories from `packages/demo-app/webapp/guards.ts`.
 
 ```typescript
 import type { RouteGuardConfig } from "ui5/guard/router/types";
@@ -399,6 +408,8 @@ router.removeGuard(logGuard);
 ```
 
 ### Leave guard with controller lifecycle
+
+The demo app shows the same lifecycle pattern in `packages/demo-app/webapp/controller/Home.controller.ts`, using `createHomeLeaveLogger()` from `packages/demo-app/webapp/guards.ts`.
 
 ```typescript
 import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";

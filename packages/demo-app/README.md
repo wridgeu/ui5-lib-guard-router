@@ -4,6 +4,9 @@ Demo application showcasing `ui5.guard.router.Router` with authentication-based 
 
 The demo supports both standalone preview and a local FLP sandbox preview served from a virtual endpoint.
 
+> [!CAUTION]
+> The auth and permission scenarios in this demo are illustrative client-side UX examples only. They do **not** enforce real security and do not replace backend authorization, service checks, or role validation.
+
 ## Routes
 
 | Route       | Pattern       | Guard behavior                                                      |
@@ -17,7 +20,9 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 Guard registration happens in two places:
 
-**Component level** (`Component.ts`): Registers guards during `init()` and tears them down in `destroy()`.
+All demo guard factories live in `webapp/guards.ts` for single-file discoverability. The file is structured with active runtime guards first and reference-only examples second.
+
+**Component level** (`Component.ts`): Registers guards during `init()` for the component lifetime. The component explicitly destroys its runtime coordinator, and the router-owned guard registrations are cleared when the component/router is destroyed.
 
 | Guard                          | Type         | Route       | Description                                  |
 | ------------------------------ | ------------ | ----------- | -------------------------------------------- |
@@ -32,7 +37,7 @@ Guard registration happens in two places:
 | ------------------------- | ----------- | ------ | --------------------------------- |
 | `createHomeLeaveLogger()` | Route leave | `home` | Logs leaving home (always allows) |
 
-**Reference implementations** in `guards.ts` (exported but not registered in the demo):
+**Reference implementations** in the same `guards.ts` file (grouped below the active runtime guards, exported but not registered in the demo):
 
 | Function                          | Purpose                                                             |
 | --------------------------------- | ------------------------------------------------------------------- |

@@ -17,6 +17,9 @@ UI5's native router has no way to block or redirect navigation before views are 
 > [!WARNING]
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
+> [!CAUTION]
+> Navigation guards are a UX layer, not a security boundary. They can prevent unauthorized content flashes and steer client-side navigation, but they do **not** replace server-side authorization, backend validation, or service-level access control.
+
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
@@ -169,6 +172,8 @@ npm run pack:check   # build + dry-run pack + consumer smoke test
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
+Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics come from this repository rather than upstream oxlint alone.
+
 ### Build
 
 ```bash
@@ -183,6 +188,14 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `CHANGELOG.md`
 3. Merging the Release PR triggers: build, test (QUnit + standalone E2E + FLP preview smoke), then `npm publish` with provenance via OIDC
+
+Short maintainer conventions:
+
+- Use `[skip ci]` only for docs-only or issue-only commits that do not affect shipped code, tests, or build/release configuration.
+- Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
+- Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
+- If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
+- For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run lint`, `npm run typecheck`, `npm run test:qunit`, `npm run test:qunit:compat:120`, `npm run test:e2e`, `npm run test:e2e:flp`, and `npm run pack:check`.
 
 | File                            | Purpose                                            |
 | ------------------------------- | -------------------------------------------------- |

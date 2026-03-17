@@ -377,11 +377,14 @@ navigation bypasses the app router's `parse()`. The dirty-state provider fires
 and the FLP shows its own confirm dialog. If the user confirms, the shell
 completes the navigation. If the user cancels, the hash stays unchanged.
 
-The demo app's FLP E2E tests pin this behavior in two spec files:
-`flp-preview.e2e.ts` covers the cancel path (dirty provider fires, headless
-`confirm()` returns `false`, user stays on page) and in-app dirty blocking;
-`flp-cross-app.e2e.ts` covers the confirm path (dirty + `confirm()` returns
-`true`, navigation completes to Shell-home) in an isolated browser session.
+The demo app's FLP E2E tests pin this behavior in three spec files:
+`flp-preview.e2e.ts` covers FLP runtime detection, in-app navigation inside the
+sandbox, dirty cross-app cancel flow, in-app dirty blocking, and browser
+history behavior under guards; `flp-cross-app.e2e.ts` covers the dirty
+cross-app confirm path (dirty + `confirm()` returns `true`, navigation
+completes to Shell-home) in an isolated browser session; and
+`flp-clean-cross-app.e2e.ts` covers the clean cross-app path (no dirty prompt,
+navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
@@ -462,12 +465,19 @@ The demo app's FLP E2E tests pin this behavior in two spec files:
        |                               |
   packages/demo-app/test/flp/    packages/lib/test/qunit/
        |                          (same suite, OpenUI5 1.120.0)
-  +---------------------------+
-  | flp-preview.e2e.ts        |   Verifies the core library's
-  |   FLP runtime detection   |   guard pipeline works on
-  |   In-app nav inside FLP   |   the older UI5 runtime.
-  |   FLP dirty-state prompt  |
-  +---------------------------+
+  +------------------------------+   Verifies the core library's
+  | flp-preview.e2e.ts           |   guard pipeline works on
+  |   FLP runtime detection      |   the older UI5 runtime.
+  |   In-app nav inside FLP      |
+  |   Dirty cancel path          |
+  |   Browser history in FLP     |
+  | flp-cross-app.e2e.ts         |
+  |   Dirty confirm path         |
+  |   Isolated Shell-home exit   |
+  | flp-clean-cross-app.e2e.ts   |
+  |   Clean cross-app exit       |
+  |   No dirty prompt            |
+  +------------------------------+
 
   CI also runs:
   - node22-pack-smoke: build + pack + consumer type smoke on Node 22
