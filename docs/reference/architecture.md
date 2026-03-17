@@ -14,6 +14,7 @@ ui5-lib-guard-router/
     |   |-- src/
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
+    |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
     |       |-- qunit/              QUnit tests (unit)
@@ -73,10 +74,11 @@ matching, target loading, or event firing occurs.
 |   | removeRouteGuard() |    | _runRouteGuards()         |            |
 |   | addLeaveGuard()    |    | _runGuards()              |            |
 |   | removeLeaveGuard() |    | _continueGuardsAsync()    |            |
-|   +--------------------+    | _validateGuardResult()    |            |
-|                             | _commitNavigation()       |            |
+|   | navigationSettled()|    | _validateGuardResult()    |            |
+|   +--------------------+    | _commitNavigation()       |            |
 |                             | _redirect()               |            |
 |                             | _blockNavigation()        |            |
+|                             | _flushSettlement()        |            |
 |                             | _restoreHash()            |            |
 |                             +---------------------------+            |
 +----------------------------------------------------------------------+
@@ -108,12 +110,21 @@ GuardContext                        GuardResult
 | signal       |  AbortSignal      +---------------------------+
 +--------------+
 
+NavigationOutcome (UI5 enum)        NavigationResult
++----------------+                  +----------------------------+
+| Committed      |  "committed"    | status: NavigationOutcome   |
+| Blocked        |  "blocked"      | route:  string              |
+| Redirected     |  "redirected"   | hash:   string              |
+| Cancelled      |  "cancelled"    +----------------------------+
++----------------+
+
 GuardRouter (public interface)      Router (ES6 class)
   extends sap.m.routing.Router        extends sap.m.routing.Router
-  + 6 public guard methods             implements GuardRouter
+  + 6 guard methods + 1 query         implements GuardRouter
     addGuard / removeGuard             + internal state fields
     addRouteGuard / removeRouteGuard   + private _cancelPendingNavigation()
-    addLeaveGuard / removeLeaveGuard   + override parse(), stop(), destroy()
+    addLeaveGuard / removeLeaveGuard   + private _flushSettlement()
+    navigationSettled()                + override parse(), stop(), destroy()
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -272,6 +283,44 @@ stale result is silently discarded. This ensures only the latest navigation wins
 The generation is also bumped on same-hash dedup, invalidating any pending async guard
 that was running when the user navigated back to the original hash.
 
+## Settlement Signal
+
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The
+result carries a `NavigationOutcome` enum value indicating how the navigation resolved.
+
+```mermaid
+flowchart TD
+    call(["navigationSettled()"]) --> pending{_pendingHash set?}
+    pending -- "null" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
+    pending -- "non-null" --> push["push resolver<br/>into _settlementResolvers"]
+
+    subgraph "Guard pipeline terminal actions"
+        commit["_commitNavigation()"] -- "flush" --> fcommit["Committed or Redirected"]
+        block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
+        cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
+    end
+
+    push -.-> commit
+    push -.-> block
+    push -.-> cancel
+```
+
+Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
+`_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
+with the same `NavigationResult`. This ensures:
+
+- Multiple callers of `navigationSettled()` for the same navigation all receive the same result
+- Resolvers fire before `super.parse()` (in commit) and before `_restoreHash()` (in block),
+  so consumers see the outcome before `routeMatched` events or hash restoration
+- `_commitNavigation` uses the `_redirecting` flag to distinguish `Committed` from `Redirected`
+- `_cancelPendingNavigation` only flushes when `_pendingHash` is non-null, avoiding
+  spurious settlement signals during initialization or when no navigation is in flight
+- `_lastSettlement` caches the most recent result so that `navigationSettled()` called
+  after a synchronous navigation still returns the correct outcome. This handles the
+  common case where sync guards settle within the same tick as `navTo()`, leaving
+  `_pendingHash` null before any caller has a chance to register a resolver. The cache
+  is reset on `stop()` and `destroy()`
+
 ## FLP Integration
 
 When the router runs inside a Fiori Launchpad (FLP), two independent dirty-state
@@ -326,18 +375,20 @@ The demo app's FLP E2E tests pin this behavior in two spec files:
 
 ## Internal State
 
-| Field              | Type                          | Purpose                                       |
-| ------------------ | ----------------------------- | --------------------------------------------- |
-| `_globalGuards`    | `GuardFn[]`                   | Guards that run for every navigation          |
-| `_enterGuards`     | `Map<string, GuardFn[]>`      | Route-specific enter guards, by route name    |
-| `_leaveGuards`     | `Map<string, LeaveGuardFn[]>` | Route-specific leave guards, by route name    |
-| `_currentRoute`    | `string`                      | Name of the currently active route            |
-| `_currentHash`     | `string \| null`              | Hash of the active route, `null` before first |
-| `_pendingHash`     | `string \| null`              | Hash being evaluated by async guards          |
-| `_redirecting`     | `boolean`                     | True during guard-triggered redirect          |
-| `_parseGeneration` | `number`                      | Monotonic counter for async invalidation      |
-| `_suppressedHash`  | `string \| null`              | Hash to suppress in the next `parse()` call   |
-| `_abortController` | `AbortController \| null`     | Aborted when navigation is superseded         |
+| Field                  | Type                                | Purpose                                              |
+| ---------------------- | ----------------------------------- | ---------------------------------------------------- |
+| `_globalGuards`        | `GuardFn[]`                         | Guards that run for every navigation                 |
+| `_enterGuards`         | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name           |
+| `_leaveGuards`         | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name           |
+| `_currentRoute`        | `string`                            | Name of the currently active route                   |
+| `_currentHash`         | `string \| null`                    | Hash of the active route, `null` before first        |
+| `_pendingHash`         | `string \| null`                    | Hash being evaluated by async guards                 |
+| `_redirecting`         | `boolean`                           | True during guard-triggered redirect                 |
+| `_parseGeneration`     | `number`                            | Monotonic counter for async invalidation             |
+| `_suppressedHash`      | `string \| null`                    | Hash to suppress in the next `parse()` call          |
+| `_abortController`     | `AbortController \| null`           | Aborted when navigation is superseded                |
+| `_settlementResolvers` | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks              |
+| `_lastSettlement`      | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries) |
 
 ## Monorepo Tooling
 
@@ -393,13 +444,14 @@ The demo app's FLP E2E tests pin this behavior in two spec files:
   - Error handling              - Rapid hash changes
   - API parity with native      - Multi-step user flows
   - Leave guard pipeline        - Leave guard dirty form
+  - Settlement outcomes         - Settlement-based wait
 
   Additional CI lanes (not part of `npm test`):
 
-  test:e2e:flp                    test:qunit:compat:118
+  test:e2e:flp                    test:qunit:compat:120
        |                               |
   packages/demo-app/test/flp/    packages/lib/test/qunit/
-       |                          (same suite, OpenUI5 1.118.0)
+       |                          (same suite, OpenUI5 1.120.0)
   +---------------------------+
   | flp-preview.e2e.ts        |   Verifies the core library's
   |   FLP runtime detection   |   guard pipeline works on
