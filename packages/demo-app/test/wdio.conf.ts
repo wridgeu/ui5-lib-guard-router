@@ -19,6 +19,7 @@ export const config: wdi5Config = {
 	],
 	logLevel: "error",
 	bail: 0,
+	specFileRetries: 1,
 	baseUrl: "http://localhost:8080/index.html",
 	waitforTimeout: 31000,
 	connectionRetryTimeout: 120000,
