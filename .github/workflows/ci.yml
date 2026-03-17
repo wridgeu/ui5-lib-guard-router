@@ -103,7 +103,7 @@ jobs:
             - name: Run FLP preview smoke tests
               run: npm run test:e2e:flp
 
-    compatibility-ui5-118:
+    compatibility-ui5-120:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -119,13 +119,13 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.ui5
-                  key: ui5-compat-118-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-compat-118-
+                  key: ui5-compat-120-${{ hashFiles('packages/*/ui5*.yaml') }}
+                  restore-keys: ui5-compat-120-
 
             - run: npm ci
 
-            - name: Run OpenUI5 1.118 compatibility QUnit suite
-              run: npm run test:qunit:compat:118
+            - name: Run OpenUI5 1.120 compatibility QUnit suite
+              run: npm run test:qunit:compat:120
 
     windows-smoke:
         needs: validate
