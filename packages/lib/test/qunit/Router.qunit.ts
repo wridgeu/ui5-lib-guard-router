@@ -2610,6 +2610,17 @@ QUnit.test("Async redirect to nonexistent route settles as blocked", async funct
 	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
 });
 
+QUnit.test("GuardRedirect object to nonexistent route settles as blocked", async function (assert: Assert) {
+	router.addRouteGuard("protected", (): GuardRedirect => ({ route: "nonExistentRoute", parameters: { id: "1" } }));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed GuardRedirect settles as blocked");
+	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
+});
+
 QUnit.test("Blocked navigation does not fire patternMatched on target route", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
