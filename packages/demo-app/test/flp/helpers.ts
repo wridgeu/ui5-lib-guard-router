@@ -210,12 +210,11 @@ async function resetDirtyState(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Dialog helpers -- WDIO v9 native dialog API (browser.on('dialog'))
+// Dialog helpers: WDIO v9 native dialog API (browser.on('dialog'))
 //
 // WDIO v9 auto-dismisses native dialogs (confirm/alert/prompt) unless a
 // listener is registered. The dialog API intercepts at the WebDriver BiDi
-// protocol level, before the browser auto-resolves the dialog. This replaces
-// the older window.confirm monkey-patch approach.
+// protocol level, before the browser auto-resolves the dialog.
 // ---------------------------------------------------------------------------
 
 type DialogRecord = {
@@ -229,7 +228,7 @@ type DialogRecord = {
  * responds with the given value. Returns a cleanup function and a record
  * object that tracks dialog calls.
  *
- * Must be called BEFORE the action that triggers the dialog.
+ * Call before the action that triggers the dialog.
  */
 export function installDialogHandler(accept: boolean): { record: DialogRecord; cleanup: () => void } {
 	const record: DialogRecord = { called: false, message: "", type: "" };
@@ -258,7 +257,7 @@ export function installDialogHandler(accept: boolean): { record: DialogRecord; c
 
 /**
  * Trigger cross-app navigation via FLP's CrossApplicationNavigation service.
- * Does not install a dialog handler -- callers must handle dialogs separately.
+ * Does not install a dialog handler. Callers handle dialogs separately.
  */
 export async function triggerFlpCrossAppNavigation(): Promise<void> {
 	const triggered = await browser.execute(() => {

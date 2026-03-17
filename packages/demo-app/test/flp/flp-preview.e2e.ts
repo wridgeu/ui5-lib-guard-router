@@ -59,7 +59,7 @@ describe("FLP preview integration", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
 
-		// PART 1: In-app navigation -- leave guard blocks, no FLP confirm
+		// PART 1: In-app navigation. Leave guard blocks, no FLP confirm.
 		const { record: inAppRecord, cleanup: inAppCleanup } = installDialogHandler(true);
 
 		try {
@@ -71,7 +71,7 @@ describe("FLP preview integration", () => {
 			inAppCleanup();
 		}
 
-		// PART 2: Same dirty state, cross-app navigation -- FLP confirm fires.
+		// PART 2: Same dirty state, cross-app navigation. FLP confirm fires.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
 		await waitForProtectedPageInFlp();
 		await expectControlText("protectedCurrentHashText", "#/protected");
@@ -145,7 +145,7 @@ describe("FLP guard router hardening", () => {
 
 		await browser.back();
 
-		// Leave guard should block -- page stays on protected.
+		// Leave guard blocks. Page stays on protected.
 		await waitForProtectedPageInFlp();
 		await expectAppHashToBe("protected");
 	});
@@ -177,7 +177,7 @@ describe("FLP guard router hardening", () => {
 		await browser.back();
 		await waitForHomePageInFlp();
 
-		// Forward to protected (still logged in -- guard allows)
+		// Forward to protected (still logged in, guard allows)
 		await browser.forward();
 		await waitForProtectedPageInFlp();
 

@@ -1,5 +1,6 @@
 import type MobileRouter from "sap/m/routing/Router";
 import type { ComponentTargetParameters, RouteInfo } from "sap/ui/core/routing/Router";
+import type NavigationOutcome from "./NavigationOutcome";
 
 /**
  * Redirect target with route name and optional parameters.
@@ -77,6 +78,18 @@ export interface RouteGuardConfig {
 }
 
 /**
+ * Result of a settled navigation, returned by `navigationSettled()`.
+ */
+export interface NavigationResult {
+	/** How the navigation resolved. */
+	status: NavigationOutcome;
+	/** Route name that is active after settlement. */
+	route: string;
+	/** Hash that is active after settlement. */
+	hash: string;
+}
+
+/**
  * Public instance shape of the extended Router.
  *
  * Extends `sap.m.routing.Router` with guard management methods.
@@ -89,4 +102,5 @@ export interface GuardRouter extends MobileRouter {
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	navigationSettled(): Promise<NavigationResult>;
 }

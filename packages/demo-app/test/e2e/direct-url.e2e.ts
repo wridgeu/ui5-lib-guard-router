@@ -85,7 +85,7 @@ describe("Direct URL navigation with guards", () => {
 		});
 
 		// Should end up on Home (all guarded while logged out).
-		// waitForPage checks DOM visibility + router settled (_pendingHash null).
+		// waitForPage calls navigationSettled() then checks DOM visibility.
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		// Verify hash settled to a home-route value (not stuck on a guarded route)

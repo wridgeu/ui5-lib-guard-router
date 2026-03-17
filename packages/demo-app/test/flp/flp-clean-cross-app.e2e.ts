@@ -39,7 +39,7 @@ describe("FLP clean cross-app navigation (isolated session)", () => {
 				},
 			);
 
-			// Confirm dialog was never triggered -- clean state means no prompt.
+			// Confirm dialog was never triggered. Clean state means no prompt.
 			expect(record.called).toBe(false);
 		} finally {
 			cleanup();
