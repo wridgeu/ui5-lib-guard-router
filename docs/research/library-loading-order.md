@@ -101,11 +101,11 @@ Component.create("demo.app")
                     +-- new Router(routes, config)
 ```
 
-## Implications for `import "./library"` in Router.ts
+## Implications for Router.ts
 
-The `import "./library"` in `Router.ts` is a **redundant safeguard** for the normal manifest-based flow. Library dependencies are always loaded first. However, it protects against an edge case: a consumer doing a bare `sap.ui.require("ui5/guard/router/Router")` without declaring the library in `sap.ui5/dependencies/libs`. In that scenario, `library.js` would never execute, and `DataType.registerEnum` would not run.
+`Router.ts` does **not** import `library.ts`. The manifest-based loading sequence above guarantees that `library.js` (including `Lib.init()` and `DataType.registerEnum`) executes before any routing class is resolved. An explicit import would be a redundant safeguard.
 
-Note that `sap.m.routing.Router` does **not** import `sap/m/library`. Its AMD dependencies are only `sap/ui/core/routing/Router`, `./TargetHandler`, and `./Targets`. SAP's own router relies entirely on the manifest-based library loading guarantee.
+`sap.m.routing.Router` follows the same pattern: its AMD dependencies are only `sap/ui/core/routing/Router`, `./TargetHandler`, and `./Targets` -- it does not import `sap/m/library`. SAP's own router relies entirely on the manifest-based library loading guarantee.
 
 ## The module loader has no library awareness
 

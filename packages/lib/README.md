@@ -267,6 +267,8 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                           |
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed) |
 
+A guard redirect to a nonexistent route name settles as `Blocked` because no route change commits. The router logs a warning with the bad target name.
+
 If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router (or after `stop()`/`destroy()`), this defaults to `Committed` with the current state. Multiple callers waiting on the same pending navigation all receive the same result.
 
 **App code: busy indicator during async guards**
