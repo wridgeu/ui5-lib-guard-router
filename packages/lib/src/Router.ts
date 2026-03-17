@@ -1,6 +1,7 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
+import "./library";
 import type {
 	GuardFn,
 	GuardContext,
@@ -8,8 +9,10 @@ import type {
 	GuardRedirect,
 	GuardRouter,
 	LeaveGuardFn,
+	NavigationResult,
 	RouteGuardConfig,
 } from "./types";
+import NavigationOutcome from "./NavigationOutcome";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -80,6 +83,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _parseGeneration = 0;
 	private _suppressedHash: string | null = null;
 	private _abortController: AbortController | null = null;
+	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
+	private _lastSettlement: NavigationResult | null = null;
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -196,6 +201,41 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 		removeFromGuardMap(this._leaveGuards, routeName, guard);
 		return this;
+	}
+
+	/**
+	 * Return a Promise that settles when the current guard pipeline finishes.
+	 *
+	 * If no navigation is pending, the Promise resolves immediately with the
+	 * most recent settlement result (or `Committed` with the current state
+	 * when no navigation has occurred yet). Otherwise it resolves once the
+	 * pending navigation commits, blocks, redirects, or is cancelled.
+	 */
+	navigationSettled(): Promise<NavigationResult> {
+		if (this._pendingHash === null) {
+			return Promise.resolve(
+				this._lastSettlement ?? {
+					status: NavigationOutcome.Committed,
+					route: this._currentRoute,
+					hash: this._currentHash ?? "",
+				},
+			);
+		}
+		return new Promise((resolve) => {
+			this._settlementResolvers.push(resolve);
+		});
+	}
+
+	/**
+	 * Drain all settlement resolvers with the given result.
+	 */
+	private _flushSettlement(result: NavigationResult): void {
+		this._lastSettlement = result;
+		const resolvers = this._settlementResolvers;
+		this._settlementResolvers = [];
+		for (const resolve of resolvers) {
+			resolve(result);
+		}
 	}
 
 	/**
@@ -356,6 +396,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._suppressedHash = null;
 		this._currentRoute = "";
 		this._currentHash = null;
+		this._lastSettlement = null;
 		super.stop();
 		return this;
 	}
@@ -367,6 +408,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _cancelPendingNavigation(): void {
 		++this._parseGeneration;
+		if (this._pendingHash !== null) {
+			this._flushSettlement({
+				status: NavigationOutcome.Cancelled,
+				route: this._currentRoute,
+				hash: this._currentHash ?? "",
+			});
+		}
 		this._pendingHash = null;
 		this._abortController?.abort();
 		this._abortController = null;
@@ -423,6 +471,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._abortController = null;
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
+		this._flushSettlement({
+			status: this._redirecting ? NavigationOutcome.Redirected : NavigationOutcome.Committed,
+			route: this._currentRoute,
+			hash,
+		});
 		super.parse(hash);
 	}
 
@@ -494,7 +547,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * determines what to return for non-true results: leave guards always
 	 * return `false`, enter guards validate and may return redirects.
 	 *
-	 * Note: `guards` is typed as `GuardFn[]` for reuse. Leave guard callers
+	 * `guards` is typed as `GuardFn[]` for reuse. Leave guard callers
 	 * pass `LeaveGuardFn[]` which is assignable (narrower return type).
 	 *
 	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
@@ -562,6 +615,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _blockNavigation(attemptedHash?: string): void {
 		this._pendingHash = null;
 		this._abortController = null;
+		this._flushSettlement({
+			status: NavigationOutcome.Blocked,
+			route: this._currentRoute,
+			hash: this._currentHash ?? "",
+		});
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
 			return;
@@ -572,8 +630,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Restore the previous hash without creating a history entry.
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
-	 * Note: _currentRoute intentionally stays unchanged. The blocked navigation
-	 * never committed, so the user remains on the same logical route.
+	 * `_currentRoute` stays unchanged because the blocked navigation never
+	 * committed. The user remains on the same logical route.
 	 */
 	private _restoreHash(hash: string, suppressParse = true): void {
 		const hashChanger = this.getHashChanger();
@@ -594,6 +652,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
+		this._lastSettlement = null;
 		super.destroy();
 		return this;
 	}

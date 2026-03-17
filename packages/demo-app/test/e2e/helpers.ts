@@ -11,6 +11,18 @@
 /** Component ID used throughout the demo app */
 const COMPONENT_ID = "container-demo.app";
 
+type SettlementSnapshot = {
+	status?: string;
+	route?: string;
+	hash?: string;
+} | null;
+
+type SettlementWaitResult = {
+	ok: boolean;
+	result: SettlementSnapshot;
+	message: string | null;
+};
+
 /**
  * Wait for a UI5 Page control to be available, have the expected title,
  * AND be currently visible with navigation fully settled.
@@ -18,48 +30,129 @@ const COMPONENT_ID = "container-demo.app";
  * Uses browser.execute with Element.getElementById() directly to avoid
  * wdi5's control resolution incorrectly picking up sub-elements (e.g. navButton).
  *
- * Combines two checks to handle all edge cases:
- * 1. DOM visibility - ensures page is rendered and not hidden by NavContainer
- * 2. Router state - ensures async guards have completed and navigation is settled
- *
- * Note: The router state check uses an internal property (_pendingHash) because
- * there's no public API to detect when async guard evaluation completes. This is
- * acceptable for E2E tests and is documented here for maintainability.
+ * Runs in two phases:
+ * 1. Settlement: calls `router.navigationSettled()` to wait for the guard
+ *    pipeline to finish.
+ * 2. DOM visibility: polls until the page control is rendered and visible
+ *    (not hidden by NavContainer's display:none on inactive pages).
  */
 export async function waitForPage(controlId: string, expectedTitle: string, timeout = 10000): Promise<void> {
+	// Phase 1: Wait for the guard pipeline to settle.
+	const settlement = (await browser.executeAsync(
+		(componentId: string, timeoutMs: number, done: (result: SettlementWaitResult) => void) => {
+			let finished = false;
+
+			const finish = (result: SettlementWaitResult) => {
+				if (finished) {
+					return;
+				}
+				finished = true;
+				window.clearTimeout(timer);
+				done(result);
+			};
+
+			const formatError = (error: unknown): string => {
+				if (error instanceof Error) {
+					return error.message;
+				}
+				return String(error);
+			};
+
+			const timer = window.setTimeout(() => {
+				finish({
+					ok: false,
+					result: null,
+					message: `Timed out after ${timeoutMs}ms waiting for router.navigationSettled()`,
+				});
+			}, timeoutMs);
+
+			try {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				if (!Component?.getComponentById) {
+					finish({
+						ok: false,
+						result: null,
+						message: "sap/ui/core/Component is unavailable in the browser context",
+					});
+					return;
+				}
+
+				const component = Component.getComponentById(componentId);
+				if (!component?.getRouter) {
+					finish({
+						ok: false,
+						result: null,
+						message: `Component "${componentId}" was not found or does not expose getRouter()`,
+					});
+					return;
+				}
+
+				const router = component.getRouter();
+				if (!router) {
+					finish({
+						ok: false,
+						result: null,
+						message: `Router was not found for component "${componentId}"`,
+					});
+					return;
+				}
+
+				if (typeof router.navigationSettled !== "function") {
+					finish({
+						ok: false,
+						result: null,
+						message: "Router does not expose navigationSettled(); the public settlement API is unavailable",
+					});
+					return;
+				}
+
+				router.navigationSettled().then(
+					(result: SettlementSnapshot) => finish({ ok: true, result, message: null }),
+					(error: unknown) => {
+						finish({
+							ok: false,
+							result: null,
+							message: `router.navigationSettled() rejected: ${formatError(error)}`,
+						});
+					},
+				);
+			} catch (error: unknown) {
+				finish({
+					ok: false,
+					result: null,
+					message: `Failed to wait for router settlement: ${formatError(error)}`,
+				});
+			}
+		},
+		COMPONENT_ID,
+		timeout,
+	)) as SettlementWaitResult;
+
+	if (!settlement.ok) {
+		throw new Error(
+			`waitForPage(${controlId}) could not confirm navigation settlement before checking "${expectedTitle}": ${settlement.message}`,
+		);
+	}
+
+	// Phase 2: Poll until the page control is rendered and visible.
 	await browser.waitUntil(
 		async () => {
 			return browser.execute(
-				(id: string, title: string, componentId: string) => {
+				(id: string, title: string) => {
 					const Element = sap.ui.require("sap/ui/core/Element");
 					const control = Element?.getElementById(id);
 					if (control?.getTitle?.() !== title) {
 						return false;
 					}
 
-					// Check 1: Verify the control is rendered and visible in the DOM.
-					// This prevents false positives from cached views that are hidden.
 					const domRef = control?.getDomRef?.();
 					if (!domRef) {
 						return false;
 					}
 
 					// NavContainer hides non-current pages with display:none.
-					// Check computed style as a reliable visibility test.
 					const style = window.getComputedStyle(domRef);
 					if (style.display === "none" || style.visibility === "hidden") {
-						return false;
-					}
-
-					// Check 2: Verify the router's navigation has fully settled.
-					// This ensures async guards have completed, preventing race conditions
-					// where the page is visible but subsequent operations fail because
-					// navigation is still in progress internally.
-					// Note: _pendingHash is internal to GuardRouter. No public API exists
-					// to check if async guards are still evaluating.
-					const Component = sap.ui.require("sap/ui/core/Component");
-					const router = Component?.getComponentById(componentId)?.getRouter();
-					if (router?._pendingHash !== null) {
 						return false;
 					}
 
@@ -67,10 +160,12 @@ export async function waitForPage(controlId: string, expectedTitle: string, time
 				},
 				controlId,
 				expectedTitle,
-				COMPONENT_ID,
 			);
 		},
-		{ timeout, timeoutMsg: `Page "${controlId}" did not show title "${expectedTitle}" within ${timeout}ms` },
+		{
+			timeout,
+			timeoutMsg: `Page "${controlId}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
+		},
 	);
 }
 
