@@ -1,5 +1,6 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import Router from "ui5/guard/router/Router";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardRouter } from "ui5/guard/router/types";
 
 export const GuardRouterClass = Router;
@@ -55,11 +56,11 @@ export function nextTick(ms = 50): Promise<void> {
 /**
  * Wait for a single patternMatched on `routeName`, then detach.
  *
- * Note: this waits for future events only. Tests must call `waitForRoute`
- * before or immediately after `navTo()`. This is safe because the router
- * config uses `async: true`, which defers patternMatched to a microtask.
- * If the config were changed to sync routing, the event would fire inside
- * `navTo()` before the listener is attached, and these tests would hang.
+ * Waits for future events only. Tests must call `waitForRoute` before or
+ * immediately after `navTo()`. This is safe because the router config uses
+ * `async: true`, which defers patternMatched to a microtask. With sync
+ * routing the event would fire inside `navTo()` before the listener is
+ * attached, and these tests would hang.
  */
 export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1000): Promise<void> {
 	return new Promise((resolve, reject) => {
@@ -87,31 +88,17 @@ export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1
 }
 
 /**
- * Assert that navigation to `routeName` does not complete within `timeout` ms.
- * Call `navigate()` to trigger the navigation under test.
+ * Assert that navigation is blocked by the guard pipeline.
+ *
+ * Calls `navigationSettled()` and verifies the outcome is `Blocked`.
  */
 export async function assertBlocked(
 	assert: Assert,
 	router: GuardRouter,
-	routeName: string,
 	navigate: () => void,
 	message: string,
-	// Sync guards resolve in the same tick; async test guards settle within
-	// ~10 ms.  150 ms gives a 15x margin while saving ~11 s wall-time vs the
-	// previous 500 ms default.
-	timeout = 150,
 ): Promise<void> {
-	let matched = false;
-	const route = router.getRoute(routeName)!;
-	const handler = () => {
-		matched = true;
-	};
-	route.attachPatternMatched(handler);
 	navigate();
-	await nextTick(timeout);
-	route.detachPatternMatched(handler);
-	const assertMsg = matched
-		? `${message} (navigation unexpectedly reached "${routeName}", hash="${HashChanger.getInstance().getHash()}")`
-		: message;
-	assert.notOk(matched, assertMsg);
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, message);
 }
