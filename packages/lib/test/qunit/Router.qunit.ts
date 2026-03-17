@@ -6,6 +6,7 @@ import type {
 	GuardRedirect,
 	GuardRouter,
 	LeaveGuardFn,
+	NavigationResult,
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -2656,6 +2657,117 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 
 	await nextTick();
 	assert.notOk(matched, "patternMatched never fired on the blocked target route");
+});
+
+// ============================================================
+// Module: Restore and settlement invariants
+// ============================================================
+QUnit.module("Router - Restore and settlement invariants", standardHooks);
+
+QUnit.test("Blocked navigation restores hash through a single suppressed parse cycle", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => {
+		guardCalls++;
+		return false;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const originalFlushSettlement = Reflect.get(router, "_flushSettlement") as (result: NavigationResult) => void;
+	let flushSettlementCalls = 0;
+	Reflect.set(router, "_flushSettlement", (result: NavigationResult) => {
+		flushSettlementCalls++;
+		Reflect.apply(originalFlushSettlement, router, [result]);
+	});
+
+	let guardCalls = 0;
+	let matched = false;
+	router.getRoute("protected")!.attachPatternMatched(() => {
+		matched = true;
+	});
+
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		await nextTick();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation settled as blocked");
+		assert.strictEqual(result.route, "home", "Current route stayed on home");
+		assert.strictEqual(result.hash, "", "Settlement hash stayed on the previous hash");
+		assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
+		assert.strictEqual(guardCalls, 1, "Guard pipeline ran exactly once for the blocked navigation");
+		assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
+		assert.strictEqual(flushSettlementCalls, 1, "Suppressed restore parse did not emit a second settlement");
+	} finally {
+		Reflect.set(router, "_flushSettlement", originalFlushSettlement);
+	}
+});
+
+QUnit.test("Committed settlement flushes before parent parse runs", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const originalFlushSettlement = Reflect.get(router, "_flushSettlement") as (result: NavigationResult) => void;
+	const mobileRouterPrototype = Object.getPrototypeOf(Object.getPrototypeOf(router)) as {
+		parse(hash: string): void;
+	};
+	const originalParentParse = mobileRouterPrototype.parse;
+	let settlementFlushed = false;
+	let settlementWasFlushedBeforeParentParse = false;
+
+	Reflect.set(router, "_flushSettlement", (result: NavigationResult) => {
+		settlementFlushed = true;
+		Reflect.apply(originalFlushSettlement, router, [result]);
+	});
+	mobileRouterPrototype.parse = function (this: GuardRouter, hash: string): void {
+		if (hash === "protected") {
+			settlementWasFlushedBeforeParentParse = settlementFlushed;
+		}
+		Reflect.apply(originalParentParse, this, [hash]);
+	};
+
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		await waitForRoute(router, "protected");
+
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation settled as committed");
+		assert.ok(settlementWasFlushedBeforeParentParse, "Commit settlement flushed before delegating to parent parse");
+	} finally {
+		Reflect.set(router, "_flushSettlement", originalFlushSettlement);
+		mobileRouterPrototype.parse = originalParentParse;
+	}
+});
+
+QUnit.test("Blocked settlement flushes before hash restoration begins", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const originalFlushSettlement = Reflect.get(router, "_flushSettlement") as (result: NavigationResult) => void;
+	const originalRestoreHash = Reflect.get(router, "_restoreHash") as (hash: string, suppressParse?: boolean) => void;
+	let settlementFlushed = false;
+	let settlementWasFlushedBeforeRestore = false;
+
+	Reflect.set(router, "_flushSettlement", (result: NavigationResult) => {
+		settlementFlushed = true;
+		Reflect.apply(originalFlushSettlement, router, [result]);
+	});
+	Reflect.set(router, "_restoreHash", (hash: string, suppressParse?: boolean) => {
+		settlementWasFlushedBeforeRestore = settlementFlushed;
+		Reflect.apply(originalRestoreHash, router, [hash, suppressParse]);
+	});
+
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation settled as blocked");
+		assert.ok(settlementWasFlushedBeforeRestore, "Blocked settlement flushed before hash restoration ran");
+	} finally {
+		Reflect.set(router, "_flushSettlement", originalFlushSettlement);
+		Reflect.set(router, "_restoreHash", originalRestoreHash);
+	}
 });
 
 // ============================================================
