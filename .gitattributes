@@ -4,6 +4,8 @@
 # Force LF for these files
 *.ts text eol=lf
 *.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
 *.json text eol=lf
 *.xml text eol=lf
 *.html text eol=lf
