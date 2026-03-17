@@ -46,7 +46,7 @@
 		"build": "ui5 build --create-build-manifest",
 		"prepublishOnly": "npm run build",
 		"start": "ui5 serve",
-		"start:compat:118": "ui5 serve --config ui5.compat-1.118.yaml",
+		"start:compat:120": "ui5 serve --config ui5.compat-1.120.yaml",
 		"test": "echo \"Run tests from monorepo root: npm run test:qunit\" && exit 1",
 		"typecheck": "tsc --noEmit",
 		"pack:check": "npm run build && npm pack --dry-run"
