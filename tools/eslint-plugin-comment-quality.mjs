@@ -134,31 +134,60 @@ const noObviousComment = {
 		return {
 			Program(programNode) {
 				const comments = context.sourceCode.getAllComments();
-				const body = programNode.body;
-				if (!body?.length) return;
+				if (!comments.length) return;
+
+				// Collect every statement-bearing body array from the AST so
+				// we can match each comment to its enclosing scope, not just
+				// the top-level Program.body.
+				const bodies = [];
+
+				function collectBodies(node) {
+					if (node.type === "Program" || node.type === "BlockStatement") {
+						bodies.push({ body: node.body, start: node.start, end: node.end });
+					}
+					for (const key of Object.keys(node)) {
+						if (key === "parent" || key === "type") continue;
+						const child = node[key];
+						if (Array.isArray(child)) {
+							for (const item of child) {
+								if (item && typeof item.type === "string") collectBodies(item);
+							}
+						} else if (child && typeof child.type === "string") {
+							collectBodies(child);
+						}
+					}
+				}
+
+				collectBodies(programNode);
 
 				for (const comment of comments) {
-					// Only check line comments (skip JSDoc / block comments)
 					if (comment.type !== "Line") continue;
 					if (KEEPER_RE.test(comment.value)) continue;
 
 					const text = commentText(comment);
-
-					// Skip multi-sentence or long comments (likely explanatory)
 					if (text.length > 80 || /[.!?]\s+[A-Z]/.test(text)) continue;
-
-					// Skip comments that explain "why"
 					if (EXPLAINS_WHY_RE.test(text)) continue;
 
-					// Find the next statement after this comment
-					const nextNode = body.find((n) => n.start > comment.end);
+					// Find the narrowest scope body that contains this comment.
+					// Program scope (bodies[0]) always contains every comment.
+					let nearestBody = bodies[0].body;
+					let nearestSize = bodies[0].end - bodies[0].start;
+					for (let i = 1; i < bodies.length; i++) {
+						const b = bodies[i];
+						const size = b.end - b.start;
+						if (comment.start >= b.start && comment.end <= b.end && size < nearestSize) {
+							nearestBody = b.body;
+							nearestSize = size;
+						}
+					}
+
+					// Find the next statement after this comment within its scope.
+					const nextNode = nearestBody.find((n) => n.start > comment.end);
 					if (!nextNode) continue;
 
-					// Collect identifier names from the next statement
 					const codeIds = collectIdentifiers(nextNode);
 					if (codeIds.size === 0) continue;
 
-					// Check: does the comment ONLY contain code identifiers + filler?
 					const words = commentWords(text);
 					if (words.length < 2) continue;
 
@@ -168,7 +197,6 @@ const noObviousComment = {
 					const overlap = meaningful.filter((w) => codeIds.has(w));
 					const ratio = overlap.length / meaningful.length;
 
-					// If 80%+ of meaningful words are just code identifiers, it's obvious
 					if (ratio >= 0.8) {
 						context.report({ node: comment, messageId: "noObviousComment" });
 					}

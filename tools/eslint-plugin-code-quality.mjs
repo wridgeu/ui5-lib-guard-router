@@ -87,8 +87,11 @@ const noConsoleOnlyCatch = {
 
 /**
  * Detects `if (cond) { return true; } else { return false; }` and
- * the inverse. Auto-fix wraps with `!!` to preserve boolean return type
- * when the condition might not already be a boolean.
+ * the inverse. Auto-fix always wraps the condition in parens to
+ * preserve correct operator precedence for any expression type.
+ *
+ * Same-value branches (true/true or false/false) are dead code:
+ * reported without auto-fix so the developer decides what was intended.
  */
 const noRedundantBooleanReturn = {
 	meta: {
@@ -112,17 +115,19 @@ const noRedundantBooleanReturn = {
 				if (!consequent || !alternate) return;
 
 				if (isBooleanLiteral(consequent) && isBooleanLiteral(alternate)) {
+					if (consequent.value === alternate.value) {
+						context.report({ node, messageId: "noRedundantBooleanReturn" });
+						return;
+					}
+
 					context.report({
 						node,
 						messageId: "noRedundantBooleanReturn",
 						fix(fixer) {
 							const condText = context.sourceCode.getText(node.test);
-							// if (cond) return true; else return false; -> return !!cond;
-							// if (cond) return false; else return true; -> return !cond;
-							// Uses !! to preserve boolean return type when cond may not be boolean.
-							const replacement = consequent.value
-								? `return !!${maybeWrap(condText)};`
-								: `return !${maybeWrap(condText)};`;
+							// Always wrap in parens so any expression (a === b, typeof x, etc.)
+							// keeps correct precedence after the ! or !! prefix.
+							const replacement = consequent.value ? `return !!(${condText});` : `return !(${condText});`;
 							return fixer.replaceText(node, replacement);
 						},
 					});
@@ -147,11 +152,6 @@ function unwrapSingleReturn(node) {
 
 function isBooleanLiteral(node) {
 	return node?.type === "Literal" && typeof node.value === "boolean";
-}
-
-/** Wraps compound expressions in parens so `!a || b` becomes `!(a || b)`. */
-function maybeWrap(text) {
-	return /[|&?]/.test(text) ? `(${text})` : text;
 }
 
 // Em-dash character built at runtime so the rule source does not contain it.
