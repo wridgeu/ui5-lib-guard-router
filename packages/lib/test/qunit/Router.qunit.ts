@@ -1,4 +1,6 @@
+import DataType from "sap/ui/base/DataType";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import "ui5/guard/router/library";
 import type {
 	GuardContext,
 	GuardFn,
@@ -7,6 +9,7 @@ import type {
 	LeaveGuardFn,
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import {
@@ -61,6 +64,19 @@ const safeDestroyHooks = {
 		HashChanger.getInstance().setHash("");
 	},
 };
+
+// ============================================================
+// Module: Library integration
+// ============================================================
+QUnit.module("Router - Library integration");
+
+QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: Assert) {
+	const type = DataType.getType("ui5.guard.router.NavigationOutcome");
+
+	assert.ok(type, "Enum type is discoverable via DataType.getType()");
+	assert.strictEqual(type?.isValid(NavigationOutcome.Committed), true, "Known enum values are accepted");
+	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
+});
 
 // ============================================================
 // Module: Drop-in replacement (no guards)
@@ -147,7 +163,7 @@ QUnit.test("addGuard / removeGuard affect navigation behavior", async function (
 	router.addGuard(guard);
 
 	// Guard is active: navigation should be blocked
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Guard blocks after addGuard");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks after addGuard");
 
 	router.removeGuard(guard);
 
@@ -165,13 +181,7 @@ QUnit.test("addRouteGuard / removeRouteGuard affect navigation behavior", async 
 	router.addRouteGuard("protected", guard);
 
 	// Route guard is active: navigation should be blocked
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Route guard blocks after addRouteGuard",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Route guard blocks after addRouteGuard");
 
 	router.removeRouteGuard("protected", guard);
 
@@ -263,7 +273,6 @@ QUnit.test("removeGuard ignores non-function input", async function (assert: Ass
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Guard still blocks after invalid removeGuard calls",
 	);
@@ -306,7 +315,6 @@ QUnit.test("removeLeaveGuard ignores non-function input", async function (assert
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Leave guard still blocks after invalid removeLeaveGuard calls",
 	);
@@ -334,7 +342,6 @@ QUnit.test("removeRouteGuard ignores non-function input", async function (assert
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Route guard still blocks after invalid removeRouteGuard calls",
 	);
@@ -420,7 +427,7 @@ QUnit.test("Guards still work after stop and re-initialize", async function (ass
 	await waitForRoute(router, "home");
 
 	// Guard blocks before stop
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Guard blocks before stop");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks before stop");
 
 	// Stop and re-initialize
 	router.stop();
@@ -432,7 +439,6 @@ QUnit.test("Guards still work after stop and re-initialize", async function (ass
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Guard still blocks after stop and re-initialize",
 	);
@@ -444,13 +450,7 @@ QUnit.test("Double initialize is safe and guards still work", async function (as
 	router.initialize(); // second call should be a no-op
 	await waitForRoute(router, "home");
 
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Guard blocks after double initialize",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks after double initialize");
 });
 
 QUnit.test("Re-initialize after stop fires routeMatched like native router", async function (assert: Assert) {
@@ -521,13 +521,7 @@ QUnit.test("Promise-like guard returning false blocks navigation", async functio
 	router.initialize();
 	await waitForRoute(router, "home");
 	router.addGuard(() => promiseLike);
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Promise-like guard blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Promise-like guard blocked navigation");
 });
 
 QUnit.test("Route-specific guard returning true allows navigation", async function (assert: Assert) {
@@ -546,7 +540,7 @@ QUnit.module("Router - Guard blocks navigation", standardHooks);
 QUnit.test("Guard returning false blocks navigation", async function (assert: Assert) {
 	router.addGuard(() => false);
 	router.initialize();
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Navigation was blocked");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Navigation was blocked");
 });
 
 QUnit.test("Async guard returning false blocks navigation", async function (assert: Assert) {
@@ -555,13 +549,13 @@ QUnit.test("Async guard returning false blocks navigation", async function (asse
 		return false;
 	});
 	router.initialize();
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Async guard blocked navigation");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Async guard blocked navigation");
 });
 
 QUnit.test("Route-specific guard returning false blocks navigation", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Route guard blocked navigation");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Route guard blocked navigation");
 });
 
 QUnit.test("Guard throwing an error blocks navigation", async function (assert: Assert) {
@@ -569,25 +563,13 @@ QUnit.test("Guard throwing an error blocks navigation", async function (assert: 
 		throw new Error("Guard error");
 	});
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Navigation blocked on guard error",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Navigation blocked on guard error");
 });
 
 QUnit.test("Guard returning rejected Promise blocks navigation", async function (assert: Assert) {
 	router.addGuard(() => Promise.reject(new Error("Rejected")));
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Navigation blocked on rejected promise",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Navigation blocked on rejected promise");
 });
 
 // ============================================================
@@ -712,26 +694,14 @@ QUnit.module("Router - Guard invalid values", standardHooks);
 QUnit.test("Guard returning invalid value treats as block", async function (assert: Assert) {
 	addGuardUnsafe(router, () => 42);
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Invalid guard return treated as block",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Invalid guard return treated as block");
 });
 
 QUnit.test("Guard returning invalid redirect object treats as block", async function (assert: Assert) {
 	addRouteGuardUnsafe(router, "protected", () => ({ route: "" }));
 	router.initialize();
 	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Invalid redirect object treated as block",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Invalid redirect object treated as block");
 });
 
 // ============================================================
@@ -796,7 +766,7 @@ QUnit.test("Blocked initial navigation falls back to the default hash", async fu
 
 QUnit.test("Blocked default route on initial navigation stays blocked", async function (assert: Assert) {
 	router.addRouteGuard("home", () => false);
-	await assertBlocked(assert, router, "home", () => router.initialize(), "Blocked default route did not match");
+	await assertBlocked(assert, router, () => router.initialize(), "Blocked default route did not match");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash stays on the default target");
 });
 
@@ -811,7 +781,6 @@ QUnit.test("Direct hash change to guarded route is blocked", async function (ass
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => HashChanger.getInstance().setHash("protected"),
 		"Direct hash change was blocked by guard",
 	);
@@ -882,13 +851,7 @@ QUnit.test("Adding guard mid-session blocks subsequent navigations", async funct
 	// Navigate away and back
 	router.navTo("home");
 	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Guard added mid-session blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard added mid-session blocked navigation");
 });
 
 QUnit.test("Removing guard mid-session allows subsequent navigations", async function (assert: Assert) {
@@ -974,7 +937,6 @@ QUnit.test("Sync global guard allows, async route guard blocks", async function 
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Async route guard blocked after sync global allowed",
 	);
@@ -1006,7 +968,6 @@ QUnit.test("Async global guard allows, sync route guard blocks", async function 
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Sync route guard blocked after async global allowed",
 	);
@@ -1140,13 +1101,7 @@ QUnit.test("Async route-specific guard throwing error blocks navigation", async 
 		throw new Error("Async route guard error");
 	});
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Async route guard error blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Async route guard error blocked navigation");
 });
 
 QUnit.test("Async route-specific guard returning rejected promise blocks navigation", async function (assert: Assert) {
@@ -1155,7 +1110,6 @@ QUnit.test("Async route-specific guard returning rejected promise blocks navigat
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Rejected route guard promise blocked navigation",
 	);
@@ -1203,25 +1157,13 @@ QUnit.test("Async route guard redirects", async function (assert: Assert) {
 QUnit.test("Guard returning null is treated as block", async function (assert: Assert) {
 	addGuardUnsafe(router, () => null);
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Null guard return treated as block",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Null guard return treated as block");
 });
 
 QUnit.test("Guard returning undefined is treated as block", async function (assert: Assert) {
 	addGuardUnsafe(router, () => undefined);
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Undefined guard return treated as block",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Undefined guard return treated as block");
 });
 
 QUnit.test("Async guard returning invalid value treats as block", async function (assert: Assert) {
@@ -1230,13 +1172,7 @@ QUnit.test("Async guard returning invalid value treats as block", async function
 		return 42;
 	});
 	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Async invalid guard return treated as block",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Async invalid guard return treated as block");
 });
 
 QUnit.test("Async guard returning invalid redirect object treats as block", async function (assert: Assert) {
@@ -1248,7 +1184,6 @@ QUnit.test("Async guard returning invalid redirect object treats as block", asyn
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Async invalid redirect object treated as block",
 	);
@@ -1752,7 +1687,7 @@ QUnit.test("Leave guard returning false blocks navigation", async function (asse
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Leave guard blocked navigation");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Leave guard blocked navigation");
 });
 
 QUnit.test("Async leave guard returning true allows navigation", async function (assert: Assert) {
@@ -1795,13 +1730,7 @@ QUnit.test("Promise-like leave guard returning false blocks navigation", async f
 	router.addLeaveGuard("home", () => promiseLike);
 	router.initialize();
 	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Promise-like leave guard blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Promise-like leave guard blocked navigation");
 });
 
 QUnit.test("Async leave guard returning false blocks navigation", async function (assert: Assert) {
@@ -1813,13 +1742,7 @@ QUnit.test("Async leave guard returning false blocks navigation", async function
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Async leave guard blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Async leave guard blocked navigation");
 });
 
 QUnit.test("Leave guard only runs when leaving its registered route", async function (assert: Assert) {
@@ -1886,13 +1809,7 @@ QUnit.test("Multiple leave guards: first false short-circuits", async function (
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"First leave guard blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "First leave guard blocked navigation");
 	assert.notOk(secondCalled, "Second leave guard was not called");
 });
 
@@ -1924,7 +1841,7 @@ QUnit.test("Leave guard blocks, enter guard never runs", async function (assert:
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	await assertBlocked(assert, router, "protected", () => router.navTo("protected"), "Leave guard blocked navigation");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Leave guard blocked navigation");
 	assert.notOk(enterCalled, "Enter guard did not run after leave guard blocked");
 });
 
@@ -1937,7 +1854,6 @@ QUnit.test("Leave guard allows, enter guard blocks", async function (assert: Ass
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Enter guard blocked after leave guard allowed",
 	);
@@ -2043,13 +1959,7 @@ QUnit.test("Leave guard throwing error blocks navigation", async function (asser
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	await assertBlocked(
-		assert,
-		router,
-		"protected",
-		() => router.navTo("protected"),
-		"Throwing leave guard blocked navigation",
-	);
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Throwing leave guard blocked navigation");
 });
 
 QUnit.test("addRouteGuard with object form registers both enter and leave guards", async function (assert: Assert) {
@@ -2110,7 +2020,6 @@ QUnit.test("Async leave guard rejecting blocks navigation", async function (asse
 	await assertBlocked(
 		assert,
 		router,
-		"protected",
 		() => router.navTo("protected"),
 		"Rejecting async leave guard blocked navigation",
 	);
@@ -2165,13 +2074,7 @@ QUnit.test("removeRouteGuard with object form: partial config (beforeEnter only)
 	);
 
 	// Leave guard still active: should block
-	await assertBlocked(
-		assert,
-		router,
-		"home",
-		() => router.navTo("home"),
-		"Leave guard still blocks after partial remove",
-	);
+	await assertBlocked(assert, router, () => router.navTo("home"), "Leave guard still blocks after partial remove");
 });
 
 QUnit.test("removeRouteGuard with object form returns router for chaining", function (assert: Assert) {
@@ -2391,3 +2294,288 @@ QUnit.test(
 		assert.notOk(redirectedSignal!.aborted, "Redirected signal stays clean after subsequent navigation");
 	},
 );
+
+// ============================================================
+// Module: navigationSettled()
+// ============================================================
+QUnit.module("Router - navigationSettled()", standardHooks);
+
+QUnit.test("Resolves immediately with 'committed' when nothing pending", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Status is committed");
+	assert.strictEqual(result.route, "home", "Route is current route");
+	assert.strictEqual(result.hash, "", "Hash is current hash");
+});
+
+QUnit.test("Resolves with 'committed' when sync guard allows", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Status is committed");
+	assert.strictEqual(result.route, "protected", "Route is target route");
+	assert.strictEqual(result.hash, "protected", "Hash is target hash");
+});
+
+QUnit.test("Resolves with 'blocked' when sync guard blocks", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Status is blocked");
+	assert.strictEqual(result.route, "home", "Route stays on current route");
+	assert.strictEqual(result.hash, "", "Hash stays on current hash");
+});
+
+QUnit.test("Resolves with 'redirected' when guard redirects (string)", async function (assert: Assert) {
+	router.addRouteGuard("forbidden", () => "home");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Status is redirected");
+	assert.strictEqual(result.route, "home", "Route is redirect target");
+});
+
+QUnit.test("Resolves with 'committed' when async guard allows", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => Promise.resolve(true));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Status is committed");
+	assert.strictEqual(result.route, "protected", "Route is target route");
+});
+
+QUnit.test("Resolves with 'blocked' when async guard blocks", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => Promise.resolve(false));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Status is blocked");
+	assert.strictEqual(result.route, "home", "Route stays on current route");
+});
+
+QUnit.test("Resolves with 'redirected' when async guard redirects", async function (assert: Assert) {
+	router.addRouteGuard("forbidden", () => Promise.resolve("home"));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Status is redirected");
+	assert.strictEqual(result.route, "home", "Route is redirect target");
+});
+
+QUnit.test("Resolves with 'cancelled' when navigation is superseded", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => {
+		return new Promise((resolve) => setTimeout(() => resolve(true), 100));
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Start slow navigation
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+
+	// Supersede with immediate navigation
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	const result = await settledPromise;
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Status is cancelled");
+	assert.strictEqual(result.route, "home", "Route is the route active when cancelled");
+});
+
+QUnit.test("Multiple callers receive the same result", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => Promise.resolve(true));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const [result1, result2, result3] = await Promise.all([
+		router.navigationSettled(),
+		router.navigationSettled(),
+		router.navigationSettled(),
+	]);
+	assert.strictEqual(result1.status, NavigationOutcome.Committed, "First caller gets committed");
+	assert.strictEqual(result2.status, NavigationOutcome.Committed, "Second caller gets committed");
+	assert.strictEqual(result3.status, NavigationOutcome.Committed, "Third caller gets committed");
+	assert.strictEqual(result1.route, result2.route, "All callers get the same route");
+	assert.strictEqual(result2.route, result3.route, "All callers get the same route");
+});
+
+QUnit.test("Status is NOT committed when guard blocks", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.notStrictEqual(result.status, NavigationOutcome.Committed, "Status is not committed");
+	assert.notStrictEqual(result.status, NavigationOutcome.Redirected, "Status is not redirected");
+	assert.notStrictEqual(result.status, NavigationOutcome.Cancelled, "Status is not cancelled");
+});
+
+QUnit.test("Status is NOT blocked when guard allows", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.notStrictEqual(result.status, NavigationOutcome.Blocked, "Status is not blocked");
+	assert.notStrictEqual(result.status, NavigationOutcome.Redirected, "Status is not redirected");
+	assert.notStrictEqual(result.status, NavigationOutcome.Cancelled, "Status is not cancelled");
+});
+
+QUnit.test("Resolves with 'redirected' when guard returns GuardRedirect object", async function (assert: Assert) {
+	const target: GuardRedirect = { route: "detail", parameters: { id: "42" } };
+	router.addRouteGuard("forbidden", () => target);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Status is redirected");
+	assert.strictEqual(result.route, "detail", "Route is redirect target");
+	assert.strictEqual(result.hash, "detail/42", "Hash includes parameters");
+});
+
+QUnit.test("Leave guard block produces 'blocked' status", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Leave guard block is reflected");
+	assert.strictEqual(result.route, "home", "Route stays on home");
+});
+
+QUnit.test("Async leave guard block produces 'blocked' status", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => Promise.resolve(false));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Async leave guard block is reflected");
+	assert.strictEqual(result.route, "home", "Route stays on home");
+});
+
+QUnit.test("Resolves with 'committed' for navigation without guards", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "No-guard navigation is committed");
+	assert.strictEqual(result.route, "protected", "Route is target route");
+});
+
+QUnit.test("Successive navigations each produce independent results", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First: blocked
+	router.navTo("protected");
+	const result1 = await router.navigationSettled();
+	assert.strictEqual(result1.status, NavigationOutcome.Blocked, "First navigation blocked");
+
+	// Second: committed (different route, no guard)
+	router.navTo("forbidden");
+	const result2 = await router.navigationSettled();
+	assert.strictEqual(result2.status, NavigationOutcome.Committed, "Second navigation committed");
+	assert.strictEqual(result2.route, "forbidden", "Route is forbidden");
+});
+
+QUnit.test("Resolves with 'cancelled' when stop() is called during async guard", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => {
+		return new Promise((resolve) => setTimeout(() => resolve(true), 200));
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+	router.stop();
+
+	const result = await settledPromise;
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "stop() cancels pending navigation");
+});
+
+QUnit.test("Idle call after Blocked replays Blocked status", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const first = await router.navigationSettled();
+	assert.strictEqual(first.status, NavigationOutcome.Blocked, "First call returns Blocked");
+
+	// Router is now idle -- second call should replay the last settlement
+	const second = await router.navigationSettled();
+	assert.strictEqual(second.status, NavigationOutcome.Blocked, "Idle replay returns Blocked");
+	assert.strictEqual(second.route, "home", "Replayed route is correct");
+	assert.strictEqual(second.hash, "", "Replayed hash is correct");
+});
+
+QUnit.test("Idle call after Cancelled replays Cancelled status", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => {
+		return new Promise((resolve) => setTimeout(() => resolve(true), 100));
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Start slow navigation
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+
+	// Navigate back to current hash -- cancels without starting a new pipeline
+	HashChanger.getInstance().setHash("");
+
+	const first = await settledPromise;
+	assert.strictEqual(first.status, NavigationOutcome.Cancelled, "Pending nav was cancelled");
+
+	// Router is now idle -- second call should replay the last settlement
+	const second = await router.navigationSettled();
+	assert.strictEqual(second.status, NavigationOutcome.Cancelled, "Idle replay returns Cancelled");
+	assert.strictEqual(second.route, "home", "Replayed route is correct");
+});
+
+QUnit.test("Blocked navigation does not fire patternMatched on target route", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let matched = false;
+	router.getRoute("protected")!.attachPatternMatched(() => {
+		matched = true;
+	});
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation was blocked");
+
+	await nextTick();
+	assert.notOk(matched, "patternMatched never fired on the blocked target route");
+});
