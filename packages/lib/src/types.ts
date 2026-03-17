@@ -32,7 +32,7 @@ export type GuardResult = boolean | string | GuardRedirect;
  * Context passed to guard functions.
  */
 export interface GuardContext {
-	/** Target route name (empty string if no route matched) */
+	/** Target route name (empty string if no route matched / bypassed) */
 	toRoute: string;
 	/** Raw hash being navigated to */
 	toHash: string;
@@ -83,7 +83,7 @@ export interface RouteGuardConfig {
 export interface NavigationResult {
 	/** How the navigation resolved. */
 	status: NavigationOutcome;
-	/** Route name determined by the guard pipeline. */
+	/** Route name determined by the guard pipeline (empty string when bypassed). */
 	route: string;
 	/** Hash determined by the guard pipeline. */
 	hash: string;

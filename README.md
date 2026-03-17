@@ -186,8 +186,8 @@ npm run clean        # remove dist and .ui5 caches in all packages
 Automated via [release-please](https://github.com/googleapis/release-please) and GitHub Actions.
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
-2. release-please opens/updates a "Release PR" that bumps versions and maintains `CHANGELOG.md`
-3. Merging the Release PR triggers: build, test (QUnit + standalone E2E + FLP preview smoke), then `npm publish` with provenance via OIDC
+2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 Short maintainer conventions:
 
@@ -197,12 +197,12 @@ Short maintainer conventions:
 - If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run lint`, `npm run typecheck`, `npm run test:qunit`, `npm run test:qunit:compat:120`, `npm run test:e2e`, `npm run test:e2e:flp`, and `npm run pack:check`.
 
-| File                            | Purpose                                            |
-| ------------------------------- | -------------------------------------------------- |
-| `.github/workflows/ci.yml`      | CI pipeline (lint, format, typecheck, build, test) |
-| `.github/workflows/release.yml` | Release-please + npm publish                       |
-| `release-please-config.json`    | Package path, extra version files                  |
-| `.release-please-manifest.json` | Current version tracker                            |
+| File                            | Purpose                                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, browser tests, compatibility, Windows smoke) |
+| `.github/workflows/release.yml` | Release-please + npm publish                                                                             |
+| `release-please-config.json`    | Package path, extra version files                                                                        |
+| `.release-please-manifest.json` | Current version tracker                                                                                  |
 
 ## License
 

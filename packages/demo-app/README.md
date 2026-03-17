@@ -184,4 +184,4 @@ The cross-app specs are isolated because `toExternal()` navigates to Shell-home,
 - TypeScript via `ui5-tooling-transpile`
 - `ui5-middleware-livereload` for dev server
 - `fiori-tools-preview` for local FLP sandbox (`@sap/ux-ui5-tooling`)
-- wdio v9 + wdi5 v3 for E2E tests
+- wdio v9 + `wdio-ui5-service` v3 for E2E tests

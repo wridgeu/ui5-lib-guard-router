@@ -11,6 +11,8 @@
 const NavigationOutcome = Object.freeze({
 	/** Navigation was allowed and the target route activated. */
 	Committed: "committed",
+	/** Navigation was allowed, but no route matched; UI5 continued with bypassed handling. */
+	Bypassed: "bypassed",
 	/** A guard blocked navigation; the previous route remains active. */
 	Blocked: "blocked",
 	/** A guard redirected navigation to a different route. */

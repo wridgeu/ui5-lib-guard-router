@@ -132,14 +132,23 @@ export default class Router extends MobileRouter implements GuardRouter {
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
 			let hasHandler = false;
+			this._warnIfRouteUnknown(routeName, "addRouteGuard");
 
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
-				this.addRouteGuard(routeName, guard.beforeEnter);
+				if (typeof guard.beforeEnter !== "function") {
+					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+				} else {
+					addToGuardMap(this._enterGuards, routeName, guard.beforeEnter);
+				}
 			}
 			if (guard.beforeLeave !== undefined) {
 				hasHandler = true;
-				this.addLeaveGuard(routeName, guard.beforeLeave);
+				if (typeof guard.beforeLeave !== "function") {
+					Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+				} else {
+					addToGuardMap(this._leaveGuards, routeName, guard.beforeLeave);
+				}
 			}
 
 			if (!hasHandler) {
@@ -156,6 +165,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
+		this._warnIfRouteUnknown(routeName, "addRouteGuard");
 		addToGuardMap(this._enterGuards, routeName, guard);
 		return this;
 	}
@@ -197,8 +207,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
+		this._warnIfRouteUnknown(routeName, "addLeaveGuard");
 		addToGuardMap(this._leaveGuards, routeName, guard);
 		return this;
+	}
+
+	private _warnIfRouteUnknown(routeName: string, methodName: "addRouteGuard" | "addLeaveGuard"): void {
+		if (this.getRoute(routeName)) {
+			return;
+		}
+		Log.warning(
+			`${methodName} called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.`,
+			routeName,
+			LOG_COMPONENT,
+		);
 	}
 
 	/**
@@ -219,7 +241,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * If no navigation is pending, the Promise resolves immediately with the
 	 * most recent settlement result (or `Committed` with the current state
 	 * when no navigation has occurred yet). Otherwise it resolves once the
-	 * pending navigation commits, blocks, redirects, or is cancelled.
+	 * pending navigation commits, bypasses, blocks, redirects, or is cancelled.
 	 */
 	navigationSettled(): Promise<NavigationResult> {
 		if (this._pendingHash === null) {
@@ -328,7 +350,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						} else if (guardResult === false) {
 							this._blockNavigation(newHash);
 						} else {
-							this._redirect(guardResult);
+							this._redirect(guardResult, newHash);
 						}
 					})
 					.catch((error: unknown) => {
@@ -347,7 +369,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			} else if (enterResult === false) {
 				this._blockNavigation(newHash);
 			} else {
-				this._redirect(enterResult);
+				this._redirect(enterResult, newHash);
 			}
 		};
 
@@ -482,7 +504,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
 		this._flushSettlement({
-			status: this._redirecting ? NavigationOutcome.Redirected : NavigationOutcome.Committed,
+			status: this._redirecting
+				? NavigationOutcome.Redirected
+				: this._currentRoute === ""
+					? NavigationOutcome.Bypassed
+					: NavigationOutcome.Committed,
 			route: this._currentRoute,
 			hash,
 		});
@@ -606,7 +632,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Perform a guard redirect (string route name or GuardRedirect object). */
-	private _redirect(target: string | GuardRedirect): void {
+	private _redirect(target: string | GuardRedirect, attemptedHash?: string): void {
 		this._pendingHash = null;
 		this._abortController = null;
 		const settlementBefore = this._lastSettlement;
@@ -633,11 +659,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				undefined,
 				LOG_COMPONENT,
 			);
-			this._flushSettlement({
-				status: NavigationOutcome.Blocked,
-				route: this._currentRoute,
-				hash: this._currentHash ?? "",
-			});
+			this._blockNavigation(attemptedHash);
 		}
 	}
 

@@ -418,7 +418,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
                                + ui5-middleware-livereload
 ```
 
-- **TypeScript**: strict mode, ES2022 target, composite project references
+- **TypeScript**: strict mode, ES2022 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
 - **Type check**: `tsc --noEmit` against both package tsconfigs

@@ -1,4 +1,5 @@
 import DataType from "sap/ui/base/DataType";
+import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
 	GuardContext,
@@ -10,7 +11,7 @@ import type {
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
+import type { Router$BypassedEvent, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import {
 	addGuardUnsafe,
@@ -75,6 +76,7 @@ QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: As
 
 	assert.ok(type, "Enum type is discoverable via DataType.getType()");
 	assert.strictEqual(type?.isValid(NavigationOutcome.Committed), true, "Known enum values are accepted");
+	assert.strictEqual(type?.isValid(NavigationOutcome.Bypassed), true, "Bypassed enum value is accepted");
 	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
 });
 
@@ -205,6 +207,84 @@ QUnit.test("addRouteGuard returns this for chaining", function (assert: Assert) 
 		router,
 		"addRouteGuard returns this",
 	);
+});
+
+QUnit.test("addRouteGuard warns for unknown route but still registers the guard", function (assert: Assert) {
+	const guard: GuardFn = () => true;
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router.addRouteGuard("missing", guard);
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.strictEqual(warnings.length, 1, "One warning was logged");
+	assert.strictEqual(
+		warnings[0]?.message,
+		"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+		"Warning message explains the non-blocking behavior",
+	);
+	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
+
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.strictEqual(enterGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
+});
+
+QUnit.test(
+	"addRouteGuard object form warns once for unknown route and registers both guards",
+	function (assert: Assert) {
+		const enterGuard: GuardFn = () => true;
+		const leaveGuard: LeaveGuardFn = () => true;
+		const warnings: Array<{ message: string; details?: string }> = [];
+		const originalWarning = Log.warning;
+		Log.warning = (message: string, details?: string) => {
+			warnings.push({ message, details });
+		};
+
+		try {
+			router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
+		} finally {
+			Log.warning = originalWarning;
+		}
+
+		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
+
+		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		assert.strictEqual(enterGuards.get("missing")?.[0], enterGuard, "Enter guard registered");
+		assert.strictEqual(leaveGuards.get("missing")?.[0], leaveGuard, "Leave guard registered");
+	},
+);
+
+QUnit.test("addLeaveGuard warns for unknown route but still registers the guard", function (assert: Assert) {
+	const guard: LeaveGuardFn = () => true;
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router.addLeaveGuard("missing", guard);
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.strictEqual(warnings.length, 1, "One warning was logged");
+	assert.strictEqual(
+		warnings[0]?.message,
+		"addLeaveGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+		"Warning message explains the non-blocking behavior",
+	);
+	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
+
+	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
 
 QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (assert: Assert) {
@@ -2491,6 +2571,51 @@ QUnit.test("Resolves with 'committed' for navigation without guards", async func
 	assert.strictEqual(result.route, "protected", "Route is target route");
 });
 
+QUnit.test("Resolves with 'bypassed' for unmatched hash without guards", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Bypassed, "Unmatched hash settles as bypassed");
+	assert.strictEqual(result.route, "", "Route is empty when no route matched");
+	assert.strictEqual(result.hash, "some/unknown/path", "Hash is the attempted unmatched hash");
+});
+
+QUnit.test("Resolves with 'bypassed' when leave guard allows unmatched hash", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Bypassed, "Allowed unmatched hash settles as bypassed");
+	assert.strictEqual(result.route, "", "Route is empty when no route matched");
+	assert.strictEqual(result.hash, "some/unknown/path", "Hash is the attempted unmatched hash");
+});
+
+QUnit.test("Unmatched hash settles as 'bypassed' and still fires UI5 bypassed event", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const bypassedEventPromise = new Promise<string>((resolve) => {
+		const onBypassed = (event: Router$BypassedEvent) => {
+			resolve(event.getParameter("hash") as string);
+		};
+		router.attachBypassed(onBypassed);
+	});
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	const [result, bypassedHash] = await Promise.all([router.navigationSettled(), bypassedEventPromise]);
+
+	assert.strictEqual(result.status, NavigationOutcome.Bypassed, "Settlement reports bypassed");
+	assert.strictEqual(result.route, "", "Settlement route is empty");
+	assert.strictEqual(result.hash, "some/unknown/path", "Settlement hash is the unmatched hash");
+	assert.strictEqual(bypassedHash, "some/unknown/path", "UI5 bypassed event still fires with the same hash");
+});
+
 QUnit.test("Successive navigations each produce independent results", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
@@ -2525,6 +2650,20 @@ QUnit.test("Idle replay returns the most recent settlement, not a stale one", as
 	const replay = await router.navigationSettled();
 	assert.strictEqual(replay.status, NavigationOutcome.Committed, "Replay returns latest settlement");
 	assert.strictEqual(replay.route, "forbidden", "Replay route is from latest navigation");
+});
+
+QUnit.test("Idle replay after bypassed returns bypassed status", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("some/unknown/path");
+	const first = await router.navigationSettled();
+	const second = await router.navigationSettled();
+
+	assert.strictEqual(first.status, NavigationOutcome.Bypassed, "First call returns bypassed");
+	assert.strictEqual(second.status, NavigationOutcome.Bypassed, "Idle replay returns bypassed");
+	assert.strictEqual(second.route, "", "Idle replay keeps empty route");
+	assert.strictEqual(second.hash, "some/unknown/path", "Idle replay keeps unmatched hash");
 });
 
 QUnit.test("Resolves with 'cancelled' when stop() is called during async guard", async function (assert: Assert) {
@@ -2628,6 +2767,7 @@ QUnit.test("Async redirect to nonexistent route settles as blocked", async funct
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed async redirect settles as blocked");
 	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
 });
 
 QUnit.test("GuardRedirect object to nonexistent route settles as blocked", async function (assert: Assert) {

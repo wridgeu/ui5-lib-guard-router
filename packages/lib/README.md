@@ -263,14 +263,17 @@ import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 const result: NavigationResult = await router.navigationSettled();
 ```
 
-| `result.status`                | Meaning                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------- |
-| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active                    |
-| `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                      |
-| `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                           |
-| `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed) |
+| `result.status`                | Meaning                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active                                               |
+| `NavigationOutcome.Bypassed`   | Guards allowed the navigation, but no route matched; UI5 continued with `bypassed` / not-found handling |
+| `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                                                 |
+| `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
+| `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
 
 A guard redirect to a nonexistent route name settles as `Blocked` because no route change commits. The router logs a warning with the bad target name.
+
+An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
 
 If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router (or after `stop()`/`destroy()`), this defaults to `Committed` with the current state. Multiple callers waiting on the same pending navigation all receive the same result.
 
@@ -293,6 +296,9 @@ const result = await router.navigationSettled();
 switch (result.status) {
 	case NavigationOutcome.Committed:
 		break; // navigation succeeded
+	case NavigationOutcome.Bypassed:
+		MessageToast.show("No route matched; showing not-found flow");
+		break;
 	case NavigationOutcome.Blocked:
 		MessageToast.show("Access denied");
 		break;
