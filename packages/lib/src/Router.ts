@@ -407,6 +407,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _cancelPendingNavigation(): void {
 		++this._parseGeneration;
+		this._abortController?.abort();
+		this._abortController = null;
 		if (this._pendingHash !== null) {
 			this._flushSettlement({
 				status: NavigationOutcome.Cancelled,
@@ -415,8 +417,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			});
 		}
 		this._pendingHash = null;
-		this._abortController?.abort();
-		this._abortController = null;
 	}
 
 	/**
@@ -598,6 +598,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _redirect(target: string | GuardRedirect): void {
 		this._pendingHash = null;
 		this._abortController = null;
+		const settlementBefore = this._lastSettlement;
 		this._redirecting = true;
 		try {
 			if (typeof target === "string") {
@@ -607,6 +608,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 		} finally {
 			this._redirecting = false;
+		}
+
+		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the
+		// target route does not exist and the hash did not change), no
+		// _commitNavigation ran and _lastSettlement was not updated. Flush so
+		// pending resolvers are drained and post-hoc navigationSettled() calls
+		// see the redirect outcome.
+		if (this._lastSettlement === settlementBefore) {
+			this._flushSettlement({
+				status: NavigationOutcome.Redirected,
+				route: this._currentRoute,
+				hash: this._currentHash ?? "",
+			});
 		}
 	}
 
