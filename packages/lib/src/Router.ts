@@ -614,7 +614,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// target route does not exist and the hash did not change), no
 		// _commitNavigation ran and _lastSettlement was not updated. Flush so
 		// pending resolvers are drained and post-hoc navigationSettled() calls
-		// see the redirect outcome.
+		// see that a redirect was attempted.
 		if (this._lastSettlement === settlementBefore) {
 			this._flushSettlement({
 				status: NavigationOutcome.Redirected,

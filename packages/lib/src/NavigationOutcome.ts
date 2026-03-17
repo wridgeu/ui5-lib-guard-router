@@ -13,9 +13,9 @@ const NavigationOutcome = Object.freeze({
 	Committed: "committed" as const,
 	/** A guard blocked navigation; the previous route remains active. */
 	Blocked: "blocked" as const,
-	/** A guard redirected to a different route, which was then committed. */
+	/** A guard redirected navigation to a different route. */
 	Redirected: "redirected" as const,
-	/** Navigation was superseded by a newer navigation before settling. */
+	/** Navigation was cancelled before settling (superseded, stopped, or destroyed). */
 	Cancelled: "cancelled" as const,
 });
 

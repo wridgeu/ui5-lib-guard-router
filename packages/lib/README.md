@@ -260,12 +260,12 @@ import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 const result: NavigationResult = await router.navigationSettled();
 ```
 
-| `result.status`                | Meaning                                                   |
-| ------------------------------ | --------------------------------------------------------- |
-| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active |
-| `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active   |
-| `NavigationOutcome.Redirected` | A guard redirected to a different route, which committed  |
-| `NavigationOutcome.Cancelled`  | A newer navigation superseded this one before it settled  |
+| `result.status`                | Meaning                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active                    |
+| `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                      |
+| `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                           |
+| `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed) |
 
 If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router (or after `stop()`/`destroy()`), this defaults to `Committed` with the current state. Multiple callers waiting on the same pending navigation all receive the same result.
 
