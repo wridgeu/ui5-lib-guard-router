@@ -123,7 +123,7 @@ For the full API reference, usage examples, limitations, and FLP integration gui
 ## Repository structure
 
 ```
-docs/           Docs index plus reference, research, explorations, and feature proposals
+docs/           Docs index plus reference, research, explorations, and feature notes
 packages/
   lib/          ui5.guard.router library (Router + types)
   demo-app/     Demo app with auth guards, FLP preview, and guided scenarios
@@ -156,7 +156,7 @@ npm run test:e2e      # integration tests only
 npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
 ```
 
-Each test command automatically starts and stops the appropriate server (port 8080).
+Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
 
 ### Quality checks
 

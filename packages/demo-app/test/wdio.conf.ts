@@ -1,5 +1,7 @@
 import type { wdi5Config } from "wdio-ui5-service";
 
+const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080/index.html";
+
 export const config: wdi5Config = {
 	wdi5: {
 		logLevel: "verbose",
@@ -20,7 +22,7 @@ export const config: wdi5Config = {
 	logLevel: "error",
 	bail: 0,
 	specFileRetries: 1,
-	baseUrl: "http://localhost:8080/index.html",
+	baseUrl,
 	waitforTimeout: 31000,
 	connectionRetryTimeout: 120000,
 	connectionRetryCount: 3,

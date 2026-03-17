@@ -47,8 +47,8 @@ function spawnNpmScript(script, extra = {}) {
 	});
 }
 
-async function runNpmScript(script) {
-	const child = spawnNpmScript(script);
+async function runNpmScript(script, extra = {}) {
+	const child = spawnNpmScript(script, extra);
 	const { code, signal } = await waitForExit(child);
 	if (code !== 0) {
 		throw new Error(`npm run ${script} exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}`);
@@ -146,6 +146,7 @@ async function main() {
 	const readyUrl = getOption("--ready-url");
 	const serverScript = getOption("--server-script");
 	const testScript = getOption("--test-script");
+	const testBaseUrl = process.argv.includes("--test-base-url") ? getOption("--test-base-url") : null;
 	const timeoutMs = process.argv.includes("--timeout-ms") ? Number(getOption("--timeout-ms")) : DEFAULT_TIMEOUT_MS;
 
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -158,7 +159,12 @@ async function main() {
 
 	try {
 		await waitForUrl(readyUrl, timeoutMs, serverScript, activeServer);
-		await runNpmScript(testScript);
+		await runNpmScript(testScript, {
+			env: {
+				...process.env,
+				...(testBaseUrl ? { UI5_TEST_BASE_URL: testBaseUrl } : {}),
+			},
+		});
 	} finally {
 		await stopActiveServer();
 	}

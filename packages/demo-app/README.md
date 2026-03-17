@@ -55,7 +55,7 @@ All controllers extend `BaseController`, which provides shared helpers (`getRout
 | File                                 | Purpose                                                                 |
 | ------------------------------------ | ----------------------------------------------------------------------- |
 | `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, and scenario runner |
-| `controller/App.controller.ts`       | Root view controller (empty, reserved for future shell-level logic)     |
+| `controller/App.controller.ts`       | Root view controller (currently empty)                                  |
 | `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard      |
 | `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back          |
 | `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                 |
@@ -150,7 +150,7 @@ npm run test:e2e
 npm run test:e2e:flp
 ```
 
-The command starts and stops the demo server on port 8080 for you.
+Each command starts and stops its own demo server for you. Standalone and FLP test lanes use dedicated ports so they can run alongside other suites without colliding.
 
 Test files are in `test/e2e/`:
 

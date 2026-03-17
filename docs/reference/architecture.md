@@ -412,7 +412,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
            |                           |
      packages/lib               packages/demo-app
            |                           |
-   ui5 serve (port 8080)       ui5 serve (port 8080)
+   ui5 serve (default 8080)    ui5 serve (default 8080)
    ui5-tooling-transpile       ui5-tooling-transpile
    (TS -> JS on the fly)       + transpileDependencies: true
                                + ui5-middleware-livereload
@@ -422,6 +422,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
 - **Type check**: `tsc --noEmit` against both package tsconfigs
+- **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
 
 ## Test Architecture
 

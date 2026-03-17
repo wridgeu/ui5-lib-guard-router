@@ -1,3 +1,5 @@
+const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080";
+
 export const config: WebdriverIO.Config = {
 	runner: "local",
 	specs: [],
@@ -13,7 +15,7 @@ export const config: WebdriverIO.Config = {
 	],
 	logLevel: "error",
 	bail: 0,
-	baseUrl: "http://localhost:8080",
+	baseUrl,
 	waitforTimeout: 90000,
 	connectionRetryTimeout: 120000,
 	connectionRetryCount: 3,

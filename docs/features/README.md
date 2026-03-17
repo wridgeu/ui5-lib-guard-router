@@ -1,6 +1,6 @@
-# Feature Proposals
+# Features and Proposals
 
-Proposed enhancements for `ui5.guard.router.Router`, derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
+Feature notes for `ui5.guard.router.Router`, including implemented items and future proposals derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
 
 ## Current State
 
@@ -32,7 +32,7 @@ The router provides:
 ## Implementation Order
 
 ```
-Phase 1: Leave Guards (01) — DONE
+Phase 1: Leave Guards (01) - DONE
 
 Phase 2: Transition Object (03)
   → Enables "redirect to login, resume after auth" pattern
