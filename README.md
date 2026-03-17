@@ -124,7 +124,7 @@ packages/
   lib/          ui5.guard.router library (Router + types)
   demo-app/     Demo app with auth guards, FLP preview, and guided scenarios
 scripts/        CI and test infrastructure (server runner, pack smoke test)
-tools/          Custom oxlint JS plugins (guardrails)
+tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-guardrails)
 ```
 
 ## Development

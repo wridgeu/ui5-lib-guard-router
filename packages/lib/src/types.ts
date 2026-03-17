@@ -83,9 +83,9 @@ export interface RouteGuardConfig {
 export interface NavigationResult {
 	/** How the navigation resolved. */
 	status: NavigationOutcome;
-	/** Route name that is active after settlement. */
+	/** Route name determined by the guard pipeline. */
 	route: string;
-	/** Hash that is active after settlement. */
+	/** Hash determined by the guard pipeline. */
 	hash: string;
 }
 
