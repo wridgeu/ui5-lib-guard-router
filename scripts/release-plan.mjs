@@ -42,6 +42,11 @@ function main() {
 	const token = getGitHubToken();
 	const extraArgs = process.argv.slice(2);
 	const { command, args } = getReleasePleaseCommand();
+	const childEnv = {
+		...process.env,
+		GITHUB_TOKEN: token,
+		GH_TOKEN: token,
+	};
 
 	execFileSync(
 		command,
@@ -49,7 +54,6 @@ function main() {
 			...args,
 			"release-pr",
 			"--dry-run",
-			`--token=${token}`,
 			`--repo-url=${repoUrl}`,
 			"--target-branch=main",
 			"--config-file=release-please-config.json",
@@ -58,6 +62,7 @@ function main() {
 		],
 		{
 			cwd: repoRoot,
+			env: childEnv,
 			stdio: "inherit",
 			shell: false,
 		},
