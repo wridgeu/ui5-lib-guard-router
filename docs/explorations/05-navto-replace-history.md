@@ -77,8 +77,8 @@ private _navigateBasedOnState(isLoggedIn: boolean): void {
 This approach is complementary. Even with `ui5.guard.router`, guards use `navTo(..., true)` internally for redirects. The library's `_redirect` method always passes `bReplace: true`:
 
 ```typescript
-// Router.ts line 279
-this.navTo(result, {}, {}, true);
+// Router.ts — _redirect()
+this.navTo(target, {}, {}, true);
 ```
 
 For application code, using `bReplace: true` in explicit `navTo` calls is still good practice alongside router guards, as it ensures clean history even for non-guarded navigations like login state transitions.

@@ -100,7 +100,7 @@ This introduces the exact same problems as the HashChanger interception approach
 
 The `parse()` override was chosen specifically because it catches **all** navigation paths in a single interception point. The `navTo()` approach requires additional mechanisms (hashChanged listener) to cover the remaining paths, creating complexity without full coverage.
 
-From `docs/implementation-approaches.md`:
+From the [problem analysis](../reference/analysis.md#22-override-navto-only):
 
 > **Verdict: Rejected.** Incomplete coverage of navigation entry points.
 
@@ -120,4 +120,4 @@ From `docs/implementation-approaches.md`:
 ## References
 
 - [SAP/openui5#3411 comment](https://github.com/SAP/openui5/issues/3411#issuecomment-1000067038): Discussion of where to place guard checks
-- [docs/implementation-approaches.md](../implementation-approaches.md): Why navTo override was rejected
+- [Problem analysis — Override navTo()](../reference/analysis.md#22-override-navto-only): Why navTo override was rejected
