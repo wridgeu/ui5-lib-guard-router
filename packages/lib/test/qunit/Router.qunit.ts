@@ -2507,6 +2507,25 @@ QUnit.test("Successive navigations each produce independent results", async func
 	assert.strictEqual(result2.route, "forbidden", "Route is forbidden");
 });
 
+QUnit.test("Idle replay returns the most recent settlement, not a stale one", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First: blocked
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	// Second: committed (overrides _lastSettlement)
+	router.navTo("forbidden");
+	await router.navigationSettled();
+
+	// Idle replay should return the latest (committed), not the earlier (blocked)
+	const replay = await router.navigationSettled();
+	assert.strictEqual(replay.status, NavigationOutcome.Committed, "Replay returns latest settlement");
+	assert.strictEqual(replay.route, "forbidden", "Replay route is from latest navigation");
+});
+
 QUnit.test("Resolves with 'cancelled' when stop() is called during async guard", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => {
 		return new Promise((resolve) => setTimeout(() => resolve(true), 200));
