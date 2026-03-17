@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.1...v1.2.0) (2026-03-17)
+
+
+### Features
+
+* add navigationSettled() API with NavigationOutcome enum ([41cff49](https://github.com/wridgeu/ui5-lib-guard-router/commit/41cff491da2aebce3e1f0f920497f5718f5bdabf))
+* **demo:** enable enhanced FLP homepage and add dirty-state separation tests ([#25](https://github.com/wridgeu/ui5-lib-guard-router/issues/25)) ([366e03f](https://github.com/wridgeu/ui5-lib-guard-router/commit/366e03fc42d8b701d7ee87e00e25d01861d3b162))
+
+
+### Bug Fixes
+
+* prevent stranded settlement on redirect to nonexistent route ([e251b1d](https://github.com/wridgeu/ui5-lib-guard-router/commit/e251b1d227f7fae4835efe25859c8cdc31a7f0f6))
+* settle failed redirect as Blocked, not Redirected ([9a9433e](https://github.com/wridgeu/ui5-lib-guard-router/commit/9a9433e22acfce71c77261a17fdb6f7f3453b6eb))
+
+
+### Code Refactoring
+
+* remove redundant library side-effect import from Router ([1ab6930](https://github.com/wridgeu/ui5-lib-guard-router/commit/1ab693042087f698576f8064c9209b116eeb3b1a))
+* **test:** remove redundant library import from QUnit suite ([b671893](https://github.com/wridgeu/ui5-lib-guard-router/commit/b671893a9df2f2bf796d8c1a75350222ddeaf171))
+
 ## [1.1.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.0...v1.1.1) (2026-03-16)
 
 
