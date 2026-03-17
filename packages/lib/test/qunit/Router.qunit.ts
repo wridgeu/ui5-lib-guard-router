@@ -2657,3 +2657,252 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 	await nextTick();
 	assert.notOk(matched, "patternMatched never fired on the blocked target route");
 });
+
+// ============================================================
+// Module: Destroy during redirect
+// ============================================================
+QUnit.module("Router - Destroy during redirect", safeDestroyHooks);
+
+QUnit.test(
+	"Destroying router while async guard is evaluating a redirect does not throw",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", async () => {
+			await nextTick(50);
+			return "forbidden"; // redirect
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		await nextTick(10);
+		router.destroy();
+
+		// Wait for the guard promise to resolve in the background
+		await nextTick(200);
+		assert.ok(true, "No errors thrown after destroy during pending redirect");
+	},
+);
+
+QUnit.test("Destroy during redirect settles pending navigationSettled as cancelled", async function (assert: Assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(100);
+		return "forbidden"; // redirect
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+	await nextTick(10);
+	router.destroy();
+
+	const result = await settledPromise;
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Cancelled,
+		"Settlement is cancelled on destroy during redirect",
+	);
+});
+
+// ============================================================
+// Module: navigationSettled after destroy
+// ============================================================
+QUnit.module("Router - navigationSettled after destroy", safeDestroyHooks);
+
+QUnit.test("navigationSettled called after destroy resolves immediately", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+	router.destroy();
+
+	// Calling navigationSettled after destroy should not hang or throw
+	const result = await router.navigationSettled();
+	// After destroy, _lastSettlement is null, so we get the default
+	assert.ok(result, "navigationSettled resolved after destroy");
+});
+
+QUnit.test("navigationSettled resolves for pending navigation when destroy is called", async function (assert: Assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(200);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+	await nextTick(10);
+	router.destroy();
+
+	const result = await settledPromise;
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Cancelled,
+		"Pending settlement resolved as cancelled on destroy",
+	);
+});
+
+// ============================================================
+// Module: Guard error after signal abort
+// ============================================================
+QUnit.module("Router - Guard error after signal abort", standardHooks);
+
+QUnit.test("Guard throwing after signal abort does not produce unhandled rejection", async function (assert: Assert) {
+	const unhandledRejections: PromiseRejectionEvent[] = [];
+	const rejectionHandler = (event: PromiseRejectionEvent): void => {
+		unhandledRejections.push(event);
+	};
+	window.addEventListener("unhandledrejection", rejectionHandler);
+
+	router.addGuard(async (context: GuardContext) => {
+		// Simulate a guard that does async work, then throws a non-AbortError
+		// after its navigation was superseded
+		await new Promise<void>((resolve, reject) => {
+			context.signal.addEventListener("abort", () => {
+				reject(new Error("Resource cleanup failed"));
+			});
+			setTimeout(resolve, 200);
+		});
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Start navigation (triggers slow guard)
+	router.navTo("protected");
+	// Supersede to abort the signal
+	await nextTick(10);
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	// Wait for stale guard error to surface (if it would)
+	await nextTick(300);
+	window.removeEventListener("unhandledrejection", rejectionHandler);
+	assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from guard error after abort");
+});
+
+QUnit.test("Leave guard throwing after signal abort is silenced", async function (assert: Assert) {
+	const unhandledRejections: PromiseRejectionEvent[] = [];
+	const rejectionHandler = (event: PromiseRejectionEvent): void => {
+		unhandledRejections.push(event);
+	};
+	window.addEventListener("unhandledrejection", rejectionHandler);
+
+	router.addLeaveGuard(
+		"home",
+		async (context: GuardContext) =>
+			new Promise<boolean>((resolve, reject) => {
+				context.signal.addEventListener("abort", () => {
+					reject(new Error("Leave guard cleanup error"));
+				});
+				setTimeout(() => resolve(true), 200);
+			}),
+	);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// First nav triggers leave guard (slow)
+	router.navTo("protected");
+	// Supersede it
+	await nextTick(10);
+	router.navTo("forbidden");
+
+	await nextTick(500);
+	window.removeEventListener("unhandledrejection", rejectionHandler);
+	assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from leave guard error after abort");
+});
+
+// ============================================================
+// Module: Settlement for leave guard block
+// ============================================================
+QUnit.module("Router - Settlement for leave guard scenarios", standardHooks);
+
+QUnit.test("Leave guard block settlement includes correct route and hash", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Status is blocked");
+	assert.strictEqual(result.route, "home", "Route stayed on home");
+	assert.strictEqual(result.hash, "", "Hash stayed empty");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored");
+});
+
+QUnit.test("Leave guard allows then enter guard blocks: settlement is blocked", async function (assert: Assert) {
+	router.addLeaveGuard("home", () => true);
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Leave allowed + enter blocked = blocked");
+	assert.strictEqual(result.route, "home", "Route stayed on home");
+});
+
+QUnit.test(
+	"Async leave guard allows then async enter guard redirects: settlement is redirected",
+	async function (assert: Assert) {
+		router.addLeaveGuard("home", async () => {
+			await nextTick(10);
+			return true;
+		});
+		router.addRouteGuard("protected", async () => {
+			await nextTick(10);
+			return "forbidden";
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Redirected, "Leave allowed + enter redirect = redirected");
+		assert.strictEqual(result.route, "forbidden", "Route is redirect target");
+	},
+);
+
+// ============================================================
+// Module: Redirect edge cases
+// ============================================================
+QUnit.module("Router - Redirect edge cases", standardHooks);
+
+QUnit.test("Redirect from global guard and route guard: first non-true wins", async function (assert: Assert) {
+	router.addGuard((context: GuardContext) => {
+		if (context.toRoute === "protected") return "forbidden";
+		return true;
+	});
+	// Route guard on "protected" should never run because global guard redirects first
+	let routeGuardCalled = false;
+	router.addRouteGuard("protected", () => {
+		routeGuardCalled = true;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Global guard redirect took effect");
+	assert.strictEqual(result.route, "forbidden", "Redirected to forbidden");
+	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
+});
+
+QUnit.test("Redirect target with enter guard that blocks: block wins", async function (assert: Assert) {
+	// Guard on "protected" redirects to "forbidden"
+	router.addRouteGuard("protected", () => "forbidden");
+	// But "forbidden" also has a blocking guard -- however, redirect targets bypass guards
+	router.addRouteGuard("forbidden", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	// The redirect sets _redirecting=true which bypasses the "forbidden" guard
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirect bypassed target's guard");
+	assert.strictEqual(result.route, "forbidden", "Landed on forbidden despite its guard");
+});
