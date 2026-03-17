@@ -298,7 +298,7 @@ flowchart TD
         commit["_commitNavigation()"] -- "flush" --> fcommit["Committed or Redirected"]
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
-        redirect["_redirect()"] -- "flush (if resolvers stranded)" --> fredirect["Redirected"]
+        redirect["_redirect()"] -- "flush (if target invalid)" --> fredirect["Blocked"]
     end
 
     push -.-> commit
@@ -309,9 +309,10 @@ flowchart TD
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
 `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
-with the same `NavigationResult`. `_redirect()` includes a safety-net flush for the edge
-case where `navTo()` does not trigger a re-entrant `parse()` (e.g. redirect to a
-nonexistent route when the hash is already empty). This ensures:
+with the same `NavigationResult`. `_redirect()` includes a safety-net flush that settles as `Blocked` when
+`navTo()` does not trigger a re-entrant `parse()` (e.g. redirect to a
+nonexistent route when the hash is already empty), because the observable
+outcome is that the user stays on the current route. This ensures:
 
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Resolvers fire before `super.parse()` (in commit) and before `_restoreHash()` (in block),
