@@ -4,7 +4,7 @@ import { runHashSequence, setHash } from "../routing/hashNavigation";
 
 const RAPID_HASH_SEQUENCE = ["#/protected", "#/forbidden", "#/protected"];
 
-export default class DemoScenarioRunner {
+export default class ScenarioRunner {
 	private readonly _runtimeModel: JSONModel;
 
 	constructor(runtimeModel: JSONModel) {
