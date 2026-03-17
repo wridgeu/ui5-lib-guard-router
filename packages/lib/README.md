@@ -251,7 +251,7 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 
 ### Navigation settlement
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The returned `NavigationResult` contains the outcome as a `NavigationOutcome` enum value, the active route name, and the active hash.
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The returned `NavigationResult` contains the outcome as a `NavigationOutcome` enum value, the route name, and the hash determined by the guard pipeline.
 
 ```typescript
 import type { NavigationResult } from "ui5/guard/router/types";
