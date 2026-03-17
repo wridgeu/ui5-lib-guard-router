@@ -612,12 +612,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the
 		// target route does not exist and the hash did not change), no
-		// _commitNavigation ran and _lastSettlement was not updated. Flush so
-		// pending resolvers are drained and post-hoc navigationSettled() calls
-		// see that a redirect was attempted.
+		// _commitNavigation ran and _lastSettlement was not updated. Treat as
+		// blocked because the observable outcome is that the user stays on the
+		// current route. Log a warning so the developer sees the bad target.
 		if (this._lastSettlement === settlementBefore) {
+			const targetName = typeof target === "string" ? target : target.route;
+			Log.warning(
+				`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+				undefined,
+				LOG_COMPONENT,
+			);
 			this._flushSettlement({
-				status: NavigationOutcome.Redirected,
+				status: NavigationOutcome.Blocked,
 				route: this._currentRoute,
 				hash: this._currentHash ?? "",
 			});

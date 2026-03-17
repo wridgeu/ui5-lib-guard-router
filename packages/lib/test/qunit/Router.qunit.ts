@@ -2582,7 +2582,7 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
 });
 
-QUnit.test("Redirect to nonexistent route does not strand settlement callers", async function (assert: Assert) {
+QUnit.test("Redirect to nonexistent route settles as blocked", async function (assert: Assert) {
 	router.addGuard((context: GuardContext) => {
 		if (context.toRoute === "home") {
 			return "nonExistentRoute";
@@ -2592,14 +2592,11 @@ QUnit.test("Redirect to nonexistent route does not strand settlement callers", a
 	router.initialize();
 
 	const result = await router.navigationSettled();
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Redirected,
-		"Settlement resolves with Redirected (not stranded)",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed redirect settles as blocked");
+	assert.strictEqual(result.route, "", "Route reflects where the router stayed");
 });
 
-QUnit.test("Async redirect to nonexistent route does not strand pending resolvers", async function (assert: Assert) {
+QUnit.test("Async redirect to nonexistent route settles as blocked", async function (assert: Assert) {
 	router.addRouteGuard("protected", async () => {
 		await nextTick(10);
 		return "nonExistentRoute";
@@ -2609,11 +2606,8 @@ QUnit.test("Async redirect to nonexistent route does not strand pending resolver
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Redirected,
-		"Pending resolver is flushed even when async redirect target does not exist",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed async redirect settles as blocked");
+	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
 });
 
 QUnit.test("Blocked navigation does not fire patternMatched on target route", async function (assert: Assert) {
