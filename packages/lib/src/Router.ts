@@ -145,7 +145,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (guard.beforeLeave !== undefined) {
 				hasHandler = true;
 				if (typeof guard.beforeLeave !== "function") {
-					Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 				} else {
 					addToGuardMap(this._leaveGuards, routeName, guard.beforeLeave);
 				}
