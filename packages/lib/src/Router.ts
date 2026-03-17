@@ -1,7 +1,6 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
-import "./library";
 import type {
 	GuardFn,
 	GuardContext,
