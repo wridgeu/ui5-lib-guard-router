@@ -2522,6 +2522,27 @@ QUnit.test("Resolves with 'cancelled' when stop() is called during async guard",
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "stop() cancels pending navigation");
 });
 
+QUnit.test("Cancelled settlement sees an already-aborted signal", async function (assert: Assert) {
+	let capturedSignal: AbortSignal | null = null;
+	router.addRouteGuard("protected", async (context: GuardContext) => {
+		capturedSignal = context.signal;
+		await nextTick(200);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+	await nextTick(10);
+	router.navTo("forbidden");
+
+	const result = await settledPromise;
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Navigation was cancelled");
+	assert.ok(capturedSignal, "Signal was captured");
+	assert.ok(capturedSignal!.aborted, "Signal is already aborted when Cancelled settlement resolves");
+});
+
 QUnit.test("Idle call after Blocked replays Blocked status", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
@@ -2559,6 +2580,40 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	const second = await router.navigationSettled();
 	assert.strictEqual(second.status, NavigationOutcome.Cancelled, "Idle replay returns Cancelled");
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
+});
+
+QUnit.test("Redirect to nonexistent route does not strand settlement callers", async function (assert: Assert) {
+	router.addGuard((context: GuardContext) => {
+		if (context.toRoute === "home") {
+			return "nonExistentRoute";
+		}
+		return true;
+	});
+	router.initialize();
+
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Redirected,
+		"Settlement resolves with Redirected (not stranded)",
+	);
+});
+
+QUnit.test("Async redirect to nonexistent route does not strand pending resolvers", async function (assert: Assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(10);
+		return "nonExistentRoute";
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Redirected,
+		"Pending resolver is flushed even when async redirect target does not exist",
+	);
 });
 
 QUnit.test("Blocked navigation does not fire patternMatched on target route", async function (assert: Assert) {
