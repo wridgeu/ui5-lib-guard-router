@@ -5,8 +5,14 @@ import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard
 const LOG_COMPONENT = "demo.app.guards";
 
 /**
+ * Guard factories actively registered by the demo runtime.
+ *
+ * See `Component.ts` and `controller/Home.controller.ts` for the wiring.
+ */
+
+/**
  * Global navigation logger guard.
- * Demonstrates global guard pattern - runs for every navigation.
+ * Demonstrates the global guard pattern: runs for every navigation.
  * Always returns true (allows navigation) but logs the transition.
  *
  * Note: Uses Log.info() which may be filtered in browser console by default.
@@ -22,31 +28,14 @@ export function createNavigationLogger(): GuardFn {
 }
 
 /**
- * Guard that requires the user to be logged in.
- * Redirects to "home" if not authenticated.
- *
- * **Reference implementation** - demonstrates a synchronous auth guard.
- * The demo app uses the async variant {@link createAsyncPermissionGuard} instead.
- *
- * Handles edge case where model property might be undefined (e.g., model not yet loaded).
- */
-export function createAuthGuard(authModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		const isLoggedIn = authModel.getProperty("/isLoggedIn");
-		// Explicitly check for true to handle undefined/null cases safely
-		if (isLoggedIn !== true) {
-			Log.info(`Auth guard blocked navigation to "${context.toRoute}"`, "", LOG_COMPONENT);
-			return "home";
-		}
-		return true;
-	};
-}
-
-/**
  * Async guard that simulates checking permissions via an API.
  * Demonstrates:
  * - Async guard returning a Promise
  * - Using AbortSignal to cancel pending work when navigation is superseded
+ *
+ * This is the auth guard variant wired by `Component.ts` in the runnable demo.
+ * For the synchronous equivalent used in the library README examples, see
+ * {@link createAuthGuard} in the reference section below.
  *
  * @param authModel - Model containing auth state
  * @param simulatedDelayMs - Simulated API delay in milliseconds (default: 50)
@@ -92,32 +81,9 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 
 /**
  * Guard that always blocks navigation and redirects to "home".
- * Demonstrates simple redirect guard.
+ * Demonstrates the simplest redirect guard shape.
  */
 export const forbiddenGuard: GuardFn = () => "home";
-
-/**
- * Guard that demonstrates redirect with route parameters.
- * Redirects to a route while preserving/transforming parameters.
- *
- * **Reference implementation** - not used in the demo app as it requires
- * routes with parameters. See documentation for usage examples.
- *
- * @example
- * // Redirect from "old-detail/{id}" to "detail/{id}" preserving the id
- * router.addRouteGuard("old-detail", createRedirectWithParamsGuard("detail"));
- *
- * @param targetRoute - The route to redirect to
- */
-export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		Log.info(`Redirecting from "${context.toRoute}" to "${targetRoute}" with params`, "", LOG_COMPONENT);
-		return {
-			route: targetRoute,
-			parameters: context.toArguments,
-		};
-	};
-}
 
 /**
  * Leave guard that blocks navigation when a form has unsaved changes.
@@ -162,9 +128,62 @@ export function createHomeLeaveLogger(): LeaveGuardFn {
 }
 
 /**
+ * Reference-only guard factories.
+ *
+ * These stay in the same file for discoverability, but they are not registered
+ * by the runnable demo application. The library README points to these exports
+ * when its examples match one-to-one with demo code.
+ */
+
+/**
+ * Guard that requires the user to be logged in.
+ * Redirects to "home" if not authenticated.
+ *
+ * Reference implementation: demonstrates a synchronous auth guard.
+ * The runnable demo uses the async variant {@link createAsyncPermissionGuard}
+ * instead.
+ *
+ * Handles edge case where model property might be undefined
+ * (for example, model not yet loaded).
+ */
+export function createAuthGuard(authModel: JSONModel): GuardFn {
+	return (context: GuardContext): GuardResult => {
+		const isLoggedIn = authModel.getProperty("/isLoggedIn");
+		if (isLoggedIn !== true) {
+			Log.info(`Auth guard blocked navigation to "${context.toRoute}"`, "", LOG_COMPONENT);
+			return "home";
+		}
+		return true;
+	};
+}
+
+/**
+ * Guard that demonstrates redirect with route parameters.
+ * Redirects to a route while preserving or transforming parameters.
+ *
+ * Reference implementation: not used in the runnable demo because the demo
+ * routes have no parameters.
+ *
+ * @example
+ * // Redirect from "old-detail/{id}" to "detail/{id}" preserving the id
+ * router.addRouteGuard("old-detail", createRedirectWithParamsGuard("detail"));
+ *
+ * @param targetRoute - The route to redirect to
+ */
+export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
+	return (context: GuardContext): GuardResult => {
+		Log.info(`Redirecting from "${context.toRoute}" to "${targetRoute}" with params`, "", LOG_COMPONENT);
+		return {
+			route: targetRoute,
+			parameters: context.toArguments,
+		};
+	};
+}
+
+/**
  * Guard that demonstrates error handling behavior.
  *
- * **Reference implementation** - not used in the demo app. Shows how guard
+ * Reference implementation: not used in the runnable demo. Shows how guard
  * errors are handled by the router:
  * 1. Logs the error via sap/base/Log.error()
  * 2. Blocks the navigation (treats as if guard returned false)
@@ -194,7 +213,7 @@ export function createErrorDemoGuard(errorModel: JSONModel): GuardFn {
 /**
  * Async version of error demo guard - demonstrates rejected Promise handling.
  *
- * **Reference implementation** - not used in the demo app. Shows how async
+ * Reference implementation: not used in the runnable demo. Shows how async
  * guard errors (rejected Promises) are handled identically to sync errors.
  *
  * @example
