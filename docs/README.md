@@ -12,6 +12,7 @@ This directory groups the repository's longer-form documentation by intent.
     - [Native NavContainer navigate event](./research/native-router-navigate-event.md)
     - [Beforeunload and Navigation API](./research/beforeunload-navigation-api-2026.md)
     - [Stale closure invalidation patterns](./research/stale-closure-invalidation-patterns.md)
+    - [Library loading order](./research/library-loading-order.md)
     - [View caching and controller lifecycle](./research/view-caching-controller-lifecycle.md)
 - [Explorations](./explorations/README.md)
     - Alternative approaches and extension ideas evaluated during development
