@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/ui5-lib-guard-router"><img src="https://img.shields.io/npm/v/ui5-lib-guard-router.svg" alt="npm"></a>
-  <a href="https://npmx.dev/package/ui5-lib-guard-router"><img src="https://img.shields.io/badge/npmx.dev-browse-CB3837.svg" alt="npmx"></a>
+  <a href="https://npmx.dev/package/ui5-lib-guard-router"><img src="https://img.shields.io/npm/v/ui5-lib-guard-router?label=npmx.dev" alt="npmx"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
   <a href="https://openui5.org/"><img src="https://img.shields.io/badge/OpenUI5-1.144.0-green.svg" alt="UI5"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-blue.svg" alt="TypeScript"></a>
