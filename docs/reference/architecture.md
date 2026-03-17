@@ -134,6 +134,11 @@ GuardRouter (public interface)      Router (ES6 class)
 Only strict `true` allows navigation. Truthy non-boolean values (numbers, objects, etc.)
 are treated as blocks. This prevents accidental allow from coercion.
 
+`NavigationOutcome` is registered as a UI5 enum in `library.ts` via `DataType.registerEnum`.
+The manifest dependency chain guarantees `library.ts` executes before `Router.ts` is loaded,
+so `Router.ts` does not need to import `library.ts`. See [Library Loading Order Research](../research/library-loading-order.md)
+for the full analysis of the Component bootstrap sequence.
+
 The Router is an ES6 class that extends `sap.m.routing.Router` and implements the
 `GuardRouter` interface. Application code casts `getRouter()` to `GuardRouter` for
 type-safe access to the guard management methods. Internal state and methods live

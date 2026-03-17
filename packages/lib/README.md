@@ -287,8 +287,17 @@ router.addRouteGuard("dashboard", async (context) => {
 // Show a global busy while the guard pipeline runs
 router.navTo("dashboard");
 const result = await router.navigationSettled();
-if (result.status === NavigationOutcome.Blocked) {
-	MessageToast.show("Access denied");
+switch (result.status) {
+	case NavigationOutcome.Committed:
+		break; // navigation succeeded
+	case NavigationOutcome.Blocked:
+		MessageToast.show("Access denied");
+		break;
+	case NavigationOutcome.Redirected:
+		MessageToast.show(`Redirected to ${result.route}`);
+		break;
+	case NavigationOutcome.Cancelled:
+		break; // superseded by a newer navigation
 }
 ```
 
