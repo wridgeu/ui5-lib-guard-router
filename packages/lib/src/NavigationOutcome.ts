@@ -10,13 +10,13 @@
  */
 const NavigationOutcome = Object.freeze({
 	/** Navigation was allowed and the target route activated. */
-	Committed: "committed" as const,
+	Committed: "committed",
 	/** A guard blocked navigation; the previous route remains active. */
-	Blocked: "blocked" as const,
+	Blocked: "blocked",
 	/** A guard redirected navigation to a different route. */
-	Redirected: "redirected" as const,
+	Redirected: "redirected",
 	/** Navigation was cancelled before settling (superseded, stopped, or destroyed). */
-	Cancelled: "cancelled" as const,
+	Cancelled: "cancelled",
 });
 
 type NavigationOutcome = (typeof NavigationOutcome)[keyof typeof NavigationOutcome];
