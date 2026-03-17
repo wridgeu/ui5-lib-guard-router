@@ -1,6 +1,5 @@
 import DataType from "sap/ui/base/DataType";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import "ui5/guard/router/library";
 import type {
 	GuardContext,
 	GuardFn,
