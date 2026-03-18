@@ -151,7 +151,8 @@ npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/
 ### Tests
 
 ```bash
-npm test              # run all tests (QUnit + E2E, sequentially)
+npm test              # run the default local subset (QUnit + standalone E2E)
+npm run test:full     # run the full browser matrix (default + compat + FLP)
 npm run test:qunit    # unit tests only
 npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
 npm run test:e2e      # integration tests only
@@ -200,7 +201,7 @@ Short maintainer conventions:
 - Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
 - Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
 - If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
-- For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run lint`, `npm run typecheck`, `npm run test:qunit`, `npm run test:qunit:compat:120`, `npm run test:e2e`, `npm run test:e2e:flp`, and `npm run pack:check`.
+- For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
 | File                            | Purpose                                                                                                  |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- |

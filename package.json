@@ -34,6 +34,7 @@
 		"wdio:e2e": "wdio run packages/demo-app/test/wdio.conf.ts",
 		"wdio:e2e:flp": "wdio run packages/demo-app/test/wdio-flp.conf.ts",
 		"test": "npm run test:qunit && npm run test:e2e",
+		"test:full": "npm run test:qunit && npm run test:qunit:compat:120 && npm run test:e2e && npm run test:e2e:flp",
 		"test:qunit": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit",
 		"test:qunit:compat:120": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8082 --server-script start:lib:compat:120:test --test-script wdio:qunit --test-base-url http://localhost:8082",
 		"test:e2e": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8081 --server-script serve:demo:test --test-script wdio:e2e --test-base-url http://localhost:8081/index.html",
