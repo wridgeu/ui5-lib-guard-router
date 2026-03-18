@@ -103,6 +103,33 @@ jobs:
             - name: Run FLP preview smoke tests
               run: npm run test:e2e:flp
 
+    upstream-parity:
+        needs: validate
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: Cache UI5 framework resources
+              uses: actions/cache@v4
+              with:
+                  path: ~/.ui5
+                  key: ui5-upstream-parity-${{ hashFiles('packages/*/ui5*.yaml') }}
+                  restore-keys: ui5-upstream-parity-
+
+            - run: npm ci
+
+            - name: Verify vendored OpenUI5 router files
+              run: npm run verify:openui5-router-vendor
+
+            - name: Run vendored upstream parity QUnit suite
+              run: npm run test:qunit:upstream-parity
+
     compatibility-ui5-120:
         needs: validate
         runs-on: ubuntu-latest

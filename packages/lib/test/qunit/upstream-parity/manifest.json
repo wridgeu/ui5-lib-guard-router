@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"upstream": {
+		"repo": "UI5/openui5",
+		"tag": "1.144.0",
+		"commitSha": "3ee7b61446490b20e4ab95bb33404a520761daf5"
+	},
+	"files": [
+		{
+			"id": "sap.m.routing.Router.async.Router.qunit.js",
+			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
+			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
+			"portFilePath": "packages/lib/test/qunit/upstream-parity/ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts",
+			"status": "ported-subset",
+			"adaptations": [
+				"Executes selected router parity cases through the local adapter harness while keeping the raw upstream file untouched."
+			]
+		},
+		{
+			"id": "sap.m.routing.async.helpers.js",
+			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/helpers.js",
+			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/helpers.js",
+			"portFilePath": null,
+			"status": "support-file",
+			"adaptations": []
+		},
+		{
+			"id": "sap.m.routing.async.commonIntegrationTests.js",
+			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/commonIntegrationTests.js",
+			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/commonIntegrationTests.js",
+			"portFilePath": null,
+			"status": "support-file",
+			"adaptations": []
+		}
+	]
+}

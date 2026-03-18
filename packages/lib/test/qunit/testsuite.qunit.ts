@@ -32,5 +32,8 @@ export default {
 		NativeRouterCompat: {
 			title: "QUnit Tests for Native Router Compatibility",
 		},
+		UpstreamParity: {
+			title: "QUnit Tests for Vendored OpenUI5 Router Parity",
+		},
 	},
 };

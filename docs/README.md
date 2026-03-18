@@ -7,6 +7,7 @@ This directory groups the repository's longer-form documentation by intent.
 - [Reference](./reference/)
     - [Architecture](./reference/architecture.md)
     - [Problem analysis](./reference/analysis.md)
+    - [Upstream parity](./reference/upstream-parity.md)
 - [Guides](./guides/)
     - [Migration from attachPatternMatched](./guides/migration-from-pattern-matched.md)
     - [Guard integration patterns](./guides/integration-patterns.md)
@@ -21,6 +22,7 @@ This directory groups the repository's longer-form documentation by intent.
     - Alternative approaches and extension ideas evaluated during development
 - [Feature notes](./features/README.md)
     - Shipped capabilities, historical design notes, and follow-up proposals for `ui5.guard.router.Router`
+    - [Vendored OpenUI5 router parity suite](./features/07-vendored-openui5-router-parity.md)
 
 ## Notes
 
