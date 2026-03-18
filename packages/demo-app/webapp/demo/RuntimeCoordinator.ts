@@ -1,4 +1,5 @@
 import JSONModel from "sap/ui/model/json/JSONModel";
+import type { NavigationResult } from "ui5/guard/router/types";
 import type { GuardRouter } from "ui5/guard/router/types";
 import { registerDirtyStateProvider } from "../flp/ContainerAdapter";
 import { setSettlementResult, syncRuntimeModel } from "../model/runtime";
@@ -23,7 +24,9 @@ export default class RuntimeCoordinator {
 
 	private _router: GuardRouter | null = null;
 
-	private _settlementRequestId = 0;
+	private _pollTimer: ReturnType<typeof setInterval> | null = null;
+
+	private _lastCapturedResult: NavigationResult | null = null;
 
 	constructor(runtimeModel: JSONModel, formModel: JSONModel) {
 		this._runtimeModel = runtimeModel;
@@ -35,16 +38,27 @@ export default class RuntimeCoordinator {
 
 		this._detachHashChanged = attachHashChanged(() => {
 			this.sync();
-			this.captureSettlement();
 		});
+
+		// Poll at 200ms to capture navigation settlements for the demo UI
+		// and E2E test assertions. navigationSettled() is a one-shot query,
+		// not a subscription stream, so periodic checking is the only way
+		// to observe all outcomes (leave-guard-blocked navTo calls do not
+		// fire hashChanged or reach enter guards). The identity check on
+		// _lastCapturedResult prevents model mutations when idle.
+		this._pollTimer = setInterval(() => this.captureSettlement(), 200);
 
 		this.sync();
 		this.captureSettlement();
 	}
 
 	destroy(): void {
-		this._settlementRequestId++;
 		this._router = null;
+
+		if (this._pollTimer !== null) {
+			clearInterval(this._pollTimer);
+			this._pollTimer = null;
+		}
 
 		this._detachHashChanged?.();
 		this._detachHashChanged = null;
@@ -67,14 +81,13 @@ export default class RuntimeCoordinator {
 			return;
 		}
 
-		const requestId = ++this._settlementRequestId;
-
 		void router.navigationSettled().then((result) => {
-			if (requestId !== this._settlementRequestId) {
-				return;
-			}
+			if (!this._router) return;
 
-			setSettlementResult(this._runtimeModel, result);
+			if (result !== this._lastCapturedResult) {
+				this._lastCapturedResult = result;
+				setSettlementResult(this._runtimeModel, result);
+			}
 		});
 	}
 }

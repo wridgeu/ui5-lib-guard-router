@@ -21,10 +21,15 @@ export interface GuardRedirect {
  * non-boolean values) block or redirect. This avoids accidental allow from
  * falsy/truthy coercion.
  *
- * - `true`            -> allow navigation to proceed
- * - `false`           -> block navigation (stay on current route, no history entry)
- * - `string`          -> redirect to this route name (replaceHash, no history entry)
- * - `GuardRedirect`   -> redirect with route name, parameters, and optional component target info
+ * - `true` -- Allow navigation to proceed.
+ * - `false` -- Block navigation. For programmatic `navTo()`, no hash change
+ *   or history entry occurs. For browser-initiated navigation (back/forward,
+ *   URL bar), the hash is restored via `replaceHash()` (best-effort repair).
+ * - `string` -- Redirect to this route name. For programmatic `navTo()`,
+ *   navigation goes directly to the target with no intermediate history entry.
+ *   For browser-initiated navigation, the redirect replaces the current entry.
+ * - `GuardRedirect` -- Redirect with route name, parameters, and optional
+ *   component target info. Same history semantics as string redirect.
  */
 export type GuardResult = boolean | string | GuardRedirect;
 

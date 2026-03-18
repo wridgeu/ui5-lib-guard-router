@@ -164,7 +164,9 @@ A routing solution that:
 - Does **not** catch direct URL/hash changes (user typing in address bar)
 - Would need additional HashChanger listeners to cover all entry points, creating complexity and potential race conditions
 
-**Verdict**: Rejected. Incomplete coverage of navigation entry points.
+**Verdict**: Rejected as a standalone approach. Incomplete coverage of navigation entry points.
+
+The navTo override concept was later adopted as one half of a two-entry-point design: navTo() preflight + parse() fallback. See [architecture.md](architecture.md).
 
 ### 2.3 Override `parse()` (Chosen Approach)
 
@@ -362,10 +364,6 @@ No application logic changes needed beyond the guard definitions themselves.
 ---
 
 ## 4. Test Coverage
-
-> **Note:** Test counts are illustrative and may drift as tests are added.
-> Run `npm test` for the authoritative count.
-> The QUnit reporter prints per-module totals at the end of each run.
 
 | Category                       | Count | What's Tested                                                                                                             |
 | ------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------- |

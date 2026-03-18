@@ -21,6 +21,7 @@ import {
 	GuardRouterClass,
 	initHashChanger,
 	nextTick,
+	getHash,
 	removeGuardUnsafe,
 	removeLeaveGuardUnsafe,
 	removeRouteGuardUnsafe,
@@ -1423,9 +1424,12 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 	// Navigate to protected (triggers slow async guard)
 	router.navTo("protected");
 
-	// While guard is pending, trigger same-hash parse (user pressed back to home)
+	// While guard is pending, navigate back to home (same-hash dedup cancels preflight).
+	// With navTo preflight, the hash never changed to "protected", so
+	// HashChanger.setHash("") would be a no-op. Use navTo("home") to
+	// exercise the same-hash dedup in the navTo override.
 	await nextTick(10);
-	HashChanger.getInstance().setHash("");
+	router.navTo("home");
 
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Navigation was cancelled");
@@ -1644,8 +1648,11 @@ QUnit.test("Signal is aborted when navigating back to current route", async func
 	await nextTick(10);
 	assert.ok(capturedSignal, "Signal was captured");
 
-	// Navigate back to current route while guard is pending
-	HashChanger.getInstance().setHash("");
+	// Navigate back to current route while guard is pending.
+	// With navTo preflight, the hash never changed to "protected", so
+	// HashChanger.setHash("") would be a no-op. Use navTo("home") to
+	// exercise the same-hash dedup.
+	router.navTo("home");
 	assert.ok(capturedSignal!.aborted, "Signal was aborted when returning to current route");
 });
 
@@ -2835,8 +2842,10 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	router.navTo("protected");
 	const settledPromise = router.navigationSettled();
 
-	// Navigate back to current hash -- cancels without starting a new pipeline
-	HashChanger.getInstance().setHash("");
+	// Navigate back to current hash -- cancels without starting a new pipeline.
+	// With navTo preflight, the hash never changed, so use navTo("home") for
+	// same-hash dedup cancellation.
+	router.navTo("home");
 
 	const first = await settledPromise;
 	assert.strictEqual(first.status, NavigationOutcome.Cancelled, "Pending nav was cancelled");
@@ -2873,7 +2882,11 @@ QUnit.test("Async redirect to nonexistent route settles as blocked", async funct
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed async redirect settles as blocked");
 	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"",
+		"Browser hash unchanged (preflight blocked before hash update)",
+	);
 });
 
 QUnit.test("GuardRedirect object to nonexistent route settles as blocked", async function (assert: Assert) {
@@ -2910,7 +2923,7 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 // ============================================================
 QUnit.module("Router - Restore and settlement invariants", standardHooks);
 
-QUnit.test("Blocked navigation restores hash through a single suppressed parse cycle", async function (assert: Assert) {
+QUnit.test("Blocked setHash restores hash through a single suppressed parse cycle", async function (assert: Assert) {
 	let guardCalls = 0;
 	let matched = false;
 
@@ -2927,7 +2940,10 @@ QUnit.test("Blocked navigation restores hash through a single suppressed parse c
 	});
 
 	try {
-		router.navTo("protected");
+		// Use setHash to go through the parse() path where the hash actually
+		// changes before guards run. This exercises _restoreHash and the
+		// suppressed parse cycle that undoes the hash change.
+		HashChanger.getInstance().setHash("protected");
 		const result = await router.navigationSettled();
 		await nextTick();
 
@@ -3196,4 +3212,378 @@ QUnit.test("Redirect target's own guard is bypassed by _redirecting flag", async
 		"Redirect committed despite target's blocking guard",
 	);
 	assert.strictEqual(result.route, "forbidden", "Landed on forbidden (guard was bypassed)");
+});
+
+QUnit.module("Router - navTo preflight", standardHooks);
+
+QUnit.test("blocked programmatic navTo does not change the hash", function (assert) {
+	router.addGuard(() => false);
+	router.initialize();
+
+	const hashBefore = getHash();
+	router.navTo("protected");
+
+	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after blocked navTo");
+});
+
+QUnit.test("blocked programmatic navTo settles as Blocked", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Settlement is Blocked");
+	assert.strictEqual(result.route, "home", "Route stays on home");
+});
+
+QUnit.test("redirected programmatic navTo does not create intermediate hash", function (assert) {
+	router.addRouteGuard("protected", () => "home");
+	router.initialize();
+
+	const hashBefore = getHash();
+	router.navTo("protected");
+
+	assert.strictEqual(getHash(), hashBefore, "Hash did not visit intermediate protected route");
+});
+
+QUnit.test("redirected programmatic navTo settles as Redirected", async function (assert) {
+	router.addRouteGuard("protected", () => "home");
+	router.initialize();
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Settlement is Redirected");
+	assert.strictEqual(result.route, "home", "Route is home after redirect");
+});
+
+QUnit.test("allowed programmatic navTo is not double-guarded in parse", async function (assert) {
+	let guardCallCount = 0;
+	router.addGuard(() => {
+		guardCallCount++;
+		return true;
+	});
+	router.initialize();
+	guardCallCount = 0; // reset after initialize fires parse
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(guardCallCount, 1, "Guard ran exactly once, not in both navTo and parse");
+});
+
+QUnit.test("async blocked programmatic navTo does not change the hash", async function (assert) {
+	router.addGuard(() => Promise.resolve(false));
+	router.initialize();
+
+	const hashBefore = getHash();
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after async blocked navTo");
+});
+
+QUnit.test("async redirected programmatic navTo settles as Redirected", async function (assert) {
+	router.addRouteGuard("protected", () => Promise.resolve("home"));
+	router.initialize();
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Settlement is Redirected");
+	assert.strictEqual(result.route, "home", "Route is home after async redirect");
+});
+
+QUnit.test(
+	"same-hash redirect via navTo forwards componentTargetInfo without rematching the top-level route",
+	async function (assert) {
+		const expectedCTI = { detail: { route: "sub", parameters: { subId: "x" } } };
+		const calls: unknown[][] = [];
+		const originalNavTo = Reflect.get(router, "navTo") as (...args: unknown[]) => unknown;
+		let homePatternMatched = 0;
+
+		router.getRoute("home")!.attachPatternMatched(() => {
+			homePatternMatched++;
+		});
+
+		Reflect.set(router, "navTo", function (this: unknown, ...args: unknown[]) {
+			calls.push(args);
+			if (args[0] === "home") {
+				return router;
+			}
+			return Reflect.apply(originalNavTo, this, args);
+		});
+
+		try {
+			router.addRouteGuard(
+				"forbidden",
+				(): GuardRedirect => ({
+					route: "home",
+					componentTargetInfo: expectedCTI,
+				}),
+			);
+			router.initialize();
+			await waitForRoute(router, "home");
+			calls.length = 0;
+			homePatternMatched = 0;
+
+			const homeMatched = waitForRoute(router, "home");
+			router.navTo("forbidden");
+			await homeMatched;
+			const result = await router.navigationSettled();
+
+			assert.strictEqual(result.status, NavigationOutcome.Redirected, "Settlement is Redirected");
+			assert.ok(calls.length >= 2, "navTo called at least twice (trigger + redirect)");
+			const redirectCall = calls[calls.length - 1];
+			assert.strictEqual(redirectCall[0], "home", "Redirect targeted the current top-level route");
+			assert.deepEqual(redirectCall[2], expectedCTI, "componentTargetInfo forwarded on same-hash redirect");
+			assert.strictEqual(homePatternMatched, 1, "Top-level route was re-matched once for the redirect");
+		} finally {
+			Reflect.set(router, "navTo", originalNavTo);
+		}
+	},
+);
+
+QUnit.test("navTo with replace=true works through preflight with guards", async function (assert) {
+	let guardCallCount = 0;
+	router.addGuard(() => {
+		guardCallCount++;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	guardCallCount = 0;
+
+	// Navigate to protected first (creates history entry)
+	router.navTo("protected");
+	await router.navigationSettled();
+	assert.strictEqual(getHash(), "protected", "Navigated to protected");
+	assert.strictEqual(guardCallCount, 1, "Guard ran for first navigation");
+
+	// Navigate with replace=true (3-arg overload)
+	router.navTo("forbidden", {}, true);
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
+	assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
+	assert.strictEqual(guardCallCount, 2, "Guard ran for replace navigation");
+});
+
+QUnit.test("navTo with replace=true works through preflight (4-arg overload)", async function (assert) {
+	router.addGuard(() => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	// Navigate with replace=true (4-arg overload)
+	router.navTo("forbidden", {}, {}, true);
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
+	assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
+});
+
+QUnit.test("navTo returns this for chaining", function (assert) {
+	router.initialize();
+	const result = router.navTo("home");
+	assert.strictEqual(result, router, "navTo returns this");
+});
+
+QUnit.test("navTo to unknown route falls through to parent without error", function (assert) {
+	router.initialize();
+
+	// Unknown routes bypass preflight and delegate to super.navTo().
+	// UI5 sets the hash to "" for unknown routes, which triggers same-hash
+	// dedup in parse(). The router does not throw.
+	router.navTo("nonexistent");
+	assert.ok(true, "navTo to unknown route did not throw");
+});
+
+QUnit.test("async preflight superseded by second navTo cancels first", async function (assert) {
+	let resolveGuard!: (value: boolean) => void;
+	router.addGuard(
+		() =>
+			new Promise<boolean>((r) => {
+				resolveGuard = r;
+			}),
+	);
+	router.initialize();
+
+	router.navTo("protected"); // starts async preflight
+	const settled = router.navigationSettled();
+	router.navTo("forbidden"); // supersedes first
+
+	resolveGuard(true); // resolves the second guard (shared variable was overwritten by navTo("forbidden"))
+
+	const result = await settled;
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "First navigation cancelled");
+});
+
+QUnit.test("duplicate navTo to same pending hash is a no-op", async function (assert) {
+	let guardCallCount = 0;
+	router.addGuard(() => {
+		guardCallCount++;
+		return new Promise<boolean>((r) => setTimeout(() => r(true), 20));
+	});
+	router.initialize();
+	guardCallCount = 0;
+
+	router.navTo("protected");
+	router.navTo("protected"); // same hash, should be deduped
+	await router.navigationSettled();
+
+	assert.strictEqual(guardCallCount, 1, "Guard ran only once despite duplicate navTo");
+});
+
+// _restoreHash pairs: same guard scenario, setHash (parse path) vs navTo (preflight).
+// Parse path: hash already changed, _restoreHash needed to undo it.
+// Preflight: hash never changed, _restoreHash must be skipped.
+
+QUnit.test("blocked via setHash calls _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		HashChanger.getInstance().setHash("protected");
+		await router.navigationSettled();
+		assert.strictEqual(restoreSpy.callCount, 1, "_restoreHash called to undo hash change");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("blocked via navTo does not call _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		await router.navigationSettled();
+		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("rejected async guard via navTo does not call _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => Promise.reject(new Error("guard error")));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const hashBefore = getHash();
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Rejected guard settles as Blocked");
+		assert.strictEqual(getHash(), hashBefore, "Hash unchanged after rejected async preflight guard");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test(
+	"external hash change to same pending hash during async preflight restores hash on block",
+	async function (assert) {
+		let resolveGuard!: (value: boolean) => void;
+		router.addRouteGuard(
+			"protected",
+			() =>
+				new Promise<boolean>((r) => {
+					resolveGuard = r;
+				}),
+		);
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		const hashBefore = getHash();
+		router.navTo("protected"); // async preflight, hash unchanged
+
+		// Simulate external navigation to the same hash (URL bar, bookmark, etc.)
+		// while the async preflight is still pending. parse() must not silently
+		// drop this; it should cancel the preflight and take over.
+		HashChanger.getInstance().setHash("protected");
+
+		// Now block the guard.
+		resolveGuard(false);
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation blocked");
+		assert.strictEqual(getHash(), hashBefore, "Hash restored after block - browser URL matches router state");
+	},
+);
+
+QUnit.test("setHash during async preflight supersedes the preflight", async function (assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(200);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const settledPromise = router.navigationSettled();
+
+	// Browser back / direct hash change while async preflight is pending.
+	// parse() bumps the generation counter, cancelling the preflight.
+	await nextTick(10);
+	HashChanger.getInstance().setHash("forbidden");
+
+	const result = await settledPromise;
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Preflight cancelled by parse");
+
+	// The parse-driven navigation should proceed normally.
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(getHash(), "forbidden", "parse-driven navigation committed");
+});
+
+QUnit.test("redirect to nonexistent via setHash calls _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => "nonExistentRoute");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		HashChanger.getInstance().setHash("protected");
+		await router.navigationSettled();
+		assert.ok(restoreSpy.callCount >= 1, "_restoreHash called to undo hash change");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("redirect to nonexistent via navTo does not call _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => "nonExistentRoute");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		await router.navigationSettled();
+		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("async redirect to nonexistent via navTo does not call _restoreHash", async function (assert) {
+	router.addRouteGuard("protected", () => Promise.resolve("nonExistentRoute" as const));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		await router.navigationSettled();
+		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
+	} finally {
+		restoreSpy.restore();
+	}
 });
