@@ -601,11 +601,13 @@ import Log from "sap/base/Log";
 Log.setLevel(Log.Level.DEBUG, "ui5.guard.router.Router");
 ```
 
-Or via URL parameter:
+Or set the global log level via URL parameter (per-component filtering is only available through the programmatic API above):
 
 ```
-?sap-ui-log-level=ui5.guard.router.Router=DEBUG
+?sap-ui-log-level=DEBUG
 ```
+
+> **Note**: UI5 1.120+ uses kebab-case URL parameters (`sap-ui-log-level`). Older versions use camelCase (`sap-ui-logLevel`).
 
 ### Log reference
 

@@ -190,11 +190,14 @@ Reference: `Component.ts` guard registration.
 
 ## Settlement for UI feedback
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The result contains `status` (`Committed`, `Blocked`, `Redirected`, `Bypassed`, `Cancelled`), `route`, and `hash`.
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The result contains `status` (a `NavigationOutcome` enum value), `route`, and `hash`.
 
 ```typescript
-const result = await router.navigationSettled();
-if (result.status === "Blocked") {
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+import type { NavigationResult } from "ui5/guard/router/types";
+
+const result: NavigationResult = await router.navigationSettled();
+if (result.status === NavigationOutcome.Blocked) {
 	MessageToast.show("Navigation was blocked by a guard.");
 }
 ```
