@@ -29,7 +29,7 @@ This document explores how to bring this concept to UI5.
 
 ---
 
-## Current State vs. Desired State
+## Guard Returns vs. Transition Object
 
 ### Current: Guard Returns
 

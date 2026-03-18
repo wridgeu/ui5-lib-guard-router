@@ -1,4 +1,4 @@
-# Analysis: Fully Async Router Rewrite
+# Analysis: Async Guard Support vs Fully Async Router Rewrite
 
 ## Context: OpenUI5 Issue #3411
 
@@ -42,11 +42,11 @@ As of October 2024, no solution has been implemented. The community workarounds 
 - Monkey-patching `HashChanger` or `CrossApplicationNavigation` (fragile, bad practice)
 - Hard redirect via `URLHelper.redirect()` (full page reload, loses state)
 
-### What This Library Already Solves
+### What a `parse()` Override Already Provides
 
-Our `parse()` override is the exact solution the UI5 team has been looking for:
+A `parse()` override satisfies the same core requirements:
 
-| UI5 Team's Requirements                   | Our Library's Answer                                   |
+| UI5 Team's Requirements                   | `parse()` Override Approach                            |
 | ----------------------------------------- | ------------------------------------------------------ |
 | Must intercept **before** target loading  | `parse()` runs before `MobileRouter.prototype.parse()` |
 | Must support async checks (backend calls) | Async guards with Promise return                       |
@@ -104,7 +104,7 @@ There's a spectrum. Each level includes the previous:
 
 ---
 
-#### Level 1: Async Guard Hook (What Our Library Does Today)
+#### Level 1: Async Guard Hook on a Router Subclass
 
 **Scope**: Override `parse()` on a subclass, run guards before calling `super.parse()`.
 
@@ -169,10 +169,9 @@ not the code; it's the backward compatibility guarantee and test tool updates.
 and deeply entrenched. Inserting an async gap requires either:
 
 - (a) Always deferring `crossroads.parse()` to a microtask (breaks sync contract), or
-- (b) Using our library's dual-path approach (sync when possible, async when needed)
+- (b) Using a dual-path approach (sync when possible, async when needed)
 
-Option (b) is what our library proves works. The UI5 team may not have considered it because
-the dual-path pattern is unusual, and most framework authors default to "just make it all async."
+Option (b) preserves UI5's synchronous fast path while still supporting async guards.
 
 ---
 
@@ -240,35 +239,35 @@ a full pipeline rewrite.
 
 ### Summary: Level Comparison
 
-| Aspect             | Level 1 (Our Library) | Level 2 (Native Guards) | Level 3 (Full Pipeline)       |
-| ------------------ | --------------------- | ----------------------- | ----------------------------- |
-| Async guards       | Yes                   | Yes                     | Yes                           |
-| Leave guards       | Feature 01            | Possible                | Yes                           |
-| Data loading phase | No                    | No                      | Yes                           |
-| Navigation states  | No                    | No                      | Yes (pending/loading/settled) |
-| AbortSignal        | Feature (additive)    | Possible                | Yes                           |
-| Framework changes  | None                  | 2-3 modules             | 8+ modules                    |
-| Breaking changes   | None                  | Minimal                 | Significant                   |
-| Timeline           | Done                  | Months                  | Quarters/Years                |
-| Who does it        | Us                    | UI5 team                | UI5 team                      |
-| Risk               | Low (subclass)        | Medium                  | Very High                     |
+| Aspect             | Level 1 (Subclass) | Level 2 (Native Guards) | Level 3 (Full Pipeline)       |
+| ------------------ | ------------------ | ----------------------- | ----------------------------- |
+| Async guards       | Yes                | Yes                     | Yes                           |
+| Leave guards       | Feature 01         | Possible                | Yes                           |
+| Data loading phase | No                 | No                      | Yes                           |
+| Navigation states  | No                 | No                      | Yes (pending/loading/settled) |
+| AbortSignal        | Feature (additive) | Possible                | Yes                           |
+| Framework changes  | None               | 2-3 modules             | 8+ modules                    |
+| Breaking changes   | None               | Minimal                 | Significant                   |
+| Timeline           | Available today    | Months                  | Quarters/Years                |
+| Who does it        | App/library code   | UI5 team                | UI5 team                      |
+| Risk               | Low (subclass)     | Medium                  | Very High                     |
 
-### Where Our Library Fits
+### Where the Subclassed Approach Fits
 
-Our library is a complete **Level 1** solution that proves **Level 2** is feasible.
-The dual-path sync/async design is the key insight the UI5 team needs: you don't have to
+A router subclass is a complete **Level 1** solution and shows that **Level 2** is feasible.
+The dual-path sync/async design shows that UI5 does not need to
 make _everything_ async to support async guards. You just need to detect when a guard
 returns a Promise and defer only in that case.
 
-If the UI5 team adopted our approach for Level 2, the migration would be:
+If UI5 adopts the same idea natively, the migration would be:
 
 1. Replace `ui5.guard.router.Router` with native `sap.m.routing.Router`
 2. Map `addGuard()` → native guard API
 3. Map `addRouteGuard()` → native per-route guard API
 4. Map `addLeaveGuard()` → native leave guard API (if supported)
 
-Level 3 is unlikely and unnecessary. The proposed features (01-04) give us everything
-we'd want from Level 3's guard/middleware capabilities without the framework rewrite.
+Level 3 is likely unnecessary for the routing problems this library targets. The proposed
+features in this folder cover the main guard and middleware use cases without a framework rewrite.
 
 ## Current Architecture: Sync-First with Async Fallback
 
@@ -286,9 +285,9 @@ The dual-path approach:
 2. **Async fallback**: When any guard returns a Promise, the pipeline switches to async mode
    with a generation counter for staleness detection
 
-### Why This Is the Right Design
+### Why Sync-First Fits UI5
 
-The sync-first approach is not a compromise; it's optimal:
+The sync-first approach matches UI5's routing model well:
 
 - **Zero overhead without guards**: Direct call to `MobileRouter.prototype.parse()`
 - **Same-tick for sync guards**: Framework sees navigation as complete within the event handler
@@ -306,7 +305,7 @@ The current code has three guard-running methods:
 
 Total: ~36 lines of dual-path logic. This is not a maintenance burden.
 
-## What Would Going Fully Async Cost _Us_?
+## Costs of a Fully Async Pipeline
 
 ### Option A: Always-Async Pipeline
 

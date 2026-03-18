@@ -55,7 +55,7 @@ All controllers extend `BaseController`, which provides shared helpers (`getRout
 | File                                 | Purpose                                                                 |
 | ------------------------------------ | ----------------------------------------------------------------------- |
 | `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, and scenario runner |
-| `controller/App.controller.ts`       | Root view controller (currently empty)                                  |
+| `controller/App.controller.ts`       | Root view controller                                                    |
 | `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard      |
 | `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back          |
 | `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                 |

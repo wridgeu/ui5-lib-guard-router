@@ -1,12 +1,15 @@
 # Alternative 8: Leave Guards for UI5
 
-> **Status**: Implemented. This document captures the design research that informed the implementation. The actual API diverges from this proposal:
+> **Status**: Implemented. This document captures the design research behind leave guards.
+> See the [README](../../README.md) for the shipped API and [Feature 01](../features/01-leave-guards.implemented.md) for the feature write-up.
+>
+> **Proposal-to-implementation differences:**
 >
 > - Uses shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
 > - Public methods return `GuardRouter` (not the proposed `RouterInstance` — renamed to `RouterInternal` for the internal interface)
 > - Helper is `isPromise` (not `isThenable`)
 >
-> See the [README](../../README.md) for usage examples and [Feature 01](../features/01-leave-guards.implemented.md) for the feature specification. The code samples below reflect the original **proposal**, not the final implementation.
+> The code samples below show the proposal, not the shipped API.
 
 ## The Problem
 

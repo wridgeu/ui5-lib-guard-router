@@ -1,4 +1,4 @@
-# Analysis: UI5 Navigation Guard Problem & This Repository's Solution
+# Analysis: UI5 Navigation Guard Problem and Router-Override Approach
 
 ## 1. Problem Statement
 
@@ -65,7 +65,7 @@ There is no way to prevent a route from displaying based on conditions (permissi
 - **Scenario**: After login, browser back button returns to "not logged in" screen despite still being authenticated
 - **Root cause**: `navTo()` creates browser history entries, allowing users to navigate "back" to invalid states
 - **Proposed solutions**: Conditional rendering (no routes for login state), `navTo` with `bReplace: true`, custom Router extension, composable guard helper, component-registration API
-- **Connection to this repo**: Directly motivated the development of `ui5.guard.router`
+- **Connection to this library**: Directly motivated the development of `ui5.guard.router`
 
 ### 1.4 The Core Problem Summarized
 
@@ -235,7 +235,7 @@ The current published package declares and tests against **1.144.0**. The compat
 
 ---
 
-## 3. How This Repository Solves It
+## 3. Router-Override Approach
 
 ### 3.1 The Key Insight: Override `parse()`
 
@@ -363,8 +363,8 @@ No application logic changes needed beyond the guard definitions themselves.
 
 ## 4. Test Coverage
 
-> **Note:** Counts below reflect the test suite at the time of writing and may
-> drift as tests are added. Run `npm test` for the authoritative count.
+> **Note:** Test counts are illustrative and may drift as tests are added.
+> Run `npm test` for the authoritative count.
 > The QUnit reporter prints per-module totals at the end of each run.
 
 | Category                       | Count | What's Tested                                                                                                             |

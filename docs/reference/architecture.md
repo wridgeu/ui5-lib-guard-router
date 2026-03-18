@@ -321,10 +321,7 @@ nonexistent route when the hash is already empty), because the observable
 outcome is that the user stays on the current route. This ensures:
 
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
-- `_flushSettlement()` is invoked inline from `_commitNavigation()`, `_blockNavigation()`,
-  and `_cancelPendingNavigation()`, so settlement stays coupled to the router's terminal
-  actions. The current regression coverage focuses on the externally visible blocked-restore
-  behavior rather than pinning the exact internal call ordering
+- Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
 - `_commitNavigation` uses the `_redirecting` flag and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
 - `_cancelPendingNavigation` only flushes when `_pendingHash` is non-null, avoiding
   spurious settlement signals during initialization or when no navigation is in flight

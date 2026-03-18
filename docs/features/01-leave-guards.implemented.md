@@ -1,8 +1,9 @@
 # Feature: Leave Guards
 
-> **Status**: Implemented. See the [README](../../README.md) for usage examples.
+> **Status**: Implemented. This document records the leave-guard design proposal.
+> See the [README](../../README.md) for the shipped API and usage examples.
 >
-> **Implementation note**: The final implementation diverges from this proposal in several ways:
+> **Proposal-to-implementation differences:**
 >
 > - Leave guards use the shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
 > - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | Promise<boolean>` directly
@@ -11,7 +12,7 @@
 > - The helper is named `isPromise` (not `isThenable` as sketched below)
 > - Open question #2 was resolved: leave guards receive the full `GuardContext`
 >
-> The code samples below reflect the original **proposal**, not the final implementation. Refer to `Router.ts` and `types.ts` for the actual code.
+> The code samples below show the proposal, not the shipped API. Refer to `Router.ts` and `types.ts` for the source of truth.
 
 ## Problem
 

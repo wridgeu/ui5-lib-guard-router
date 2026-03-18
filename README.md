@@ -173,7 +173,7 @@ npm run release:plan # preview the next release-please version/PR locally
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
-Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics come from this repository rather than upstream oxlint alone.
+Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics differ from upstream oxlint.
 
 ### Build
 

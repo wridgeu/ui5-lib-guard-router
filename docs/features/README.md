@@ -2,7 +2,7 @@
 
 Feature notes for `ui5.guard.router.Router`, including implemented items and future proposals derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
 
-## Current State
+## Implemented Capabilities
 
 The router provides:
 
@@ -14,7 +14,7 @@ The router provides:
 - Concurrent navigation handling via generation counter
 - Clean history on block/redirect
 
-## Proposed Features
+## Feature Documents
 
 | #   | Feature                                          | Priority | Depends On | Status          |
 | --- | ------------------------------------------------ | -------- | ---------- | --------------- |
@@ -29,25 +29,11 @@ The router provides:
 | --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | 05  | [Async Rewrite Analysis](./05-async-rewrite-analysis.md) | Not recommended. Sync-first is correct for UI5. Refactor to unified pipeline instead. |
 
-## Implementation Order
+## Status Notes
 
-```
-Phase 1: Leave Guards (01) - DONE
-
-Phase 2: Transition Object (03)
-  → Enables "redirect to login, resume after auth" pattern
-  → retry() re-runs guards (no bypass needed if state is updated)
-
-Phase 3: Route Metadata (04)
-  → Convenience layer, reduces guard boilerplate
-  → Independent, can be implemented anytime
-
-Deprioritized: Guard Bypass (02)
-  → Most use cases are better solved by updating application state
-    so guards pass naturally (e.g., set isDirty=false before navigating)
-  → Revisit only if a concrete use case arises that can't be handled
-    by proper guard logic
-```
+- `01` leave guards are implemented and shipped
+- `02` guard bypass is deferred because most use cases are better handled by updating application state so guards pass naturally
+- `03` transition object and `04` route metadata remain proposals
 
 ## Framework Comparison Summary
 
