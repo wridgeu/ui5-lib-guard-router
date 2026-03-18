@@ -6,16 +6,18 @@
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-blue.svg" alt="TypeScript"></a>
 </p>
 
-# ui5-lib-guard-router
+<h1 align="center">ui5-lib-guard-router</h1>
 
-UI5 Router extension with async navigation guards. Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing unauthorized content flashes.
-
-> [!CAUTION]
-> Navigation guards are a UX layer only. Keep authorization, validation, and access control on the server.
+<p align="center">
+UI5 Router extension with async navigation guards. Drop-in replacement for <code>sap.m.routing.Router</code> that intercepts navigation <b>before</b> route matching, target loading, or view creation, preventing unauthorized content flashes.
+</p>
 
 > Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5. Track the UI5 team's progress there.
 
 UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to guard logic in `attachPatternMatched` callbacks, which causes **flashes of unauthorized content**, **pollutes browser history**, and **scatters guard logic** across controllers. This library solves all three by extending `sap.m.routing.Router` and overriding `parse()`, the single entry point for all navigation, so guards run before any route matching or view creation begins.
+
+> [!CAUTION]
+> Navigation guards are a UX layer only. Keep authorization, validation, and access control on the server.
 
 > [!WARNING]
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
