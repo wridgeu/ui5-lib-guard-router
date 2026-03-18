@@ -7,7 +7,7 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 > **Related resources**:
 >
 > - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research/native-router-navigate-event.md) (detailed comparison with this library)
+> - [Research: Native NavContainer navigate event](../../docs/research/native-router-navigate-event.md) (detailed comparison with this library)
 
 > [!WARNING]
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
@@ -515,7 +515,7 @@ No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navi
 > [!TIP]
 > **Testing with the FLP preview**: The `fiori-tools-preview` middleware supports `enhancedHomePage: true` (UI5 >= 1.123.0), which uses CDM-based bootstrap for a more complete UShell service layer. This is recommended for testing dirty-state provider integration, as it provides `ShellNavigationHashChanger` and `CrossApplicationNavigation` behavior closer to production FLP.
 
-See the [FLP Dirty State Research](https://github.com/wridgeu/ui5-lib-guard-router/blob/main/docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
+See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
 ## Limitations
 
