@@ -468,12 +468,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 						guards,
 						i,
 						context,
-						() => false,
+						(candidate) => this._validateLeaveGuardResult(candidate),
 						"Leave guard",
 						true,
 					) as Promise<boolean>;
 				}
-				if (result !== true) return false;
+				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
 				Log.error(
 					`Leave guard [${i}] on route "${this._currentRoute}" threw, blocking navigation`,
@@ -623,6 +623,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (typeof result === "string" && result.length > 0) return result;
 		if (isGuardRedirect(result)) return result;
 		Log.warning("Guard returned invalid value, treating as block", String(result), LOG_COMPONENT);
+		return false;
+	}
+
+	/** Validate a leave guard result; non-boolean values log a warning and block. */
+	private _validateLeaveGuardResult(result: unknown): boolean {
+		if (typeof result === "boolean") return result;
+		Log.warning("Leave guard returned non-boolean value, treating as block", String(result), LOG_COMPONENT);
 		return false;
 	}
 

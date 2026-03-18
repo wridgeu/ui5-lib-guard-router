@@ -75,6 +75,7 @@ matching, target loading, or event firing occurs.
 |   | addLeaveGuard()    |    | _runGuards()              |            |
 |   | removeLeaveGuard() |    | _continueGuardsAsync()    |            |
 |   | navigationSettled()|    | _validateGuardResult()    |            |
+|   |                    |    | _validateLeaveGuardResult()|           |
 |   +--------------------+    | _commitNavigation()       |            |
 |                             | _redirect()               |            |
 |                             | _blockNavigation()        |            |

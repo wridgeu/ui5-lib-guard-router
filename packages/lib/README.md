@@ -611,22 +611,23 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Log reference
 
-| Level   | Message                                                                                 | Trigger                                                                                              |
-| ------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| warning | `addGuard called with invalid guard, ignoring`                                          | Non-function passed to `addGuard()`                                                                  |
-| warning | `addRouteGuard called with invalid guard, ignoring`                                     | Non-function `beforeEnter`, `beforeLeave`, or direct guard                                           |
-| info    | `addRouteGuard called with config missing both beforeEnter and beforeLeave`             | Empty `RouteGuardConfig` object (no handlers)                                                        |
-| warning | `addLeaveGuard called with invalid guard, ignoring`                                     | Non-function passed to `addLeaveGuard()`                                                             |
-| warning | `removeGuard / removeRouteGuard / removeLeaveGuard called with invalid guard, ignoring` | Non-function passed to a remove method                                                               |
-| warning | `{method} called for unknown route; guard will still register...`                       | Route name not found at registration time                                                            |
-| warning | `Guard returned invalid value, treating as block`                                       | Guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` object |
-| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked`     | Redirect target route does not exist in the manifest                                                 |
-| error   | `Async enter guard for route "{route}" failed, blocking navigation`                     | Async enter guard Promise rejected                                                                   |
-| error   | `Async leave guard on route "{route}" failed, blocking navigation`                      | Async leave guard Promise rejected                                                                   |
-| error   | `Enter guard [{n}] for/on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                         |
-| error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                       | Sync or async leave guard threw an exception                                                         |
-| debug   | `Async enter guard result discarded (superseded by newer navigation)`                   | A newer `parse()` call invalidated the pending async result                                          |
-| debug   | `Async leave guard result discarded (superseded by newer navigation)`                   | A newer `parse()` call invalidated the pending async result                                          |
+| Level   | Message                                                                                 | Trigger                                                                                             |
+| ------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| warning | `addGuard called with invalid guard, ignoring`                                          | Non-function passed to `addGuard()`                                                                 |
+| warning | `addRouteGuard called with invalid guard, ignoring`                                     | Non-function `beforeEnter`, `beforeLeave`, or direct guard                                          |
+| info    | `addRouteGuard called with config missing both beforeEnter and beforeLeave`             | Empty `RouteGuardConfig` object (no handlers)                                                       |
+| warning | `addLeaveGuard called with invalid guard, ignoring`                                     | Non-function passed to `addLeaveGuard()`                                                            |
+| warning | `removeGuard / removeRouteGuard / removeLeaveGuard called with invalid guard, ignoring` | Non-function passed to a remove method                                                              |
+| warning | `{method} called for unknown route; guard will still register...`                       | Route name not found at registration time                                                           |
+| warning | `Guard returned invalid value, treating as block`                                       | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
+| warning | `Leave guard returned non-boolean value, treating as block`                             | Leave guard returned something other than `true` or `false`                                         |
+| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked`     | Redirect target route does not exist in the manifest                                                |
+| error   | `Async enter guard for route "{route}" failed, blocking navigation`                     | Async enter guard Promise rejected                                                                  |
+| error   | `Async leave guard on route "{route}" failed, blocking navigation`                      | Async leave guard Promise rejected                                                                  |
+| error   | `Enter guard [{n}] for/on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                        |
+| error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                       | Sync or async leave guard threw an exception                                                        |
+| debug   | `Async enter guard result discarded (superseded by newer navigation)`                   | A newer `parse()` call invalidated the pending async result                                         |
+| debug   | `Async leave guard result discarded (superseded by newer navigation)`                   | A newer `parse()` call invalidated the pending async result                                         |
 
 ### Common issues
 

@@ -804,6 +804,68 @@ QUnit.test("Guard returning invalid redirect object treats as block", async func
 });
 
 // ============================================================
+// Module: Leave guard invalid return values
+// ============================================================
+QUnit.module("Router - Leave guard invalid values", standardHooks);
+
+QUnit.test("Leave guard returning non-boolean value treats as block", async function (assert: Assert) {
+	addLeaveGuardUnsafe(router, "home", () => 42);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(
+		assert,
+		router,
+		() => router.navTo("protected"),
+		"Non-boolean leave guard return treated as block",
+	);
+});
+
+QUnit.test("Leave guard returning null treats as block", async function (assert: Assert) {
+	addLeaveGuardUnsafe(router, "home", () => null);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Null leave guard return treated as block");
+});
+
+QUnit.test("Async leave guard returning undefined treats as block", async function (assert: Assert) {
+	addLeaveGuardUnsafe(router, "home", async () => undefined);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(
+		assert,
+		router,
+		() => router.navTo("protected"),
+		"Async undefined leave guard return treated as block",
+	);
+});
+
+QUnit.test("Leave guard returning false blocks without warning", async function (assert: Assert) {
+	const warningSpy = sinon.spy(Log, "warning");
+	router.addLeaveGuard("home", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "False leave guard blocks navigation");
+	const leaveGuardWarnings = warningSpy
+		.getCalls()
+		.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
+	assert.strictEqual(leaveGuardWarnings.length, 0, "No non-boolean warning for a legitimate false return");
+	warningSpy.restore();
+});
+
+QUnit.test("Leave guard returning non-boolean logs a warning", async function (assert: Assert) {
+	const warningSpy = sinon.spy(Log, "warning");
+	addLeaveGuardUnsafe(router, "home", () => 42);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Non-boolean leave guard blocks");
+	const leaveGuardWarnings = warningSpy
+		.getCalls()
+		.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
+	assert.strictEqual(leaveGuardWarnings.length, 1, "Warning logged for non-boolean leave guard return");
+	warningSpy.restore();
+});
+
+// ============================================================
 // Module: GuardRedirect object
 // ============================================================
 QUnit.module("Router - GuardRedirect object", standardHooks);
@@ -1341,12 +1403,17 @@ QUnit.test("Rapid async navigations - only last navigation settles", async funct
 QUnit.module("Router - Returning to current route during pending guard", standardHooks);
 
 QUnit.test("Navigating back to current route cancels a pending async guard", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(200);
-		return true;
+	let guardResolved = false;
+	const guardDone = new Promise<void>((resolve) => {
+		router.addRouteGuard("protected", async () => {
+			await nextTick(200);
+			guardResolved = true;
+			resolve();
+			return true;
+		});
 	});
 	router.initialize();
-	await nextTick(100);
+	await waitForRoute(router, "home");
 
 	let protectedMatched = false;
 	router.getRoute("protected")!.attachPatternMatched(() => {
@@ -1357,11 +1424,15 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 	router.navTo("protected");
 
 	// While guard is pending, trigger same-hash parse (user pressed back to home)
-	await nextTick(50);
+	await nextTick(10);
 	HashChanger.getInstance().setHash("");
 
-	// Wait for the async guard to resolve
-	await nextTick(300);
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Navigation was cancelled");
+
+	// Wait for the guard to actually finish its async work
+	await guardDone;
+	assert.ok(guardResolved, "Guard did resolve its async work");
 	assert.notOk(protectedMatched, "Stale async guard result was discarded after same-hash dedup");
 });
 
@@ -1877,9 +1948,9 @@ QUnit.test("Leave guard does not run on initial navigation", async function (ass
 });
 
 QUnit.test("Leave guard does not run during redirects", async function (assert: Assert) {
-	let leaveGuardCalled = false;
+	let leaveGuardCallCount = 0;
 	router.addLeaveGuard("home", () => {
-		leaveGuardCalled = true;
+		leaveGuardCallCount++;
 		return true;
 	});
 	// Enter guard on "forbidden" redirects to "home"
@@ -1889,13 +1960,14 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 
 	// Navigate to forbidden (enter guard redirects to home)
 	// The leave guard on "home" should run once (for leaving home to go to forbidden)
-	leaveGuardCalled = false;
+	leaveGuardCallCount = 0;
 	router.navTo("forbidden");
-	await nextTick(100);
+	const result = await router.navigationSettled();
 
 	// The redirect from forbidden back to home should NOT trigger
 	// the leave guard again because _redirecting bypasses all guards
-	assert.ok(leaveGuardCalled, "Leave guard ran for initial leave from home");
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Navigation resulted in redirect");
+	assert.strictEqual(leaveGuardCallCount, 1, "Leave guard ran exactly once (for initial leave, not during redirect)");
 });
 
 QUnit.test("Multiple leave guards: first false short-circuits", async function (assert: Assert) {
@@ -2214,7 +2286,8 @@ QUnit.test("Leave guard can block navigation to an unmatched hash", async functi
 	await waitForRoute(router, "home");
 
 	HashChanger.getInstance().setHash("some/unknown/path");
-	await nextTick(150);
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Settlement is blocked");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after leave guard blocked");
 });
 

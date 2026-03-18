@@ -30,18 +30,23 @@ function getReleasePleaseCommand() {
 		return {
 			command: process.execPath,
 			args: [process.env.npm_execpath, "exec", "release-please", "--"],
+			shell: false,
 		};
 	}
 
-	return process.platform === "win32"
-		? { command: "npx.cmd", args: ["--no-install", "release-please"] }
-		: { command: "npx", args: ["--no-install", "release-please"] };
+	// On Windows, npx is a .cmd batch wrapper that requires shell execution.
+	// Using shell: true lets the OS resolve npx correctly on all platforms.
+	return {
+		command: "npx",
+		args: ["--no-install", "release-please"],
+		shell: process.platform === "win32",
+	};
 }
 
 function main() {
 	const token = getGitHubToken();
 	const extraArgs = process.argv.slice(2);
-	const { command, args } = getReleasePleaseCommand();
+	const { command, args, shell } = getReleasePleaseCommand();
 	const childEnv = {
 		...process.env,
 		GITHUB_TOKEN: token,
@@ -64,7 +69,7 @@ function main() {
 			cwd: repoRoot,
 			env: childEnv,
 			stdio: "inherit",
-			shell: false,
+			shell,
 		},
 	);
 }

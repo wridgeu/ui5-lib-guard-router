@@ -46,15 +46,7 @@
 		"prepare": "husky"
 	},
 	"lint-staged": {
-		"packages/**/*.ts": [
-			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-			"oxfmt"
-		],
-		"scripts/**/*.{js,mjs,ts}": [
-			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-			"oxfmt"
-		],
-		"tools/**/*.{js,mjs,ts}": [
+		"{packages,scripts,tools}/**/*.{ts,js,mjs}": [
 			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
 			"oxfmt"
 		],
