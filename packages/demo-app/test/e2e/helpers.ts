@@ -344,3 +344,8 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 		COMPONENT_ID,
 	);
 }
+
+/** Return current window.history.length from the browser. */
+export async function getHistoryLength(): Promise<number> {
+	return browser.execute(() => window.history.length);
+}

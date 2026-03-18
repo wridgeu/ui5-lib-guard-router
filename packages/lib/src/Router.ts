@@ -1,6 +1,7 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
+import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
 	GuardContext,
@@ -62,16 +63,36 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
 }
 
 /**
+ * Normalized result of the guard decision pipeline.
+ * Internal only -- not part of the public API.
+ */
+type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redirect"; target: string | GuardRedirect };
+
+/**
+ * Guard context without the AbortSignal. Callers build this; `_evaluateGuards`
+ * creates the AbortController and produces the full `GuardContext` internally.
+ */
+type GuardContextBase = Omit<GuardContext, "signal">;
+
+/**
  * Router with navigation guard support.
  *
- * Extends `sap.m.routing.Router` by overriding `parse()` to run
- * registered guard functions before any route matching, target loading,
- * or event firing occurs.
+ * Extends `sap.m.routing.Router` with a shared guard pipeline that
+ * evaluates registered guard functions before route matching, target
+ * loading, or event firing occurs.
+ *
+ * Two entry points feed the same pipeline:
+ * - `navTo()` runs guards as a preflight check. Blocked or redirected
+ *   navigations never change the hash or push history entries.
+ * - `parse()` runs guards as a fallback for browser back/forward, URL
+ *   bar entry, and direct hash changes where the hash has already changed
+ *   before guards can intercept.
  *
  * Key assumptions (see docs/reference/architecture.md for full rationale):
  * - `parse()` is intentionally NOT async. Sync guards execute in the
  *   same tick; async guards fall back to a deferred path.
  * - `replaceHash` fires `hashChanged` synchronously (validated by test).
+ * - `setHash` (via `super.navTo`) fires `hashChanged` synchronously (validated by test).
  * - Redirect targets bypass guards to prevent infinite loops.
  *
  * @namespace ui5.guard.router
@@ -90,6 +111,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _abortController: AbortController | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
+	private _preflightApprovedHash: string | null = null;
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -292,6 +314,183 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Navigate to a route with preflight guard evaluation.
+	 *
+	 * For programmatic navigation, guards run BEFORE the hash changes.
+	 * This prevents history pollution: blocked navigations never push a
+	 * history entry, and redirected navigations go directly to the final
+	 * target.
+	 *
+	 * Same-hash navigations are deduped: if the target hash matches
+	 * `_currentHash`, any pending navigation is cancelled and the call
+	 * returns without navigating. If it matches `_pendingHash`, the
+	 * in-flight preflight continues undisturbed.
+	 *
+	 * When all guards are synchronous, the decision and the resulting
+	 * hash change happen in the same tick. When any guard returns a
+	 * Promise, `navTo()` returns `this` immediately and defers the
+	 * hash change to when the guard resolves.
+	 *
+	 * Assumes `super.navTo()` calls `HashChanger.setHash()` which fires
+	 * `hashChanged` synchronously, causing `parse()` to re-enter in the
+	 * same call stack (validated by test).
+	 *
+	 * @override sap.m.routing.Router#navTo
+	 */
+	override navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfo?: Record<string, ComponentTargetParameters>,
+		bReplace?: boolean,
+	): this;
+	override navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+	override navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
+		bReplace?: boolean,
+	): this {
+		// Normalize the two overload shapes into a single set of arguments.
+		let componentTargetInfo: Record<string, ComponentTargetParameters> | undefined;
+		let replace: boolean | undefined;
+		if (typeof componentTargetInfoOrReplace === "boolean") {
+			replace = componentTargetInfoOrReplace;
+		} else {
+			componentTargetInfo = componentTargetInfoOrReplace;
+			replace = bReplace;
+		}
+
+		// Redirect path: _redirect() calls this.navTo() with _redirecting=true.
+		// Bypass preflight -- parse() will commit directly via the _redirecting flag.
+		if (this._redirecting) {
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
+		// Resolve the target hash so we can build a guard context.
+		// getURL() returns the hash pattern with parameters substituted.
+		const route = this.getRoute(routeName);
+		if (!route) {
+			// Unknown route -- let parent handle it (may fire bypassed event).
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
+		const targetHash = route.getURL(parameters ?? {});
+		const routeInfo = this.getRouteInfoByHash(targetHash);
+		const toRoute = routeInfo?.name ?? "";
+
+		// Same-hash dedup: cancel any pending navigation and return without navigating.
+		if (this._currentHash !== null && targetHash === this._currentHash) {
+			this._cancelPendingNavigation();
+			return this;
+		}
+
+		// Pending-hash dedup: if an async preflight for this exact hash is
+		// already running, don't cancel and restart it.
+		if (this._pendingHash !== null && targetHash === this._pendingHash) {
+			return this;
+		}
+
+		// Cancel any pending navigation (including previous async preflight).
+		this._cancelPendingNavigation();
+		const generation = this._parseGeneration;
+
+		this._pendingHash = targetHash;
+
+		const context: GuardContextBase = {
+			toRoute,
+			toHash: targetHash,
+			toArguments: routeInfo?.arguments ?? {},
+			fromRoute: this._currentRoute,
+			fromHash: this._currentHash ?? "",
+		};
+
+		const decision = this._evaluateGuards(context);
+
+		if (isPromiseLike(decision)) {
+			decision
+				.then((d: GuardDecision) => {
+					if (generation !== this._parseGeneration) {
+						Log.debug(
+							"Async preflight result discarded (superseded by newer navigation)",
+							targetHash,
+							LOG_COMPONENT,
+						);
+						return;
+					}
+					this._applyPreflightDecision(
+						d,
+						routeName,
+						parameters,
+						componentTargetInfo,
+						replace,
+						targetHash,
+						toRoute,
+					);
+				})
+				.catch((error: unknown) => {
+					if (generation !== this._parseGeneration) return;
+					Log.error(
+						`Async preflight guard failed for route "${routeName}", blocking navigation`,
+						String(error),
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(targetHash, false);
+				});
+			return this;
+		}
+
+		// Sync path: apply the decision immediately.
+		this._applyPreflightDecision(
+			decision,
+			routeName,
+			parameters,
+			componentTargetInfo,
+			replace,
+			targetHash,
+			toRoute,
+		);
+		return this;
+	}
+
+	/**
+	 * Apply a preflight guard decision. For "allow", set the approved-hash
+	 * marker and call super.navTo(). For "block", flush settlement without
+	 * touching the hash. For "redirect", navigate to the redirect target.
+	 */
+	private _applyPreflightDecision(
+		decision: GuardDecision,
+		routeName: string,
+		parameters: object | undefined,
+		componentTargetInfo: Record<string, ComponentTargetParameters> | undefined,
+		bReplace: boolean | undefined,
+		targetHash: string,
+		toRoute: string,
+	): void {
+		switch (decision.action) {
+			case "allow":
+				this._preflightApprovedHash = targetHash;
+				super.navTo(routeName, parameters, componentTargetInfo, bReplace);
+				// Safety: if super.navTo didn't trigger parse (e.g. hash didn't change),
+				// clear the marker to avoid stale state.
+				if (this._preflightApprovedHash === targetHash) {
+					this._preflightApprovedHash = null;
+					// Hash didn't change, so parse() wasn't called. Commit manually.
+					this._commitNavigation(targetHash, toRoute);
+				}
+				break;
+			case "block":
+				this._blockNavigation(targetHash, false);
+				break;
+			case "redirect": {
+				this._redirect(decision.target, targetHash, false);
+				break;
+			}
+		}
+	}
+
+	/**
 	 * Intercept hash changes and run the guard pipeline before route matching.
 	 *
 	 * Called by the HashChanger on every `hashChanged` event. Runs leave guards
@@ -317,12 +516,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		if (this._currentHash !== null && newHash === this._currentHash) {
-			this._cancelPendingNavigation();
+		// Preflight-approved: navTo() already ran guards and approved this hash.
+		// Commit without re-running guards. Assumes super.navTo() fires
+		// hashChanged synchronously (validated by test).
+		if (this._preflightApprovedHash !== null && newHash === this._preflightApprovedHash) {
+			this._preflightApprovedHash = null;
+			this._commitNavigation(newHash, this.getRouteInfoByHash(newHash)?.name ?? "");
 			return;
 		}
 
-		if (this._pendingHash !== null && newHash === this._pendingHash) {
+		if (this._currentHash !== null && newHash === this._currentHash) {
+			this._cancelPendingNavigation();
 			return;
 		}
 
@@ -334,105 +538,42 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		this._pendingHash = newHash;
 
-		const hasLeaveGuards = this._currentRoute !== "" && this._leaveGuards.has(this._currentRoute);
-		const hasEnterGuards = this._globalGuards.length > 0 || (toRoute !== "" && this._enterGuards.has(toRoute));
-
-		if (!hasLeaveGuards && !hasEnterGuards) {
-			this._commitNavigation(newHash, toRoute);
-			return;
-		}
-
-		this._abortController = new AbortController();
-
-		const context: GuardContext = {
+		const context: GuardContextBase = {
 			toRoute,
 			toHash: newHash,
 			toArguments: routeInfo?.arguments ?? {},
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
-			signal: this._abortController.signal,
 		};
 
-		const runEnterGuards = (): void => {
-			const enterResult = this._runEnterGuards(this._globalGuards, toRoute, context);
+		const decision = this._evaluateGuards(context);
 
-			if (isPromiseLike(enterResult)) {
-				enterResult
-					.then((guardResult: GuardResult) => {
-						if (generation !== this._parseGeneration) {
-							Log.debug(
-								"Async enter guard result discarded (superseded by newer navigation)",
-								newHash,
-								LOG_COMPONENT,
-							);
-							return;
-						}
-						if (guardResult === true) {
-							this._commitNavigation(newHash, toRoute);
-						} else if (guardResult === false) {
-							this._blockNavigation(newHash);
-						} else {
-							this._redirect(guardResult, newHash);
-						}
-					})
-					.catch((error: unknown) => {
-						if (generation !== this._parseGeneration) return;
-						Log.error(
-							`Async enter guard for route "${toRoute}" failed, blocking navigation`,
-							String(error),
+		if (isPromiseLike(decision)) {
+			decision
+				.then((d: GuardDecision) => {
+					if (generation !== this._parseGeneration) {
+						Log.debug(
+							"Async guard result discarded (superseded by newer navigation)",
+							newHash,
 							LOG_COMPONENT,
 						);
-						this._blockNavigation(newHash);
-					});
-				return;
-			}
-			if (enterResult === true) {
-				this._commitNavigation(newHash, toRoute);
-			} else if (enterResult === false) {
-				this._blockNavigation(newHash);
-			} else {
-				this._redirect(enterResult, newHash);
-			}
-		};
-
-		if (hasLeaveGuards) {
-			const leaveResult = this._runLeaveGuards(context);
-
-			if (isPromiseLike(leaveResult)) {
-				leaveResult
-					.then((allowed: boolean) => {
-						if (generation !== this._parseGeneration) {
-							Log.debug(
-								"Async leave guard result discarded (superseded by newer navigation)",
-								newHash,
-								LOG_COMPONENT,
-							);
-							return;
-						}
-						if (allowed !== true) {
-							this._blockNavigation(newHash);
-							return;
-						}
-						runEnterGuards();
-					})
-					.catch((error: unknown) => {
-						if (generation !== this._parseGeneration) return;
-						Log.error(
-							`Async leave guard on route "${this._currentRoute}" failed, blocking navigation`,
-							String(error),
-							LOG_COMPONENT,
-						);
-						this._blockNavigation(newHash);
-					});
-				return;
-			}
-			if (leaveResult !== true) {
-				this._blockNavigation(newHash);
-				return;
-			}
+						return;
+					}
+					this._applyDecision(d, newHash, toRoute);
+				})
+				.catch((error: unknown) => {
+					if (generation !== this._parseGeneration) return;
+					Log.error(
+						`Guard pipeline failed for "${newHash}", blocking navigation`,
+						String(error),
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(newHash);
+				});
+			return;
 		}
 
-		runEnterGuards();
+		this._applyDecision(decision, newHash, toRoute);
 	}
 
 	/**
@@ -448,6 +589,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
+		this._preflightApprovedHash = null;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
@@ -472,6 +614,60 @@ export default class Router extends MobileRouter implements GuardRouter {
 			});
 		}
 		this._pendingHash = null;
+	}
+
+	/**
+	 * Run the full guard pipeline (leave → global enter → route enter) and
+	 * return a normalized decision. Stays synchronous when all guards return
+	 * plain values; returns a Promise only when an async guard is encountered.
+	 *
+	 * Shared by navTo() preflight and parse() fallback.
+	 */
+	private _evaluateGuards(baseContext: GuardContextBase): GuardDecision | Promise<GuardDecision> {
+		const hasLeaveGuards = this._currentRoute !== "" && this._leaveGuards.has(this._currentRoute);
+		const hasEnterGuards =
+			this._globalGuards.length > 0 || (baseContext.toRoute !== "" && this._enterGuards.has(baseContext.toRoute));
+
+		if (!hasLeaveGuards && !hasEnterGuards) {
+			return { action: "allow" };
+		}
+
+		this._abortController = new AbortController();
+		const context: GuardContext = { ...baseContext, signal: this._abortController.signal };
+
+		const processEnterResult = (
+			enterResult: GuardResult | Promise<GuardResult>,
+		): GuardDecision | Promise<GuardDecision> => {
+			if (isPromiseLike(enterResult)) {
+				return enterResult.then((r: GuardResult): GuardDecision => {
+					if (r === true) return { action: "allow" };
+					if (r === false) return { action: "block" };
+					return { action: "redirect", target: r };
+				});
+			}
+			if (enterResult === true) return { action: "allow" };
+			if (enterResult === false) return { action: "block" };
+			return { action: "redirect", target: enterResult };
+		};
+
+		const runEnterPhase = (): GuardDecision | Promise<GuardDecision> => {
+			const enterResult = this._runEnterGuards(this._globalGuards, context.toRoute, context);
+			return processEnterResult(enterResult);
+		};
+
+		if (hasLeaveGuards) {
+			const leaveResult = this._runLeaveGuards(context);
+
+			if (isPromiseLike(leaveResult)) {
+				return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
+					if (allowed !== true) return { action: "block" };
+					return runEnterPhase();
+				});
+			}
+			if (leaveResult !== true) return { action: "block" };
+		}
+
+		return runEnterPhase();
 	}
 
 	/**
@@ -511,6 +707,23 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Apply a guard decision for the parse() fallback path.
+	 */
+	private _applyDecision(decision: GuardDecision, hash: string, route: string): void {
+		switch (decision.action) {
+			case "allow":
+				this._commitNavigation(hash, route);
+				break;
+			case "block":
+				this._blockNavigation(hash);
+				break;
+			case "redirect":
+				this._redirect(decision.target, hash);
+				break;
+		}
 	}
 
 	/**
@@ -661,10 +874,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Perform a guard redirect (string route name or GuardRedirect object). */
-	private _redirect(target: string | GuardRedirect, attemptedHash?: string): void {
+	private _redirect(target: string | GuardRedirect, attemptedHash?: string, restoreHash = true): void {
 		this._pendingHash = null;
 		this._abortController = null;
 		const settlementBefore = this._lastSettlement;
+		const targetName = typeof target === "string" ? target : target.route;
+		let targetHash: string | null = null;
+		const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
+		const targetRoute = this.getRoute(targetName);
+		if (targetRoute) {
+			try {
+				targetHash = targetRoute.getURL(targetParameters);
+			} catch {
+				targetHash = null;
+			}
+		}
+		const redirectsToCurrentHash = targetHash !== null && targetHash === (this._currentHash ?? "");
 		this._redirecting = true;
 		try {
 			if (typeof target === "string") {
@@ -682,18 +907,31 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// blocked because the observable outcome is that the user stays on the
 		// current route. Log a warning so the developer sees the bad target.
 		if (this._lastSettlement === settlementBefore) {
-			const targetName = typeof target === "string" ? target : target.route;
+			if (redirectsToCurrentHash) {
+				this._redirecting = true;
+				try {
+					this._commitNavigation(this._currentHash ?? "", this._currentRoute);
+				} finally {
+					this._redirecting = false;
+				}
+				return;
+			}
 			Log.warning(
 				`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
 				undefined,
 				LOG_COMPONENT,
 			);
-			this._blockNavigation(attemptedHash);
+			this._blockNavigation(attemptedHash, restoreHash);
 		}
 	}
 
-	/** Clear pending state and restore the previous hash. */
-	private _blockNavigation(attemptedHash?: string): void {
+	/**
+	 * Clear pending state and flush a Blocked settlement.
+	 * When `restoreHash` is true (default), also restores the browser hash
+	 * to `_currentHash`. Preflight callers pass false because the hash was
+	 * never changed.
+	 */
+	private _blockNavigation(attemptedHash?: string, restoreHash = true): void {
 		this._pendingHash = null;
 		this._abortController = null;
 		this._flushSettlement({
@@ -701,6 +939,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash: this._currentHash ?? "",
 		});
+		if (!restoreHash) return;
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
 			return;
@@ -733,6 +972,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._redirecting = false;
 		this._suppressedHash = null;
+		this._preflightApprovedHash = null;
 		this._lastSettlement = null;
 		super.destroy();
 		return this;

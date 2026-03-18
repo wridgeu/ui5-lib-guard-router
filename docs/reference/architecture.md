@@ -63,20 +63,24 @@ matching, target loading, or event firing occurs.
 |                     ui5.guard.router.Router                            |
 |                                                                      |
 |   extends sap.m.routing.Router                                       |
-|   overrides parse() to intercept all hash changes                    |
+|   overrides navTo() + parse() to intercept all navigation            |
 |                                                                      |
 |   +--------------------+    +---------------------------+            |
 |   | Guard Management   |    | Navigation Interception   |            |
 |   |                    |    |                           |            |
-|   | addGuard()         |    | parse() override          |            |
-|   | removeGuard()      |    | _runLeaveGuards()         |            |
-|   | addRouteGuard()    |    | _runEnterGuards()         |            |
-|   | removeRouteGuard() |    | _runRouteGuards()         |            |
-|   | addLeaveGuard()    |    | _runGuards()              |            |
-|   | removeLeaveGuard() |    | _continueGuardsAsync()    |            |
-|   | navigationSettled()|    | _validateGuardResult()    |            |
-|   |                    |    | _validateLeaveGuardResult()|           |
-|   +--------------------+    | _commitNavigation()       |            |
+|   | addGuard()         |    | navTo() override          |            |
+|   | removeGuard()      |    | parse() override          |            |
+|   | addRouteGuard()    |    | _evaluateGuards()         |            |
+|   | removeRouteGuard() |    | _applyPreflightDecision() |            |
+|   | addLeaveGuard()    |    | _applyDecision()          |            |
+|   | removeLeaveGuard() |    | _runLeaveGuards()         |            |
+|   | navigationSettled()|    | _runEnterGuards()         |            |
+|   |                    |    | _runRouteGuards()         |            |
+|   +--------------------+    | _runGuards()              |            |
+|                             | _continueGuardsAsync()    |            |
+|                             | _validateGuardResult()    |            |
+|                             | _validateLeaveGuardResult()|           |
+|                             | _commitNavigation()       |            |
 |                             | _redirect()               |            |
 |                             | _blockNavigation()        |            |
 |                             | _flushSettlement()        |            |
@@ -126,7 +130,7 @@ GuardRouter (public interface)      Router (ES6 class)
     addGuard / removeGuard             + internal state fields
     addRouteGuard / removeRouteGuard   + private _cancelPendingNavigation()
     addLeaveGuard / removeLeaveGuard   + private _flushSettlement()
-    navigationSettled()                + override parse(), stop(), destroy()
+    navigationSettled()                + override navTo(), parse(), stop(), destroy()
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -146,10 +150,11 @@ The Router is an ES6 class that extends `sap.m.routing.Router` and implements th
 type-safe access to the guard management methods. Internal state and methods live
 directly on the class as typed fields; no separate internal interface is needed.
 
-## parse() Override - The Core Mechanism
+## parse() Override - Fallback for Browser-Initiated Navigation
 
-Every navigation path in UI5 flows through `parse()`. The override intercepts it to run
-guards before the parent router processes the hash.
+Browser-initiated navigation (back/forward, URL bar, direct hash changes) flows through
+`parse()`. The override intercepts it to run guards before the parent router processes
+the hash. Programmatic `navTo()` calls bypass `parse()` via the preflight path above.
 
 ```mermaid
 flowchart TD
@@ -159,11 +164,11 @@ flowchart TD
     smatch -- "no" --> sclear2["clear flag"] --> redir
     suppress -- "no" --> redir{_redirecting?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
-    redir -- "no" --> samehash{same as _currentHash?}
+    redir -- "no" --> preflight{preflightApproved?}
+    preflight -- "yes" --> bypass
+    preflight -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
-    samehash -- "no" --> pending{same as _pendingHash?}
-    pending -- "yes" --> ret
-    pending -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
+    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
 
     setup --> guards{guards registered?}
     guards -- "no" --> commit(["_commitNavigation()"])
@@ -204,6 +209,44 @@ a newer navigation started, the stale result is discarded.
    the resulting `navTo` triggers a re-entrant `parse()` with `_redirecting = true`,
    which skips all guard evaluation. This prevents infinite loops but means route B's
    guards are **not** evaluated during a redirect. Design guard chains accordingly.
+
+## Two-Entry-Point Model: navTo() Preflight + parse() Fallback
+
+The router intercepts navigation through two complementary entry points that feed the
+same shared guard pipeline (`_evaluateGuards()`).
+
+```
+Programmatic navigation:
+  navTo(route, params)
+    → _evaluateGuards(hash, route, params)
+        → allow  → set _preflightApprovedHash, call super.navTo()
+        → block  → _blockNavigation(hash, restoreHash=false), flush Blocked settlement
+        → redirect → _redirect(target), which sets _redirecting=true and calls this.navTo(target)
+
+Browser-initiated navigation (back/forward, URL bar, direct hash change):
+  parse(newHash)
+    → _preflightApprovedHash matches? → clear flag, _commitNavigation()
+    → otherwise → _evaluateGuards(hash, route, params)
+        → allow  → _commitNavigation()
+        → block  → _blockNavigation() + _restoreHash()
+        → redirect → _redirect() via navTo(replace=true)
+```
+
+### The \_preflightApprovedHash handshake
+
+When `navTo()` runs guards and they allow navigation, the router stores the approved
+hash in `_preflightApprovedHash` before calling `super.navTo()`. The parent router
+triggers a hash change, which re-enters through `parse()`. On entry, `parse()` checks
+`_preflightApprovedHash`: if the incoming hash matches, it clears the flag and commits
+immediately without re-running guards. This avoids double evaluation while keeping
+`parse()` as the authoritative commit path.
+
+### Why parse() remains authoritative
+
+`navTo()` only covers programmatic navigation. Browser back/forward, URL bar entry,
+and direct hash changes bypass `navTo()` entirely; they arrive through `hashChanged`
+→ `parse()`. The `parse()` override remains the authoritative fallback that catches
+all navigation paths the `navTo()` preflight cannot reach.
 
 ## Guard Execution Pipeline
 
@@ -389,20 +432,21 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                  | Type                                | Purpose                                              |
-| ---------------------- | ----------------------------------- | ---------------------------------------------------- |
-| `_globalGuards`        | `GuardFn[]`                         | Guards that run for every navigation                 |
-| `_enterGuards`         | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name           |
-| `_leaveGuards`         | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name           |
-| `_currentRoute`        | `string`                            | Name of the currently active route                   |
-| `_currentHash`         | `string \| null`                    | Hash of the active route, `null` before first        |
-| `_pendingHash`         | `string \| null`                    | Hash being evaluated by async guards                 |
-| `_redirecting`         | `boolean`                           | True during guard-triggered redirect                 |
-| `_parseGeneration`     | `number`                            | Monotonic counter for async invalidation             |
-| `_suppressedHash`      | `string \| null`                    | Hash to suppress in the next `parse()` call          |
-| `_abortController`     | `AbortController \| null`           | Aborted when navigation is superseded                |
-| `_settlementResolvers` | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks              |
-| `_lastSettlement`      | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries) |
+| Field                    | Type                                | Purpose                                                         |
+| ------------------------ | ----------------------------------- | --------------------------------------------------------------- |
+| `_globalGuards`          | `GuardFn[]`                         | Guards that run for every navigation                            |
+| `_enterGuards`           | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name                      |
+| `_leaveGuards`           | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name                      |
+| `_currentRoute`          | `string`                            | Name of the currently active route                              |
+| `_currentHash`           | `string \| null`                    | Hash of the active route, `null` before first                   |
+| `_pendingHash`           | `string \| null`                    | Hash being evaluated by async guards                            |
+| `_redirecting`           | `boolean`                           | True during guard-triggered redirect                            |
+| `_parseGeneration`       | `number`                            | Monotonic counter for async invalidation                        |
+| `_suppressedHash`        | `string \| null`                    | Hash to suppress in the next `parse()` call                     |
+| `_abortController`       | `AbortController \| null`           | Aborted when navigation is superseded                           |
+| `_settlementResolvers`   | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                         |
+| `_lastSettlement`        | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)            |
+| `_preflightApprovedHash` | `string \| null`                    | Hash approved by navTo() preflight; cleared by parse() on match |
 
 ## Monorepo Tooling
 

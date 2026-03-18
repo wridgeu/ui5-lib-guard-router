@@ -2,7 +2,7 @@
 
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
-> Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5.
+> Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request for native navigation guard support in UI5.
 >
 > **Related resources**:
 >
@@ -174,7 +174,12 @@ export default class Component extends UIComponent {
 
 ## How it works
 
-The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/api/sap.m.routing.Router) and overrides `parse()`, the single method through which all navigation flows (programmatic `navTo`, browser back/forward, direct URL changes). Guards run before any route matching, target loading, or view creation.
+The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/api/sap.m.routing.Router) and intercepts navigation through two entry points:
+
+- **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. If a guard blocks or redirects, the hash never changes, so no history entry is created.
+- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks or redirects, the router restores the previous hash via `replaceHash()`.
+
+Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
 
 Because it extends the mobile router directly, all existing `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) works unchanged.
 
@@ -227,12 +232,12 @@ Enter guards return `GuardResult`, a union of four outcomes:
 GuardResult = boolean | string | GuardRedirect
 ```
 
-| Return                                         | Type            | When to use                                             | Effect                                          |
-| ---------------------------------------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------- |
-| `true`                                         | `boolean`       | Guard condition passes                                  | Allow navigation                                |
-| `false`                                        | `boolean`       | Guard condition fails, no specific destination          | Block (stay on current route, no history entry) |
-| `"routeName"`                                  | `string`        | Redirect to a fixed route (no parameters needed)        | Redirect to named route (replaces history)      |
-| `{ route, parameters?, componentTargetInfo? }` | `GuardRedirect` | Redirect and pass route parameters or component targets | Redirect with parameters (replaces history)     |
+| Return                                         | Type            | When to use                                             | Effect                                                                                                                                                       |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `true`                                         | `boolean`       | Guard condition passes                                  | Allow navigation                                                                                                                                             |
+| `false`                                        | `boolean`       | Guard condition fails, no specific destination          | Stay on current route. Programmatic `navTo()` creates no history entry. Browser-initiated navigation restores the previous hash.                             |
+| `"routeName"`                                  | `string`        | Redirect to a fixed route (no parameters needed)        | Navigate to target route. Programmatic `navTo()` goes directly to target with no intermediate entry. Browser-initiated navigation replaces the current hash. |
+| `{ route, parameters?, componentTargetInfo? }` | `GuardRedirect` | Redirect and pass route parameters or component targets | Same as string redirect, with parameters                                                                                                                     |
 
 `GuardRedirect` is the object form of a redirect. Use it when you need to pass route parameters (`parameters`) or nested component targets (`componentTargetInfo`). For simple redirects without parameters, the string shorthand (`return "home"`) is equivalent and shorter.
 
@@ -545,31 +550,43 @@ router.addRouteGuard("dashboard", (context) => {
 });
 ```
 
-### URL bar shows target hash during async guards
+### History guarantees differ by navigation source
 
-When a guard returns a Promise (e.g., a `fetch` call to check permissions), the browser's URL bar shows the target hash while the guard is resolving. If the guard ultimately blocks or redirects, the URL reverts. However, there is a brief window where the displayed URL doesn't match the active route.
+Programmatic `router.navTo()` calls get clean history: blocked or redirected navigations create no history entry. Browser back/forward and URL bar entry may leave an extra history entry because the browser changes the hash before guards can intercept. The guard still protects the route, but the browser history may contain a duplicate entry that the router repairs via `replaceHash()`.
 
-This does **not** affect sync guards, which resolve in the same tick as the hash change (the URL flicker is imperceptible).
+### URL bar shows target hash during async guards (browser-initiated only)
 
-**Why the router doesn't handle this**: UI5's `HashChanger` updates the URL and fires `hashChanged` _before_ `parse()` is called. The router cannot prevent the URL change; it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture doesn't allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
+For browser-initiated navigation (back/forward, URL bar entry, direct hash changes), the URL bar shows the target hash while an async guard resolves. If the guard blocks or redirects, the URL reverts via `replaceHash()`. There is a brief window where the displayed URL does not match the active route.
+
+This does **not** apply to programmatic `navTo()` calls, where the hash does not change until guards approve. It also does not affect sync guards on the `parse()` path, which resolve in the same tick as the hash change.
+
+**Why the parse() path cannot prevent this**: UI5's `HashChanger` updates the URL and fires `hashChanged` before `parse()` runs. The router cannot prevent the URL change; it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture does not allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
 
 ```
-User clicks link / navTo()
-        ↓
-HashChanger updates browser URL    ← URL changes HERE
-        ↓
-HashChanger fires hashChanged
-        ↓
-Router.parse() called              ← guards run HERE
-        ↓
-   ┌────┴────┐
-allowed    blocked
-   ↓          ↓
-views      _restoreHash()
-load       reverts URL
+Browser-initiated navigation (back/forward, URL bar, setHash):
+  HashChanger updates browser URL    ← URL changes HERE
+          ↓
+  HashChanger fires hashChanged
+          ↓
+  Router.parse() called              ← guards run HERE
+          ↓
+     ┌────┴────┐
+  allowed    blocked
+     ↓          ↓
+  views      _restoreHash()
+  load       reverts URL
+
+Programmatic navigation (navTo):
+  navTo() called                     ← guards run HERE
+          ↓
+     ┌────┴────┐
+  allowed    blocked
+     ↓          ↓
+  super.navTo()  return
+  hash changes   (no hash change)
 ```
 
-Show a busy indicator while async guards resolve. This communicates to the user that navigation is in progress, making the URL bar state a non-issue:
+For the `parse()` path, show a busy indicator while async guards resolve. This communicates that navigation is in progress, making the URL bar state a non-issue:
 
 ```typescript
 router.addRouteGuard("dashboard", async (context) => {
@@ -625,12 +642,12 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
-| error   | `Async enter guard for route "{route}" failed, blocking navigation`                 | Async enter guard Promise rejected                                                                  |
-| error   | `Async leave guard on route "{route}" failed, blocking navigation`                  | Async leave guard Promise rejected                                                                  |
+| error   | `Guard pipeline failed for "{hash}", blocking navigation`                           | Async guard pipeline rejected in `parse()` fallback path                                            |
+| error   | `Async preflight guard failed for route "{route}", blocking navigation`             | Async guard pipeline rejected in `navTo()` preflight path                                           |
 | error   | `Enter guard [{n}] for/on route "{route}" threw, blocking navigation`               | Sync or async enter guard threw an exception                                                        |
 | error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async leave guard threw an exception                                                        |
-| debug   | `Async enter guard result discarded (superseded by newer navigation)`               | A newer `parse()` call invalidated the pending async result                                         |
-| debug   | `Async leave guard result discarded (superseded by newer navigation)`               | A newer `parse()` call invalidated the pending async result                                         |
+| debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
+| debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |
 
 ### Common issues
 

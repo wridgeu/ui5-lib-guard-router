@@ -12,7 +12,7 @@ The router provides:
 - Sync-first execution with async fallback
 - Guard results: allow (`true`), block (`false`), redirect (string / `GuardRedirect`)
 - Concurrent navigation handling via generation counter
-- Clean history on block/redirect
+- Clean history on programmatic block/redirect; best-effort for browser-initiated navigation
 
 ## Documents
 
@@ -29,11 +29,18 @@ The router provides:
 | --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | 05  | [Async Rewrite Analysis](./05-async-rewrite-analysis.md) | Not recommended. Sync-first is correct for UI5. Refactor to unified pipeline instead. |
 
+## Optimizations
+
+| #   | Feature                                    | Priority | Depends On | Status          |
+| --- | ------------------------------------------ | -------- | ---------- | --------------- |
+| 06  | [navTo Preflight](./06-navto-preflight.md) | High     | None       | **Implemented** |
+
 ## Status Notes
 
 - `01` leave guards are implemented and shipped
 - `02` guard bypass is deferred because most use cases are better handled by updating application state so guards pass naturally
 - `03` transition object and `04` route metadata remain open proposals
+- `06` navTo preflight is implemented and shipped
 
 ## Framework Comparison Summary
 

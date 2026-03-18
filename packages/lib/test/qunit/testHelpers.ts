@@ -102,3 +102,8 @@ export async function assertBlocked(
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, message);
 }
+
+/** Return the current hash from the HashChanger. */
+export function getHash(): string {
+	return HashChanger.getInstance().getHash();
+}

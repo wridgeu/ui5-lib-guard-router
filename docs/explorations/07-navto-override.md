@@ -1,5 +1,7 @@
 # Alternative 7: Override navTo() Only
 
+This exploration led to the navTo preflight in the shipped implementation; see [architecture.md](../reference/architecture.md) for the two-entry-point design.
+
 ## Approach
 
 Override the router's `navTo()` method to run guard checks before triggering navigation.
@@ -96,26 +98,28 @@ This introduces the exact same problems as the HashChanger interception approach
 - Useful as a partial solution in controlled environments (e.g., embedded iframes, kiosk mode)
 - As a stepping stone before implementing full `parse()` override
 
-## Why This Repository Chose parse() Instead
+## Why navTo-Only Was Rejected as a Standalone Approach
 
-The `parse()` override was chosen specifically because it catches **all** navigation paths in a single interception point. The `navTo()` approach requires additional mechanisms (hashChanged listener) to cover the remaining paths, creating complexity without full coverage.
+A navTo-only override does not catch browser back/forward, URL bar entry, or direct hash changes. It requires additional mechanisms (hashChanged listener) to cover the remaining paths, creating complexity without full coverage.
+
+The shipped implementation uses navTo() as a **preflight** paired with the `parse()` fallback. See [architecture.md](../reference/architecture.md) for the two-entry-point design.
 
 From the [problem analysis](../reference/analysis.md#22-override-navto-only):
 
 > **Verdict: Rejected.** Incomplete coverage of navigation entry points.
 
-## Comparison with This Repository's Approach
+## Comparison: navTo-Only vs Shipped Two-Entry-Point Design
 
-| Aspect                    | navTo Override              | `ui5.guard.router` (parse) |
-| ------------------------- | --------------------------- | -------------------------- |
-| Programmatic navTo        | Covered                     | Covered                    |
-| Browser back/forward      | NOT covered                 | Covered                    |
-| Direct URL entry          | NOT covered                 | Covered                    |
-| HashChanger.setHash       | NOT covered                 | Covered                    |
-| Implementation complexity | Low                         | Low-medium                 |
-| Coverage                  | ~50%                        | ~100%                      |
-| Race conditions           | With hashChanged workaround | None (single interception) |
-| History on block          | Clean (navTo never called)  | Clean (replaceHash)        |
+| Aspect                     | navTo Override Only        | `ui5.guard.router` (navTo preflight + parse fallback) |
+| -------------------------- | -------------------------- | ----------------------------------------------------- |
+| Programmatic navTo         | Covered                    | Covered (preflight, no hash change on block)          |
+| Browser back/forward       | NOT covered                | Covered (parse fallback, replaceHash on block)        |
+| Direct URL entry           | NOT covered                | Covered (parse fallback)                              |
+| HashChanger.setHash        | NOT covered                | Covered (parse fallback)                              |
+| Implementation complexity  | Low                        | Medium                                                |
+| Coverage                   | ~50%                       | ~100%                                                 |
+| History on block (navTo)   | Clean (navTo never called) | Clean (hash never changes)                            |
+| History on block (browser) | N/A                        | Repaired (replaceHash)                                |
 
 ## References
 
