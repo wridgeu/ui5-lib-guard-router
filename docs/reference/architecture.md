@@ -26,9 +26,9 @@ ui5-lib-guard-router/
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
-        |   |-- controller/         Home, Protected, Forbidden, NotFound
-        |   |-- view/               XML views
-        |   |-- guards.ts           guard factories (auth, dirty form, forbidden)
+        |   |-- controller/         Home, Protected, Blocked, Forbidden, NotFound
+        |   |-- view/               XML views + SettlementPanel fragment
+        |   |-- guards.ts           guard factories (auth, dirty form, blocked, forbidden)
         |   |-- demo/               RuntimeCoordinator, ScenarioRunner
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
         |   |-- model/              runtime model factory
@@ -507,11 +507,15 @@ The demo app shows the minimal integration pattern:
   | routing.config.routerClass |-------->| router = getRouter() as          |
   | = "ui5.guard.router.Router" |         |            GuardRouter        |
   |                            |         |                                  |
-  | routes:                    |         | router.addRouteGuard("protected",|
-  |   home     -> ""           |         |   () => isLoggedIn ? true : "home"|
+  | routes:                    |         | router.addRouteGuard("blocked",  |
+  |   home      -> ""          |         |   () => false                    |
   |   protected -> "protected" |         | )                                |
-  |   forbidden -> "forbidden" |         |                                  |
-  +----------------------------+         | router.addRouteGuard("forbidden",|
+  |   blocked   -> "blocked"   |         |                                  |
+  |   forbidden -> "forbidden" |         | router.addRouteGuard("protected",|
+  +----------------------------+         |   () => isLoggedIn ? true : "home"|
+                                         | )                                |
+                                         |                                  |
+                                         | router.addRouteGuard("forbidden",|
                                          |   () => "home"                   |
                                          | )                                |
                                          |                                  |
