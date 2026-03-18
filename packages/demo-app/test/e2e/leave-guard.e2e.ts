@@ -39,7 +39,10 @@ describe("Leave Guard - Dirty Form", () => {
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
 
 		// Leave guard should block - hash should stay at protected
-		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
+		await expectHashToBe("#/protected", {
+			timeoutMsg: "Hash should stay at protected after leave guard blocks",
+			afterRevision: settlementRevision,
+		});
 		const settlement = await waitForRuntimeSettlement(
 			{
 				status: "Blocked",
@@ -76,7 +79,21 @@ describe("Leave Guard - Dirty Form", () => {
 		});
 		expect(isDirty).toBe(true);
 
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => window.history.back());
-		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
+		await expectHashToBe("#/protected", {
+			timeoutMsg: "Hash should stay at protected after leave guard blocks",
+			afterRevision: settlementRevision,
+		});
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Blocked",
+				route: "protected",
+				hash: "protected",
+			},
+			{ afterRevision: settlementRevision },
+		);
+		expect(settlement.route).toBe("protected");
+		expect(settlement.hash).toBe("protected");
 	});
 });

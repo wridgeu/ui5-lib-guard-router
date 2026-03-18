@@ -25,10 +25,13 @@ describe("Guard redirects unauthenticated navigation", () => {
 		await navBtn.press();
 
 		// Wait for hash to settle (async guard takes time, hash changes before guard completes)
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
 
 		// Verify we're back on Home page after the redirect
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{

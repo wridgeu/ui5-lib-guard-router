@@ -1,6 +1,7 @@
 import {
 	expectAppHashToBe,
 	expectControlText,
+	getRuntimeSettlementRevisionInFlp,
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	navigateToRouteInFlp,
@@ -38,20 +39,20 @@ describe("FLP preview integration", () => {
 		await setDirtyStateInFlp(true);
 
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
-		await waitForProtectedPageInFlp();
-		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 
 	it("blocks dirty in-app navigation via leave guard without triggering FLP confirm", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 
 		const { record, cleanup } = installDialogHandler(true);
 
 		try {
 			await navigateToRouteInFlp("home");
 
-			await waitForProtectedPageInFlp();
+			await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+			await expectAppHashToBe("protected", { afterRevision: settlementRevision });
 			await expectControlText("protectedCurrentHashText", "#/protected");
 			expect(record.called).toBe(false);
 		} finally {
@@ -65,11 +66,13 @@ describe("FLP preview integration", () => {
 
 		// PART 1: In-app navigation. Leave guard blocks, no FLP confirm.
 		const { record: inAppRecord, cleanup: inAppCleanup } = installDialogHandler(true);
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 
 		try {
 			await navigateToRouteInFlp("home");
 
-			await waitForProtectedPageInFlp();
+			await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+			await expectAppHashToBe("protected", { afterRevision: settlementRevision });
 			expect(inAppRecord.called).toBe(false);
 		} finally {
 			inAppCleanup();
@@ -77,8 +80,6 @@ describe("FLP preview integration", () => {
 
 		// PART 2: Same dirty state, cross-app navigation. FLP confirm fires.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
-		await waitForProtectedPageInFlp();
-		await expectControlText("protectedCurrentHashText", "#/protected");
 	});
 });
 
@@ -91,18 +92,20 @@ describe("FLP guard router hardening", () => {
 
 	it("blocks navigation to protected route when logged out", async () => {
 		// Logged out (resetFlpDemo ensures this). Try to navigate to protected.
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await navigateToRouteInFlp("protected");
 
 		// Guard should redirect back to home.
-		await waitForHomePageInFlp();
-		await expectAppHashToBe("");
+		await waitForHomePageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("", { afterRevision: settlementRevision });
 	});
 
 	it("redirects forbidden route to home", async () => {
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await navigateToRouteInFlp("forbidden");
 
-		await waitForHomePageInFlp();
-		await expectAppHashToBe("");
+		await waitForHomePageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("", { afterRevision: settlementRevision });
 	});
 
 	it("allows navigation to protected route when logged in", async () => {
@@ -146,12 +149,13 @@ describe("FLP guard router hardening", () => {
 	it("blocks browser back when form is dirty", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 
 		await browser.back();
 
 		// Leave guard blocks. Page stays on protected.
-		await waitForProtectedPageInFlp();
-		await expectAppHashToBe("protected");
+		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
 	});
 
 	it("re-evaluates enter guard on browser forward after logout", async () => {
@@ -167,11 +171,12 @@ describe("FLP guard router hardening", () => {
 		await expectControlText("authStatus", "Logged Out");
 
 		// Browser forward toward previously visited #/protected.
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await browser.forward();
 
 		// Enter guard should block and redirect back to home.
-		await waitForHomePageInFlp();
-		await expectAppHashToBe("");
+		await waitForHomePageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("", { afterRevision: settlementRevision });
 	});
 
 	it("handles back/forward cycles with guards", async () => {

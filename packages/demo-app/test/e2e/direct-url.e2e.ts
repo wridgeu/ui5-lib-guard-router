@@ -17,7 +17,10 @@ describe("Direct URL navigation with guards", () => {
 		});
 
 		// Wait for hash to settle after async guard redirects
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
 		const settlement = await waitForRuntimeSettlement(
@@ -43,8 +46,11 @@ describe("Direct URL navigation with guards", () => {
 		});
 
 		// Wait for hash to settle after sync guard redirects
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -70,8 +76,11 @@ describe("Direct URL navigation with guards", () => {
 			window.location.hash = "#/blocked";
 		});
 
-		await expectHashToBe("", "Hash should settle to home after enter guard blocks");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after enter guard blocks",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -150,6 +159,7 @@ describe("Direct URL navigation with guards", () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		const settlementRevision = await getRuntimeSettlementRevision();
 
 		// Rapidly change the hash multiple times
 		await browser.execute(() => {
@@ -165,6 +175,14 @@ describe("Direct URL navigation with guards", () => {
 		// Should end up on Home (all guarded while logged out).
 		// waitForPage calls navigationSettled() then checks DOM visibility.
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{ afterRevision: settlementRevision },
+		);
 
 		// Verify hash settled to a home-route value (not stuck on a guarded route)
 		const hash = await browser.execute(() => window.location.hash);

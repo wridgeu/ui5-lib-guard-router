@@ -35,6 +35,17 @@ type RuntimeSettlementWaitOptions = {
 	afterRevision?: number;
 };
 
+type HashWaitOptions = {
+	timeout?: number;
+	timeoutMsg?: string;
+	afterRevision?: number;
+};
+
+type PageWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
 type SettlementWaitResult = {
 	ok: boolean;
 	result: SettlementSnapshot;
@@ -54,7 +65,14 @@ type SettlementWaitResult = {
  * 2. DOM visibility: polls until the page control is rendered and visible
  *    (not hidden by NavContainer's display:none on inactive pages).
  */
-export async function waitForPage(controlId: string, expectedTitle: string, timeout = 10000): Promise<void> {
+export async function waitForPage(
+	controlId: string,
+	expectedTitle: string,
+	timeoutOrOptions: number | PageWaitOptions = 10000,
+): Promise<void> {
+	const timeout = typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeout ?? 10000);
+	const afterRevision = typeof timeoutOrOptions === "number" ? undefined : timeoutOrOptions.afterRevision;
+
 	// Phase 1: Wait for the guard pipeline to settle.
 	const settlement = (await browser.executeAsync(
 		(componentId: string, timeoutMs: number, done: (result: SettlementWaitResult) => void) => {
@@ -152,6 +170,13 @@ export async function waitForPage(controlId: string, expectedTitle: string, time
 		);
 	}
 
+	if (afterRevision !== undefined) {
+		await browser.waitUntil(async () => (await getRuntimeSettlementRevision()) > afterRevision, {
+			timeout,
+			timeoutMsg: `Page "${controlId}" did not observe a fresh settlement after revision ${afterRevision} within ${timeout}ms`,
+		});
+	}
+
 	// Phase 2: Poll until the page control is rendered and visible.
 	await browser.waitUntil(
 		async () => {
@@ -219,13 +244,28 @@ export async function resetAuth(): Promise<void> {
 /**
  * Wait for the URL hash to settle to an expected value, then assert it.
  */
-export async function expectHashToBe(expected: string, timeoutMsg?: string): Promise<void> {
+export async function expectHashToBe(expected: string, timeoutMsgOrOptions?: string | HashWaitOptions): Promise<void> {
+	const options: HashWaitOptions =
+		typeof timeoutMsgOrOptions === "string" ? { timeoutMsg: timeoutMsgOrOptions } : (timeoutMsgOrOptions ?? {});
+	const timeout = options.timeout ?? 3000;
+
 	await browser.waitUntil(
 		async () => {
 			const hash = await browser.execute(() => window.location.hash);
-			return hash === expected;
+			if (hash !== expected) {
+				return false;
+			}
+
+			return (
+				options.afterRevision === undefined || (await getRuntimeSettlementRevision()) > options.afterRevision
+			);
 		},
-		{ timeout: 3000, timeoutMsg: timeoutMsg ?? `Hash did not settle to ${expected}` },
+		{
+			timeout,
+			timeoutMsg:
+				options.timeoutMsg ??
+				`Hash did not settle to ${expected}${options.afterRevision === undefined ? "" : ` after revision ${options.afterRevision}`}`,
+		},
 	);
 }
 
@@ -259,6 +299,7 @@ export async function waitForRuntimeSettlement(
 	options: RuntimeSettlementWaitOptions = {},
 ): Promise<RuntimeSettlementSnapshot> {
 	const { timeout = 3000, afterRevision } = options;
+	let matchedSettlement: RuntimeSettlementSnapshot | null = null;
 
 	await browser.waitUntil(
 		async () => {
@@ -271,7 +312,12 @@ export async function waitForRuntimeSettlement(
 				return false;
 			}
 
-			return afterRevision === undefined || settlement.revision > afterRevision;
+			if (afterRevision !== undefined && settlement.revision <= afterRevision) {
+				return false;
+			}
+
+			matchedSettlement = settlement;
+			return true;
 		},
 		{
 			timeout,
@@ -279,7 +325,7 @@ export async function waitForRuntimeSettlement(
 		},
 	);
 
-	return getRuntimeSettlement();
+	return matchedSettlement ?? getRuntimeSettlement();
 }
 
 /**

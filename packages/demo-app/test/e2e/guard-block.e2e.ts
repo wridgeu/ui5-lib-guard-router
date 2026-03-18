@@ -18,8 +18,11 @@ describe("Guard blocks enter navigation", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
-		await expectHashToBe("", "Hash should stay on home after enter guard blocks");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should stay on home after enter guard blocks",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{

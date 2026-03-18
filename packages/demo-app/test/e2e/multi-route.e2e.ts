@@ -1,4 +1,11 @@
-import { waitForPage, fireEvent, resetAuth, expectHashToBe } from "./helpers";
+import {
+	getRuntimeSettlementRevision,
+	waitForPage,
+	fireEvent,
+	resetAuth,
+	expectHashToBe,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Multi-route navigation sequences", () => {
 	it("should handle Home -> Protected -> Home -> Forbidden (redirected) -> Home sequence", async () => {
@@ -29,11 +36,23 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
 			forceSelect: true,
 		});
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navForbidden.press();
 
 		// Wait for hash to settle after redirect
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{ afterRevision: settlementRevision },
+		);
 	});
 
 	it("should redirect protected to Home after mid-session logout", async () => {
@@ -76,11 +95,23 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 			forceSelect: true,
 		});
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn2.press();
 
 		// Wait for hash to settle after guard redirects
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{ afterRevision: settlementRevision },
+		);
 	});
 
 	it("should handle login -> protected -> logout -> protected (redirected) -> login -> protected (allowed)", async () => {
@@ -118,10 +149,22 @@ describe("Multi-route navigation sequences", () => {
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 			forceSelect: true,
 		});
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
+		});
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{ afterRevision: settlementRevision },
+		);
 
 		// Login again
 		toggleBtn = await browser.asControl({

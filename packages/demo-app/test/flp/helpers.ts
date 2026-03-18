@@ -129,6 +129,16 @@ const SELECTORS = {
 
 type SelectorName = keyof typeof SELECTORS;
 
+type PageWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
+type AppHashWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
 async function getControl(name: SelectorName) {
 	return browser.asControl(SELECTORS[name]);
 }
@@ -150,12 +160,52 @@ async function waitForControlText(name: SelectorName, expected: string, timeout 
 	);
 }
 
-async function waitForPage(name: "homePage" | "protectedPage", expectedTitle: string, timeout = 30000): Promise<void> {
+export async function getRuntimeSettlementRevisionInFlp(): Promise<number> {
+	return browser.execute(() => {
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const all = Component.registry.all() as Record<string, UIComponent>;
+		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+		return Number(component?.getModel("runtime")?.getProperty("/lastSettlementRevision") ?? 0);
+	});
+}
+
+async function waitForPage(
+	name: "homePage" | "protectedPage",
+	expectedTitle: string,
+	options: PageWaitOptions = {},
+): Promise<void> {
+	const { timeout = 30000, afterRevision } = options;
+
+	if (afterRevision !== undefined) {
+		await browser.waitUntil(async () => (await getRuntimeSettlementRevisionInFlp()) > afterRevision, {
+			timeout,
+			timeoutMsg: `Page "${name}" did not observe a fresh settlement after revision ${afterRevision}`,
+		});
+	}
+
 	await browser.waitUntil(
 		async () => {
 			try {
 				const page = await getControl(name);
-				return (await page.getProperty("title")) === expectedTitle;
+				if ((await page.getProperty("title")) !== expectedTitle) {
+					return false;
+				}
+
+				return browser.execute((selectorName: string) => {
+					const Element = sap.ui.require("sap/ui/core/Element");
+					const controlId =
+						selectorName === "homePage"
+							? "application-app-preview-component---homeView--homePage"
+							: "application-app-preview-component---protectedView--protectedPage";
+					const control = Element?.getElementById(controlId);
+					const domRef = control?.getDomRef?.();
+					if (!domRef) {
+						return false;
+					}
+
+					const style = window.getComputedStyle(domRef);
+					return style.display !== "none" && style.visibility !== "hidden";
+				}, name);
 			} catch {
 				return false;
 			}
@@ -209,9 +259,10 @@ export async function loginAndGoToProtectedInFlp(): Promise<void> {
 	await toggleLoginButton.press();
 	await waitForControlText("authStatus", "Logged In");
 
+	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 	const navigateProtectedButton = await getControl("navigateProtectedButton");
 	await navigateProtectedButton.press();
-	await waitForPage("protectedPage", "Protected Page");
+	await waitForPage("protectedPage", "Protected Page", { afterRevision: settlementRevision });
 }
 
 export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
@@ -251,6 +302,7 @@ async function resetDirtyState(): Promise<void> {
 
 type DialogRecord = {
 	called: boolean;
+	handled: boolean;
 	message: string;
 	type: string;
 };
@@ -263,7 +315,7 @@ type DialogRecord = {
  * Call before the action that triggers the dialog.
  */
 export function installDialogHandler(accept: boolean): { record: DialogRecord; cleanup: () => void } {
-	const record: DialogRecord = { called: false, message: "", type: "" };
+	const record: DialogRecord = { called: false, handled: false, message: "", type: "" };
 
 	const handler = async (dialog: WebdriverIO.Dialog): Promise<void> => {
 		record.called = true;
@@ -275,6 +327,8 @@ export function installDialogHandler(accept: boolean): { record: DialogRecord; c
 		} else {
 			await dialog.dismiss();
 		}
+
+		record.handled = true;
 	};
 
 	browser.on("dialog", handler);
@@ -313,26 +367,32 @@ export async function triggerFlpCrossAppNavigation(): Promise<void> {
  */
 export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promise<void> {
 	const { record, cleanup } = installDialogHandler(false);
+	const appHashBefore = await browser.execute(() => {
+		const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
+		return String(HashChanger?.getInstance()?.getHash() ?? "");
+	});
 
 	try {
 		await triggerFlpCrossAppNavigation();
 
-		await browser.waitUntil(() => record.called, {
+		await browser.waitUntil(() => record.called && record.handled, {
 			timeout: 5000,
 			timeoutMsg:
-				"FLP dirty-state provider did not trigger a confirm dialog - registerDirtyStateProvider may not have fired",
+				"FLP dirty-state provider did not trigger and resolve a confirm dialog - registerDirtyStateProvider may not have fired",
 		});
+
+		await expectAppHashToBe(appHashBefore);
 	} finally {
 		cleanup();
 	}
 }
 
-export async function waitForProtectedPageInFlp(): Promise<void> {
-	await waitForPage("protectedPage", "Protected Page");
+export async function waitForProtectedPageInFlp(options?: PageWaitOptions): Promise<void> {
+	await waitForPage("protectedPage", "Protected Page", options);
 }
 
-export async function waitForHomePageInFlp(): Promise<void> {
-	await waitForPage("homePage", "Home");
+export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<void> {
+	await waitForPage("homePage", "Home", options);
 }
 
 /**
@@ -363,15 +423,26 @@ export async function navigateToRouteInFlp(routeName: string): Promise<void> {
  * The ShellNavigationHashChanger overrides this method to split shell hash
  * from app hash automatically.
  */
-export async function expectAppHashToBe(expected: string, timeout = 5000): Promise<void> {
+export async function expectAppHashToBe(expected: string, options: AppHashWaitOptions = {}): Promise<void> {
+	const { timeout = 5000, afterRevision } = options;
+
 	await browser.waitUntil(
 		async () => {
-			return browser.execute((exp: string) => {
+			const hashMatches = await browser.execute((exp: string) => {
 				const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
 				const hash = HashChanger?.getInstance()?.getHash() ?? "";
 				return hash === exp;
 			}, expected);
+
+			if (!hashMatches) {
+				return false;
+			}
+
+			return afterRevision === undefined || (await getRuntimeSettlementRevisionInFlp()) > afterRevision;
 		},
-		{ timeout, timeoutMsg: `App hash did not settle to "${expected}"` },
+		{
+			timeout,
+			timeoutMsg: `App hash did not settle to "${expected}"${afterRevision === undefined ? "" : ` after revision ${afterRevision}`}`,
+		},
 	);
 }

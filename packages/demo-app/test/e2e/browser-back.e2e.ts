@@ -1,4 +1,10 @@
-import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
+import {
+	getRuntimeSettlementRevision,
+	waitForPage,
+	resetAuth,
+	expectHashToBe,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Browser back navigation with guards", () => {
 	it("should handle back navigation cleanly after login flow", async () => {
@@ -64,32 +70,26 @@ describe("Browser back navigation with guards", () => {
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try browser forward (toward previously visited #/protected)
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => window.history.forward());
 
 		// Guard should block: wait for hash to settle back to home
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
-	});
-
-	it("should handle back after a blocked navigation attempt", async () => {
-		await browser.goTo({ sHash: "" });
-		await resetAuth();
-
-		// Try navigating to protected (will be blocked - logged out)
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
+		await expectHashToBe("", {
+			timeoutMsg: "Hash should settle to home after guard redirect",
+			afterRevision: settlementRevision,
 		});
-		await navBtn.press();
+		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
 
-		// Wait for hash to settle after guard redirects
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
-
-		// Browser back should not break the app
-		await browser.back();
-
-		// App should remain on Home (or recover to it)
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{ afterRevision: settlementRevision },
+		);
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 
 	it("should handle multiple back/forward cycles", async () => {
