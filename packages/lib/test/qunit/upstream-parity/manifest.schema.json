@@ -1,0 +1,83 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://wridgeu.github.io/ui5-lib-guard-router/schemas/upstream-parity-manifest.schema.json",
+	"title": "Vendored OpenUI5 Router Parity Manifest",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schemaVersion", "upstream", "files"],
+	"properties": {
+		"schemaVersion": {
+			"type": "integer",
+			"const": 1
+		},
+		"upstream": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["repo", "tag", "commitSha"],
+			"properties": {
+				"repo": {
+					"type": "string",
+					"minLength": 1,
+					"pattern": "^[^\\s]+/[^\\s]+$"
+				},
+				"tag": {
+					"type": "string",
+					"minLength": 1
+				},
+				"commitSha": {
+					"type": "string",
+					"pattern": "^[a-f0-9]{40}$"
+				}
+			}
+		},
+		"files": {
+			"type": "array",
+			"minItems": 1,
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [
+					"id",
+					"sourcePath",
+					"rawFilePath",
+					"contentSha256",
+					"portFilePath",
+					"status",
+					"adaptations"
+				],
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"sourcePath": {
+						"type": "string",
+						"minLength": 1
+					},
+					"rawFilePath": {
+						"type": "string",
+						"minLength": 1
+					},
+					"contentSha256": {
+						"type": "string",
+						"pattern": "^[a-f0-9]{64}$"
+					},
+					"portFilePath": {
+						"type": "string",
+						"minLength": 1
+					},
+					"status": {
+						"type": "string",
+						"enum": ["ported", "ported-subset"]
+					},
+					"adaptations": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				}
+			}
+		}
+	}
+}

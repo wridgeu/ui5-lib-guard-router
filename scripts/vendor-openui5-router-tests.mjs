@@ -1,3 +1,4 @@
+import Ajv2020 from "ajv/dist/2020.js";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.json");
+const manifestSchemaPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.schema.json");
 
 function getFlag(name) {
 	return process.argv.includes(name);
@@ -21,6 +23,10 @@ function getOption(name) {
 
 async function readManifest() {
 	return JSON.parse(await readFile(manifestPath, "utf8"));
+}
+
+async function readManifestSchema() {
+	return JSON.parse(await readFile(manifestSchemaPath, "utf8"));
 }
 
 async function fetchJson(url) {
@@ -93,12 +99,15 @@ function computeSha256(contents) {
 
 async function main() {
 	const manifest = await readManifest();
+	const manifestSchema = await readManifestSchema();
 	const requestedTag = getOption("--tag");
 	const sha = getOption("--sha");
 	const targetVersion = requestedTag ?? sha ?? manifest.upstream.tag;
 	const dryRun = getFlag("--dry-run");
 	const writeManifest = getFlag("--write-manifest");
 	const repo = manifest.upstream.repo;
+	const ajv = new Ajv2020({ allErrors: true, strict: false });
+	const validateManifest = ajv.compile(manifestSchema);
 
 	if (writeManifest && !requestedTag) {
 		throw new Error(
@@ -151,6 +160,14 @@ async function main() {
 		for (const file of manifest.files) {
 			file.rawFilePath = buildRawFilePathForManifest(targetVersion, file.sourcePath);
 		}
+
+		if (!validateManifest(manifest)) {
+			const issues = (validateManifest.errors ?? [])
+				.map((issue) => `${issue.instancePath || "/"}: ${issue.message ?? "invalid value"}`)
+				.join("; ");
+			throw new Error(`Generated manifest does not satisfy manifest.schema.json: ${issues}`);
+		}
+
 		await writeFile(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`, "utf8");
 		console.log(`Updated manifest to ${targetVersion} (${commitSha})`);
 	}

@@ -39,6 +39,7 @@ Those remain covered by the local QUnit, E2E, and FLP suites.
 packages/lib/test/qunit/upstream-parity/
   README.md
   manifest.json
+  manifest.schema.json
   adapters/
   ports/
   vendor/
@@ -48,7 +49,9 @@ packages/lib/test/qunit/upstream-parity/
 - `ports/openui5/<tag>/` contains local executable ports/wrappers
 - `adapters/` contains shared local harness helpers
 - `manifest.json` records provenance and raw-to-port mapping
+- `manifest.schema.json` validates the manifest structure
 - `manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
+- the vendoring script validates generated manifest updates against the schema before writing them
 
 ## Vendoring Rules
 
@@ -61,7 +64,7 @@ packages/lib/test/qunit/upstream-parity/
 
 - `npm run test:qunit:upstream-parity` - run the vendored parity lane
 - `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest` - fetch pinned upstream router test files into the raw vendor tree and refresh manifest provenance
-- `npm run verify:openui5-router-vendor` - verify manifest integrity and raw/port mapping
+- `npm run verify:openui5-router-vendor` - validate the manifest schema and verify raw/port mapping
 
 ## Maintenance
 
@@ -81,6 +84,6 @@ Recommended process:
 
 ## Current Scope
 
-The initial implementation vendors selected files from the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports a small first batch of parity cases through the local harness.
+The initial implementation vendors the `Router.qunit.js` entrypoint from the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports a small first batch of parity cases through the local harness.
 
 This is intentionally incremental: start with high-value router cases, keep provenance explicit, and expand only when the maintenance cost is justified.

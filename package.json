@@ -57,6 +57,7 @@
 		"*.{json,md,yaml,yml}": "oxfmt"
 	},
 	"devDependencies": {
+		"ajv": "^8.17.1",
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^20.0.0",
 		"@openui5/types": "1.144.0",

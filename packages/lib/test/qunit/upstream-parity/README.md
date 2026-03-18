@@ -13,10 +13,11 @@ It does **not** verify guard-specific behavior.
 
 ```text
 upstream-parity/
-  adapters/  shared local harness helpers
-  ports/     executable local ports/wrappers
-  vendor/    raw upstream snapshots
-  manifest.json
+  adapters/              shared local harness helpers
+  manifest.json          pinned upstream provenance and raw-to-port mapping
+  manifest.schema.json   JSON Schema for manifest.json
+  ports/                 executable local ports/wrappers
+  vendor/                raw upstream snapshots
 ```
 
 ## Raw Vendor Rule
@@ -25,52 +26,40 @@ upstream-parity/
 - Do not format, rewrite imports, or add local comments there.
 - Put local execution logic in `ports/` and `adapters/` only.
 
+## Lean Mapping Model
+
+The current parity lane is intentionally lean:
+
+- only vendor upstream files that we actively keep as raw provenance and execute through a local port
+- keep that mapping one-to-one wherever possible
+
+For the current import set:
+
+- `Router.qunit.js`
+    - raw source: `vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js`
+    - local port: `ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts`
+
+We do **not** keep additional raw support modules unless they are independently worth reviewing or porting later.
+
 ## Provenance
 
 `manifest.json` is the source of truth for:
 
 - upstream repo, tag, and commit SHA
-- tracked source files
+- tracked raw source files
 - raw snapshot paths
 - raw snapshot checksums
 - local executable port paths
 - adaptation notes
 
-## Mapping Model
-
-The parity lane does **not** treat every raw upstream file the same way.
-
-- executable upstream test entrypoints should map clearly to their own executable port files
-- upstream support modules may remain raw-only if they are not independently runnable test entrypoints
-
-For the current OpenUI5 async router import set:
-
-- `Router.qunit.js` is the executable upstream test entrypoint
-    - it maps to `ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts`
-- `helpers.js` and `commonIntegrationTests.js` are support modules
-    - they stay vendored as raw provenance files
-    - they are linked in `manifest.json` as support files used by the `Router.qunit.ts` port
-
-So the rule is:
-
-- one executable upstream test module -> one executable local port
-- support modules -> raw snapshots with explicit manifest linkage, not fake standalone ports
-
-That keeps the adoption traceable without inventing meaningless wrapper files for modules that are not standalone tests.
+`manifest.schema.json` validates the manifest structure before the verifier runs any repo-state checks.
+The vendoring script also validates any rewritten manifest against the schema before saving it.
 
 ## Scripts
 
 - `npm run test:qunit:upstream-parity`
 - `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest`
 - `npm run verify:openui5-router-vendor`
-
-## Update Process
-
-1. Fetch or refresh the raw upstream snapshots with the vendoring script.
-2. Review upstream diffs before changing any ports.
-3. Keep local executable ports thin and traceable.
-4. For a version bump, migrate the versioned `portFilePath` entries before writing the new manifest version.
-5. Run the verification and parity test scripts.
 
 ## General Procedure
 
@@ -117,7 +106,7 @@ This writes the raw files into `vendor/openui5/1.145.0/raw/`, but it does not sw
 
 - compare the old and new raw trees
 - identify which upstream changes are relevant to the local executable ports
-- decide whether existing ports still represent the right subset or whether new ports should be added
+- decide whether the existing port still represents the right subset or whether a new port should be added
 
 4. Migrate the executable ports
 
@@ -152,13 +141,14 @@ npm run test:qunit
 
 If the current branch is meant to be release-ready, also run the broader validation lanes used for the library.
 
-## What Is Manual vs Automatic?
+## What Is Automatic vs Manual?
 
 Automatic or assisted:
 
 - fetching raw upstream files
 - updating raw file checksums
 - updating raw file paths in the manifest
+- validating the manifest against `manifest.schema.json`
 - verifying raw-file integrity and current entrypoint wiring
 
 Manual:
