@@ -1,36 +1,22 @@
-import Ajv2020 from "ajv/dist/2020.js";
-import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { computeSha256, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.json");
-const manifestSchemaPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.schema.json");
-
-function computeSha256(contents) {
-	return createHash("sha256").update(contents).digest("hex");
-}
 
 async function main() {
 	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-	const manifestSchema = JSON.parse(await readFile(manifestSchemaPath, "utf8"));
-	const errors = [];
+	const { errors, files: manifestFiles } = validateUpstreamParityManifest(manifest);
 	const currentEntryPointPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/Current.qunit.ts");
-	const ajv = new Ajv2020({ allErrors: true, strict: false });
-	const validateManifest = ajv.compile(manifestSchema);
 
-	if (!validateManifest(manifest)) {
-		for (const issue of validateManifest.errors ?? []) {
-			errors.push(
-				`Manifest schema violation at ${issue.instancePath || "/"}: ${issue.message ?? "invalid value"}`,
-			);
+	if (errors.length > 0) {
+		for (const error of errors) {
+			console.error(error);
 		}
-	}
-
-	if (!manifest.upstream?.tag || !manifest.upstream?.commitSha || !manifest.upstream?.repo) {
-		errors.push("Manifest upstream metadata is incomplete");
+		process.exitCode = 1;
+		return;
 	}
 
 	try {
@@ -38,15 +24,17 @@ async function main() {
 		const currentImports = new Set(
 			[...currentEntryPoint.matchAll(/import\s+"([^"]+)";/g)].map((match) => match[1]),
 		);
-		const expectedImports = manifest.files
-			.filter((file) => file.portFilePath)
-			.map((file) => {
-				const relativePath = path.posix.relative(
-					"packages/lib/test/qunit/upstream-parity",
-					String(file.portFilePath).replaceAll("\\", "/"),
-				);
-				return `./${relativePath.replace(/\.ts$/, "")}`;
-			});
+		const expectedImports = new Set(
+			manifestFiles
+				.filter((file) => file.portFilePath)
+				.map((file) => {
+					const relativePath = path.posix.relative(
+						"packages/lib/test/qunit/upstream-parity",
+						String(file.portFilePath).replaceAll("\\", "/"),
+					);
+					return `./${relativePath.replace(/\.ts$/, "")}`;
+				}),
+		);
 
 		for (const expectedImport of expectedImports) {
 			if (!currentImports.has(expectedImport)) {
@@ -57,7 +45,7 @@ async function main() {
 		}
 
 		for (const currentImport of currentImports) {
-			if (currentImport.startsWith("./ports/openui5/") && !expectedImports.includes(currentImport)) {
+			if (currentImport.startsWith("./ports/openui5/") && !expectedImports.has(currentImport)) {
 				errors.push(
 					`Current upstream parity entrypoint contains an unexpected versioned import ${currentImport}: packages/lib/test/qunit/upstream-parity/Current.qunit.ts`,
 				);
@@ -69,19 +57,7 @@ async function main() {
 		);
 	}
 
-	for (const file of manifest.files) {
-		if (
-			!file.id ||
-			!file.sourcePath ||
-			!file.rawFilePath ||
-			!file.status ||
-			!file.contentSha256 ||
-			!file.portFilePath
-		) {
-			errors.push(`Manifest entry is incomplete: ${JSON.stringify(file)}`);
-			continue;
-		}
-
+	for (const file of manifestFiles) {
 		if (
 			!file.rawFilePath.includes(`/${manifest.upstream.tag}/`) &&
 			!file.rawFilePath.includes(`\\${manifest.upstream.tag}\\`)
@@ -98,7 +74,6 @@ async function main() {
 
 		const rawFilePath = path.join(repoRoot, file.rawFilePath);
 		try {
-			await access(rawFilePath);
 			const rawContents = await readFile(rawFilePath);
 			const actualSha256 = computeSha256(rawContents);
 			if (actualSha256 !== file.contentSha256) {
@@ -112,7 +87,7 @@ async function main() {
 
 		const portFilePath = path.join(repoRoot, file.portFilePath);
 		try {
-			await access(portFilePath);
+			await readFile(portFilePath, "utf8");
 		} catch {
 			errors.push(`Missing executable port file: ${file.portFilePath}`);
 		}
@@ -136,7 +111,7 @@ async function main() {
 	}
 
 	console.log(
-		`Verified ${manifest.files.length} vendored OpenUI5 router file entries for ${manifest.upstream.tag} (${manifest.upstream.commitSha})`,
+		`Verified ${manifestFiles.length} vendored OpenUI5 router file entries for ${manifest.upstream.tag} (${manifest.upstream.commitSha})`,
 	);
 }
 

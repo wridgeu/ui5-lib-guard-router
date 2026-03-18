@@ -628,7 +628,7 @@ Upstream router tests may evolve in ways that are not worth porting immediately.
 ### Milestone 1: Skeleton and Documentation
 
 - folder structure
-- manifest schema
+- manifest + verifier
 - local README
 - reference doc
 - npm script placeholder

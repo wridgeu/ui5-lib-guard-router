@@ -15,7 +15,6 @@ It does **not** verify guard-specific behavior.
 upstream-parity/
   adapters/              shared local harness helpers
   manifest.json          pinned upstream provenance and raw-to-port mapping
-  manifest.schema.json   JSON Schema for manifest.json
   ports/                 executable local ports/wrappers
   vendor/                raw upstream snapshots
 ```
@@ -52,8 +51,8 @@ We do **not** keep additional raw support modules unless they are independently 
 - local executable port paths
 - adaptation notes
 
-`manifest.schema.json` validates the manifest structure before the verifier runs any repo-state checks.
-The vendoring script also validates any rewritten manifest against the schema before saving it.
+`manifest.json` is intentionally lightweight and internal to this repository.
+The custom verifier enforces both its structural rules and its repo-state rules.
 
 ## Scripts
 
@@ -148,7 +147,7 @@ Automatic or assisted:
 - fetching raw upstream files
 - updating raw file checksums
 - updating raw file paths in the manifest
-- validating the manifest against `manifest.schema.json`
+- validating the manifest structure and required fields in the custom verifier
 - verifying raw-file integrity and current entrypoint wiring
 
 Manual:

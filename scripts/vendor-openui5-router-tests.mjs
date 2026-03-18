@@ -1,13 +1,10 @@
-import Ajv2020 from "ajv/dist/2020.js";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { computeSha256, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.json");
-const manifestSchemaPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.schema.json");
 
 function getFlag(name) {
 	return process.argv.includes(name);
@@ -23,10 +20,6 @@ function getOption(name) {
 
 async function readManifest() {
 	return JSON.parse(await readFile(manifestPath, "utf8"));
-}
-
-async function readManifestSchema() {
-	return JSON.parse(await readFile(manifestSchemaPath, "utf8"));
 }
 
 async function fetchJson(url) {
@@ -93,21 +86,19 @@ function buildRawFilePathForManifest(tag, sourcePath) {
 	);
 }
 
-function computeSha256(contents) {
-	return createHash("sha256").update(contents).digest("hex");
-}
-
 async function main() {
 	const manifest = await readManifest();
-	const manifestSchema = await readManifestSchema();
+	const { errors: manifestErrors, files: manifestFiles } = validateUpstreamParityManifest(manifest);
+	if (manifestErrors.length > 0) {
+		throw new Error(`Manifest is invalid before vendoring: ${manifestErrors.join("; ")}`);
+	}
+
 	const requestedTag = getOption("--tag");
 	const sha = getOption("--sha");
 	const targetVersion = requestedTag ?? sha ?? manifest.upstream.tag;
 	const dryRun = getFlag("--dry-run");
 	const writeManifest = getFlag("--write-manifest");
 	const repo = manifest.upstream.repo;
-	const ajv = new Ajv2020({ allErrors: true, strict: false });
-	const validateManifest = ajv.compile(manifestSchema);
 
 	if (writeManifest && !requestedTag) {
 		throw new Error(
@@ -119,7 +110,7 @@ async function main() {
 	const isVersionChange = targetVersion !== manifest.upstream.tag;
 
 	if (writeManifest && isVersionChange) {
-		const unmigratedPortEntry = manifest.files.find((file) => {
+		const unmigratedPortEntry = manifestFiles.find((file) => {
 			return (
 				file.portFilePath &&
 				!file.portFilePath.includes(`/${targetVersion}/`) &&
@@ -134,7 +125,7 @@ async function main() {
 		}
 	}
 
-	for (const file of manifest.files) {
+	for (const file of manifestFiles) {
 		const targetPath = buildRawFilePath(targetVersion, file.sourcePath);
 		const sourceUrl = `https://raw.githubusercontent.com/${repo}/${commitSha}/${file.sourcePath}`;
 		if (dryRun) {
@@ -157,15 +148,13 @@ async function main() {
 	if (!dryRun && writeManifest) {
 		manifest.upstream.tag = targetVersion;
 		manifest.upstream.commitSha = commitSha;
-		for (const file of manifest.files) {
+		for (const file of manifestFiles) {
 			file.rawFilePath = buildRawFilePathForManifest(targetVersion, file.sourcePath);
 		}
 
-		if (!validateManifest(manifest)) {
-			const issues = (validateManifest.errors ?? [])
-				.map((issue) => `${issue.instancePath || "/"}: ${issue.message ?? "invalid value"}`)
-				.join("; ");
-			throw new Error(`Generated manifest does not satisfy manifest.schema.json: ${issues}`);
+		const { errors: updatedManifestErrors } = validateUpstreamParityManifest(manifest);
+		if (updatedManifestErrors.length > 0) {
+			throw new Error(`Generated manifest is invalid: ${updatedManifestErrors.join("; ")}`);
 		}
 
 		await writeFile(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`, "utf8");
