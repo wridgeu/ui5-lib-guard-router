@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -25,51 +26,51 @@ function getGitHubToken() {
 	}
 }
 
-function getReleasePleaseCommand() {
-	if (process.env.npm_execpath) {
-		return {
-			command: process.execPath,
-			args: [process.env.npm_execpath, "exec", "release-please", "--"],
-			shell: false,
-		};
+/**
+ * Resolve the npm CLI entry point bundled with Node.
+ *
+ * npm is installed alongside the node binary but outside the normal
+ * module resolution paths. We locate it relative to `process.execPath`.
+ */
+function resolveNpmCli() {
+	const nodeDir = path.dirname(process.execPath);
+	const candidates = [
+		path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"),
+		path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+	];
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) return candidate;
 	}
-
-	// On Windows, npx is a .cmd batch wrapper that requires shell execution.
-	// Using shell: true lets the OS resolve npx correctly on all platforms.
-	return {
-		command: "npx",
-		args: ["--no-install", "release-please"],
-		shell: process.platform === "win32",
-	};
+	throw new Error(`Could not find npm CLI relative to node at ${process.execPath}`);
 }
 
 function main() {
 	const token = getGitHubToken();
 	const extraArgs = process.argv.slice(2);
-	const { command, args, shell } = getReleasePleaseCommand();
-	const childEnv = {
-		...process.env,
-		GITHUB_TOKEN: token,
-		GH_TOKEN: token,
-	};
+
+	// Always invoke via `node <npm-cli> exec release-please --` to avoid
+	// platform-specific .cmd wrappers and shell: true (DEP0190).
+	const npmCli = process.env.npm_execpath ?? resolveNpmCli();
 
 	execFileSync(
-		command,
+		process.execPath,
 		[
-			...args,
+			npmCli,
+			"exec",
+			"release-please",
+			"--",
 			"release-pr",
 			"--dry-run",
 			`--repo-url=${repoUrl}`,
 			"--target-branch=main",
 			"--config-file=release-please-config.json",
 			"--manifest-file=.release-please-manifest.json",
+			`--token=${token}`,
 			...extraArgs,
 		],
 		{
 			cwd: repoRoot,
-			env: childEnv,
 			stdio: "inherit",
-			shell,
 		},
 	);
 }
