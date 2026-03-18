@@ -10,29 +10,6 @@ import {
 	type RouterFlavor,
 } from "../../../../adapters/routerFactories";
 
-type Restorable = {
-	restore(): void;
-};
-
-type SpyHandle = Restorable & {
-	callCount: number;
-	firstCall: {
-		args: unknown[];
-	};
-};
-
-type SinonLike = {
-	stub(
-		target: object,
-		method: string,
-	): {
-		callsFake(fn: (...args: unknown[]) => unknown): Restorable;
-	};
-	spy(target: object, method: string): SpyHandle;
-};
-
-const sinonApi = (globalThis as unknown as { sinon: SinonLike }).sinon;
-
 type ForwardNavigationResult = {
 	toCallCount: number;
 	normalizedToArgs: unknown[] | null;
@@ -51,17 +28,17 @@ type RouteMatchedApi = {
 	detachRouteMatched(handler: (event: RouteMatchedEvent) => void, listener?: unknown): void;
 };
 
-function stubViewsForSinglePage(targetPage: Page): Restorable {
+function stubViewsForSinglePage(targetPage: Page) {
 	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
-	return sinonApi.stub(prototype, "_getView").callsFake(() => targetPage);
+	return sinon.stub(prototype, "_getView").callsFake(() => targetPage);
 }
 
-function stubViewsByName(viewMap: Record<string, Page>): Restorable {
+function stubViewsByName(viewMap: Record<string, Page>) {
 	const prototype = Views.prototype as unknown as {
 		_getView: (options: { viewName?: string; name?: string }) => unknown;
 	};
 
-	return sinonApi.stub(prototype, "_getView").callsFake((options: unknown) => {
+	return sinon.stub(prototype, "_getView").callsFake((options: unknown) => {
 		const candidateOptions = options as { viewName?: string; name?: string };
 		const candidate = String(candidateOptions.viewName ?? candidateOptions.name ?? "").toLowerCase();
 		for (const [name, page] of Object.entries(viewMap)) {
@@ -101,7 +78,7 @@ async function runForwardNavigationScenario(flavor: RouterFlavor): Promise<Forwa
 	const navContainer = new NavContainer({ pages: startPage });
 	const targetPage = new Page();
 	const router = createRouterByFlavor(flavor, ...createForwardNavigationFixture(navContainer.getId()));
-	const toSpy = sinonApi.spy(navContainer, "to");
+	const toSpy = sinon.spy(navContainer, "to");
 	const getViewStub = stubViewsForSinglePage(targetPage);
 
 	try {
@@ -135,7 +112,7 @@ async function runViewLevelScenario(flavor: RouterFlavor): Promise<{
 	const initialPage = new Page();
 	const router = createRouterByFlavor(flavor, ...createViewLevelFixture(navContainer.getId()));
 	const getViewStub = stubViewsByName({ first: firstPage, second: secondPage, initial: initialPage });
-	const backToPageSpy = sinonApi.spy(navContainer, "backToPage");
+	const backToPageSpy = sinon.spy(navContainer, "backToPage");
 
 	try {
 		const targets = router.getTargets();
