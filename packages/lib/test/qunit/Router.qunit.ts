@@ -2276,7 +2276,7 @@ QUnit.test("Leave guard runs for navigation to an unmatched hash", async functio
 	await waitForRoute(router, "home");
 
 	HashChanger.getInstance().setHash("some/unknown/path");
-	await nextTick(50);
+	await router.navigationSettled();
 	assert.ok(guardCalled, "Leave guard was called for unmatched hash navigation");
 });
 
@@ -2301,7 +2301,7 @@ QUnit.test("Leave guard can allow navigation to an unmatched hash", async functi
 	await waitForRoute(router, "home");
 
 	HashChanger.getInstance().setHash("some/unknown/path");
-	await nextTick(50);
+	await router.navigationSettled();
 	assert.ok(guardCalled, "Leave guard ran");
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
@@ -2323,7 +2323,7 @@ QUnit.test("Guard context has empty toRoute for unmatched hash but valid fromRou
 	await waitForRoute(router, "protected");
 
 	HashChanger.getInstance().setHash("cross-app-intent");
-	await nextTick(50);
+	await router.navigationSettled();
 
 	assert.ok(capturedContext, "Guard context was captured");
 	assert.strictEqual(capturedContext!.fromRoute, "protected", "fromRoute is the current route");
@@ -2897,6 +2897,9 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 QUnit.module("Router - Restore and settlement invariants", standardHooks);
 
 QUnit.test("Blocked navigation restores hash through a single suppressed parse cycle", async function (assert: Assert) {
+	let guardCalls = 0;
+	let matched = false;
+
 	router.addRouteGuard("protected", () => {
 		guardCalls++;
 		return false;
@@ -2905,9 +2908,6 @@ QUnit.test("Blocked navigation restores hash through a single suppressed parse c
 	await waitForRoute(router, "home");
 
 	const flushSpy = sinon.spy(router as unknown as { _flushSettlement: () => void }, "_flushSettlement");
-
-	let guardCalls = 0;
-	let matched = false;
 	router.getRoute("protected")!.attachPatternMatched(() => {
 		matched = true;
 	});

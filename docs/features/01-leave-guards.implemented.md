@@ -1,7 +1,7 @@
 # Feature: Leave Guards
 
 > **Status**: Implemented. This document records the leave-guard design history and proposal context for the shipped feature.
-> See the [README](../../README.md) for the shipped API and usage examples.
+> See the [library README](../../packages/lib/README.md) for the shipped API and usage examples.
 >
 > **Proposal-to-implementation differences:**
 >

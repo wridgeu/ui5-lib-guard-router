@@ -36,7 +36,11 @@ export interface GuardContext {
 	toRoute: string;
 	/** Raw hash being navigated to */
 	toHash: string;
-	/** Parsed route parameters */
+	/**
+	 * Parsed route arguments for the target route.
+	 * Values are strings (simple parameters) or `Record<string, string>` (nested parameters).
+	 * Empty object when the target route has no parameters or no route matched.
+	 */
 	toArguments: RouteInfo["arguments"];
 	/** Current route name (empty string on initial navigation) */
 	fromRoute: string;
@@ -98,10 +102,16 @@ export interface NavigationResult {
 export interface GuardRouter extends MobileRouter {
 	/**
 	 * Register a global guard that runs for every navigation.
+	 *
+	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	addGuard(guard: GuardFn): GuardRouter;
 	/**
 	 * Remove a previously registered global guard.
+	 *
+	 * @param guard - Guard function to remove by reference. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	removeGuard(guard: GuardFn): GuardRouter;
 	/**
@@ -109,6 +119,10 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * Accepts either an enter guard function or a configuration object with
 	 * `beforeEnter` and/or `beforeLeave` guards.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param guard - Guard function or {@link RouteGuardConfig} object.
+	 * @returns `this` for chaining.
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	/**
@@ -117,6 +131,10 @@ export interface GuardRouter extends MobileRouter {
 	 * Accepts the same forms as `addRouteGuard`: a guard function removes an
 	 * enter guard, while a configuration object removes `beforeEnter` and/or
 	 * `beforeLeave` by reference.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param guard - Guard function or {@link RouteGuardConfig} object to remove by reference.
+	 * @returns `this` for chaining.
 	 */
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	/**
@@ -124,10 +142,18 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * Leave guards run when navigating away from the route. They can allow or
 	 * block the navigation, but they cannot redirect.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	/**
 	 * Remove a previously registered leave guard from a specific route.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param guard - Leave guard function to remove by reference. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	/**
@@ -135,6 +161,8 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * If no navigation is pending, this resolves immediately with the most
 	 * recent settlement result.
+	 *
+	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */
 	navigationSettled(): Promise<NavigationResult>;
 }

@@ -4,19 +4,19 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 
 ## Pattern overview
 
-| Pattern                                                            | Guard type          | Sync / Async | Reference                                                            |
-| ------------------------------------------------------------------ | ------------------- | ------------ | -------------------------------------------------------------------- |
-| [Authentication guard](#authentication-guard)                      | Route enter         | Sync         | `guards.ts` -- `createAuthGuard`                                     |
-| [Async permission check](#async-permission-check-with-abortsignal) | Route enter         | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
-| [Always block](#always-block)                                      | Route enter         | Sync         | `guards.ts` -- `blockedGuard`                                        |
-| [Always redirect](#always-redirect)                                | Route enter         | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
-| [Dirty form leave guard](#dirty-form-leave-guard)                  | Route leave         | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
-| [Redirect with parameters](#redirect-with-parameters)              | Route enter         | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
-| [Error handling](#error-handling-in-guards)                        | Enter / Leave       | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
-| [Guard factories](#guard-factories)                                | Any                 | Any          | `guards.ts` -- all `create*` functions                               |
-| [Controller-level lifecycle](#controller-level-guard-lifecycle)    | Route leave         | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
-| [Object form (enter + leave)](#object-form-enter--leave)           | Route enter + leave | Any          | `Component.ts` -- `addRouteGuard` with config                        |
-| [Settlement for UI feedback](#settlement-for-ui-feedback)          | N/A                 | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
+| Pattern                                                            | Guard type           | Sync / Async | Reference                                                            |
+| ------------------------------------------------------------------ | -------------------- | ------------ | -------------------------------------------------------------------- |
+| [Authentication guard](#authentication-guard)                      | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
+| [Async permission check](#async-permission-check-with-abortsignal) | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
+| [Always block](#always-block)                                      | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
+| [Always redirect](#always-redirect)                                | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
+| [Dirty form leave guard](#dirty-form-leave-guard)                  | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
+| [Redirect with parameters](#redirect-with-parameters)              | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
+| [Error handling](#error-handling-in-guards)                        | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
+| [Guard factories](#guard-factories)                                | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
+| [Controller-level lifecycle](#controller-level-guard-lifecycle)    | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
+| [Object form (enter + leave)](#object-form-enter--leave)           | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
+| [Settlement for UI feedback](#settlement-for-ui-feedback)          | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
 All reference implementations live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts).
 

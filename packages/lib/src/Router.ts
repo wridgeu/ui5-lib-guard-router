@@ -93,6 +93,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Register a global guard that runs for every navigation.
+	 *
+	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	addGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
@@ -105,6 +108,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Remove a previously registered global guard.
+	 *
+	 * @param guard - Guard function to remove by reference. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	removeGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
@@ -123,6 +129,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param guard - Guard function or {@link RouteGuardConfig} object.
+	 * @returns `this` for chaining.
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
@@ -171,6 +181,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts the same forms as `addRouteGuard`: a guard function removes
 	 * an enter guard; a configuration object removes `beforeEnter` and/or
 	 * `beforeLeave` by reference.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param guard - Guard function or {@link RouteGuardConfig} object to remove by reference.
+	 * @returns `this` for chaining.
 	 */
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
@@ -196,6 +210,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Leave guards run when navigating **away from** the route, before any
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
@@ -220,6 +238,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Remove a leave guard from a specific route.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param guard - Leave guard function to remove by reference. Non-functions are ignored with a warning.
+	 * @returns `this` for chaining.
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
@@ -237,6 +259,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * most recent settlement result (or `Committed` with the current state
 	 * when no navigation has occurred yet). Otherwise it resolves once the
 	 * pending navigation commits, bypasses, blocks, redirects, or is cancelled.
+	 *
+	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */
 	navigationSettled(): Promise<NavigationResult> {
 		if (this._pendingHash === null) {
@@ -274,6 +298,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * when a guard returns a Promise. A generation counter discards stale results
 	 * when navigations overlap.
 	 *
+	 * @param newHash - The new hash fragment from the URL.
 	 * @override sap.ui.core.routing.Router#parse
 	 */
 	override parse(newHash: string): void {

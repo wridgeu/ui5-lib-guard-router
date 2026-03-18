@@ -1,7 +1,7 @@
 # Alternative 8: Leave Guards for UI5
 
 > **Status**: Implemented. This document captures the design research behind leave guards.
-> See the [README](../../README.md) for the shipped API and [Feature 01](../features/01-leave-guards.implemented.md) for the feature write-up.
+> See the [library README](../../packages/lib/README.md) for the shipped API and [Feature 01](../features/01-leave-guards.implemented.md) for the feature write-up.
 >
 > **Proposal-to-implementation differences:**
 >
