@@ -6,8 +6,8 @@
 > **Proposal-to-implementation differences:**
 >
 > - Uses shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
-> - Public methods return `GuardRouter` (not the proposed `RouterInstance` — renamed to `RouterInternal` for the internal interface)
-> - Helper is `isPromise` (not `isThenable`)
+> - Public methods return `GuardRouter` (the proposed `RouterInstance` name was not shipped)
+> - Helper is `isPromiseLike` (not `isThenable`)
 >
 > The code samples below show the proposal, not the shipped API.
 

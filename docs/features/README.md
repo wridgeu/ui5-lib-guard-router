@@ -1,6 +1,6 @@
-# Features and Proposals
+# Feature Notes
 
-Feature notes for `ui5.guard.router.Router`, including implemented items and future proposals derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
+Feature notes for `ui5.guard.router.Router`, including shipped capabilities, historical design records, and future proposals derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
 
 ## Implemented Capabilities
 
@@ -14,7 +14,7 @@ The router provides:
 - Concurrent navigation handling via generation counter
 - Clean history on block/redirect
 
-## Feature Documents
+## Documents
 
 | #   | Feature                                          | Priority | Depends On | Status          |
 | --- | ------------------------------------------------ | -------- | ---------- | --------------- |
@@ -33,7 +33,7 @@ The router provides:
 
 - `01` leave guards are implemented and shipped
 - `02` guard bypass is deferred because most use cases are better handled by updating application state so guards pass naturally
-- `03` transition object and `04` route metadata remain proposals
+- `03` transition object and `04` route metadata remain open proposals
 
 ## Framework Comparison Summary
 

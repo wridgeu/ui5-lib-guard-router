@@ -1,5 +1,7 @@
 # Feature: Transition Object (NavigationIntent)
 
+> **Status**: Proposed. See the [feature index](./README.md) for priority and dependencies.
+
 ## Problem
 
 When a guard redirects (e.g., unauthenticated user → login page), the original destination is available in the guard's context but not easily passed to the redirect target. Developers must manually encode it:

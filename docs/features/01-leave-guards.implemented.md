@@ -1,18 +1,18 @@
 # Feature: Leave Guards
 
-> **Status**: Implemented. This document records the leave-guard design proposal.
+> **Status**: Implemented. This document records the leave-guard design history and proposal context for the shipped feature.
 > See the [README](../../README.md) for the shipped API and usage examples.
 >
 > **Proposal-to-implementation differences:**
 >
 > - Leave guards use the shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
 > - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | Promise<boolean>` directly
-> - Public methods return `GuardRouter` (not the proposed `RouterInstance` — which was renamed to `RouterInternal` for the internal interface)
+> - Public methods return `GuardRouter` (the proposed `RouterInstance` name was not shipped)
 > - `addRouteGuard` also accepts an object form `{ beforeEnter?, beforeLeave? }` for convenience
-> - The helper is named `isPromise` (not `isThenable` as sketched below)
+> - The helper is named `isPromiseLike` (not `isThenable` as sketched below)
 > - Open question #2 was resolved: leave guards receive the full `GuardContext`
 >
-> The code samples below show the proposal, not the shipped API. Refer to `Router.ts` and `types.ts` for the source of truth.
+> Some code samples below show the proposal rather than the final API. Refer to `Router.ts` and `types.ts` for the source of truth.
 
 ## Problem
 

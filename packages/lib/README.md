@@ -202,6 +202,10 @@ All methods return `this` for chaining.
 | `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form |
 | `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                             |
 
+### Unknown routes during registration
+
+`addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
+
 ### GuardContext
 
 Every guard receives a `GuardContext` object:
@@ -583,6 +587,56 @@ router.addRouteGuard("dashboard", async (context) => {
 ```
 
 This follows the same pattern as [TanStack Router's `pendingComponent`](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking#handling-blocked-navigations): the URL reflects the intent while a loading state signals that the navigation hasn't committed yet.
+
+## Debugging and Troubleshooting
+
+### Enabling guard logs
+
+The router logs guard registration errors, pipeline decisions, and async discard events through UI5's `Log` API under the component name `ui5.guard.router.Router`.
+
+Enable debug-level output programmatically:
+
+```typescript
+import Log from "sap/base/Log";
+Log.setLevel(Log.Level.DEBUG, "ui5.guard.router.Router");
+```
+
+Or via URL parameter:
+
+```
+?sap-ui-log-level=ui5.guard.router.Router=DEBUG
+```
+
+### Log reference
+
+| Level   | Message                                                                             | Trigger                                                                                              |
+| ------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| warning | `addGuard called with invalid guard, ignoring`                                      | Non-function passed to `addGuard()`                                                                  |
+| warning | `addRouteGuard called with invalid guard, ignoring`                                 | Non-function `beforeEnter`, `beforeLeave`, or direct guard                                           |
+| info    | `addRouteGuard called with config missing both beforeEnter and beforeLeave`         | Empty `RouteGuardConfig` object (no handlers)                                                        |
+| warning | `addLeaveGuard called with invalid guard, ignoring`                                 | Non-function passed to `addLeaveGuard()`                                                             |
+| warning | `removeGuard / removeRouteGuard / removeLeaveGuard called with invalid guard`       | Non-function passed to a remove method                                                               |
+| warning | `{method} called for unknown route; guard will still register`                      | Route name not found at registration time                                                            |
+| warning | `Guard returned invalid value, treating as block`                                   | Guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` object |
+| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target route does not exist in the manifest                                                 |
+| error   | `Async enter guard for route "{route}" failed, blocking navigation`                 | Async enter guard Promise rejected                                                                   |
+| error   | `Async leave guard on route "{route}" failed, blocking navigation`                  | Async leave guard Promise rejected                                                                   |
+| error   | `Enter guard [{n}] for route "{route}" threw, blocking navigation`                  | Sync or async enter guard threw an exception                                                         |
+| error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async leave guard threw an exception                                                         |
+| debug   | `Async enter guard result discarded (superseded by newer navigation)`               | A newer `parse()` call invalidated the pending async result                                          |
+| debug   | `Async leave guard result discarded (superseded by newer navigation)`               | A newer `parse()` call invalidated the pending async result                                          |
+
+### Common issues
+
+**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. If the guard is on a redirect target, it does not run -- see [Redirect targets bypass guards](#redirect-targets-bypass-guards).
+
+**Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
+
+**Redirect treated as blocked**: The redirect target route does not exist in the manifest. The router logs a warning with the target name. Verify the route name spelling.
+
+**Async guard result discarded**: A newer navigation started before the async guard resolved. The router uses a generation counter to discard stale results. This is expected behavior during rapid sequential navigations. The debug log confirms when this occurs.
+
+**URL bar shows target hash, then reverts**: This is expected for async guards. The `HashChanger` updates the URL before `parse()` runs. See [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards) for the architectural explanation and the busy-indicator pattern.
 
 ## Compatibility
 

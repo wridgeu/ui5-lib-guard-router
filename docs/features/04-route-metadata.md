@@ -1,5 +1,7 @@
 # Feature: Route Metadata
 
+> **Status**: Proposed (low priority). See the [feature index](./README.md) for priority and dependencies.
+
 ## Problem
 
 Guard conditions are currently defined imperatively in JavaScript. For common patterns like "this route requires authentication" or "this route requires admin role", developers write repetitive guard logic:

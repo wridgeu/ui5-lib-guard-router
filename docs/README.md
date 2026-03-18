@@ -7,6 +7,9 @@ This directory groups the repository's longer-form documentation by intent.
 - [Reference](./reference/)
     - [Architecture](./reference/architecture.md)
     - [Problem analysis](./reference/analysis.md)
+- [Guides](./guides/)
+    - [Migration from attachPatternMatched](./guides/migration-from-pattern-matched.md)
+    - [Guard integration patterns](./guides/integration-patterns.md)
 - [Research](./research/)
     - [FLP dirty state](./research/flp-dirty-state.md)
     - [Native NavContainer navigate event](./research/native-router-navigate-event.md)
@@ -16,8 +19,8 @@ This directory groups the repository's longer-form documentation by intent.
     - [View caching and controller lifecycle](./research/view-caching-controller-lifecycle.md)
 - [Explorations](./explorations/README.md)
     - Alternative approaches and extension ideas evaluated during development
-- [Feature proposals](./features/README.md)
-    - Candidate follow-up capabilities for `ui5.guard.router.Router`
+- [Feature notes](./features/README.md)
+    - Shipped capabilities, historical design notes, and follow-up proposals for `ui5.guard.router.Router`
 
 ## Notes
 
