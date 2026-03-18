@@ -56,6 +56,11 @@ export interface GuardContext {
 
 /**
  * A guard function. It can be synchronous or asynchronous.
+ *
+ * @param context - Navigation context with current/target route info and an `AbortSignal`.
+ * @returns `true` to allow, `false` to block, a route name string to redirect,
+ * or a {@link GuardRedirect} object for redirect with parameters or nested component targets.
+ * Promise-like return values are awaited.
  */
 export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>;
 
@@ -64,6 +69,10 @@ export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<Guard
  *
  * Leave guards answer the question "can I leave this route?" and return
  * only a boolean. They cannot redirect. Use enter guards for that.
+ *
+ * @param context - Navigation context with current/target route info and an `AbortSignal`.
+ * @returns `true` to allow leaving the current route. Any non-`true` boolean result blocks.
+ * Promise-like return values are awaited. Non-boolean runtime values are treated as blocked.
  */
 export type LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>;
 
@@ -87,9 +96,17 @@ export interface RouteGuardConfig {
 export interface NavigationResult {
 	/** How the navigation resolved. */
 	status: NavigationOutcome;
-	/** Route name determined by the guard pipeline (empty string when bypassed). */
+	/**
+	 * Route name associated with the settled state.
+	 * Empty string when no route is active or the winning navigation did not match a route
+	 * (for example the initial idle state, after `stop()`, or a bypassed navigation).
+	 */
 	route: string;
-	/** Hash determined by the guard pipeline. */
+	/**
+	 * Hash associated with the settled state.
+	 * For blocked or cancelled navigations this is usually the hash the router stayed on;
+	 * for committed, bypassed, and redirected navigations it is the hash from the winning path.
+	 */
 	hash: string;
 }
 
@@ -159,8 +176,11 @@ export interface GuardRouter extends MobileRouter {
 	/**
 	 * Resolve when the current guard pipeline settles.
 	 *
+	 * If a navigation is pending, this resolves when that pipeline settles.
 	 * If no navigation is pending, this resolves immediately with the most
-	 * recent settlement result.
+	 * recent settlement result. Before any navigation has settled, it falls back
+	 * to a synthetic `Committed` result derived from the router's current route/hash state.
+	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */

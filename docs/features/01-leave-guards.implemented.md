@@ -12,7 +12,7 @@
 > - The helper is named `isPromiseLike` (not `isThenable` as sketched below)
 > - Open question #2 was resolved: leave guards receive the full `GuardContext`
 >
-> Some code samples below show the proposal rather than the final API. Refer to `Router.ts` and `types.ts` for the source of truth.
+> Some code samples below are preserved as historical proposal sketches rather than the final API. Refer to `Router.ts` and `types.ts` for the source of truth.
 
 ## Problem
 
@@ -24,7 +24,21 @@ Without leave guards, developers must either:
 - Rely on browser `beforeunload` (only covers page close, not in-app navigation)
 - Manually track dirty state in a model and check it everywhere
 
-## Proposed API
+## Shipped API Snapshot
+
+```typescript
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+
+// `LeaveGuardFn` receives the shared `GuardContext`
+// and returns `boolean | PromiseLike<boolean>`.
+
+router.addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+router.removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+```
+
+## Original Proposal
+
+The snippets in the following sections are the pre-implementation design notes. They intentionally keep the original names and shapes for historical context.
 
 ```typescript
 // Register a leave guard for a specific route
@@ -135,11 +149,11 @@ parse(this: RouterInstance, newHash: string): void {
 }
 ```
 
-### LeaveGuardContext vs GuardContext
+### Historical Note: LeaveGuardContext vs GuardContext
 
 The `LeaveGuardContext` is intentionally a separate type from `GuardContext`. Leave guards don't receive a `transition` object (Feature 03) because they shouldn't redirect. They answer a binary question: "can I leave?"
 
-## Types Addition
+## Historical Type Sketch
 
 ```typescript
 // In types.ts

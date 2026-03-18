@@ -18,7 +18,7 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | [Object form (enter + leave)](#object-form-enter--leave)           | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
 | [Settlement for UI feedback](#settlement-for-ui-feedback)          | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
-All reference implementations live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts).
+Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). Controller lifecycle and object-form examples also reference `Component.ts` and `Home.controller.ts` where noted in the table above.
 
 ## Authentication guard
 

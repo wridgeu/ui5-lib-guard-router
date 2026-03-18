@@ -255,10 +255,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Return a Promise that settles when the current guard pipeline finishes.
 	 *
-	 * If no navigation is pending, the Promise resolves immediately with the
-	 * most recent settlement result (or `Committed` with the current state
-	 * when no navigation has occurred yet). Otherwise it resolves once the
-	 * pending navigation commits, bypasses, blocks, redirects, or is cancelled.
+	 * If a navigation is pending, the Promise resolves when that pipeline settles.
+	 * If no navigation is pending, it resolves immediately with the most recent
+	 * settlement result. Before any navigation has settled, it falls back to a
+	 * synthetic `Committed` result derived from the router's current route/hash
+	 * state. After `stop()`, that idle fallback reports empty route/hash values
+	 * until a new navigation settles.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */

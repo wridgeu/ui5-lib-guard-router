@@ -275,11 +275,11 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
 
-A guard redirect to a nonexistent route name settles as `Blocked` because no route change commits. The router logs a warning with the bad target name.
+A guard redirect that fails to trigger a follow-up navigation settles as `Blocked` because no route change commits. A nonexistent route name is the most common cause, and the router logs the target name to help diagnose it.
 
 An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
 
-If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router (or after `stop()`/`destroy()`), this defaults to `Committed` with the current state. Multiple callers waiting on the same pending navigation all receive the same result.
+If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router, this defaults to `Committed` with the instance's current route/hash state. After `stop()`, those fields are reset, so idle calls resolve with empty strings until the next navigation settles. Multiple callers waiting on the same pending navigation all receive the same result.
 
 **App code: busy indicator during async guards**
 
@@ -362,7 +362,7 @@ router.addGuard((context): GuardRedirect | true => {
 });
 ```
 
-The demo app exposes the same redirect-with-parameters pattern as `createRedirectWithParamsGuard()` in `packages/demo-app/webapp/guards.ts`.
+The demo app keeps `createRedirectWithParamsGuard()` as a reference implementation in `packages/demo-app/webapp/guards.ts`; the runnable demo routes do not use it because they have no route parameters.
 
 ### Guard factories
 
@@ -388,18 +388,18 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 
 ### Object form with RouteGuardConfig
 
-The runnable demo uses the same object form in `packages/demo-app/webapp/Component.ts`, paired with factories from `packages/demo-app/webapp/guards.ts`.
+The runnable demo uses the same object form in `packages/demo-app/webapp/Component.ts`, pairing an async permission check with a leave guard on the `protected` route.
 
 ```typescript
 import type { RouteGuardConfig } from "ui5/guard/router/types";
 
-const orderGuards: RouteGuardConfig = {
-	beforeEnter: createAuthGuard(authModel),
+const protectedGuards: RouteGuardConfig = {
+	beforeEnter: createAsyncPermissionGuard(authModel),
 	beforeLeave: createDirtyFormGuard(formModel),
 };
 
-router.addRouteGuard("editOrder", orderGuards);
-// later: router.removeRouteGuard("editOrder", orderGuards);
+router.addRouteGuard("protected", protectedGuards);
+// later: router.removeRouteGuard("protected", protectedGuards);
 ```
 
 ### Dynamic guard registration
@@ -419,27 +419,30 @@ router.removeGuard(logGuard);
 
 ### Leave guard with controller lifecycle
 
-The demo app shows the same lifecycle pattern in `packages/demo-app/webapp/controller/Home.controller.ts`, using `createHomeLeaveLogger()` from `packages/demo-app/webapp/guards.ts`.
+The demo app shows the same lifecycle pattern in `packages/demo-app/webapp/controller/Home.controller.ts`, registering `createHomeLeaveLogger()` on the `home` route and removing it again in `onExit()`.
 
 ```typescript
 import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
-import { createDirtyFormGuard } from "./guards";
+import BaseController from "./BaseController";
+import { createHomeLeaveLogger } from "../guards";
 
-export default class EditOrderController extends Controller {
-	private _leaveGuard: LeaveGuardFn;
+export default class HomeController extends BaseController {
+	private _leaveGuard: LeaveGuardFn | null = null;
 
 	onInit(): void {
-		const formModel = new JSONModel({ isDirty: false });
-		this.getView()!.setModel(formModel, "form");
-
-		const router = UIComponent.getRouterFor(this) as GuardRouter;
-		this._leaveGuard = createDirtyFormGuard(formModel);
-		router.addLeaveGuard("editOrder", this._leaveGuard);
+		const router = this.getRouter<GuardRouter>();
+		this._leaveGuard = createHomeLeaveLogger();
+		router.addLeaveGuard("home", this._leaveGuard);
 	}
 
 	onExit(): void {
-		const router = UIComponent.getRouterFor(this) as GuardRouter;
-		router.removeLeaveGuard("editOrder", this._leaveGuard);
+		if (!this._leaveGuard) {
+			return;
+		}
+
+		const router = this.getRouter<GuardRouter>();
+		router.removeLeaveGuard("home", this._leaveGuard);
+		this._leaveGuard = null;
 	}
 }
 ```
@@ -623,7 +626,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time                                                           |
 | warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
-| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target route does not exist in the manifest                                                |
+| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
 | error   | `Async enter guard for route "{route}" failed, blocking navigation`                 | Async enter guard Promise rejected                                                                  |
 | error   | `Async leave guard on route "{route}" failed, blocking navigation`                  | Async leave guard Promise rejected                                                                  |
 | error   | `Enter guard [{n}] for/on route "{route}" threw, blocking navigation`               | Sync or async enter guard threw an exception                                                        |
@@ -637,7 +640,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
 
-**Redirect treated as blocked**: The redirect target route does not exist in the manifest. The router logs a warning with the target name. Verify the route name spelling.
+**Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong, but a same-hash no-op can look similar. The router logs the target name so you can verify the route and parameters.
 
 **Async guard result discarded**: A newer navigation started before the async guard resolved. The router uses a generation counter to discard stale results. This is expected behavior during rapid sequential navigations. The debug log confirms when this occurs.
 

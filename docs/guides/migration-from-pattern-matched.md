@@ -51,7 +51,7 @@ No view renders for `"protected"` unless the guard returns `true`. A redirect to
 
 ## Step-by-step migration
 
-1. **Add the library dependency.** Install `ui5-lib-guard-router` and configure `manifest.json` and `ui5.yaml` as described in the [library README setup section](../../packages/lib/README.md#setup).
+1. **Add the library dependency.** Install `ui5-lib-guard-router`, choose the serving option that fits your app, and configure `manifest.json` as described in the library README's [Install](../../packages/lib/README.md#install), [Serving the library](../../packages/lib/README.md#serving-the-library), and [Setup](../../packages/lib/README.md#setup) sections.
 
 2. **Set `routerClass` in `manifest.json`.** Change the router class from `sap.m.routing.Router` to `ui5.guard.router.Router`. All existing routes, targets, and patterns remain unchanged.
 
