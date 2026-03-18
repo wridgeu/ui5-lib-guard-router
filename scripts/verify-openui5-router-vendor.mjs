@@ -15,6 +15,7 @@ async function main() {
 	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 	const errors = [];
 	const currentEntryPointPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/Current.qunit.ts");
+	const filesById = new Map(manifest.files.map((file) => [file.id, file]));
 
 	if (!manifest.upstream?.tag || !manifest.upstream?.commitSha || !manifest.upstream?.repo) {
 		errors.push("Manifest upstream metadata is incomplete");
@@ -57,9 +58,40 @@ async function main() {
 	}
 
 	for (const file of manifest.files) {
-		if (!file.id || !file.sourcePath || !file.rawFilePath || !file.status || !file.contentSha256) {
+		if (!file.id || !file.kind || !file.sourcePath || !file.rawFilePath || !file.status || !file.contentSha256) {
 			errors.push(`Manifest entry is incomplete: ${JSON.stringify(file)}`);
 			continue;
+		}
+
+		if (file.kind === "test-entrypoint") {
+			if (!file.portFilePath) {
+				errors.push(`Test entrypoint is missing portFilePath: ${file.id}`);
+			}
+
+			for (const dependencyId of file.dependsOnIds ?? []) {
+				const dependency = filesById.get(dependencyId);
+				if (!dependency) {
+					errors.push(`Entry point ${file.id} references unknown dependency ${dependencyId}`);
+					continue;
+				}
+
+				if (dependency.kind !== "support-module") {
+					errors.push(`Entry point ${file.id} depends on non-support file ${dependencyId}`);
+				}
+			}
+		}
+
+		if (file.kind === "support-module") {
+			if (!file.usedByPortFilePath) {
+				errors.push(`Support module is missing usedByPortFilePath: ${file.id}`);
+			} else {
+				const usedByPortFilePath = path.join(repoRoot, file.usedByPortFilePath);
+				try {
+					await access(usedByPortFilePath);
+				} catch {
+					errors.push(`Support module references missing executable port: ${file.usedByPortFilePath}`);
+				}
+			}
 		}
 
 		if (
