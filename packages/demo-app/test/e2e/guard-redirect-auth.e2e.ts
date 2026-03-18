@@ -1,4 +1,10 @@
-import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
+import {
+	getRuntimeSettlementRevision,
+	waitForPage,
+	resetAuth,
+	expectHashToBe,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Guard redirects unauthenticated navigation", () => {
 	it("should redirect to Home when navigating to Protected while logged out", async () => {
@@ -15,6 +21,7 @@ describe("Guard redirects unauthenticated navigation", () => {
 		const navBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 		});
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
 		// Wait for hash to settle (async guard takes time, hash changes before guard completes)
@@ -22,5 +29,18 @@ describe("Guard redirects unauthenticated navigation", () => {
 
 		// Verify we're back on Home page after the redirect
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{
+				afterRevision: settlementRevision,
+			},
+		);
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 });

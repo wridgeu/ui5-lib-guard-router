@@ -14,6 +14,7 @@ type RuntimeState = {
 	lastSettlementRoute: string;
 	lastSettlementHash: string;
 	lastSettlementHashTechnical: string;
+	lastSettlementRevision: number;
 };
 
 function formatSettlementStatus(status: string): string {
@@ -55,7 +56,11 @@ function formatSettlementHashTechnical(hash: string): string {
 	return JSON.stringify(hash);
 }
 
-function buildRuntimeState(lastAction: string, flpDirtyProviderActive: boolean): RuntimeState {
+function buildRuntimeState(
+	lastAction: string,
+	flpDirtyProviderActive: boolean,
+	lastSettlementRevision = 0,
+): RuntimeState {
 	const ushellAvailable = hasUshellContainer();
 
 	return {
@@ -69,6 +74,7 @@ function buildRuntimeState(lastAction: string, flpDirtyProviderActive: boolean):
 		lastSettlementRoute: "(pending)",
 		lastSettlementHash: formatSettlementHash(getCurrentHash()),
 		lastSettlementHashTechnical: formatSettlementHashTechnical(getCurrentHash()),
+		lastSettlementRevision,
 	};
 }
 
@@ -78,7 +84,8 @@ export function createRuntimeModel(): JSONModel {
 
 export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boolean): void {
 	const lastAction = model.getProperty("/lastAction") as string | undefined;
-	model.setData(buildRuntimeState(lastAction ?? "Ready", flpDirtyProviderActive));
+	const lastSettlementRevision = model.getProperty("/lastSettlementRevision") as number | undefined;
+	model.setData(buildRuntimeState(lastAction ?? "Ready", flpDirtyProviderActive, lastSettlementRevision ?? 0));
 }
 
 export function setRuntimeMessage(model: JSONModel, message: string): void {
@@ -86,9 +93,11 @@ export function setRuntimeMessage(model: JSONModel, message: string): void {
 }
 
 export function setSettlementResult(model: JSONModel, result: NavigationResult): void {
+	const lastSettlementRevision = Number(model.getProperty("/lastSettlementRevision") ?? 0) + 1;
 	model.setProperty("/lastSettlementStatus", formatSettlementStatus(result.status));
 	model.setProperty("/lastSettlementState", formatSettlementState(result.status));
 	model.setProperty("/lastSettlementRoute", formatSettlementRoute(result.route));
 	model.setProperty("/lastSettlementHash", formatSettlementHash(result.hash));
 	model.setProperty("/lastSettlementHashTechnical", formatSettlementHashTechnical(result.hash));
+	model.setProperty("/lastSettlementRevision", lastSettlementRevision);
 }

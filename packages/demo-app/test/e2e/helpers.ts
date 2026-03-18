@@ -21,6 +21,18 @@ type RuntimeSettlementSnapshot = {
 	status: string;
 	route: string;
 	hash: string;
+	revision: number;
+};
+
+type RuntimeSettlementExpectation = {
+	status: string;
+	route?: string;
+	hash?: string;
+};
+
+type RuntimeSettlementWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
 };
 
 type SettlementWaitResult = {
@@ -226,22 +238,44 @@ async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 			status: String(runtimeModel?.getProperty("/lastSettlementStatus") ?? ""),
 			route: String(runtimeModel?.getProperty("/lastSettlementRoute") ?? ""),
 			hash: String(runtimeModel?.getProperty("/lastSettlementHash") ?? ""),
+			revision: Number(runtimeModel?.getProperty("/lastSettlementRevision") ?? 0),
 		};
 	}, COMPONENT_ID) as Promise<RuntimeSettlementSnapshot>;
 }
 
+export async function getRuntimeSettlementRevision(): Promise<number> {
+	const settlement = await getRuntimeSettlement();
+	return settlement.revision;
+}
+
+function formatRuntimeSettlementExpectation(expected: RuntimeSettlementExpectation): string {
+	return Object.entries(expected)
+		.map(([key, value]) => `${key}=${String(value)}`)
+		.join(", ");
+}
+
 export async function waitForRuntimeSettlement(
-	expectedStatus: string,
-	timeout = 3000,
+	expected: RuntimeSettlementExpectation,
+	options: RuntimeSettlementWaitOptions = {},
 ): Promise<RuntimeSettlementSnapshot> {
+	const { timeout = 3000, afterRevision } = options;
+
 	await browser.waitUntil(
 		async () => {
 			const settlement = await getRuntimeSettlement();
-			return settlement.status === expectedStatus;
+			const matchesExpected = Object.entries(expected).every(([key, value]) => {
+				return settlement[key as keyof RuntimeSettlementSnapshot] === value;
+			});
+
+			if (!matchesExpected) {
+				return false;
+			}
+
+			return afterRevision === undefined || settlement.revision > afterRevision;
 		},
 		{
 			timeout,
-			timeoutMsg: `Runtime settlement did not reach ${expectedStatus} within ${timeout}ms`,
+			timeoutMsg: `Runtime settlement did not reach ${formatRuntimeSettlementExpectation(expected)} within ${timeout}ms${afterRevision === undefined ? "" : ` after revision ${afterRevision}`}`,
 		},
 	);
 

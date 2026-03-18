@@ -1,9 +1,17 @@
-import { waitForPage, resetAuth, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
+import {
+	getRuntimeSettlementRevision,
+	waitForPage,
+	resetAuth,
+	expectHashToBe,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => {
 			window.location.hash = "#/protected";
 		});
@@ -11,10 +19,25 @@ describe("Direct URL navigation with guards", () => {
 		// Wait for hash to settle after async guard redirects
 		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{
+				afterRevision: settlementRevision,
+			},
+		);
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
 		await browser.goTo({ sHash: "" });
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => {
 			window.location.hash = "#/forbidden";
 		});
@@ -22,12 +45,26 @@ describe("Direct URL navigation with guards", () => {
 		// Wait for hash to settle after sync guard redirects
 		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Redirected",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{
+				afterRevision: settlementRevision,
+			},
+		);
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 
 	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		const settlementRevision = await getRuntimeSettlementRevision();
 
 		await browser.execute(() => {
 			window.location.hash = "#/blocked";
@@ -36,7 +73,16 @@ describe("Direct URL navigation with guards", () => {
 		await expectHashToBe("", "Hash should settle to home after enter guard blocks");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
-		const settlement = await waitForRuntimeSettlement("Blocked");
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Blocked",
+				route: "home",
+				hash: "(empty hash)",
+			},
+			{
+				afterRevision: settlementRevision,
+			},
+		);
 		expect(settlement.route).toBe("home");
 		expect(settlement.hash).toBe("(empty hash)");
 	});

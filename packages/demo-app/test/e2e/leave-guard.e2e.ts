@@ -1,4 +1,12 @@
-import { waitForPage, fireEvent, resetAuth, setDirtyState, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
+import {
+	getRuntimeSettlementRevision,
+	waitForPage,
+	fireEvent,
+	resetAuth,
+	setDirtyState,
+	expectHashToBe,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 async function loginAndGoToProtected(): Promise<void> {
 	await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
@@ -26,12 +34,22 @@ describe("Leave Guard - Dirty Form", () => {
 	it("should block leaving protected page when form is dirty", async () => {
 		await loginAndGoToProtected();
 		await setDirtyState(true);
+		const settlementRevision = await getRuntimeSettlementRevision();
 
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
 
 		// Leave guard should block - hash should stay at protected
 		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
-		const settlement = await waitForRuntimeSettlement("Blocked");
+		const settlement = await waitForRuntimeSettlement(
+			{
+				status: "Blocked",
+				route: "protected",
+				hash: "protected",
+			},
+			{
+				afterRevision: settlementRevision,
+			},
+		);
 
 		expect(settlement.route).toBe("protected");
 		expect(settlement.hash).toBe("protected");

@@ -2773,6 +2773,20 @@ QUnit.test("Resolves with 'cancelled' when stop() is called during async guard",
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "stop() cancels pending navigation");
 });
 
+QUnit.test("Idle call after stop returns synthetic committed with empty state", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+	router.stop();
+
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Idle fallback uses committed status");
+	assert.strictEqual(result.route, "", "Idle fallback clears the route after stop()");
+	assert.strictEqual(result.hash, "", "Idle fallback clears the hash after stop()");
+});
+
 QUnit.test("Cancelled settlement sees an already-aborted signal", async function (assert: Assert) {
 	let capturedSignal: AbortSignal | null = null;
 	router.addRouteGuard("protected", async (context: GuardContext) => {
