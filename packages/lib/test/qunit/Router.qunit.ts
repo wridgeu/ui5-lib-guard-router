@@ -1,3 +1,4 @@
+import sinon from "sinon";
 import DataType from "sap/ui/base/DataType";
 import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
@@ -7,7 +8,6 @@ import type {
 	GuardRedirect,
 	GuardRouter,
 	LeaveGuardFn,
-	NavigationResult,
 	RouteGuardConfig,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -744,7 +744,7 @@ QUnit.test("Multiple global guards run sequentially, first rejection wins", asyn
 	});
 
 	router.navTo("protected");
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.deepEqual(order, [1, 2], "Guards ran sequentially and stopped at first rejection");
 });
 
@@ -928,7 +928,7 @@ QUnit.test("Guard state change between navigations is respected", async function
 	});
 
 	router.navTo("protected");
-	await nextTick(500);
+	await waitForRoute(router, "home");
 	assert.ok(homeMatchCount > 0, "First attempt redirected to home");
 
 	allowNavigation = true;
@@ -960,7 +960,7 @@ QUnit.test("Removing guard mid-session allows subsequent navigations", async fun
 
 	// First attempt: blocked
 	router.navTo("protected");
-	await nextTick(500);
+	await router.navigationSettled();
 
 	// Remove the guard
 	router.removeRouteGuard("protected", guard);
@@ -984,7 +984,7 @@ QUnit.test("Guard that returns redirect does not cause infinite loop", async fun
 	router.initialize();
 
 	router.navTo("forbidden");
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.strictEqual(guardCallCount, 1, "Guard only called once (no infinite loop)");
 });
 
@@ -1114,7 +1114,7 @@ QUnit.test("Slower first navigation is superseded by faster second navigation", 
 	router.navTo("protected");
 	router.navTo("detail", { id: "1" });
 
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.notOk(protectedMatched, "Slow first navigation was superseded");
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
@@ -1139,7 +1139,7 @@ QUnit.test("Superseded async guard result does not apply", async function (asser
 	router.removeGuard(slowGuard);
 	router.navTo("detail", { id: "2" });
 
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
 		"detail/2",
@@ -1236,7 +1236,7 @@ QUnit.test("Multiple async guards - first rejection short-circuits remaining", a
 	});
 
 	router.navTo("protected");
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.deepEqual(order, [1, 2], "Third guard was short-circuited after second rejected");
 });
 
@@ -1307,7 +1307,7 @@ QUnit.test("Rapid sync navigations - last one wins", async function (assert: Ass
 	router.navTo("forbidden");
 	router.navTo("detail", { id: "1" });
 
-	await nextTick(500);
+	await waitForRoute(router, "detail");
 	const lastMatched = matchedRoutes[matchedRoutes.length - 1];
 	assert.strictEqual(lastMatched, "detail", "Last rapid navigation won");
 });
@@ -1330,7 +1330,7 @@ QUnit.test("Rapid async navigations - only last navigation settles", async funct
 	router.navTo("forbidden");
 	router.navTo("detail", { id: "1" });
 
-	await nextTick(500);
+	await waitForRoute(router, "detail");
 	assert.strictEqual(matchedRoutes.length, 1, "Only one navigation settled");
 	assert.strictEqual(matchedRoutes[0], "detail", "The last navigation won");
 });
@@ -1531,7 +1531,7 @@ QUnit.test("Signal is aborted when a newer navigation supersedes", async functio
 	await nextTick(10);
 	router.navTo("detail", { id: "1" });
 
-	await nextTick(500);
+	await router.navigationSettled();
 	assert.ok(firstSignal, "First signal was captured");
 	assert.ok(firstSignal!.aborted, "First signal was aborted by second navigation");
 	assert.ok(secondSignal, "Second signal was captured");
@@ -2831,12 +2831,7 @@ QUnit.test("Blocked navigation restores hash through a single suppressed parse c
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const originalFlushSettlement = Reflect.get(router, "_flushSettlement") as (result: NavigationResult) => void;
-	let flushSettlementCalls = 0;
-	Reflect.set(router, "_flushSettlement", (result: NavigationResult) => {
-		flushSettlementCalls++;
-		Reflect.apply(originalFlushSettlement, router, [result]);
-	});
+	const flushSpy = sinon.spy(router as unknown as { _flushSettlement: () => void }, "_flushSettlement");
 
 	let guardCalls = 0;
 	let matched = false;
@@ -2855,9 +2850,9 @@ QUnit.test("Blocked navigation restores hash through a single suppressed parse c
 		assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
 		assert.strictEqual(guardCalls, 1, "Guard pipeline ran exactly once for the blocked navigation");
 		assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
-		assert.strictEqual(flushSettlementCalls, 1, "Suppressed restore parse did not emit a second settlement");
+		assert.strictEqual(flushSpy.callCount, 1, "Suppressed restore parse did not emit a second settlement");
 	} finally {
-		Reflect.set(router, "_flushSettlement", originalFlushSettlement);
+		flushSpy.restore();
 	}
 });
 
@@ -3016,8 +3011,9 @@ QUnit.test(
 		await nextTick(10);
 		router.navTo("forbidden");
 
-		// Allow time for second leave guard (200ms) + stale rejection
-		await nextTick(500);
+		await router.navigationSettled();
+		// Allow the stale leave guard promise (200ms timeout) to reject
+		await nextTick(250);
 		window.removeEventListener("unhandledrejection", rejectionHandler);
 		assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from leave guard error after abort");
 	},
