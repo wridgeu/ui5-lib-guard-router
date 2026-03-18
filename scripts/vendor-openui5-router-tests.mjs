@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -86,6 +87,10 @@ function buildRawFilePathForManifest(tag, sourcePath) {
 	);
 }
 
+function computeSha256(contents) {
+	return createHash("sha256").update(contents).digest("hex");
+}
+
 async function main() {
 	const manifest = await readManifest();
 	const requestedTag = getOption("--tag");
@@ -131,6 +136,12 @@ async function main() {
 		const contents = await fetchText(sourceUrl);
 		await mkdir(path.dirname(targetPath), { recursive: true });
 		await writeFile(targetPath, contents, "utf8");
+		const contentSha256 = computeSha256(contents);
+
+		if (writeManifest) {
+			file.contentSha256 = contentSha256;
+		}
+
 		console.log(`Fetched ${file.sourcePath}`);
 	}
 

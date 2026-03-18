@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -5,6 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.json");
+
+function computeSha256(contents) {
+	return createHash("sha256").update(contents).digest("hex");
+}
 
 async function main() {
 	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -52,7 +57,7 @@ async function main() {
 	}
 
 	for (const file of manifest.files) {
-		if (!file.id || !file.sourcePath || !file.rawFilePath || !file.status) {
+		if (!file.id || !file.sourcePath || !file.rawFilePath || !file.status || !file.contentSha256) {
 			errors.push(`Manifest entry is incomplete: ${JSON.stringify(file)}`);
 			continue;
 		}
@@ -74,6 +79,13 @@ async function main() {
 		const rawFilePath = path.join(repoRoot, file.rawFilePath);
 		try {
 			await access(rawFilePath);
+			const rawContents = await readFile(rawFilePath);
+			const actualSha256 = computeSha256(rawContents);
+			if (actualSha256 !== file.contentSha256) {
+				errors.push(
+					`Raw vendored file checksum does not match manifest for ${file.rawFilePath}: expected ${file.contentSha256}, got ${actualSha256}`,
+				);
+			}
 		} catch {
 			errors.push(`Missing raw vendored file: ${file.rawFilePath}`);
 		}

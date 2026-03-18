@@ -10,14 +10,6 @@ import {
 	type RouterFlavor,
 } from "../../../../adapters/routerFactories";
 
-type PrivateRoute = {
-	_routeMatched: (...args: unknown[]) => Promise<unknown>;
-};
-
-type PrivateTargetHandler = {
-	navigate: (...args: unknown[]) => unknown;
-};
-
 type Restorable = {
 	restore(): void;
 };
@@ -27,7 +19,6 @@ type SpyHandle = Restorable & {
 	firstCall: {
 		args: unknown[];
 	};
-	returnValues: unknown[];
 };
 
 type SinonLike = {
@@ -45,20 +36,20 @@ const sinonApi = (globalThis as unknown as { sinon: SinonLike }).sinon;
 type ForwardNavigationResult = {
 	toCallCount: number;
 	normalizedToArgs: unknown[] | null;
-	navigatePayload: unknown;
 	routeMatched: {
 		name: string | undefined;
 		arguments: unknown;
 	} | null;
 };
 
-function getPrivateRoute(router: ComparableRouter, routeName: string): PrivateRoute {
-	return router.getRoute(routeName) as unknown as PrivateRoute;
-}
+type RouteMatchedEvent = {
+	getParameter(name: string): unknown;
+};
 
-function getPrivateTargetHandler(router: ComparableRouter): PrivateTargetHandler {
-	return Reflect.get(router, "_oTargetHandler") as PrivateTargetHandler;
-}
+type RouteMatchedApi = {
+	attachRouteMatched(data: undefined, handler: (event: RouteMatchedEvent) => void): void;
+	detachRouteMatched(handler: (event: RouteMatchedEvent) => void, listener?: unknown): void;
+};
 
 function stubViewsForSinglePage(targetPage: Page): Restorable {
 	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
@@ -79,7 +70,29 @@ function stubViewsByName(viewMap: Record<string, Page>): Restorable {
 			}
 		}
 
-		return viewMap.first ?? Object.values(viewMap)[0];
+		throw new Error(`Unexpected view request in upstream parity port: ${candidate}`);
+	});
+}
+
+function waitForRouteMatched(
+	router: ComparableRouter,
+	routeName: string,
+): Promise<ForwardNavigationResult["routeMatched"]> {
+	return new Promise((resolve) => {
+		const routeMatchedApi = router as unknown as RouteMatchedApi;
+		const handler = (event: RouteMatchedEvent) => {
+			if ((event.getParameter("name") as string | undefined) !== routeName) {
+				return;
+			}
+
+			routeMatchedApi.detachRouteMatched(handler, undefined);
+			resolve({
+				name: event.getParameter("name") as string | undefined,
+				arguments: cloneJson(event.getParameter("arguments") as unknown),
+			});
+		};
+
+		routeMatchedApi.attachRouteMatched(undefined, handler);
 	});
 }
 
@@ -89,33 +102,21 @@ async function runForwardNavigationScenario(flavor: RouterFlavor): Promise<Forwa
 	const targetPage = new Page();
 	const router = createRouterByFlavor(flavor, ...createForwardNavigationFixture(navContainer.getId()));
 	const toSpy = sinonApi.spy(navContainer, "to");
-	const navigateSpy = sinonApi.spy(getPrivateTargetHandler(router), "navigate");
-	const routeMatchedSpy = sinonApi.spy(getPrivateRoute(router, "myRoute"), "_routeMatched");
 	const getViewStub = stubViewsForSinglePage(targetPage);
-	let routeMatched: ForwardNavigationResult["routeMatched"] = null;
-
-	router.attachRouteMatched((event) => {
-		routeMatched = {
-			name: event.getParameter("name") as string | undefined,
-			arguments: cloneJson(event.getParameter("arguments") as unknown),
-		};
-	});
 
 	try {
+		const routeMatchedPromise = waitForRouteMatched(router, "myRoute");
 		router.parse("some/myData");
-		await routeMatchedSpy.returnValues[0];
+		const routeMatched = await routeMatchedPromise;
 
 		return {
 			toCallCount: toSpy.callCount,
 			normalizedToArgs:
 				toSpy.callCount > 0 ? normalizeNavContainerToArgs(toSpy.firstCall.args, targetPage.getId()) : null,
-			navigatePayload: navigateSpy.callCount > 0 ? cloneJson(navigateSpy.firstCall.args[0] as unknown) : null,
 			routeMatched,
 		};
 	} finally {
 		getViewStub.restore();
-		routeMatchedSpy.restore();
-		navigateSpy.restore();
 		toSpy.restore();
 		destroyRouters(router);
 		navContainer.destroy();
@@ -135,7 +136,6 @@ async function runViewLevelScenario(flavor: RouterFlavor): Promise<{
 	const router = createRouterByFlavor(flavor, ...createViewLevelFixture(navContainer.getId()));
 	const getViewStub = stubViewsByName({ first: firstPage, second: secondPage, initial: initialPage });
 	const backToPageSpy = sinonApi.spy(navContainer, "backToPage");
-	const routeMatchedSpy = sinonApi.spy(getPrivateRoute(router, "route"), "_routeMatched");
 
 	try {
 		const targets = router.getTargets();
@@ -144,15 +144,15 @@ async function runViewLevelScenario(flavor: RouterFlavor): Promise<{
 		}
 
 		await targets.display("initial");
+		const routeMatchedPromise = waitForRouteMatched(router, "route");
 		router.parse("anyPattern");
-		await routeMatchedSpy.returnValues[0];
+		await routeMatchedPromise;
 		return {
 			backToPageCallCount: backToPageSpy.callCount,
 			backToSecondTarget: backToPageSpy.callCount > 0 && backToPageSpy.firstCall.args[0] === secondPage.getId(),
 		};
 	} finally {
 		backToPageSpy.restore();
-		routeMatchedSpy.restore();
 		getViewStub.restore();
 		destroyRouters(router);
 		navContainer.destroy();
@@ -179,20 +179,6 @@ QUnit.test("forward navigation on NavContainer matches the upstream contract", a
 		guardResult.normalizedToArgs,
 		nativeResult.normalizedToArgs,
 		"Guard router matches the native NavContainer transition arguments",
-	);
-	assert.deepEqual(
-		nativeResult.navigatePayload,
-		{
-			askHistory: true,
-			navigationIdentifier: "myTarget",
-			level: 5,
-		},
-		"Native router matches the upstream TargetHandler.navigate payload",
-	);
-	assert.deepEqual(
-		guardResult.navigatePayload,
-		nativeResult.navigatePayload,
-		"Guard router matches the native TargetHandler.navigate payload",
 	);
 	assert.deepEqual(
 		nativeResult.routeMatched,

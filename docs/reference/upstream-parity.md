@@ -48,6 +48,7 @@ packages/lib/test/qunit/upstream-parity/
 - `ports/openui5/<tag>/` contains local executable ports/wrappers
 - `adapters/` contains shared local harness helpers
 - `manifest.json` records provenance and raw-to-port mapping
+- `manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
 
 ## Vendoring Rules
 

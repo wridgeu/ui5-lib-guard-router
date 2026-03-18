@@ -10,6 +10,7 @@
 			"id": "sap.m.routing.Router.async.Router.qunit.js",
 			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
 			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
+			"contentSha256": "315716946a8b40493f1327e85bae279e4cc15583293f10b695cfd21682d1d364",
 			"portFilePath": "packages/lib/test/qunit/upstream-parity/ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts",
 			"status": "ported-subset",
 			"adaptations": [
@@ -20,6 +21,7 @@
 			"id": "sap.m.routing.async.helpers.js",
 			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/helpers.js",
 			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/helpers.js",
+			"contentSha256": "0f785febba30842882d51604907b576306fa735cc99182c5cee38667c3a43e02",
 			"portFilePath": null,
 			"status": "support-file",
 			"adaptations": []
@@ -28,6 +30,7 @@
 			"id": "sap.m.routing.async.commonIntegrationTests.js",
 			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/commonIntegrationTests.js",
 			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/commonIntegrationTests.js",
+			"contentSha256": "50788abcd0a5aef12a37bb4b504c01ad6d35927ebfd3ca7391bde3bb20e69584",
 			"portFilePath": null,
 			"status": "support-file",
 			"adaptations": []

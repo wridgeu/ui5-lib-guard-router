@@ -1,5 +1,7 @@
 # Vendored OpenUI5 Router Parity Suite - Implementation Plan
 
+> Status: the initial vendored parity lane is implemented. The remaining checklist in this document tracks future expansion and maintenance work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.

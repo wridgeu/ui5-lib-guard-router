@@ -32,6 +32,7 @@ upstream-parity/
 - upstream repo, tag, and commit SHA
 - tracked source files
 - raw snapshot paths
+- raw snapshot checksums
 - local executable port paths
 - adaptation notes
 
