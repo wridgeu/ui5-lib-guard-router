@@ -1,5 +1,6 @@
 <mvc:View
 	xmlns:mvc="sap.ui.core.mvc"
+	xmlns:core="sap.ui.core"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Protected">
 	<Page id="protectedPage" title="Protected Page" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavBack">
@@ -64,6 +65,7 @@
 								<Label text="Last Action" />
 								<Text id="protectedLastActionText" text="{= ${runtime>/lastAction} || 'Ready'}" />
 							</VBox>
+							<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" class="sapUiTinyMarginTop" />
 						</content>
 					</Panel>
 				</FlexBox>

@@ -1,4 +1,4 @@
-import { waitForPage, resetAuth } from "./helpers";
+import { waitForPage, resetAuth, waitForRuntimeSettlement } from "./helpers";
 
 describe("Guard allows navigation when logged in", () => {
 	it("should allow navigation to Protected after login", async () => {
@@ -26,6 +26,10 @@ describe("Guard allows navigation when logged in", () => {
 		// Wait for view to load - this confirms async guard completed and navigation committed.
 		// Don't wait for hash first because it changes BEFORE async guard completes.
 		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+
+		const settlement = await waitForRuntimeSettlement("Committed");
+		expect(settlement.route).toBe("protected");
+		expect(settlement.hash).toBe("protected");
 
 		// Hash should now be correct
 		const url = await browser.getUrl();

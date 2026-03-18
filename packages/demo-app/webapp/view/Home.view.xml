@@ -1,5 +1,6 @@
 <mvc:View
 	xmlns:mvc="sap.ui.core.mvc"
+	xmlns:core="sap.ui.core"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Home">
 	<Page id="homePage" title="Home" titleAlignment="Center">
@@ -46,6 +47,7 @@
 								<Label text="Last Action" />
 								<Text id="lastActionText" text="{= ${runtime>/lastAction} || 'Ready'}" />
 							</VBox>
+							<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" />
 							<ObjectStatus
 								id="ushellStatus"
 								text="{= ${runtime>/hasUshellContainer} ? 'sap.ushell.Container available' : 'sap.ushell.Container unavailable'}"
@@ -61,7 +63,7 @@
 					<Panel headerText="Router Navigation" width="22rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
 						<content>
 							<Text
-								text="These buttons call router.navTo(...). Use them to compare allowed navigation, redirects, and leave-guard behavior."
+								text="These buttons call router.navTo(...). Use them to compare allowed navigation, enter blocks, redirects, and leave-guard behavior."
 								wrapping="true"
 								class="sapUiSmallMarginBottom" />
 							<Button
@@ -70,9 +72,19 @@
 								press=".onNavToProtected"
 								width="100%"
 								class="sapUiTinyMarginBottom" />
+							<Text
+								text="When logged in, this navigation settles as Committed."
+								wrapping="true"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="navBlockedBtn"
+								text="Go to Blocked Page (always blocks)"
+								press=".onNavToBlocked"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
 							<Button
 								id="navForbiddenBtn"
-								text="Go to Forbidden Page (always blocked)"
+								text="Go to Forbidden Page (always redirects home)"
 								press=".onNavToForbidden"
 								width="100%" />
 						</content>
@@ -81,13 +93,19 @@
 					<Panel headerText="Hash-Based Scenarios" width="22rem" class="sapUiSmallMarginBottom">
 						<content>
 							<Text
-								text="These demo-only helpers drive navigation through the UI5 hash APIs to show deep links, missing routes, and rapid hash updates."
+								text="These demo-only helpers drive navigation through the UI5 hash APIs to show deep links, blocked and redirected route hashes, missing routes, and rapid hash updates."
 								wrapping="true"
 								class="sapUiSmallMarginBottom" />
 							<Button
 								id="directHashProtectedBtn"
 								text="Set Hash to Protected"
 								press=".onDirectHashToProtected"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="directHashBlockedBtn"
+								text="Set Hash to Blocked"
+								press=".onDirectHashToBlocked"
 								width="100%"
 								class="sapUiTinyMarginBottom" />
 							<Button

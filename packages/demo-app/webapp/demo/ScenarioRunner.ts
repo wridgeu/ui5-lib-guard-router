@@ -19,6 +19,10 @@ export default class ScenarioRunner {
 		this._setHash("#/protected", 'Triggered direct hash navigation to "protected"');
 	}
 
+	goToBlockedByHash(): void {
+		this._setHash("#/blocked", 'Triggered direct hash navigation to "blocked"');
+	}
+
 	goToForbiddenByHash(): void {
 		this._setHash("#/forbidden", 'Triggered direct hash navigation to "forbidden"');
 	}

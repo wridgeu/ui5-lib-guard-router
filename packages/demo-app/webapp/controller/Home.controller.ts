@@ -39,6 +39,11 @@ export default class HomeController extends BaseController {
 		this.getRouter().navTo("protected");
 	}
 
+	onNavToBlocked(): void {
+		this.createScenarioRunner().recordAction('Triggered router.navTo("blocked")');
+		this.getRouter().navTo("blocked");
+	}
+
 	onNavToForbidden(): void {
 		this.createScenarioRunner().recordAction('Triggered router.navTo("forbidden")');
 		this.getRouter().navTo("forbidden");
@@ -46,6 +51,10 @@ export default class HomeController extends BaseController {
 
 	onDirectHashToProtected(): void {
 		this.createScenarioRunner().goToProtectedByHash();
+	}
+
+	onDirectHashToBlocked(): void {
+		this.createScenarioRunner().goToBlockedByHash();
 	}
 
 	onDirectHashToForbidden(): void {

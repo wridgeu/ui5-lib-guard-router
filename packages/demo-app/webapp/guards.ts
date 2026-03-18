@@ -80,7 +80,13 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 }
 
 /**
- * Guard that always blocks navigation and redirects to "home".
+ * Guard that always blocks navigation.
+ * Demonstrates the simplest enter-guard block shape.
+ */
+export const blockedGuard: GuardFn = () => false;
+
+/**
+ * Guard that always redirects navigation to "home".
  * Demonstrates the simplest redirect guard shape.
  */
 export const forbiddenGuard: GuardFn = () => "home";

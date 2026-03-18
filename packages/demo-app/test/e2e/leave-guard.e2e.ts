@@ -1,4 +1,4 @@
-import { waitForPage, fireEvent, resetAuth, setDirtyState, expectHashToBe } from "./helpers";
+import { waitForPage, fireEvent, resetAuth, setDirtyState, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
 
 async function loginAndGoToProtected(): Promise<void> {
 	await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
@@ -31,6 +31,10 @@ describe("Leave Guard - Dirty Form", () => {
 
 		// Leave guard should block - hash should stay at protected
 		await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
+		const settlement = await waitForRuntimeSettlement("Blocked");
+
+		expect(settlement.route).toBe("protected");
+		expect(settlement.hash).toBe("protected");
 	});
 
 	it("should allow leaving after clearing dirty state", async () => {

@@ -27,6 +27,10 @@ describe("FLP preview integration", () => {
 		await loginAndGoToProtectedInFlp();
 		await expectControlText("protectedFlpDirtyProviderStatus", "FLP cross-app dirty protection active");
 		await expectControlText("protectedCurrentHashText", "#/protected");
+		await expectControlText("settlementStatus", "Committed");
+		await expectControlText("settlementRouteText", "protected");
+		await expectControlText("settlementHashText", "protected");
+		await expectControlText("settlementHashTechnicalText", 'Technical: "protected"');
 	});
 
 	it("triggers FLP dirty-state prompt on cross-app navigation and stays on page after cancel", async () => {

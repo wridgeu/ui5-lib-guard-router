@@ -17,6 +17,12 @@ type SettlementSnapshot = {
 	hash?: string;
 } | null;
 
+type RuntimeSettlementSnapshot = {
+	status: string;
+	route: string;
+	hash: string;
+};
+
 type SettlementWaitResult = {
 	ok: boolean;
 	result: SettlementSnapshot;
@@ -209,6 +215,37 @@ export async function expectHashToBe(expected: string, timeoutMsg?: string): Pro
 		},
 		{ timeout: 3000, timeoutMsg: timeoutMsg ?? `Hash did not settle to ${expected}` },
 	);
+}
+
+export async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
+	return browser.execute((componentId: string) => {
+		const Component = sap.ui.require("sap/ui/core/Component");
+		const runtimeModel = Component?.getComponentById(componentId)?.getModel("runtime");
+
+		return {
+			status: String(runtimeModel?.getProperty("/lastSettlementStatus") ?? ""),
+			route: String(runtimeModel?.getProperty("/lastSettlementRoute") ?? ""),
+			hash: String(runtimeModel?.getProperty("/lastSettlementHash") ?? ""),
+		};
+	}, COMPONENT_ID) as Promise<RuntimeSettlementSnapshot>;
+}
+
+export async function waitForRuntimeSettlement(
+	expectedStatus: string,
+	timeout = 3000,
+): Promise<RuntimeSettlementSnapshot> {
+	await browser.waitUntil(
+		async () => {
+			const settlement = await getRuntimeSettlement();
+			return settlement.status === expectedStatus;
+		},
+		{
+			timeout,
+			timeoutMsg: `Runtime settlement did not reach ${expectedStatus} within ${timeout}ms`,
+		},
+	);
+
+	return getRuntimeSettlement();
 }
 
 /**

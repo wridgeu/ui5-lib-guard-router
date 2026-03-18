@@ -93,6 +93,38 @@ const SELECTORS = {
 		},
 		forceSelect: true,
 	},
+	settlementStatus: {
+		selector: {
+			id: /^settlementStatus$/,
+			viewName: "demo.app.view.Protected",
+			controlType: "sap.m.ObjectStatus",
+		},
+		forceSelect: true,
+	},
+	settlementRouteText: {
+		selector: {
+			id: /^settlementRouteText$/,
+			viewName: "demo.app.view.Protected",
+			controlType: "sap.m.Text",
+		},
+		forceSelect: true,
+	},
+	settlementHashText: {
+		selector: {
+			id: /^settlementHashText$/,
+			viewName: "demo.app.view.Protected",
+			controlType: "sap.m.Text",
+		},
+		forceSelect: true,
+	},
+	settlementHashTechnicalText: {
+		selector: {
+			id: /^settlementHashTechnicalText$/,
+			viewName: "demo.app.view.Protected",
+			controlType: "sap.m.Text",
+		},
+		forceSelect: true,
+	},
 } as const satisfies Record<string, wdi5Selector>;
 
 type SelectorName = keyof typeof SELECTORS;

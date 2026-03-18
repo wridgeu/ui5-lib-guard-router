@@ -1,7 +1,7 @@
 import { waitForPage, fireEvent, resetAuth, expectHashToBe } from "./helpers";
 
 describe("Multi-route navigation sequences", () => {
-	it("should handle Home -> Protected -> Home -> Forbidden (blocked) -> Home sequence", async () => {
+	it("should handle Home -> Protected -> Home -> Forbidden (redirected) -> Home sequence", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 
@@ -24,7 +24,7 @@ describe("Multi-route navigation sequences", () => {
 		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
-		// Try Forbidden (always blocked, redirects to Home)
+		// Try Forbidden (always redirects to Home)
 		const navForbidden = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
 			forceSelect: true,
@@ -36,7 +36,7 @@ describe("Multi-route navigation sequences", () => {
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
-	it("should block protected after mid-session logout", async () => {
+	it("should redirect protected to Home after mid-session logout", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 
@@ -71,7 +71,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
-		// Try Protected again (should now be blocked)
+		// Try Protected again (should now redirect home)
 		const navBtn2 = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 			forceSelect: true,
@@ -83,7 +83,7 @@ describe("Multi-route navigation sequences", () => {
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
 	});
 
-	it("should handle login -> protected -> logout -> protected (blocked) -> login -> protected (allowed)", async () => {
+	it("should handle login -> protected -> logout -> protected (redirected) -> login -> protected (allowed)", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 
@@ -113,7 +113,7 @@ describe("Multi-route navigation sequences", () => {
 		});
 		await toggleBtn.press();
 
-		// Try Protected (blocked)
+		// Try Protected (redirected)
 		navBtn = await browser.asControl({
 			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
 			forceSelect: true,

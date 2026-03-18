@@ -1,26 +1,21 @@
-import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
+import { waitForPage, resetAuth, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
 
-describe("Guard blocks navigation", () => {
-	it("should stay on Home when navigating to Protected while logged out", async () => {
+describe("Guard blocks enter navigation", () => {
+	it("should stay on Home and report Blocked when navigating to Blocked", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
 
-		// Verify we start on Home and are logged out
-		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" },
-		});
-		expect(await status.getProperty("text")).toBe("Logged Out");
-
-		// Try to navigate to protected
 		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
+			selector: { id: "container-demo.app---homeView--navBlockedBtn" },
 		});
 		await navBtn.press();
 
-		// Wait for hash to settle (async guard takes time, hash changes before guard completes)
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-
-		// Verify we're still on Home page
+		await expectHashToBe("", "Hash should stay on home after enter guard blocks");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		const settlement = await waitForRuntimeSettlement("Blocked");
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 });

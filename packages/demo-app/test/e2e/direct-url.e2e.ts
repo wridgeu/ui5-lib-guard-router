@@ -1,4 +1,4 @@
-import { waitForPage, resetAuth, expectHashToBe } from "./helpers";
+import { waitForPage, resetAuth, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
 
 describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
@@ -22,6 +22,23 @@ describe("Direct URL navigation with guards", () => {
 		// Wait for hash to settle after sync guard redirects
 		await expectHashToBe("", "Hash should settle to home after guard redirect");
 		await waitForPage("container-demo.app---homeView--homePage", "Home");
+	});
+
+	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
+		await browser.goTo({ sHash: "" });
+		await resetAuth();
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		await browser.execute(() => {
+			window.location.hash = "#/blocked";
+		});
+
+		await expectHashToBe("", "Hash should settle to home after enter guard blocks");
+		await waitForPage("container-demo.app---homeView--homePage", "Home");
+
+		const settlement = await waitForRuntimeSettlement("Blocked");
+		expect(settlement.route).toBe("home");
+		expect(settlement.hash).toBe("(empty hash)");
 	});
 
 	it("should load Protected page when accessing #/protected directly while logged in", async () => {
@@ -60,6 +77,21 @@ describe("Direct URL navigation with guards", () => {
 
 		// Verify the Not Found page is displayed
 		await waitForPage("container-demo.app---notFoundView--notFoundPage", "Not Found");
+
+		const settlementStatus = await browser.asControl({
+			selector: { id: "container-demo.app---notFoundView--settlementStatus" },
+		});
+		expect(await settlementStatus.getProperty("text")).toBe("Bypassed");
+
+		const settlementRoute = await browser.asControl({
+			selector: { id: "container-demo.app---notFoundView--settlementRouteText" },
+		});
+		expect(await settlementRoute.getProperty("text")).toBe("(no match)");
+
+		const settlementHash = await browser.asControl({
+			selector: { id: "container-demo.app---notFoundView--settlementHashText" },
+		});
+		expect(await settlementHash.getProperty("text")).toBe("this/does/not/exist");
 
 		// Verify the app recovers by navigating back to a known route
 		await browser.execute(() => {

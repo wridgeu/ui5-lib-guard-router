@@ -9,12 +9,13 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-| Route       | Pattern       | Guard behavior                                                      |
-| ----------- | ------------- | ------------------------------------------------------------------- |
-| `home`      | `""`          | Open, no guard                                                      |
-| `protected` | `"protected"` | Enter: requires login (redirects to `home`). Leave: blocks if dirty |
-| `forbidden` | `"forbidden"` | Always blocked, redirects to `home`                                 |
-| (bypassed)  | no match      | Shows the Not Found page with a button to return home               |
+| Route       | Pattern       | Guard behavior                                                                       |
+| ----------- | ------------- | ------------------------------------------------------------------------------------ |
+| `home`      | `""`          | Open, no guard                                                                       |
+| `protected` | `"protected"` | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty |
+| `blocked`   | `"blocked"`   | Enter: always blocks and stays on the current route                                  |
+| `forbidden` | `"forbidden"` | Always redirects to `home`                                                           |
+| (bypassed)  | no match      | Shows the Not Found page with a button to return home                                |
 
 ## Guards
 
@@ -28,6 +29,7 @@ All demo guard factories live in `webapp/guards.ts` for single-file discoverabil
 | ------------------------------ | ------------ | ----------- | -------------------------------------------- |
 | `createNavigationLogger()`     | Global enter | all         | Logs every navigation (always allows)        |
 | `createAsyncPermissionGuard()` | Route enter  | `protected` | Async login check with `AbortSignal` support |
+| `blockedGuard`                 | Route enter  | `blocked`   | Always blocks before navigation commits      |
 | `createDirtyFormGuard()`       | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
 | `forbiddenGuard`               | Route enter  | `forbidden` | Always redirects to `home`                   |
 
@@ -57,6 +59,7 @@ All controllers extend `BaseController`, which provides shared helpers (`getRout
 | `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, and scenario runner |
 | `controller/App.controller.ts`       | Root view controller                                                    |
 | `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard      |
+| `controller/Blocked.controller.ts`   | Blocked view (never rendered, guard always blocks)                      |
 | `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back          |
 | `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                 |
 | `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button   |
@@ -65,21 +68,21 @@ All controllers extend `BaseController`, which provides shared helpers (`getRout
 
 These files power the runtime inspector panels and hash-driven scenario buttons in the UI. They are isolated from the library and exist solely to make the demo interactive.
 
-| File                         | Purpose                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, and lazily registers the FLP dirty-state provider                     |
-| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records last-action messages to the runtime model                 |
-| `routing/hashNavigation.ts`  | Thin wrapper around `HashChanger` for `getCurrentHash()`, `setHash()`, `runHashSequence()`, and `attachHashChanged()`                 |
-| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (`currentHash`, `launchMode`, `hasUshellContainer`, `flpDirtyProviderActive`, `lastAction`) |
-| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                           |
+| File                         | Purpose                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, and lazily registers the FLP dirty-state provider              |
+| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records last-action messages to the runtime model          |
+| `routing/hashNavigation.ts`  | Thin wrapper around `HashChanger` for `getCurrentHash()`, `setHash()`, `runHashSequence()`, and `attachHashChanged()`          |
+| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, launch mode, FLP status, last action, and last navigation settlement details) |
+| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                    |
 
 ### Models
 
-| Name      | Source                 | Contents                                                      |
-| --------- | ---------------------- | ------------------------------------------------------------- |
-| `auth`    | `model/auth.json`      | `{ isLoggedIn: false }`, toggled by the UI                    |
-| `form`    | Created in `Component` | `{ isDirty: false }`, used by the leave guard                 |
-| `runtime` | `model/runtime.ts`     | Hash, launch mode, ushell status, dirty provider, last action |
+| Name      | Source                 | Contents                                                                              |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `auth`    | `model/auth.json`      | `{ isLoggedIn: false }`, toggled by the UI                                            |
+| `form`    | Created in `Component` | `{ isDirty: false }`, used by the leave guard                                         |
+| `runtime` | `model/runtime.ts`     | Hash, launch mode, ushell status, dirty provider, last action, and settlement outcome |
 
 ## FLP preview
 
@@ -154,17 +157,18 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                    | Coverage                                                       |
-| ----------------------- | -------------------------------------------------------------- |
-| `routing-basic.e2e.ts`  | Basic navigation, login flow, nav-back                         |
-| `guard-allow.e2e.ts`    | Navigation allowed after login                                 |
-| `guard-block.e2e.ts`    | Navigation blocked when logged out                             |
-| `guard-redirect.e2e.ts` | Forbidden route redirects to Home                              |
-| `nav-button.e2e.ts`     | UI5 Page nav-back button, re-navigation                        |
-| `multi-route.e2e.ts`    | Multi-step sequences, mid-session logout                       |
-| `browser-back.e2e.ts`   | Browser back/forward with guard state changes                  |
-| `direct-url.e2e.ts`     | Direct URL entry, nonexistent routes, rapid hash changes       |
-| `leave-guard.e2e.ts`    | Dirty form leave guard: allow clean, block dirty, browser back |
+| File                         | Coverage                                                       |
+| ---------------------------- | -------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                         |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                 |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                          |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                              |
+| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                        |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                       |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                  |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes       |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back |
 
 Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, and `fireEvent` helpers.
 

@@ -2,7 +2,13 @@ import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
 import RuntimeCoordinator from "./demo/RuntimeCoordinator";
-import { createNavigationLogger, createAsyncPermissionGuard, createDirtyFormGuard, forbiddenGuard } from "./guards";
+import {
+	blockedGuard,
+	createNavigationLogger,
+	createAsyncPermissionGuard,
+	createDirtyFormGuard,
+	forbiddenGuard,
+} from "./guards";
 import { createRuntimeModel } from "./model/runtime";
 
 /**
@@ -36,14 +42,15 @@ export default class Component extends UIComponent {
 		this._navigationLogger = createNavigationLogger();
 		router.addGuard(this._navigationLogger);
 
+		router.addRouteGuard("blocked", blockedGuard);
 		router.addRouteGuard("forbidden", forbiddenGuard);
 		router.addRouteGuard("protected", {
 			beforeEnter: createAsyncPermissionGuard(authModel),
 			beforeLeave: createDirtyFormGuard(formModel),
 		});
 
-		this._runtimeCoordinator.start();
 		router.initialize();
+		this._runtimeCoordinator.start(router);
 	}
 
 	override destroy(): void {

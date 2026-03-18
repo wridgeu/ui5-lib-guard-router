@@ -83,6 +83,11 @@
 					"target": "protected"
 				},
 				{
+					"name": "blocked",
+					"pattern": "blocked",
+					"target": "blocked"
+				},
+				{
 					"name": "forbidden",
 					"pattern": "forbidden",
 					"target": "forbidden"
@@ -97,6 +102,11 @@
 				"protected": {
 					"name": "Protected",
 					"id": "protectedView",
+					"level": 2
+				},
+				"blocked": {
+					"name": "Blocked",
+					"id": "blockedView",
 					"level": 2
 				},
 				"forbidden": {
