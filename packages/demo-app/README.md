@@ -170,7 +170,7 @@ Test files are in `test/e2e/`:
 | `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes       |
 | `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back |
 
-Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, and `fireEvent` helpers.
+Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, and `waitForRuntimeSettlement` helpers.
 
 FLP-specific coverage lives in `test/flp/` and is split across three spec files:
 

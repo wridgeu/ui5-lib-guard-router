@@ -409,6 +409,7 @@ No application logic changes needed beyond the guard definitions themselves.
 | NativeCompat (navTo replace)   | 3     | replace=true no history, replace=false creates history, routeMatched with replace                                         |
 | NativeCompat (Hash direction)  | 3     | Forward navigation, direct hash changes, replaceHash                                                                      |
 | E2E (guard-allow)              | 1     | Login then navigate to protected                                                                                          |
+| E2E (guard-block)              | 1     | Enter guard blocks navigation and stays on Home                                                                           |
 | E2E (guard-redirect-auth)      | 1     | Logged out, try protected -> redirected to home                                                                           |
 | E2E (guard-redirect)           | 1     | Navigate to forbidden → redirected                                                                                        |
 | E2E (browser-back)             | 4     | Back button respects guards across login states                                                                           |

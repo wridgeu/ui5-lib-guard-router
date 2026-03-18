@@ -217,7 +217,7 @@ export async function expectHashToBe(expected: string, timeoutMsg?: string): Pro
 	);
 }
 
-export async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
+async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 	return browser.execute((componentId: string) => {
 		const Component = sap.ui.require("sap/ui/core/Component");
 		const runtimeModel = Component?.getComponentById(componentId)?.getModel("runtime");

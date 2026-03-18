@@ -82,7 +82,7 @@ router.addRouteGuard("editor", {
 });
 ```
 
-For a confirmation dialog before leaving, return the result of a `MessageBox.confirm` wrapped in a Promise. See the [library README leave guard example](../../packages/lib/README.md#leave-guards) for the `MessageBox` pattern.
+For a confirmation dialog before leaving, return the result of a `MessageBox.confirm` wrapped in a Promise. See the [library README leave guard example](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) for the `MessageBox` pattern.
 
 Reference: `createDirtyFormGuard` in `guards.ts`.
 
@@ -97,7 +97,7 @@ router.addRouteGuard("old-detail", (context) => ({
 }));
 ```
 
-Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters) for the `componentTargetInfo` variant.
+Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for the `componentTargetInfo` variant.
 
 ## Error handling in guards
 
@@ -148,7 +148,7 @@ All `create*` functions in `guards.ts` follow this pattern.
 
 ## Controller-level guard lifecycle
 
-Register a leave guard in `onInit` and remove it in `onExit`. This ties the guard to the controller's lifecycle, which matters because UI5 caches XMLViews by default -- `onInit` runs once, but `onExit` runs on `destroy()`.
+Register a leave guard in `onInit` and remove it in `onExit`. UI5 caches XMLViews by default, so `onInit` runs once but `onExit` runs on `destroy()`.
 
 ```typescript
 export default class EditorController extends BaseController {

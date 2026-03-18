@@ -441,9 +441,10 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   +---------------------+     +---------------------------+
   | Router.qunit.ts     |     | routing-basic.e2e.ts      |
   |                     |     | guard-allow.e2e.ts        |
-  | NativeRouterCompat  |     | guard-redirect-auth.e2e.ts |
-  |  .qunit.ts          |     | guard-redirect.e2e.ts     |
-  +---------------------+     | browser-back.e2e.ts       |
+  | NativeRouterCompat  |     | guard-block.e2e.ts        |
+  |  .qunit.ts          |     | guard-redirect-auth.e2e.ts |
+  +---------------------+     | guard-redirect.e2e.ts     |
+                               | browser-back.e2e.ts       |
                                | direct-url.e2e.ts         |
                                | multi-route.e2e.ts        |
                                | nav-button.e2e.ts         |

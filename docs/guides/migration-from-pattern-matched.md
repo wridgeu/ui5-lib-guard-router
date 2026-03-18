@@ -61,7 +61,7 @@ No view renders for `"protected"` unless the guard returns `true`. A redirect to
 
 5. **Remove `attachPatternMatched` guard handlers from controllers.** Delete the `attachPatternMatched` / `detachPatternMatched` calls and the `_onRouteMatched` methods that were serving as guards. Controllers that only existed for guard logic can be simplified or removed.
 
-6. **Add leave guards if applicable.** If any controllers use `beforeunload` or manual dirty-state checks before navigation, convert these to `addLeaveGuard()` or `addRouteGuard()` with `{ beforeLeave: fn }`. See the [leave guard section](../../packages/lib/README.md#leave-guards) in the library README.
+6. **Add leave guards if applicable.** If any controllers use `beforeunload` or manual dirty-state checks before navigation, convert these to `addLeaveGuard()` or `addRouteGuard()` with `{ beforeLeave: fn }`. See the [leave guard section](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) in the library README.
 
 ## What stays the same
 
