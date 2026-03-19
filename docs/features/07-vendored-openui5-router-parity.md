@@ -160,40 +160,37 @@ That is the contract the vendored suite should support.
 
 ---
 
-## Proposed Directory Layout
+## Directory Layout
 
 ```text
-packages/lib/test/qunit/upstream-parity/
-  README.md
-  manifest.json
-  adapters/
-    assertions.ts
-    fixtures.ts
-    routerFactories.ts
-  ports/
-    openui5/
-      1.144.0/
-        sap.m.routing.Router/
-          api-parity.qunit.ts
-          route-matching.qunit.ts
-          navto.qunit.ts
-          events.qunit.ts
-          replace.qunit.ts
-          hash-direction.qunit.ts
-  vendor/
-    openui5/
-      1.144.0/
-        raw/
+packages/lib/test/qunit/
+  UpstreamParity.qunit.ts          # testsuite entrypoint (registered in testsuite.qunit.ts)
+  upstream-parity/
+    Current.qunit.ts               # imports all active versioned ports
+    README.md
+    manifest.json
+    adapters/
+      assertions.ts
+      fixtures.ts
+      routerFactories.ts
+    ports/
+      openui5/
+        1.144.0/
           sap.m.routing.Router/
-            Router.qunit.js
-            HashChanger.qunit.js
+            Router.qunit.ts        # executable port of selected upstream cases
+    vendor/
+      openui5/
+        1.144.0/
+          raw/
+            src/sap.m/test/sap/m/qunit/routing/async/
+              Router.qunit.js      # byte-for-byte upstream snapshot
 ```
 
-The exact file split can evolve, but the important constraints are:
+Constraints:
 
-- exact upstream snapshots stay under `vendor/openui5/<tag>/raw/`
-- executable local ports stay outside the vendored subtree under `ports/`
-- local harness code stays outside both the raw vendor and the ports tree where practical
+- exact upstream snapshots stay under `vendor/openui5/<tag>/raw/` preserving the original source path
+- executable local ports live under `ports/openui5/<tag>/` grouped by upstream module
+- local harness code stays in `adapters/`, outside both vendor and ports
 - provenance is tracked centrally in `manifest.json`
 
 ---
@@ -307,281 +304,9 @@ The documentation must always distinguish those two contracts.
 
 ---
 
-## Implementation Plan
+## Implementation
 
-## Task 1: Set Up the Upstream-Parity Test Skeleton
-
-**Files:**
-
-- Create: `packages/lib/test/qunit/upstream-parity/README.md`
-- Create: `packages/lib/test/qunit/upstream-parity/manifest.json`
-- Create: `packages/lib/test/qunit/upstream-parity/adapters/routerFactories.ts`
-- Create: `packages/lib/test/qunit/upstream-parity/adapters/fixtures.ts`
-- Create: `packages/lib/test/qunit/upstream-parity/adapters/assertions.ts`
-- Create: `packages/lib/test/qunit/upstream-parity/ports/openui5/<tag>/...`
-- Create: `packages/lib/test/qunit/upstream-parity/vendor/openui5/<tag>/raw/...`
-
-- [ ] **Step 1: Create the folder structure**
-
-Create the `upstream-parity` root, the `adapters` directory, the versioned raw vendor subtree, and the separate `ports/` subtree.
-
-- [ ] **Step 2: Add a local README**
-
-Document:
-
-- purpose of the suite
-- difference from `NativeRouterCompat.qunit.ts`
-- vendoring rules
-- provenance requirements
-- sync/update policy
-
-- [ ] **Step 3: Add `manifest.json`**
-
-Define a stable schema for:
-
-- suite version
-- upstream OpenUI5 tag/SHA
-- raw vendored files
-- local ports/wrappers
-- excluded files
-- adaptation notes
-
-- [ ] **Step 4: Create adapter helpers**
-
-The adapter layer should expose:
-
-- native router factory
-- guard router factory
-- shared route fixture factory
-- hash reset/init helpers
-- shared assertion helpers for hash, events, and route metadata
-
-The initial goal is consistency across both router flavors.
-
----
-
-## Task 2: Import the First Curated OpenUI5 Router Tests
-
-**Files:**
-
-- Create: raw vendored test files under `packages/lib/test/qunit/upstream-parity/vendor/openui5/<tag>/raw/`
-- Create: executable ports under `packages/lib/test/qunit/upstream-parity/ports/openui5/<tag>/`
-
-- [ ] **Step 1: Identify public, stable candidate tests from OpenUI5**
-
-Start with Tier 1 cases only.
-
-- API parity
-- route matching
-- URL generation
-- `navTo` and replace behavior
-- event payload parity
-- hash direction behavior
-
-- [ ] **Step 2: Vendor the upstream files as raw snapshots**
-
-Each raw file should preserve the upstream contents exactly.
-
-- [ ] **Step 3: Create local executable ports/wrappers**
-
-Do not rewrite the behavioral core of the tests more than necessary; move environment differences into the local harness and keep each port linked clearly to its raw source.
-
-- [ ] **Step 4: Register raw files and ports in the manifest**
-
-Record exact source path, source tag/SHA, raw file path, local port path, and adaptation summary.
-
----
-
-## Task 3: Wire the Vendored Suite into QUnit and npm Scripts
-
-**Files:**
-
-- Modify: `packages/lib/test/qunit/testsuite.qunit.ts`
-- Modify: `packages/lib/package.json`
-- Create: `scripts/vendor-openui5-router-tests.mjs`
-- Create: `scripts/verify-openui5-router-vendor.mjs`
-
-- [ ] **Step 1: Register the vendored parity modules in the QUnit testsuite**
-
-Keep the lane logically separate from the project's own QUnit tests.
-
-- [ ] **Step 2: Add a dedicated test script**
-
-Add something like:
-
-```json
-"test:qunit:upstream-parity": "wdio run test/wdio-qunit.conf.ts --suite upstream-parity"
-```
-
-Adapt the exact command to the existing QUnit lane setup.
-
-- [ ] **Step 3: Keep the execution model simple**
-
-Prefer a dedicated suite or test bundle rather than dynamically filtering many unrelated files.
-
-- [ ] **Step 4: Add a maintainer sync script**
-
-Add a script such as:
-
-```json
-"vendor:openui5-router-tests": "node ./scripts/vendor-openui5-router-tests.mjs"
-```
-
-Expected usage:
-
-```bash
-npm run vendor:openui5-router-tests -- --tag 1.144.0
-```
-
-The script should:
-
-- require an explicit `--tag` or `--sha`
-- fetch only the configured upstream router test files
-- write them into `vendor/openui5/<tag>/raw/`
-- update `manifest.json`
-- support `--dry-run`
-
-- [ ] **Step 5: Add a verification script**
-
-Add a script such as:
-
-```json
-"verify:openui5-router-vendor": "node ./scripts/verify-openui5-router-vendor.mjs"
-```
-
-It should verify:
-
-- manifest consistency
-- expected raw file presence
-- raw/port mapping completeness
-- provenance metadata completeness
-
----
-
-## Task 4: Integrate with CI
-
-**Files:**
-
-- Modify: CI workflow files
-
-- [ ] **Step 1: Add a separate upstream parity lane**
-
-The CI job name should clearly communicate its purpose, e.g. `qunit-upstream-parity`.
-
-- [ ] **Step 2: Keep reporting isolated**
-
-Do not mix vendored parity failures with guard-behavior failures in job naming or summaries.
-
-- [ ] **Step 3: Run on the shipped UI5 baseline first**
-
-Only add compatibility-lane execution later if the maintenance cost is justified.
-
----
-
-## Task 5: Tighten Documentation End-to-End
-
-**Files:**
-
-- Modify: `README.md`
-- Modify: `packages/lib/README.md`
-- Modify: `docs/README.md`
-- Modify: `docs/features/README.md`
-- Create: `docs/reference/upstream-parity.md`
-
-- [ ] **Step 1: Add a dedicated reference doc**
-
-`docs/reference/upstream-parity.md` should explain:
-
-- suite purpose
-- contract scope
-- what is imported vs excluded
-- provenance rules
-- how to update the suite when the UI5 baseline changes
-
-- [ ] **Step 2: Clarify README wording**
-
-The public docs should say:
-
-- native compatibility is validated by both local differential tests and a vendored upstream parity lane
-- that claim applies to inherited router behavior when guards are inactive
-- guard behavior is validated by separate suites
-
-- [ ] **Step 3: Keep wording honest and maintainable**
-
-Avoid suggesting that upstream parity covers the guard extensions.
-
----
-
-## Task 6: Preserve TypeScript, JavaScript, and Consumer Ergonomics
-
-**Files:**
-
-- Modify as needed: adapter helpers and docs only
-
-- [ ] **Step 1: Keep the feature implementation test-only**
-
-This parity lane should not require changes to the public runtime API.
-
-- [ ] **Step 2: Type adapter helpers cleanly**
-
-The vendored suite should be easy to maintain for TypeScript contributors and readable for JavaScript-oriented UI5 contributors.
-
-- [ ] **Step 3: Keep public consumer docs unaffected unless wording needs clarification**
-
-The feature is an internal quality/verification improvement, not a new consumer-facing API.
-
----
-
-## Task 7: Define a Sync and Review Process
-
-**Files:**
-
-- Create/Modify: `packages/lib/test/qunit/upstream-parity/README.md`
-- Create/Modify: `docs/reference/upstream-parity.md`
-
-- [ ] **Step 1: Define when the vendored suite is updated**
-
-Recommended triggers:
-
-- UI5 baseline bump
-- router compatibility incident
-- major router refactor
-
-- [ ] **Step 2: Define who reviews vendored changes**
-
-Vendored parity updates should receive focused review because they affect contract evidence, not just implementation.
-
-- [ ] **Step 3: Prefer manual or assisted sync, not CI fetching**
-
-If a helper script is added later, it should support maintainers locally but should not fetch remote code during CI execution.
-
-- [ ] **Step 4: Define the raw-vendor rule explicitly**
-
-Document that `vendor/openui5/<tag>/raw/` contains exact upstream snapshots, while local executable ports live separately under `ports/`.
-
----
-
-## Documentation and Quality Notes
-
-### Maintainability
-
-- Keep raw vendored tests as exact upstream copies.
-- Push local logic into adapters and ports, not into raw vendored files.
-- Track every adaptation explicitly.
-- Avoid importing more tests than the team is willing to maintain.
-
-### JavaScript and TypeScript Balance
-
-- The vendored tests can stay in TypeScript to match the repo and existing test tooling.
-- Headers and helper names should stay readable for JS-first contributors.
-- Avoid over-engineered abstractions in the adapter harness.
-
-### UI5 Framework Standards
-
-- Assert against public router behavior and public event payloads first.
-- Do not build the parity suite on fragile private UI5 internals.
-- Respect the router's standard lifecycle and `navTo` semantics.
-- Keep the runtime router implementation itself unchanged unless parity findings justify a bug fix.
+Shipped in PR #33. See the [File Map](#file-map) above for the full list of created and modified files.
 
 ---
 
@@ -613,9 +338,9 @@ Upstream router tests may evolve in ways that are not worth porting immediately.
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-- Should the vendored lane run only on the shipped UI5 baseline, or also on the compatibility baseline?
-- Should the initial import target `sap.ui.core.routing.Router` behavior too, or stay strictly on `sap.m.routing.Router` first?
-- Should the sync script support only `--tag`, or also exact commit SHAs and file allowlists?
-- Should excluded upstream tests also be recorded in the manifest for transparency, or only in the long-form docs?
+- **Vendored lane runs only on the shipped UI5 baseline.** The compatibility lane (1.120) runs the library's own QUnit suite, not vendored upstream tests.
+- **Initial import targets `sap.m.routing.Router` only.** `sap.ui.core.routing.Router` is not in scope.
+- **The sync script supports both `--tag` and `--sha`.** `--sha` alone is for ad-hoc fetching; `--write-manifest` requires `--tag`.
+- **Excluded tests are not tracked in the manifest.** The tier taxonomy in this doc and the local README document exclusion rationale instead.

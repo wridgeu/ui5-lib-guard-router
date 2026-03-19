@@ -31,7 +31,8 @@ async function fetchJson(url) {
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+		const hint = response.status === 403 ? " (GitHub API rate limit may be exceeded)" : "";
+		throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}${hint}`);
 	}
 
 	return response.json();
