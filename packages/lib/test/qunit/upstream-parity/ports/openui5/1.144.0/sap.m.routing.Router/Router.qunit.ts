@@ -9,7 +9,6 @@
  * - Replaced original upstream test bootstrap with local adapter harness
  * - Scoped execution to native-parity mode (no guards registered)
  */
-import sinon from "sinon";
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
 import Views from "sap/ui/core/routing/Views";

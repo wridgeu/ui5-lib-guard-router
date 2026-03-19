@@ -3,6 +3,7 @@
 	"compilerOptions": {
 		"rootDir": ".",
 		"baseUrl": ".",
+		"allowUmdGlobalAccess": true,
 		"paths": {
 			"ui5/guard/router/*": ["./src/*"]
 		},
