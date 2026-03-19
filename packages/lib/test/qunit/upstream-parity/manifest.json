@@ -1,5 +1,4 @@
 {
-	"schemaVersion": 1,
 	"upstream": {
 		"repo": "UI5/openui5",
 		"tag": "1.144.0",

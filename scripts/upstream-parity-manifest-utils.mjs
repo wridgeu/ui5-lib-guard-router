@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const allowedManifestKeys = new Set(["schemaVersion", "upstream", "files"]);
+const allowedManifestKeys = new Set(["upstream", "files"]);
 const allowedUpstreamKeys = new Set(["repo", "tag", "commitSha"]);
 const allowedFileKeys = new Set([
 	"id",
@@ -35,10 +35,6 @@ export function validateUpstreamParityManifest(manifest) {
 		if (!allowedManifestKeys.has(key)) {
 			errors.push(`Manifest contains unsupported top-level key '${key}'`);
 		}
-	}
-
-	if (manifest.schemaVersion !== 1) {
-		errors.push(`Unsupported upstream parity manifest schemaVersion: ${String(manifest.schemaVersion)}`);
 	}
 
 	if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
