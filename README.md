@@ -209,6 +209,7 @@ Short maintainer conventions:
 - Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
 - Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
 - If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
+  Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
 | File                            | Purpose                                                                                                                   |

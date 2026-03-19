@@ -233,7 +233,9 @@ The manifest should record, per case:
 - source SHA
 - imported date
 - adaptation summary
-- status (`active`, `adapted`, `excluded`, `replaced`)
+- status:
+    - `ported` -- full upstream test ported and executable
+    - `ported-subset` -- selected test cases ported from a larger upstream file
 
 This keeps the suite auditable and maintainable.
 
