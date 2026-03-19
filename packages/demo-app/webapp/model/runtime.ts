@@ -83,9 +83,16 @@ export function createRuntimeModel(): JSONModel {
 }
 
 export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boolean): void {
-	const lastAction = model.getProperty("/lastAction") as string | undefined;
-	const lastSettlementRevision = model.getProperty("/lastSettlementRevision") as number | undefined;
-	model.setData(buildRuntimeState(lastAction ?? "Ready", flpDirtyProviderActive, lastSettlementRevision ?? 0));
+	const ushellAvailable = hasUshellContainer();
+	model.setData(
+		{
+			currentHash: getCurrentHash(),
+			launchMode: ushellAvailable ? "FLP Preview" : "Standalone",
+			hasUshellContainer: ushellAvailable,
+			flpDirtyProviderActive: ushellAvailable && flpDirtyProviderActive,
+		},
+		true,
+	);
 }
 
 export function setRuntimeMessage(model: JSONModel, message: string): void {

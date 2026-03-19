@@ -68,15 +68,16 @@ matching, target loading, or event firing occurs.
 |   +--------------------+    +---------------------------+            |
 |   | Guard Management   |    | Navigation Interception   |            |
 |   |                    |    |                           |            |
-|   | addGuard()         |    | navTo() override          |            |
-|   | removeGuard()      |    | parse() override          |            |
-|   | addRouteGuard()    |    | _evaluateGuards()         |            |
-|   | removeRouteGuard() |    | _applyPreflightDecision() |            |
-|   | addLeaveGuard()    |    | _applyDecision()          |            |
-|   | removeLeaveGuard() |    | _runLeaveGuards()         |            |
-|   | navigationSettled()|    | _runEnterGuards()         |            |
-|   |                    |    | _runRouteGuards()         |            |
-|   +--------------------+    | _runGuards()              |            |
+|   | addGuard()              |    | navTo() override          |            |
+|   | removeGuard()           |    | parse() override          |            |
+|   | addRouteGuard()         |    | _evaluateGuards()         |            |
+|   | removeRouteGuard()      |    | _applyPreflightDecision() |            |
+|   | addLeaveGuard()         |    | _applyDecision()          |            |
+|   | removeLeaveGuard()      |    | _runLeaveGuards()         |            |
+|   | navigationSettled()     |    | _runEnterGuards()         |            |
+|   | attachNavigationSettled()|    | _runRouteGuards()         |            |
+|   | detachNavigationSettled()|    | _runGuards()              |            |
+|   +-------------------------+    | _cancelPendingNavigation()|            |
 |                             | _continueGuardsAsync()    |            |
 |                             | _validateGuardResult()    |            |
 |                             | _validateLeaveGuardResult()|           |
@@ -127,10 +128,13 @@ NavigationOutcome (UI5 enum)        NavigationResult
 GuardRouter (public interface)      Router (ES6 class)
   extends sap.m.routing.Router        extends sap.m.routing.Router
   + 6 guard methods + 1 query         implements GuardRouter
-    addGuard / removeGuard             + internal state fields
-    addRouteGuard / removeRouteGuard   + private _cancelPendingNavigation()
-    addLeaveGuard / removeLeaveGuard   + private _flushSettlement()
-    navigationSettled()                + override navTo(), parse(), stop(), destroy()
+  + 2 event methods                   + internal state fields
+    addGuard / removeGuard             + private _cancelPendingNavigation()
+    addRouteGuard / removeRouteGuard   + private _flushSettlement()
+    addLeaveGuard / removeLeaveGuard   + override navTo(), parse(), stop(), destroy()
+    navigationSettled()
+    attachNavigationSettled()
+    detachNavigationSettled()
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -359,7 +363,8 @@ flowchart TD
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
 `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
-with the same `NavigationResult`. `_redirect()` includes a safety-net flush that settles as `Blocked` when
+with the same `NavigationResult` and fires the `navigationSettled` event via
+`EventProvider.fireEvent()`. `_redirect()` includes a safety-net flush that settles as `Blocked` when
 `navTo()` does not trigger a re-entrant `parse()` (e.g. redirect to a
 nonexistent route when the hash is already empty), because the observable
 outcome is that the user stays on the current route. This ensures:

@@ -328,6 +328,21 @@ assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation was blo
 assert.strictEqual(result.route, "home", "User stays on home");
 ```
 
+**Event-based: observe every navigation outcome**
+
+`attachNavigationSettled` fires synchronously after every guard pipeline settlement. Unlike the one-shot `navigationSettled()` Promise, the event fires for every navigation without re-registration:
+
+```typescript
+router.attachNavigationSettled((event) => {
+	const status = event.getParameter("status"); // NavigationOutcome
+	const route = event.getParameter("route");
+	const hash = event.getParameter("hash");
+	console.log(`Navigation settled: ${status} on ${route}`);
+});
+```
+
+Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works.
+
 ### Execution order
 
 1. **Leave guards** for the current route (registration order)

@@ -3587,3 +3587,123 @@ QUnit.test("async redirect to nonexistent via navTo does not call _restoreHash",
 		restoreSpy.restore();
 	}
 });
+
+QUnit.module("Router - navigationSettled event", standardHooks);
+
+QUnit.test("fires on committed navigation", async function (assert) {
+	const events: { status: string; route: string; hash: string }[] = [];
+	router.attachNavigationSettled((event) => {
+		events.push({
+			status: event.getParameter("status") as string,
+			route: event.getParameter("route") as string,
+			hash: event.getParameter("hash") as string,
+		});
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	assert.strictEqual(events.length, 1, "Event fired once");
+	assert.strictEqual(events[0].status, NavigationOutcome.Committed, "Status is Committed");
+	assert.strictEqual(events[0].route, "home", "Route is home");
+});
+
+QUnit.test("fires on blocked navigation", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const events: { status: string; route: string }[] = [];
+	router.attachNavigationSettled((event) => {
+		events.push({
+			status: event.getParameter("status") as string,
+			route: event.getParameter("route") as string,
+		});
+	});
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(events.length, 1, "Event fired once for blocked navigation");
+	assert.strictEqual(events[0].status, NavigationOutcome.Blocked, "Status is Blocked");
+	assert.strictEqual(events[0].route, "home", "Route stays home");
+});
+
+QUnit.test("fires on redirected navigation", async function (assert) {
+	router.addRouteGuard("protected", () => "home");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const events: { status: string }[] = [];
+	router.attachNavigationSettled((event) => {
+		events.push({ status: event.getParameter("status") as string });
+	});
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.ok(
+		events.some((e) => e.status === NavigationOutcome.Redirected),
+		"At least one event has Redirected status",
+	);
+});
+
+QUnit.test("fires on cancelled navigation", async function (assert) {
+	router.addGuard(() => new Promise<boolean>((r) => setTimeout(() => r(true), 100)));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const events: { status: string }[] = [];
+	router.attachNavigationSettled((event) => {
+		events.push({ status: event.getParameter("status") as string });
+	});
+
+	router.navTo("protected");
+	router.navTo("home"); // cancels first
+
+	await router.navigationSettled();
+
+	assert.ok(
+		events.some((e) => e.status === NavigationOutcome.Cancelled),
+		"Cancelled event fired",
+	);
+});
+
+QUnit.test("fires on bypassed navigation", async function (assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const events: { status: string; route: string; hash: string }[] = [];
+	router.attachNavigationSettled((event) => {
+		events.push({
+			status: event.getParameter("status") as string,
+			route: event.getParameter("route") as string,
+			hash: event.getParameter("hash") as string,
+		});
+	});
+
+	HashChanger.getInstance().setHash("nonexistent/route/that/matches/nothing");
+	await router.navigationSettled();
+
+	assert.strictEqual(events.length, 1, "Event fired once for bypassed navigation");
+	assert.strictEqual(events[0].status, NavigationOutcome.Bypassed, "Status is Bypassed");
+	assert.strictEqual(events[0].route, "", "Route is empty for bypassed");
+});
+
+QUnit.test("detachNavigationSettled stops delivery", async function (assert) {
+	const events: string[] = [];
+	const oListener = {};
+	const handler = (event: Parameters<Parameters<typeof router.attachNavigationSettled>[0]>[0]) => {
+		events.push(event.getParameter("status") as string);
+	};
+
+	router.attachNavigationSettled(handler, oListener);
+	router.initialize();
+	await waitForRoute(router, "home");
+	assert.strictEqual(events.length, 1, "Handler received initial settlement");
+
+	router.detachNavigationSettled(handler, oListener);
+
+	router.navTo("forbidden");
+	await router.navigationSettled();
+	assert.strictEqual(events.length, 1, "Handler no longer receives events after detach");
+});
