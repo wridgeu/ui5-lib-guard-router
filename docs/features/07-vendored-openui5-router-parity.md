@@ -2,8 +2,6 @@
 
 > Status: the initial vendored parity lane is implemented. The remaining checklist in this document tracks future expansion and maintenance work.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 
 **Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts`. A vendored parity lane strengthens that claim, gives the project a pinned compatibility baseline against upstream framework behavior, and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
