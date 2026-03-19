@@ -4,7 +4,7 @@
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 
-**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts`. A vendored parity lane strengthens that claim, gives the project a pinned compatibility baseline against upstream framework behavior, and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
+**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts`. A vendored parity lane pins compatibility against upstream framework behavior and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
 
 **Architecture:** Keep two test layers and two source forms:
 
@@ -17,21 +17,21 @@
 
 ## Problem Statement
 
-The library extends `sap.m.routing.Router` and advertises itself as a drop-in replacement, but most compatibility guarantees are currently enforced by tests written from this repository's point of view. That is valuable, but it does not fully answer a stricter question:
+The library extends `sap.m.routing.Router` and advertises itself as a drop-in replacement, but most compatibility guarantees are currently enforced by tests written from this repository's point of view. That is valuable, but it does not answer a stricter question:
 
 > Do we still behave like the native router when measured against the framework's own public-router expectations?
 
 Today, the answer is only partially covered.
 
 - The local compatibility suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts` already compares the native router and the guard router across several core behaviors.
-- That suite is excellent as a fast smoke layer, but it is still curated entirely by this project.
+- That suite works as a fast smoke layer, but it is still curated entirely by this project.
 - The project does not yet keep a pinned, provenance-tracked set of upstream OpenUI5 router tests that can act as an additional contract suite.
 
 This matters for four reasons:
 
 1. **Compatibility confidence**
     - The library depends on subclassing and overriding router behavior.
-    - A vendored parity lane provides stronger evidence that inherited router behavior remains aligned with OpenUI5 when guards are inactive.
+    - A vendored parity lane verifies that inherited router behavior remains aligned with OpenUI5 when guards are inactive.
 
 2. **Maintainability**
     - When internal refactors happen, it is easy to accidentally preserve the library's own tests while drifting from upstream expectations.
@@ -39,7 +39,7 @@ This matters for four reasons:
 
 3. **Release discipline**
     - When the UI5 baseline changes, a pinned upstream parity lane highlights meaningful behavioral deltas.
-    - That is especially valuable for a router library whose core promise includes native ergonomics.
+    - This matters more for a router library that claims drop-in compatibility.
 
 4. **Documentation honesty**
     - The project should distinguish clearly between:
@@ -355,7 +355,7 @@ The adapter layer should expose:
 - hash reset/init helpers
 - shared assertion helpers for hash, events, and route metadata
 
-The initial goal is not sophistication - it is consistency.
+The initial goal is consistency across both router flavors.
 
 ---
 
