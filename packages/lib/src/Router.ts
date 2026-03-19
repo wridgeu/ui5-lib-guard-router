@@ -10,6 +10,7 @@ import type {
 	GuardRouter,
 	LeaveGuardFn,
 	NavigationResult,
+	Router$NavigationSettledEvent,
 	RouteGuardConfig,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
@@ -302,7 +303,45 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Drain all settlement resolvers with the given result.
+	 * Attach an event handler for the `navigationSettled` event.
+	 *
+	 * Fires synchronously after every guard pipeline settlement with
+	 * a {@link NavigationResult} payload. Unlike the one-shot
+	 * `navigationSettled()` Promise, this event fires for every
+	 * navigation outcome without re-registration.
+	 *
+	 * @param oData - Application-specific payload passed to the handler as second argument.
+	 * @param fnFunction - The function to be called when the event occurs.
+	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
+	 */
+	attachNavigationSettled(
+		oData: object,
+		fnFunction: (evt: Router$NavigationSettledEvent) => void,
+		oListener?: object,
+	): this;
+	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
+	attachNavigationSettled(oData: unknown, fnFunction?: unknown, oListener?: unknown): this {
+		this.attachEvent("navigationSettled", oData as object, fnFunction as Function, oListener as object);
+		return this;
+	}
+
+	/**
+	 * Detach a previously attached `navigationSettled` event handler.
+	 *
+	 * The passed parameters must match those used for registration with
+	 * {@link #attachNavigationSettled} beforehand.
+	 *
+	 * @param fnFunction - The handler function to detach.
+	 * @param oListener - Context object on which the given function had to be called.
+	 */
+	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener: object): this {
+		this.detachEvent("navigationSettled", fnFunction as Function, oListener);
+		return this;
+	}
+
+	/**
+	 * Drain all settlement resolvers with the given result and fire
+	 * the `navigationSettled` event.
 	 */
 	private _flushSettlement(result: NavigationResult): void {
 		this._lastSettlement = result;
@@ -311,6 +350,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		for (const resolve of resolvers) {
 			resolve(result);
 		}
+		this.fireEvent("navigationSettled", result);
 	}
 
 	/**

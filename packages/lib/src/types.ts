@@ -1,3 +1,4 @@
+import type Event from "sap/ui/base/Event";
 import type MobileRouter from "sap/m/routing/Router";
 import type { ComponentTargetParameters, RouteInfo } from "sap/ui/core/routing/Router";
 import type NavigationOutcome from "./NavigationOutcome";
@@ -116,6 +117,16 @@ export interface NavigationResult {
 }
 
 /**
+ * Event object passed to `attachNavigationSettled` handlers.
+ * Parameters are identical to {@link NavigationResult}.
+ *
+ * The source type uses {@link GuardRouter} (the public interface) rather
+ * than the concrete Router class to avoid a circular import between
+ * `types.ts` and `Router.ts`.
+ */
+export type Router$NavigationSettledEvent = Event<NavigationResult, GuardRouter>;
+
+/**
  * Public instance shape of the extended Router.
  *
  * Extends `sap.m.routing.Router` with guard management methods.
@@ -190,4 +201,28 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */
 	navigationSettled(): Promise<NavigationResult>;
+	/**
+	 * Attach an event handler for the `navigationSettled` event.
+	 *
+	 * Fires synchronously after every guard pipeline settlement with
+	 * a {@link NavigationResult} payload. Unlike the one-shot
+	 * `navigationSettled()` Promise, this event fires for every
+	 * navigation outcome without re-registration.
+	 */
+	attachNavigationSettled(
+		oData: object,
+		fnFunction: (evt: Router$NavigationSettledEvent) => void,
+		oListener?: object,
+	): GuardRouter;
+	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
+	/**
+	 * Detach a previously attached `navigationSettled` event handler.
+	 *
+	 * The passed parameters must match those used for registration with
+	 * {@link #attachNavigationSettled} beforehand.
+	 *
+	 * @param fnFunction - The handler function to detach.
+	 * @param oListener - Context object on which the given function had to be called.
+	 */
+	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener: object): GuardRouter;
 }
