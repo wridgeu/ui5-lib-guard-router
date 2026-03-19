@@ -74,7 +74,7 @@ async function main() {
 
 		const rawFilePath = path.join(repoRoot, file.rawFilePath);
 		try {
-			const rawContents = await readFile(rawFilePath);
+			const rawContents = await readFile(rawFilePath, "utf8");
 			const actualSha256 = computeSha256(rawContents);
 			if (actualSha256 !== file.contentSha256) {
 				errors.push(

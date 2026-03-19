@@ -216,7 +216,7 @@ Every local executable port should include a header like this:
 ```ts
 /**
  * Ported from vendored OpenUI5 test source
- * Source repo: SAP/openui5
+ * Source repo: UI5/openui5
  * Source path: <original path>
  * Source tag: 1.144.0
  * Source commit: <sha>

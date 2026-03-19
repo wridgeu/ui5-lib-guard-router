@@ -1,3 +1,15 @@
+/**
+ * Ported from vendored OpenUI5 test source
+ * Source repo: UI5/openui5
+ * Source path: src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js
+ * Source tag: 1.144.0
+ * Source commit: 3ee7b61446490b20e4ab95bb33404a520761daf5
+ * Imported: 2026-03-18
+ * Local adaptations:
+ * - Replaced original upstream test bootstrap with local adapter harness
+ * - Scoped execution to native-parity mode (no guards registered)
+ */
+import sinon from "sinon";
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
 import Views from "sap/ui/core/routing/Views";
