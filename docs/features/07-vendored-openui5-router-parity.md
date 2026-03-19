@@ -1,6 +1,7 @@
-# Vendored OpenUI5 Router Parity Suite - Implementation Plan
+# Vendored OpenUI5 Router Parity Suite
 
-> Status: the initial vendored parity lane is implemented. The remaining checklist in this document tracks future expansion and maintenance work.
+> **Status**: Implemented. The initial vendored parity lane shipped in PR #33.
+> See [docs/reference/upstream-parity.md](../reference/upstream-parity.md) and the [local README](../../packages/lib/test/qunit/upstream-parity/README.md) for the shipped layout and maintenance process.
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 
@@ -10,8 +11,6 @@
 
 - `NativeRouterCompat.qunit.ts` remains the fast local parity smoke suite owned entirely by this repo.
 - A new vendored upstream-parity lane keeps **byte-for-byte upstream snapshots** in a `vendor/` subtree, then runs **local executable ports/wrappers** against a shared harness in the "no guards registered" contract mode.
-
-**Tech Stack:** TypeScript, UI5 (`sap.m.routing.Router`), QUnit, OpenUI5 vendored test fixtures, npm workspaces, GitHub Actions
 
 ---
 
@@ -618,56 +617,3 @@ Upstream router tests may evolve in ways that are not worth porting immediately.
 - Should the initial import target `sap.ui.core.routing.Router` behavior too, or stay strictly on `sap.m.routing.Router` first?
 - Should the sync script support only `--tag`, or also exact commit SHAs and file allowlists?
 - Should excluded upstream tests also be recorded in the manifest for transparency, or only in the long-form docs?
-
----
-
-## Recommended Rollout
-
-### Milestone 1: Skeleton and Documentation
-
-- folder structure
-- manifest + verifier
-- local README
-- reference doc
-- npm script placeholder
-
-### Milestone 2: First Curated Import
-
-- 5-10 Tier 1 test files vendored
-- adapter harness in place
-- passing local execution
-
-### Milestone 3: CI Integration
-
-- dedicated lane
-- clear reporting
-- documentation updated in root/package README
-
-### Milestone 4: Maintenance Process
-
-- provenance review rules
-- update policy documented
-- optional local sync helper considered
-
----
-
-## Acceptance Criteria
-
-- A vendored upstream parity folder exists with provenance-tracked files.
-- The suite runs as its own dedicated lane.
-- Imported tests cover at least one meaningful Tier 1 batch.
-- Public docs clearly distinguish native-router parity from guard-specific behavior.
-- CI reports vendored parity failures separately from feature regressions.
-- The maintenance/update process is documented well enough that another contributor can extend the suite without reverse-engineering intent.
-
----
-
-## Suggested First Commit Breakdown
-
-1. `test(qunit): scaffold vendored upstream router parity suite`
-2. `test(qunit): add OpenUI5 vendor sync and verification scripts`
-3. `test(qunit): import first OpenUI5 router parity batch`
-4. `docs: document upstream parity contract and maintenance process`
-5. `ci: add vendored upstream parity lane`
-
-This keeps provenance, implementation, and CI reviewable in manageable slices.

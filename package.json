@@ -35,7 +35,7 @@
 		"wdio:e2e": "wdio run packages/demo-app/test/wdio.conf.ts",
 		"wdio:e2e:flp": "wdio run packages/demo-app/test/wdio-flp.conf.ts",
 		"test": "npm run test:qunit && npm run test:e2e",
-		"test:full": "npm run test:qunit && npm run test:qunit:upstream-parity && npm run test:qunit:compat:120 && npm run test:e2e && npm run test:e2e:flp",
+		"test:full": "npm run test:qunit && npm run verify:openui5-router-vendor && npm run test:qunit:upstream-parity && npm run test:qunit:compat:120 && npm run test:e2e && npm run test:e2e:flp",
 		"test:qunit": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit",
 		"test:qunit:upstream-parity": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit:upstream-parity",
 		"test:qunit:compat:120": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8082 --server-script start:lib:compat:120:test --test-script wdio:qunit --test-base-url http://localhost:8082",

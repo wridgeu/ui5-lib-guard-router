@@ -9,6 +9,8 @@
  * - Replaced original upstream test bootstrap with local adapter harness
  * - Scoped execution to native-parity mode (no guards registered)
  */
+// sinon is provided as a UMD global by the UI5 test starter -- do not import it
+// (importing resolves a different instance that breaks stub/spy assertions; see commit 66d036d)
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
 import Views from "sap/ui/core/routing/Views";
@@ -65,14 +67,22 @@ function stubViewsByName(viewMap: Record<string, Page>) {
 function waitForRouteMatched(
 	router: ComparableRouter,
 	routeName: string,
+	timeout = 1000,
 ): Promise<ForwardNavigationResult["routeMatched"]> {
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		const routeMatchedApi = router as unknown as RouteMatchedApi;
+
+		const timer = setTimeout(() => {
+			routeMatchedApi.detachRouteMatched(handler, undefined);
+			reject(new Error(`Timed out waiting for routeMatched "${routeName}"`));
+		}, timeout);
+
 		const handler = (event: RouteMatchedEvent) => {
 			if ((event.getParameter("name") as string | undefined) !== routeName) {
 				return;
 			}
 
+			clearTimeout(timer);
 			routeMatchedApi.detachRouteMatched(handler, undefined);
 			resolve({
 				name: event.getParameter("name") as string | undefined,
