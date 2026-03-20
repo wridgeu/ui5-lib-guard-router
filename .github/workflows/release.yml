@@ -56,4 +56,5 @@ jobs:
 
             - run: npm run build
 
+            # Authenticate via GitHub OIDC (id-token: write); empty token prevents PAT override
             - run: NODE_AUTH_TOKEN="" npm publish -w packages/lib --provenance --access public
