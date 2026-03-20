@@ -1,7 +1,9 @@
 import sinon from "sinon";
 import DataType from "sap/ui/base/DataType";
 import Log from "sap/base/Log";
+import Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type UIComponent from "sap/ui/core/UIComponent";
 import type {
 	GuardContext,
 	GuardFn,
@@ -59,6 +61,34 @@ function recreateRouter(guardRouter?: GuardRouterOptions): GuardRouter {
 	return router;
 }
 
+async function createManifestComponent(guardRouter: GuardRouterOptions): Promise<UIComponent> {
+	return (await Component.create({
+		id: `manifest-component-${Date.now()}`,
+		name: "ui5.guard.router.qunit.fixtures.manifest",
+		manifest: {
+			"sap.app": {
+				id: "ui5.guard.router.qunit.fixtures.manifest",
+				type: "application",
+			},
+			"sap.ui5": {
+				dependencies: {
+					libs: {
+						"sap.m": {},
+					},
+				},
+				routing: {
+					config: {
+						async: true,
+						routerClass: "ui5.guard.router.Router",
+						guardRouter,
+					},
+					routes: [{ name: "home", pattern: "" }],
+				},
+			},
+		},
+	})) as UIComponent;
+}
+
 const standardHooks = {
 	beforeEach: function () {
 		initHashChanger();
@@ -95,6 +125,41 @@ QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: As
 	assert.strictEqual(type?.isValid(NavigationOutcome.Bypassed), true, "Bypassed enum value is accepted");
 	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
 });
+
+QUnit.test(
+	"UIComponent routing manifest instantiates the configured routerClass with guardRouter options",
+	async function (assert) {
+		const component = await createManifestComponent({
+			unknownRouteGuardRegistration: "throw",
+			navToPreflight: "bypass",
+		});
+
+		try {
+			const manifestRouter = component.getRouter() as GuardRouter;
+			assert.ok(
+				manifestRouter.isA("ui5.guard.router.Router"),
+				"Manifest-created component uses the guard router class",
+			);
+			assert.deepEqual(
+				Reflect.get(manifestRouter, "_options"),
+				{
+					unknownRouteGuardRegistration: "throw",
+					navToPreflight: "bypass",
+				},
+				"Manifest-provided guardRouter options are normalized onto the router instance",
+			);
+			assert.notOk(
+				Object.prototype.hasOwnProperty.call(
+					Reflect.get(manifestRouter, "_oConfig") as Record<string, unknown>,
+					"guardRouter",
+				),
+				"Custom guardRouter config does not leak into the base router config when instantiated via UIComponent",
+			);
+		} finally {
+			component.destroy();
+		}
+	},
+);
 
 // ============================================================
 // Module: Drop-in replacement (no guards)
