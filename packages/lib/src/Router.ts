@@ -4,14 +4,18 @@ import coreLibrary from "sap/ui/core/library";
 import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
+	GuardNavToOptions,
 	GuardContext,
 	GuardResult,
 	GuardRedirect,
 	GuardRouter,
+	GuardRouterOptions,
 	LeaveGuardFn,
+	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
+	UnknownRouteGuardRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 
@@ -44,6 +48,61 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
 	return typeof guard === "object" && guard !== null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isUnknownRouteGuardRegistrationPolicy(value: unknown): value is UnknownRouteGuardRegistrationPolicy {
+	return value === "ignore" || value === "warn" || value === "throw";
+}
+
+function isNavToPreflightMode(value: unknown): value is NavToPreflightMode {
+	return value === "guard" || value === "bypass" || value === "off";
+}
+
+type ResolvedGuardRouterOptions = Required<GuardRouterOptions>;
+
+const DEFAULT_GUARD_ROUTER_OPTIONS: ResolvedGuardRouterOptions = {
+	unknownRouteGuardRegistration: "warn",
+	navToPreflight: "guard",
+};
+
+function normalizeGuardRouterOptions(options: unknown): ResolvedGuardRouterOptions {
+	if (!isRecord(options)) {
+		return { ...DEFAULT_GUARD_ROUTER_OPTIONS };
+	}
+
+	const normalized: ResolvedGuardRouterOptions = { ...DEFAULT_GUARD_ROUTER_OPTIONS };
+
+	if (Object.hasOwn(options, "unknownRouteGuardRegistration")) {
+		const policy = options.unknownRouteGuardRegistration;
+		if (isUnknownRouteGuardRegistrationPolicy(policy)) {
+			normalized.unknownRouteGuardRegistration = policy;
+		} else {
+			Log.warning(
+				'Invalid guardRouter.unknownRouteGuardRegistration value, falling back to "warn"',
+				String(policy),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	if (Object.hasOwn(options, "navToPreflight")) {
+		const mode = options.navToPreflight;
+		if (isNavToPreflightMode(mode)) {
+			normalized.navToPreflight = mode;
+		} else {
+			Log.warning(
+				'Invalid guardRouter.navToPreflight value, falling back to "guard"',
+				String(mode),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	return normalized;
 }
 
 function addToGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): void {
@@ -103,6 +162,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _globalGuards: GuardFn[] = [];
 	private _enterGuards = new Map<string, GuardFn[]>();
 	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
+	private _options: ResolvedGuardRouterOptions;
 	private _currentRoute = "";
 	private _currentHash: string | null = null;
 	private _pendingHash: string | null = null;
@@ -113,6 +173,33 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _preflightApprovedHash: string | null = null;
+	private _guardBypassedHash: string | null = null;
+
+	/**
+	 * Create a guard router.
+	 *
+	 * UI5 instantiates the router from `manifest.json` and passes the full
+	 * `sap.ui5.routing.config` object as the second constructor argument. This
+	 * implementation reads `config.guardRouter`, normalizes it with sensible
+	 * defaults, and removes the custom block before delegating to the native
+	 * router constructor.
+	 */
+	constructor(
+		routes?: object | object[],
+		config: (object & { guardRouter?: GuardRouterOptions }) | undefined = {},
+		owner?: object,
+		targetsConfig?: object,
+		routerHashChanger?: object,
+	) {
+		const rawConfig = isRecord(config) ? config : {};
+		const guardRouterOptions = normalizeGuardRouterOptions(rawConfig.guardRouter);
+		const baseConfig = { ...rawConfig };
+		delete baseConfig.guardRouter;
+
+		// @ts-expect-error UI5 runtime passes a fifth hash changer argument here.
+		super(routes, baseConfig, owner, targetsConfig, routerHashChanger);
+		this._options = guardRouterOptions;
+	}
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -159,27 +246,28 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
-			let hasHandler = false;
-			this._warnIfRouteUnknown(routeName, "addRouteGuard");
+			let hasConfiguredHandler = false;
+			let enterGuard: GuardFn | undefined;
+			let leaveGuard: LeaveGuardFn | undefined;
 
 			if (guard.beforeEnter !== undefined) {
-				hasHandler = true;
+				hasConfiguredHandler = true;
 				if (typeof guard.beforeEnter !== "function") {
 					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 				} else {
-					addToGuardMap(this._enterGuards, routeName, guard.beforeEnter);
+					enterGuard = guard.beforeEnter;
 				}
 			}
 			if (guard.beforeLeave !== undefined) {
-				hasHandler = true;
+				hasConfiguredHandler = true;
 				if (typeof guard.beforeLeave !== "function") {
 					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 				} else {
-					addToGuardMap(this._leaveGuards, routeName, guard.beforeLeave);
+					leaveGuard = guard.beforeLeave;
 				}
 			}
 
-			if (!hasHandler) {
+			if (!hasConfiguredHandler) {
 				Log.info(
 					"addRouteGuard called with config missing both beforeEnter and beforeLeave",
 					routeName,
@@ -187,13 +275,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 				);
 				return this;
 			}
+
+			if (!enterGuard && !leaveGuard) {
+				return this;
+			}
+
+			this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
+
+			if (enterGuard) {
+				addToGuardMap(this._enterGuards, routeName, enterGuard);
+			}
+			if (leaveGuard) {
+				addToGuardMap(this._leaveGuards, routeName, leaveGuard);
+			}
 			return this;
 		}
 		if (typeof guard !== "function") {
 			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addRouteGuard");
+		this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
 		addToGuardMap(this._enterGuards, routeName, guard);
 		return this;
 	}
@@ -243,20 +344,31 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addLeaveGuard");
+		this._handleUnknownRouteRegistration(routeName, "addLeaveGuard");
 		addToGuardMap(this._leaveGuards, routeName, guard);
 		return this;
 	}
 
-	private _warnIfRouteUnknown(routeName: string, methodName: "addRouteGuard" | "addLeaveGuard"): void {
+	private _handleUnknownRouteRegistration(routeName: string, methodName: "addRouteGuard" | "addLeaveGuard"): void {
 		if (this.getRoute(routeName)) {
 			return;
 		}
-		Log.warning(
-			`${methodName} called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.`,
-			routeName,
-			LOG_COMPONENT,
-		);
+
+		switch (this._options.unknownRouteGuardRegistration) {
+			case "ignore":
+				return;
+			case "warn":
+				Log.warning(
+					`${methodName} called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.`,
+					routeName,
+					LOG_COMPONENT,
+				);
+				return;
+			case "throw":
+				throw new Error(
+					`${methodName} called for unknown route "${routeName}" while guardRouter.unknownRouteGuardRegistration is set to "throw"`,
+				);
+		}
 	}
 
 	/**
@@ -361,6 +473,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * history entry, and redirected navigations go directly to the final
 	 * target.
 	 *
+	 * The behavior for programmatic `navTo()` calls is controlled by the router's
+	 * resolved `guardRouter.navToPreflight` option and can be bypassed per call
+	 * with `GuardNavToOptions`.
+	 *
 	 * Same-hash navigations are deduped: if the target hash matches
 	 * `_currentHash`, any pending navigation is cancelled and the call
 	 * returns without navigating. If it matches `_pendingHash`, the
@@ -382,23 +498,38 @@ export default class Router extends MobileRouter implements GuardRouter {
 		parameters?: object,
 		componentTargetInfo?: Record<string, ComponentTargetParameters>,
 		bReplace?: boolean,
+		options?: GuardNavToOptions,
 	): this;
-	override navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+	override navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
 	override navTo(
 		routeName: string,
 		parameters?: object,
 		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
-		bReplace?: boolean,
+		bReplaceOrOptions?: boolean | GuardNavToOptions,
+		navToOptions?: GuardNavToOptions,
 	): this {
 		// Normalize the two overload shapes into a single set of arguments.
 		let componentTargetInfo: Record<string, ComponentTargetParameters> | undefined;
 		let replace: boolean | undefined;
+		let options: GuardNavToOptions | undefined;
 		if (typeof componentTargetInfoOrReplace === "boolean") {
 			replace = componentTargetInfoOrReplace;
+			if (isRecord(bReplaceOrOptions)) {
+				options = bReplaceOrOptions;
+			}
 		} else {
 			componentTargetInfo = componentTargetInfoOrReplace;
-			replace = bReplace;
+			if (typeof bReplaceOrOptions === "boolean") {
+				replace = bReplaceOrOptions;
+				if (isRecord(navToOptions)) {
+					options = navToOptions;
+				}
+			} else if (isRecord(bReplaceOrOptions)) {
+				options = bReplaceOrOptions;
+			}
 		}
+
+		const skipGuards = options?.skipGuards === true || this._options.navToPreflight === "bypass";
 
 		// Redirect path: _redirect() calls this.navTo() with _redirecting=true.
 		// Bypass preflight -- parse() will commit directly via the _redirecting flag.
@@ -437,6 +568,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		// Cancel any pending navigation (including previous async preflight).
 		this._cancelPendingNavigation();
+
+		if (skipGuards) {
+			this._guardBypassedHash = targetHash;
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			if (this._guardBypassedHash === targetHash) {
+				this._guardBypassedHash = null;
+				this._commitNavigation(targetHash, toRoute);
+			}
+			return this;
+		}
+
+		if (this._options.navToPreflight === "off") {
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
 		const generation = this._parseGeneration;
 
 		this._pendingHash = targetHash;
@@ -568,6 +715,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
+		if (this._guardBypassedHash !== null && newHash === this._guardBypassedHash) {
+			this._guardBypassedHash = null;
+			this._commitNavigation(newHash, this.getRouteInfoByHash(newHash)?.name ?? "");
+			return;
+		}
+
 		if (this._currentHash !== null && newHash === this._currentHash) {
 			this._cancelPendingNavigation();
 			return;
@@ -633,6 +786,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._redirecting = false;
 		this._suppressedHash = null;
 		this._preflightApprovedHash = null;
+		this._guardBypassedHash = null;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
@@ -1022,6 +1176,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._redirecting = false;
 		this._suppressedHash = null;
 		this._preflightApprovedHash = null;
+		this._guardBypassedHash = null;
 		this._lastSettlement = null;
 		super.destroy();
 		return this;

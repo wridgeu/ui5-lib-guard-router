@@ -5,6 +5,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
 	GuardContext,
 	GuardFn,
+	GuardRouterOptions,
 	GuardRedirect,
 	GuardRouter,
 	LeaveGuardFn,
@@ -31,7 +32,7 @@ import {
 	waitForRoute,
 } from "./testHelpers";
 
-function createRouter(): GuardRouter {
+function createRouter(config?: { async?: boolean; guardRouter?: GuardRouterOptions }): GuardRouter {
 	return new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -41,11 +42,22 @@ function createRouter(): GuardRouter {
 		],
 		{
 			async: true,
+			...config,
 		},
 	);
 }
 
 let router: GuardRouter;
+
+function recreateRouter(guardRouter?: GuardRouterOptions): GuardRouter {
+	try {
+		router.destroy();
+	} catch {
+		/* already destroyed */
+	}
+	router = createRouter(guardRouter ? { guardRouter } : undefined);
+	return router;
+}
 
 const standardHooks = {
 	beforeEach: function () {
@@ -266,6 +278,82 @@ QUnit.test("addLeaveGuard warns for unknown route but still registers the guard"
 	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
 	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
+
+QUnit.test("unknown route registration policy 'ignore' registers route guard silently", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
+
+	const guard: GuardFn = () => true;
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router.addRouteGuard("missing", guard);
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.strictEqual(warnings.length, 0, "No warning was logged");
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.strictEqual(enterGuards.get("missing")?.[0], guard, "Guard registered silently");
+});
+
+QUnit.test("unknown route registration policy 'ignore' registers leave guard silently", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
+
+	const guard: LeaveGuardFn = () => true;
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router.addLeaveGuard("missing", guard);
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.strictEqual(warnings.length, 0, "No warning was logged");
+	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Leave guard registered silently");
+});
+
+QUnit.test("unknown route registration policy 'throw' rejects direct route guards", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+	const guard: GuardFn = () => true;
+	assert.throws(
+		() => router.addRouteGuard("missing", guard),
+		/unknown route "missing"/,
+		"Unknown route registration throws synchronously",
+	);
+
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.notOk(enterGuards.has("missing"), "Guard was not registered");
+});
+
+QUnit.test(
+	"unknown route registration policy 'throw' rejects object form without partial registration",
+	function (assert: Assert) {
+		recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+		const enterGuard: GuardFn = () => true;
+		const leaveGuard: LeaveGuardFn = () => true;
+		assert.throws(
+			() => router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard }),
+			/unknown route "missing"/,
+			"Object-form registration throws synchronously",
+		);
+
+		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		assert.notOk(enterGuards.has("missing"), "Enter guard was not partially registered");
+		assert.notOk(leaveGuards.has("missing"), "Leave guard was not partially registered");
+	},
+);
 
 QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (assert: Assert) {
 	addRouteGuardUnsafe(router, "protected", null);
@@ -3619,6 +3707,159 @@ QUnit.test("async redirect to nonexistent via navTo does not call _restoreHash",
 		router.navTo("protected");
 		await router.navigationSettled();
 		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.module("Router - navTo options", standardHooks);
+
+QUnit.test("navToPreflight 'bypass' skips guards for programmatic navTo", async function (assert) {
+	recreateRouter({ navToPreflight: "bypass" });
+
+	let guardCallCount = 0;
+	router.addRouteGuard("protected", () => {
+		guardCallCount++;
+		return false;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Programmatic navTo committed");
+	assert.strictEqual(result.route, "protected", "Navigation reached the target route");
+	assert.strictEqual(getHash(), "protected", "Hash updated to protected");
+	assert.strictEqual(guardCallCount, 0, "Route guard did not run for bypassed navTo");
+});
+
+QUnit.test("navToPreflight 'bypass' still guards browser-driven hash changes", async function (assert) {
+	recreateRouter({ navToPreflight: "bypass" });
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Browser hash change is still blocked");
+	assert.strictEqual(result.route, "home", "Router stays on the current route");
+	assert.strictEqual(getHash(), "", "Hash was restored to the previous route");
+});
+
+QUnit.test("navToPreflight 'off' defers programmatic navTo to parse fallback", async function (assert) {
+	recreateRouter({ navToPreflight: "off" });
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Blocked navigation settled via parse");
+		assert.strictEqual(restoreSpy.callCount, 1, "Hash restoration ran on the parse path");
+		assert.strictEqual(getHash(), "", "Hash restored after blocked navigation");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("skipGuards overrides default preflight via the replace overload", async function (assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+
+	router.navTo("detail", { id: "42" }, true, { skipGuards: true });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
+	assert.strictEqual(result.route, "detail", "Detail route became active");
+	assert.strictEqual(getHash(), "detail/42", "Hash contains route parameters");
+});
+
+QUnit.test("skipGuards overrides navToPreflight 'off' via the full overload", async function (assert) {
+	recreateRouter({ navToPreflight: "off" });
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("forbidden", {}, {}, true, { skipGuards: true });
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Per-call bypass committed");
+		assert.strictEqual(result.route, "forbidden", "Target route became active");
+		assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
+		assert.strictEqual(restoreSpy.callCount, 0, "Parse fallback did not restore the hash");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test(
+	"combined ignore + bypass config keeps registration silent and bypasses navTo guards",
+	async function (assert) {
+		recreateRouter({
+			unknownRouteGuardRegistration: "ignore",
+			navToPreflight: "bypass",
+		});
+
+		const warnings: Array<{ message: string; details?: string }> = [];
+		const originalWarning = Log.warning;
+		Log.warning = (message: string, details?: string) => {
+			warnings.push({ message, details });
+		};
+
+		try {
+			router.addRouteGuard("missing", () => true);
+			router.addRouteGuard("protected", () => false);
+		} finally {
+			Log.warning = originalWarning;
+		}
+
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(warnings.length, 0, "Unknown route registration stayed silent");
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Programmatic navTo bypassed guards");
+		assert.strictEqual(result.route, "protected", "Navigation reached protected");
+	},
+);
+
+QUnit.test("combined throw + off config throws on registration and still uses parse fallback", async function (assert) {
+	recreateRouter({
+		unknownRouteGuardRegistration: "throw",
+		navToPreflight: "off",
+	});
+
+	assert.throws(
+		() => router.addLeaveGuard("missing", () => true),
+		/unknown route "missing"/,
+		"Unknown route registration threw under the combined config",
+	);
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Blocked navigation still used parse fallback");
+		assert.strictEqual(restoreSpy.callCount, 1, "Parse fallback restored the hash");
+		assert.strictEqual(getHash(), "", "Hash restored to home");
 	} finally {
 		restoreSpy.restore();
 	}
