@@ -148,6 +148,15 @@ npm start         # demo app at http://localhost:8080/index.html
 npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/flp.html#app-preview
 ```
 
+Additional local servers:
+
+```bash
+npm run start:lib            # serve the library workspace directly
+npm run start:lib:compat:120 # serve the library against OpenUI5 1.120.0
+npm run serve:demo           # serve the demo app without auto-opening a browser
+npm run serve:demo:flp       # serve the FLP preview without auto-opening a browser
+```
+
 ### Tests
 
 ```bash
@@ -177,8 +186,10 @@ npm run fmt:check    # oxfmt
 npm run check        # all of the above (fmt:check + lint + typecheck)
 npm run fmt          # auto-format all files
 npm run lint:fix     # auto-fix lint issues
+npm run pack:smoke   # install the packed library in a temp consumer and typecheck it
 npm run pack:check   # build + dry-run pack + consumer smoke test
 npm run release:plan # preview the next release-please version/PR locally
+npm run commitlint   # validate the latest commit message locally
 ```
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
@@ -217,6 +228,10 @@ Short maintainer conventions:
 | `.github/workflows/release.yml` | Release-please + npm publish                                                                                                  |
 | `release-please-config.json`    | Package path, extra version files                                                                                             |
 | `.release-please-manifest.json` | Current version tracker                                                                                                       |
+
+## Contributing
+
+Issues and pull requests are always welcome. If you spot a bug, have a question, or want to propose an improvement, please file an issue. If you already have a fix or documentation update in mind, feel free to open a PR directly.
 
 ## License
 
