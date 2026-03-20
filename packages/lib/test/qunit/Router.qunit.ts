@@ -3401,6 +3401,65 @@ QUnit.test("navTo to unknown route falls through to parent without error", funct
 	assert.ok(true, "navTo to unknown route did not throw");
 });
 
+QUnit.test("navTo to unknown route cancels pending async guard pipeline", async function (assert) {
+	let resolveGuard!: (value: boolean) => void;
+	router.addGuard(
+		() =>
+			new Promise<boolean>((r) => {
+				resolveGuard = r;
+			}),
+	);
+	router.initialize();
+
+	// Start an async preflight to a guarded route.
+	router.navTo("protected");
+	const settled = router.navigationSettled();
+
+	// While the async guard is pending, navTo to an unknown route.
+	// This must cancel the pending navigation so settlement resolvers drain.
+	router.navTo("nonexistent");
+
+	// Resolve the now-stale guard to prove it is discarded.
+	resolveGuard(true);
+
+	const result = await settled;
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Cancelled,
+		"Pending navigation cancelled when unknown-route navTo supersedes it",
+	);
+});
+
+QUnit.test("navTo to unknown route then real route works after cancellation", async function (assert) {
+	let resolveGuard!: (value: boolean) => void;
+	router.addGuard((context) => {
+		if (context.toRoute === "forbidden") {
+			return true;
+		}
+		return new Promise<boolean>((r) => {
+			resolveGuard = r;
+		});
+	});
+	router.initialize();
+
+	// Start async preflight.
+	router.navTo("protected");
+	const firstSettled = router.navigationSettled();
+
+	// Unknown route supersedes.
+	router.navTo("nonexistent");
+	resolveGuard(true);
+
+	const cancelResult = await firstSettled;
+	assert.strictEqual(cancelResult.status, NavigationOutcome.Cancelled, "First navigation cancelled");
+
+	// Subsequent navTo to a real route must work normally.
+	router.navTo("forbidden");
+	const secondResult = await router.navigationSettled();
+	assert.strictEqual(secondResult.status, NavigationOutcome.Committed, "Subsequent navigation commits");
+	assert.strictEqual(secondResult.route, "forbidden", "Landed on forbidden");
+});
+
 QUnit.test("async preflight superseded by second navTo cancels first", async function (assert) {
 	let resolveGuard!: (value: boolean) => void;
 	router.addGuard(

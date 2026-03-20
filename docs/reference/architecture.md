@@ -65,28 +65,28 @@ matching, target loading, or event firing occurs.
 |   extends sap.m.routing.Router                                       |
 |   overrides navTo() + parse() to intercept all navigation            |
 |                                                                      |
-|   +--------------------+    +---------------------------+            |
-|   | Guard Management   |    | Navigation Interception   |            |
-|   |                    |    |                           |            |
-|   | addGuard()              |    | navTo() override          |            |
-|   | removeGuard()           |    | parse() override          |            |
-|   | addRouteGuard()         |    | _evaluateGuards()         |            |
-|   | removeRouteGuard()      |    | _applyPreflightDecision() |            |
-|   | addLeaveGuard()         |    | _applyDecision()          |            |
-|   | removeLeaveGuard()      |    | _runLeaveGuards()         |            |
-|   | navigationSettled()     |    | _runEnterGuards()         |            |
-|   | attachNavigationSettled()|    | _runRouteGuards()         |            |
-|   | detachNavigationSettled()|    | _runGuards()              |            |
-|   +-------------------------+    | _cancelPendingNavigation()|            |
-|                             | _continueGuardsAsync()    |            |
-|                             | _validateGuardResult()    |            |
-|                             | _validateLeaveGuardResult()|           |
-|                             | _commitNavigation()       |            |
-|                             | _redirect()               |            |
-|                             | _blockNavigation()        |            |
-|                             | _flushSettlement()        |            |
-|                             | _restoreHash()            |            |
-|                             +---------------------------+            |
+|   +----------------------------+    +-------------------------------+  |
+|   | Guard Management           |    | Navigation Interception       |  |
+|   |                            |    |                               |  |
+|   | addGuard()                 |    | navTo() override              |  |
+|   | removeGuard()              |    | parse() override              |  |
+|   | addRouteGuard()            |    | _evaluateGuards()             |  |
+|   | removeRouteGuard()         |    | _applyPreflightDecision()     |  |
+|   | addLeaveGuard()            |    | _applyDecision()              |  |
+|   | removeLeaveGuard()         |    | _runLeaveGuards()             |  |
+|   | navigationSettled()        |    | _runEnterGuards()             |  |
+|   | attachNavigationSettled()  |    | _runRouteGuards()             |  |
+|   | detachNavigationSettled()  |    | _runGuards()                  |  |
+|   +----------------------------+    | _cancelPendingNavigation()    |  |
+|                                     | _continueGuardsAsync()        |  |
+|                                     | _validateGuardResult()        |  |
+|                                     | _validateLeaveGuardResult()   |  |
+|                                     | _commitNavigation()           |  |
+|                                     | _redirect()                   |  |
+|                                     | _blockNavigation()            |  |
+|                                     | _flushSettlement()            |  |
+|                                     | _restoreHash()                |  |
+|                                     +-------------------------------+  |
 +----------------------------------------------------------------------+
          |
          | super.parse(hash)
