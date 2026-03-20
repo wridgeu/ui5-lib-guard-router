@@ -359,6 +359,35 @@ QUnit.test("invalid guardRouter config values warn and fall back to defaults", a
 	);
 });
 
+QUnit.test("non-object guardRouter config warns and falls back to defaults", function (assert: Assert) {
+	router.destroy();
+
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router = createRouter({
+			guardRouter: "invalid" as unknown as GuardRouterOptions,
+		});
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.deepEqual(
+		warnings,
+		[
+			{
+				message: "Invalid guardRouter config value, falling back to defaults",
+				details: "invalid",
+			},
+		],
+		"Non-object guardRouter config emits a fallback warning",
+	);
+});
+
 QUnit.test("unknown route registration policy 'ignore' registers route guard silently", function (assert: Assert) {
 	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
 

@@ -83,6 +83,9 @@ const DEFAULT_GUARD_ROUTER_OPTIONS: ResolvedGuardRouterOptions = {
 
 function normalizeGuardRouterOptions(options: unknown): ResolvedGuardRouterOptions {
 	if (!isRecord(options)) {
+		if (options !== undefined) {
+			Log.warning("Invalid guardRouter config value, falling back to defaults", String(options), LOG_COMPONENT);
+		}
 		return { ...DEFAULT_GUARD_ROUTER_OPTIONS };
 	}
 
