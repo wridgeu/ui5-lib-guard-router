@@ -18,6 +18,8 @@ import {
 	addLeaveGuardUnsafe,
 	addRouteGuardUnsafe,
 	assertBlocked,
+	captureWarnings,
+	captureWarningsAsync,
 	GuardRouterClass,
 	initHashChanger,
 	nextTick,
@@ -212,17 +214,9 @@ QUnit.test("addRouteGuard returns this for chaining", function (assert: Assert) 
 
 QUnit.test("addRouteGuard warns for unknown route but still registers the guard", function (assert: Assert) {
 	const guard: GuardFn = () => true;
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router.addRouteGuard("missing", guard);
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(warnings.length, 1, "One warning was logged");
 	assert.strictEqual(
@@ -241,17 +235,9 @@ QUnit.test(
 	function (assert: Assert) {
 		const enterGuard: GuardFn = () => true;
 		const leaveGuard: LeaveGuardFn = () => true;
-		const warnings: Array<{ message: string; details?: string }> = [];
-		const originalWarning = Log.warning;
-		Log.warning = (message: string, details?: string) => {
-			warnings.push({ message, details });
-		};
-
-		try {
+		const warnings = captureWarnings(() => {
 			router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
-		} finally {
-			Log.warning = originalWarning;
-		}
+		});
 
 		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
 
@@ -264,17 +250,9 @@ QUnit.test(
 
 QUnit.test("addLeaveGuard warns for unknown route but still registers the guard", function (assert: Assert) {
 	const guard: LeaveGuardFn = () => true;
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router.addLeaveGuard("missing", guard);
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(warnings.length, 1, "One warning was logged");
 	assert.strictEqual(
@@ -297,26 +275,18 @@ QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (
 });
 
 QUnit.test("addRouteGuard object form ignores invalid leave guard input", async function (assert: Assert) {
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
+	const warnings = await captureWarningsAsync(async () => {
+		addRouteGuardUnsafe(router, "protected", {
+			beforeLeave: "nope",
+		});
 
-	addRouteGuardUnsafe(router, "protected", {
-		beforeLeave: "nope",
-	});
-
-	try {
 		router.initialize();
 		await waitForRoute(router, "home");
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
 		router.navTo("home");
 		await waitForRoute(router, "home");
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Invalid leave guard input was ignored");
 	assert.strictEqual(warnings.length, 1, "One warning was logged");
@@ -842,28 +812,34 @@ QUnit.test("Async leave guard returning undefined treats as block", async functi
 
 QUnit.test("Leave guard returning false blocks without warning", async function (assert: Assert) {
 	const warningSpy = sinon.spy(Log, "warning");
-	router.addLeaveGuard("home", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-	await assertBlocked(assert, router, () => router.navTo("protected"), "False leave guard blocks navigation");
-	const leaveGuardWarnings = warningSpy
-		.getCalls()
-		.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
-	assert.strictEqual(leaveGuardWarnings.length, 0, "No non-boolean warning for a legitimate false return");
-	warningSpy.restore();
+	try {
+		router.addLeaveGuard("home", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		await assertBlocked(assert, router, () => router.navTo("protected"), "False leave guard blocks navigation");
+		const leaveGuardWarnings = warningSpy
+			.getCalls()
+			.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
+		assert.strictEqual(leaveGuardWarnings.length, 0, "No non-boolean warning for a legitimate false return");
+	} finally {
+		warningSpy.restore();
+	}
 });
 
 QUnit.test("Leave guard returning non-boolean logs a warning", async function (assert: Assert) {
 	const warningSpy = sinon.spy(Log, "warning");
-	addLeaveGuardUnsafe(router, "home", () => 42);
-	router.initialize();
-	await waitForRoute(router, "home");
-	await assertBlocked(assert, router, () => router.navTo("protected"), "Non-boolean leave guard blocks");
-	const leaveGuardWarnings = warningSpy
-		.getCalls()
-		.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
-	assert.strictEqual(leaveGuardWarnings.length, 1, "Warning logged for non-boolean leave guard return");
-	warningSpy.restore();
+	try {
+		addLeaveGuardUnsafe(router, "home", () => 42);
+		router.initialize();
+		await waitForRoute(router, "home");
+		await assertBlocked(assert, router, () => router.navTo("protected"), "Non-boolean leave guard blocks");
+		const leaveGuardWarnings = warningSpy
+			.getCalls()
+			.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
+		assert.strictEqual(leaveGuardWarnings.length, 1, "Warning logged for non-boolean leave guard return");
+	} finally {
+		warningSpy.restore();
+	}
 });
 
 // ============================================================

@@ -1,7 +1,13 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import Log from "sap/base/Log";
 import Router from "ui5/guard/router/Router";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardRouter } from "ui5/guard/router/types";
+
+export interface CapturedWarning {
+	message: string;
+	details?: string;
+}
 
 export const GuardRouterClass = Router;
 
@@ -106,4 +112,40 @@ export async function assertBlocked(
 /** Return the current hash from the HashChanger. */
 export function getHash(): string {
 	return HashChanger.getInstance().getHash();
+}
+
+/**
+ * Capture `Log.warning` calls during `fn`, restoring the original in a
+ * `finally` block so the stub never leaks to subsequent tests.
+ */
+export function captureWarnings(fn: () => void): CapturedWarning[] {
+	const warnings: CapturedWarning[] = [];
+	const original = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+	try {
+		fn();
+	} finally {
+		Log.warning = original;
+	}
+	return warnings;
+}
+
+/**
+ * Async variant of {@link captureWarnings} for tests that `await` inside
+ * the capture window.
+ */
+export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedWarning[]> {
+	const warnings: CapturedWarning[] = [];
+	const original = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+	try {
+		await fn();
+	} finally {
+		Log.warning = original;
+	}
+	return warnings;
 }
