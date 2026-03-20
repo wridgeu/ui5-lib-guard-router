@@ -1,0 +1,9 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"allowUmdGlobalAccess": true,
+		"types": ["@openui5/types", "@types/qunit", "@types/sinon"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts"],
+	"exclude": ["test/**/wdio*.conf.ts"]
+}

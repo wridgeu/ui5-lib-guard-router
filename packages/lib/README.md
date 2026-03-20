@@ -681,12 +681,18 @@ Or set the global log level via URL parameter (per-component filtering is only a
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. That extra lane does not change the published manifest baseline, but it provides a concrete verification signal for consumers evaluating older runtimes.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. The shipped baseline also carries a vendored OpenUI5 router parity lane for inherited `sap.m.routing.Router` behavior when no guards are active.
 
 If you maintain an app on an older UI5 stack and want to validate locally, run the dedicated compatibility check from the monorepo root:
 
 ```bash
 npm run test:qunit:compat:120
+```
+
+The vendored parity tests run as part of the main QUnit suite:
+
+```bash
+npm run test:qunit
 ```
 
 ## License

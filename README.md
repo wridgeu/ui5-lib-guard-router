@@ -25,7 +25,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. That extra lane does not change the published manifest baseline, but it provides a concrete verification signal for consumers evaluating older runtimes.
+> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. The shipped baseline also carries a dedicated vendored OpenUI5 router parity lane, which compares selected upstream `sap.m.routing.Router` behaviors against `ui5.guard.router.Router` when no guards are active.
 
 ## Quick start
 
@@ -153,13 +153,20 @@ npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/
 ```bash
 npm test              # run the default local subset (QUnit + standalone E2E)
 npm run test:full     # run the full browser matrix (default + compat + FLP)
-npm run test:qunit    # unit tests only
+npm run test:qunit    # unit tests only (includes vendored upstream parity)
 npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
 npm run test:e2e      # integration tests only
 npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
 ```
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
+
+The vendored parity sources themselves are maintained with:
+
+```bash
+npm run vendor:openui5-router-tests -- --tag 1.144.0 --write-manifest
+npm run verify:openui5-router-vendor
+```
 
 ### Quality checks
 
@@ -191,7 +198,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, prefers `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` when set, and otherwise falls back to `gh auth token` when the GitHub CLI is available.
 
@@ -201,14 +208,15 @@ Short maintainer conventions:
 - Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
 - Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
 - If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
+  Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
-| File                            | Purpose                                                                                                  |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, browser tests, compatibility, Windows smoke) |
-| `.github/workflows/release.yml` | Release-please + npm publish                                                                             |
-| `release-please-config.json`    | Package path, extra version files                                                                        |
-| `.release-please-manifest.json` | Current version tracker                                                                                  |
+| File                            | Purpose                                                                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, parity verification, browser tests, compatibility, Windows smoke) |
+| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                  |
+| `release-please-config.json`    | Package path, extra version files                                                                                             |
+| `.release-please-manifest.json` | Current version tracker                                                                                                       |
 
 ## License
 

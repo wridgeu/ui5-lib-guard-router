@@ -1,0 +1,20 @@
+{
+	"upstream": {
+		"repo": "UI5/openui5",
+		"tag": "1.144.0",
+		"commitSha": "3ee7b61446490b20e4ab95bb33404a520761daf5"
+	},
+	"files": [
+		{
+			"id": "sap.m.routing.Router.async.Router.qunit.js",
+			"sourcePath": "src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
+			"rawFilePath": "packages/lib/test/qunit/upstream-parity/vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js",
+			"contentSha256": "315716946a8b40493f1327e85bae279e4cc15583293f10b695cfd21682d1d364",
+			"portFilePath": "packages/lib/test/qunit/upstream-parity/ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts",
+			"status": "ported-subset",
+			"adaptations": [
+				"Executes selected router parity cases through the local adapter harness while keeping the raw upstream file untouched."
+			]
+		}
+	]
+}

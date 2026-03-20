@@ -46,6 +46,9 @@ jobs:
             - name: Typecheck
               run: npm run typecheck
 
+            - name: Verify vendored OpenUI5 router files
+              run: npm run verify:openui5-router-vendor
+
             - name: Pack check
               run: npm run pack:check
 

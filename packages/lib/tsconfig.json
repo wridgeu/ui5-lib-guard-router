@@ -6,8 +6,7 @@
 		"paths": {
 			"ui5/guard/router/*": ["./src/*"]
 		},
-		"types": ["@openui5/types", "@types/qunit", "@types/sinon"]
+		"types": ["@openui5/types"]
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"],
-	"exclude": ["test/**/wdio*.conf.ts"]
+	"include": ["src/**/*.ts"]
 }
