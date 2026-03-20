@@ -157,18 +157,19 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                         | Coverage                                                       |
-| ---------------------------- | -------------------------------------------------------------- |
-| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                         |
-| `guard-allow.e2e.ts`         | Navigation allowed after login                                 |
-| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                |
-| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                          |
-| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                              |
-| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                        |
-| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                       |
-| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                  |
-| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes       |
-| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back |
+| File                         | Coverage                                                         |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                           |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                   |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                  |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                            |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                |
+| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                          |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                         |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                    |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes         |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back   |
+| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect |
 
 Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, and `waitForRuntimeSettlement` helpers.
 

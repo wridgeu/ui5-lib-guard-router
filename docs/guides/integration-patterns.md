@@ -82,7 +82,7 @@ router.addRouteGuard("editor", {
 });
 ```
 
-For a confirmation dialog before leaving, return the result of a `MessageBox.confirm` wrapped in a Promise. See the [library README leave guard example](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) for the `MessageBox` pattern.
+For a confirmation dialog before leaving, return the result of a `MessageBox.confirm` wrapped in a Promise. See the [library README leave guard tip](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) for guidance on making blocked navigation visible to the user.
 
 Reference: `createDirtyFormGuard` in `guards.ts`.
 

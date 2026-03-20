@@ -187,7 +187,7 @@ The guard pipeline stays **synchronous when all guards return plain values** and
 
 ## API
 
-All methods return `this` for chaining.
+All guard registration and removal methods return `this` for chaining. `navigationSettled()` returns a `Promise<NavigationResult>`.
 
 ### Guard registration
 
