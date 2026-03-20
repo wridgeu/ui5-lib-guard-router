@@ -63,7 +63,7 @@ function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGu
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isUnknownRouteGuardRegistrationPolicy(value: unknown): value is UnknownRouteGuardRegistrationPolicy {
@@ -83,7 +83,7 @@ const DEFAULT_GUARD_ROUTER_OPTIONS: ResolvedGuardRouterOptions = {
 
 function normalizeGuardRouterOptions(options: unknown): ResolvedGuardRouterOptions {
 	if (!isRecord(options)) {
-		if (options !== undefined) {
+		if (options != null) {
 			Log.warning("Invalid guardRouter config value, falling back to defaults", String(options), LOG_COMPONENT);
 		}
 		return { ...DEFAULT_GUARD_ROUTER_OPTIONS };
@@ -255,7 +255,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. Unknown routes are handled according to `guardRouter.unknownRouteGuardRegistration`.
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
@@ -350,7 +350,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. Unknown routes are handled according to `guardRouter.unknownRouteGuardRegistration`.
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */

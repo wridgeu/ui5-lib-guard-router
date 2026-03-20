@@ -704,6 +704,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `removeGuard called with invalid guard, ignoring`                                   | Non-function passed to `removeGuard()`                                                              |
 | warning | `removeRouteGuard called with invalid guard, ignoring`                              | Non-function passed to `removeRouteGuard()`                                                         |
 | warning | `removeLeaveGuard called with invalid guard, ignoring`                              | Non-function passed to `removeLeaveGuard()`                                                         |
+| warning | `Invalid guardRouter config value, falling back to defaults`                        | `guardRouter` exists but is not a plain object, so the router uses defaults                         |
 | warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time and `unknownRouteGuardRegistration` is `"warn"`           |
 | warning | `Invalid guardRouter.unknownRouteGuardRegistration value, falling back to "warn"`   | Unsupported `guardRouter.unknownRouteGuardRegistration` config value                                |
 | warning | `Invalid guardRouter.navToPreflight value, falling back to "guard"`                 | Unsupported `guardRouter.navToPreflight` config value                                               |

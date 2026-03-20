@@ -370,7 +370,7 @@ QUnit.test("non-object guardRouter config warns and falls back to defaults", fun
 
 	try {
 		router = createRouter({
-			guardRouter: "invalid" as unknown as GuardRouterOptions,
+			guardRouter: ["invalid"] as unknown as GuardRouterOptions,
 		});
 	} finally {
 		Log.warning = originalWarning;
@@ -384,7 +384,7 @@ QUnit.test("non-object guardRouter config warns and falls back to defaults", fun
 				details: "invalid",
 			},
 		],
-		"Non-object guardRouter config emits a fallback warning",
+		"Non-plain-object guardRouter config emits a fallback warning",
 	);
 });
 
