@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.2.0...v1.3.0) (2026-03-20)
+
+
+### Features
+
+* add navigationSettled event via UI5 EventProvider ([0c80ec2](https://github.com/wridgeu/ui5-lib-guard-router/commit/0c80ec25a973b5c2d663d838766b2d3bd23abe66))
+* add navTo() preflight guard evaluation ([58e0aff](https://github.com/wridgeu/ui5-lib-guard-router/commit/58e0affe5e81c009c99a3fb0b08e7b33706ae637))
+* **router:** add bypassed settlement outcome and harden guard edge cases ([7ce94ae](https://github.com/wridgeu/ui5-lib-guard-router/commit/7ce94ae95c00f2363e4d1ef0343c2e0f70775167))
+
+
+### Bug Fixes
+
+* cancel pending navigation on unknown-route navTo, audit fixes ([#35](https://github.com/wridgeu/ui5-lib-guard-router/issues/35)) ([4690269](https://github.com/wridgeu/ui5-lib-guard-router/commit/4690269ac7a61ba0ceba0e640c9f7d107e33507d))
+* **docs:** correct broken links, log table accuracy, and test coverage refs ([84edc10](https://github.com/wridgeu/ui5-lib-guard-router/commit/84edc1068aea3a3fd016582f4a8fbe901b564503))
+* **docs:** correct log-level URL parameter and settlement type usage ([992dc5e](https://github.com/wridgeu/ui5-lib-guard-router/commit/992dc5e023010182e888d2854ce7de4ddeef9acc))
+* **router:** align object-form invalid guard warning ([eb4d409](https://github.com/wridgeu/ui5-lib-guard-router/commit/eb4d4096ca4000575f445a48598be902cbd9cc02))
+* **router:** validate leave guard results and harden test reliability ([01e5350](https://github.com/wridgeu/ui5-lib-guard-router/commit/01e5350ef7f9f353e9e0c7d8fc4c028435332deb))
+
 ## [1.2.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.1.1...v1.2.0) (2026-03-17)
 
 
