@@ -412,6 +412,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const route = this.getRoute(routeName);
 		if (!route) {
 			// Unknown route -- let parent handle it (may fire bypassed event).
+			// Cancel any pending async navigation so settlement resolvers drain
+			// and the stale pipeline does not commit a superseded navigation.
+			this._cancelPendingNavigation();
 			super.navTo(routeName, parameters, componentTargetInfo, replace);
 			return this;
 		}

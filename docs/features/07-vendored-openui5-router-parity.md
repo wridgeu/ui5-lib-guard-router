@@ -2,6 +2,8 @@
 
 > **Status**: Implemented. The initial vendored parity lane shipped in PR #33.
 > See [docs/reference/upstream-parity.md](../reference/upstream-parity.md) and the [local README](../../packages/lib/test/qunit/upstream-parity/README.md) for the shipped layout and maintenance process.
+>
+> **Implementation note:** The proposal below describes a dedicated CI/test lane. The shipped implementation folded the upstream parity suite into the existing `test:qunit` lane (registered in `testsuite.qunit.ts` and `wdio-qunit.conf.ts`) rather than creating a separate script. The CI workflow file map entry below is historical — no dedicated lane was added.
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 

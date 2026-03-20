@@ -208,12 +208,22 @@ export interface GuardRouter extends MobileRouter {
 	 * a {@link NavigationResult} payload. Unlike the one-shot
 	 * `navigationSettled()` Promise, this event fires for every
 	 * navigation outcome without re-registration.
+	 *
+	 * @param oData - Application-specific payload passed to the handler as second argument.
+	 * @param fnFunction - The function to be called when the event occurs.
+	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
 	 */
 	attachNavigationSettled(
 		oData: object,
 		fnFunction: (evt: Router$NavigationSettledEvent) => void,
 		oListener?: object,
 	): GuardRouter;
+	/**
+	 * Attach an event handler for the `navigationSettled` event (without custom data).
+	 *
+	 * @param fnFunction - The function to be called when the event occurs.
+	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
+	 */
 	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
 	/**
 	 * Detach a previously attached `navigationSettled` event handler.

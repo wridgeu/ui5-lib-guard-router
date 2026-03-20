@@ -79,7 +79,7 @@ No transpile tooling, no middleware, no additional `ui5.yaml` changes.
 
 #### Option B: Transpile from source
 
-If you prefer to serve from TypeScript sources (e.g. for debugging with source maps), install [`ui5-tooling-transpile`](https://github.com/nicholasmackey/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
+If you prefer to serve from TypeScript sources (e.g. for debugging with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
 
 ```bash
 npm install -D ui5-tooling-transpile
@@ -99,7 +99,7 @@ This transpiles the library's `.ts` sources on the fly during `ui5 serve`.
 
 #### Option C: Static serving (workaround)
 
-If neither option works for your setup, you can mount the pre-built resources manually using [`ui5-middleware-servestatic`](https://github.com/nicholasmackey/ui5-middleware-servestatic) (or a similar community middleware) and point it at the `dist/resources` folder in `node_modules`:
+If neither option works for your setup, you can mount the pre-built resources manually using [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar community middleware) and point it at the `dist/resources` folder in `node_modules`:
 
 ```bash
 npm install -D ui5-middleware-servestatic
@@ -386,7 +386,7 @@ The demo app keeps `createRedirectWithParamsGuard()` as a reference implementati
 
 ### Guard factories
 
-The demo app keeps matching reusable guard factories in `packages/demo-app/webapp/guards.ts`, including `createAuthGuard()` and `createDirtyFormGuard()`.
+The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` is actively registered as a leave guard on the `"protected"` route; `createAuthGuard()` is a reference-only synchronous alternative to the async `createAsyncPermissionGuard()` used by the demo.
 
 ```typescript
 // guards.ts
