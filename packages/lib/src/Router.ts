@@ -23,18 +23,6 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
-const UNKNOWN_ROUTE_GUARD_REGISTRATION_POLICY_MAP: Record<UnknownRouteGuardRegistrationPolicy, true> = {
-	ignore: true,
-	warn: true,
-	throw: true,
-};
-
-const NAV_TO_PREFLIGHT_MODE_MAP: Record<NavToPreflightMode, true> = {
-	guard: true,
-	bypass: true,
-	off: true,
-};
-
 function isGuardRedirect(value: unknown): value is GuardRedirect {
 	if (typeof value !== "object" || value === null) {
 		return false;
@@ -63,15 +51,34 @@ function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGu
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return false;
+	}
+
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
 }
 
 function isUnknownRouteGuardRegistrationPolicy(value: unknown): value is UnknownRouteGuardRegistrationPolicy {
-	return typeof value === "string" && value in UNKNOWN_ROUTE_GUARD_REGISTRATION_POLICY_MAP;
+	switch (value) {
+		case "ignore":
+		case "warn":
+		case "throw":
+			return true;
+		default:
+			return false;
+	}
 }
 
 function isNavToPreflightMode(value: unknown): value is NavToPreflightMode {
-	return typeof value === "string" && value in NAV_TO_PREFLIGHT_MODE_MAP;
+	switch (value) {
+		case "guard":
+		case "bypass":
+		case "off":
+			return true;
+		default:
+			return false;
+	}
 }
 
 type ResolvedGuardRouterOptions = Required<GuardRouterOptions>;

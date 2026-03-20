@@ -204,6 +204,7 @@ export interface GuardRouter extends MobileRouter {
 	 * - `navTo(routeName, parameters?, replace?)`
 	 * - `navTo(routeName, parameters?, componentTargetInfo?, replace?)`
 	 * - `navTo(routeName, parameters?, replace?, options?)`
+	 * - `navTo(routeName, parameters?, componentTargetInfo?, options?)`
 	 * - `navTo(routeName, parameters?, componentTargetInfo?, replace?, options?)`
 	 *
 	 * To avoid ambiguity with UI5's `componentTargetInfo` object, pass

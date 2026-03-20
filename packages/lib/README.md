@@ -255,6 +255,7 @@ Per-call `navTo()` options support one-shot guard bypass for a single programmat
 
 ```typescript
 router.navTo("detail", { id: "42" }, true, { skipGuards: true });
+router.navTo("home", {}, {}, { skipGuards: true });
 router.navTo("home", {}, {}, true, { skipGuards: true });
 ```
 

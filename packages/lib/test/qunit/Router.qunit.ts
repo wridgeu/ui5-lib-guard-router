@@ -61,7 +61,7 @@ function recreateRouter(guardRouter?: GuardRouterOptions): GuardRouter {
 	return router;
 }
 
-async function createManifestComponent(guardRouter: GuardRouterOptions): Promise<UIComponent> {
+async function createManifestComponent(guardRouter: unknown): Promise<UIComponent> {
 	return (await Component.create({
 		id: `manifest-component-${Date.now()}`,
 		name: "ui5.guard.router.qunit.fixtures.manifest",
@@ -135,7 +135,7 @@ QUnit.test(
 		});
 
 		try {
-			const manifestRouter = component.getRouter() as GuardRouter;
+			const manifestRouter = component.getRouter();
 			assert.ok(
 				manifestRouter.isA("ui5.guard.router.Router"),
 				"Manifest-created component uses the guard router class",
@@ -160,6 +160,41 @@ QUnit.test(
 		}
 	},
 );
+
+QUnit.test("UIComponent routing manifest warns and defaults malformed guardRouter config", async function (assert) {
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	const component = await createManifestComponent(["invalid"]);
+
+	try {
+		const manifestRouter = component.getRouter();
+		assert.deepEqual(
+			warnings,
+			[
+				{
+					message: "Invalid guardRouter config value, falling back to defaults",
+					details: "invalid",
+				},
+			],
+			"Malformed manifest guardRouter config emits the expected warning",
+		);
+		assert.deepEqual(
+			Reflect.get(manifestRouter, "_options"),
+			{
+				unknownRouteGuardRegistration: "warn",
+				navToPreflight: "guard",
+			},
+			"Malformed manifest guardRouter config falls back to defaults",
+		);
+	} finally {
+		Log.warning = originalWarning;
+		component.destroy();
+	}
+});
 
 // ============================================================
 // Module: Drop-in replacement (no guards)
