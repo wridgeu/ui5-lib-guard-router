@@ -23,6 +23,18 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
+const UNKNOWN_ROUTE_GUARD_REGISTRATION_POLICY_MAP: Record<UnknownRouteGuardRegistrationPolicy, true> = {
+	ignore: true,
+	warn: true,
+	throw: true,
+};
+
+const NAV_TO_PREFLIGHT_MODE_MAP: Record<NavToPreflightMode, true> = {
+	guard: true,
+	bypass: true,
+	off: true,
+};
+
 function isGuardRedirect(value: unknown): value is GuardRedirect {
 	if (typeof value !== "object" || value === null) {
 		return false;
@@ -55,11 +67,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isUnknownRouteGuardRegistrationPolicy(value: unknown): value is UnknownRouteGuardRegistrationPolicy {
-	return value === "ignore" || value === "warn" || value === "throw";
+	return typeof value === "string" && value in UNKNOWN_ROUTE_GUARD_REGISTRATION_POLICY_MAP;
 }
 
 function isNavToPreflightMode(value: unknown): value is NavToPreflightMode {
-	return value === "guard" || value === "bypass" || value === "off";
+	return typeof value === "string" && value in NAV_TO_PREFLIGHT_MODE_MAP;
 }
 
 type ResolvedGuardRouterOptions = Required<GuardRouterOptions>;

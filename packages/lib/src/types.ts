@@ -148,10 +148,8 @@ export interface GuardRouterOptions {
  * Per-navigation overrides for programmatic `navTo()` calls.
  *
  * These options apply only to the current `navTo()` call.
- *
- * In the initial implementation, only explicit bypass is supported:
- * `skipGuards: true` bypasses guards for the current programmatic navigation
- * even when the router's global `navToPreflight` mode is `"guard"` or `"off"`.
+ * `skipGuards: true` bypasses guards for the current programmatic navigation,
+ * including when the router's global `navToPreflight` mode is `"guard"` or `"off"`.
  */
 export interface GuardNavToOptions {
 	/**

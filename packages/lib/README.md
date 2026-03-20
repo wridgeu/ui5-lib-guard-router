@@ -236,6 +236,7 @@ Configure router options manifest-first under `sap.ui5.routing.config.guardRoute
 ```
 
 The same shape is also accepted in the router constructor config for tests or standalone usage.
+`guardRouter` is a custom extension key consumed by this library; native UI5 routing ignores it.
 
 | Option                          | Values                          | Default   | Effect                                                                                      |
 | ------------------------------- | ------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
@@ -259,7 +260,7 @@ router.navTo("home", {}, {}, true, { skipGuards: true });
 
 To avoid ambiguity with UI5's `componentTargetInfo` object, pass `GuardNavToOptions` only in the fourth or fifth argument position.
 
-At the moment, the per-call option is additive only: `skipGuards: true` forces bypass for that call, but there is no symmetric per-call flag to force one navigation back through guards when the router is globally configured with `navToPreflight: "bypass"`.
+The per-call option is additive only: `skipGuards: true` forces bypass for that call, but there is no per-call flag to force one navigation back through guards when the router is globally configured with `navToPreflight: "bypass"`.
 
 ### GuardContext
 

@@ -279,6 +279,86 @@ QUnit.test("addLeaveGuard warns for unknown route but still registers the guard"
 	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
 
+QUnit.test("constructor strips custom guardRouter config from the base router config", function (assert: Assert) {
+	recreateRouter({
+		unknownRouteGuardRegistration: "ignore",
+		navToPreflight: "off",
+	});
+
+	const baseConfig = Reflect.get(router, "_oConfig") as Record<string, unknown>;
+	assert.strictEqual(baseConfig.async, true, "Native config values are still forwarded");
+	assert.notOk(
+		Object.prototype.hasOwnProperty.call(baseConfig, "guardRouter"),
+		"Custom guardRouter config does not leak into the base router config",
+	);
+});
+
+QUnit.test("invalid guardRouter config values warn and fall back to defaults", async function (assert: Assert) {
+	router.destroy();
+
+	const warnings: Array<{ message: string; details?: string }> = [];
+	const originalWarning = Log.warning;
+	Log.warning = (message: string, details?: string) => {
+		warnings.push({ message, details });
+	};
+
+	try {
+		router = createRouter({
+			guardRouter: {
+				unknownRouteGuardRegistration:
+					"invalid" as unknown as GuardRouterOptions["unknownRouteGuardRegistration"],
+				navToPreflight: "invalid" as unknown as GuardRouterOptions["navToPreflight"],
+			},
+		});
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.deepEqual(
+		warnings,
+		[
+			{
+				message: 'Invalid guardRouter.unknownRouteGuardRegistration value, falling back to "warn"',
+				details: "invalid",
+			},
+			{
+				message: 'Invalid guardRouter.navToPreflight value, falling back to "guard"',
+				details: "invalid",
+			},
+		],
+		"Invalid config values emitted fallback warnings",
+	);
+
+	const warnAgain: Array<{ message: string; details?: string }> = [];
+	Log.warning = (message: string, details?: string) => {
+		warnAgain.push({ message, details });
+	};
+	try {
+		router.addRouteGuard("missing", () => true);
+	} finally {
+		Log.warning = originalWarning;
+	}
+
+	assert.strictEqual(warnAgain.length, 1, "Unknown-route registration fell back to warn");
+	assert.strictEqual(
+		warnAgain[0]?.message,
+		"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+		"Fallback warning behavior matches the default policy",
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"Programmatic navigation still falls back to guarded preflight",
+	);
+});
+
 QUnit.test("unknown route registration policy 'ignore' registers route guard silently", function (assert: Assert) {
 	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
 
