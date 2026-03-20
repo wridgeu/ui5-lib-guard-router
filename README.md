@@ -152,9 +152,8 @@ npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/
 
 ```bash
 npm test              # run the default local subset (QUnit + standalone E2E)
-npm run test:full     # run the full browser matrix (default + upstream parity + compat + FLP)
-npm run test:qunit    # unit tests only
-npm run test:qunit:upstream-parity # vendored OpenUI5 parity suite
+npm run test:full     # run the full browser matrix (default + compat + FLP)
+npm run test:qunit    # unit tests only (includes vendored upstream parity)
 npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
 npm run test:e2e      # integration tests only
 npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
@@ -199,7 +198,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, browser tests, vendored upstream parity, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, prefers `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` when set, and otherwise falls back to `gh auth token` when the GitHub CLI is available.
 
@@ -212,12 +211,12 @@ Short maintainer conventions:
   Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
-| File                            | Purpose                                                                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, browser tests, upstream parity, compatibility, Windows smoke) |
-| `.github/workflows/release.yml` | Release-please + npm publish                                                                                              |
-| `release-please-config.json`    | Package path, extra version files                                                                                         |
-| `.release-please-manifest.json` | Current version tracker                                                                                                   |
+| File                            | Purpose                                                                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, parity verification, browser tests, compatibility, Windows smoke) |
+| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                  |
+| `release-please-config.json`    | Package path, extra version files                                                                                             |
+| `.release-please-manifest.json` | Current version tracker                                                                                                       |
 
 ## License
 
