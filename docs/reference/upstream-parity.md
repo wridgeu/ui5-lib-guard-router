@@ -60,7 +60,7 @@ packages/lib/test/qunit/upstream-parity/
 
 ## Scripts
 
-- `npm run test:qunit:upstream-parity` - run the vendored parity lane
+- `npm run test:qunit` - run all QUnit suites including the vendored parity lane
 - `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest` - fetch pinned upstream router test files into the raw vendor tree and refresh manifest provenance
 - `npm run verify:openui5-router-vendor` - validate the manifest structure and verify raw/port mapping
 

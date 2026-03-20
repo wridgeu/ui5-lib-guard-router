@@ -148,7 +148,7 @@ That is the contract the vendored suite should support.
 | Create | `packages/lib/test/qunit/upstream-parity/vendor/openui5/<tag>/raw/...` | Byte-for-byte vendored upstream router test files                                                                  |
 | Create | `packages/lib/test/qunit/upstream-parity/ports/openui5/<tag>/...`      | Local executable ports/wrappers that run vendored cases through the adapter harness                                |
 | Modify | `packages/lib/test/qunit/testsuite.qunit.ts`                           | Register the new vendored parity modules in the QUnit suite                                                        |
-| Modify | `packages/lib/package.json`                                            | Add a dedicated npm script such as `test:qunit:upstream-parity`                                                    |
+| Modify | `packages/lib/test/wdio-qunit.conf.ts`                                 | Register `UpstreamParity` in the main QUnit WDIO config paths                                                      |
 | Create | `scripts/vendor-openui5-router-tests.mjs`                              | Maintainer sync script that fetches pinned upstream router test files into the raw vendor tree                     |
 | Create | `scripts/verify-openui5-router-vendor.mjs`                             | Verifies manifest integrity, provenance, and raw-vs-ported mapping                                                 |
 | Modify | `README.md`                                                            | Explain the new parity lane and the difference between native compatibility and guard behavior                     |

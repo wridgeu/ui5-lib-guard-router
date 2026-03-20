@@ -56,7 +56,7 @@ The custom verifier enforces both its structural rules and its repo-state rules.
 
 ## Scripts
 
-- `npm run test:qunit:upstream-parity`
+- `npm run test:qunit` (includes the upstream parity suite)
 - `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest`
 - `npm run verify:openui5-router-vendor`
 
@@ -88,7 +88,7 @@ Example: bump from `1.144.0` to `1.145.0`.
 
 ```bash
 npm run verify:openui5-router-vendor
-npm run test:qunit:upstream-parity
+npm run test:qunit
 ```
 
 Make sure the current branch is green before changing the upstream version.
@@ -134,7 +134,6 @@ The script intentionally refuses a version bump if `portFilePath` entries still 
 
 ```bash
 npm run verify:openui5-router-vendor
-npm run test:qunit:upstream-parity
 npm run test:qunit
 ```
 

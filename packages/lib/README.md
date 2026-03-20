@@ -689,10 +689,10 @@ If you maintain an app on an older UI5 stack and want to validate locally, run t
 npm run test:qunit:compat:120
 ```
 
-For the vendored parity lane on the shipped baseline, run:
+The vendored parity tests run as part of the main QUnit suite:
 
 ```bash
-npm run test:qunit:upstream-parity
+npm run test:qunit
 ```
 
 ## License
