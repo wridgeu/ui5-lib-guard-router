@@ -162,22 +162,19 @@ QUnit.test(
 );
 
 QUnit.test("UIComponent routing manifest warns and defaults malformed guardRouter config", async function (assert) {
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	const component = await createManifestComponent(["invalid"]);
+	let component: UIComponent | undefined;
+	const warnings = await captureWarningsAsync(async () => {
+		component = await createManifestComponent(["invalid"]);
+	});
 
 	try {
-		const manifestRouter = component.getRouter();
+		const manifestRouter = component!.getRouter();
 		assert.deepEqual(
 			warnings,
 			[
 				{
 					message: "Invalid guardRouter config value, falling back to defaults",
-					details: "invalid",
+					details: '["invalid"]',
 				},
 			],
 			"Malformed manifest guardRouter config emits the expected warning",
@@ -191,8 +188,7 @@ QUnit.test("UIComponent routing manifest warns and defaults malformed guardRoute
 			"Malformed manifest guardRouter config falls back to defaults",
 		);
 	} finally {
-		Log.warning = originalWarning;
-		component.destroy();
+		component?.destroy();
 	}
 });
 
@@ -396,13 +392,7 @@ QUnit.test("constructor strips custom guardRouter config from the base router co
 QUnit.test("invalid guardRouter config values warn and fall back to defaults", async function (assert: Assert) {
 	router.destroy();
 
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router = createRouter({
 			guardRouter: {
 				unknownRouteGuardRegistration:
@@ -410,9 +400,7 @@ QUnit.test("invalid guardRouter config values warn and fall back to defaults", a
 				navToPreflight: "invalid" as unknown as GuardRouterOptions["navToPreflight"],
 			},
 		});
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.deepEqual(
 		warnings,
@@ -429,15 +417,9 @@ QUnit.test("invalid guardRouter config values warn and fall back to defaults", a
 		"Invalid config values emitted fallback warnings",
 	);
 
-	const warnAgain: Array<{ message: string; details?: string }> = [];
-	Log.warning = (message: string, details?: string) => {
-		warnAgain.push({ message, details });
-	};
-	try {
+	const warnAgain = captureWarnings(() => {
 		router.addRouteGuard("missing", () => true);
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(warnAgain.length, 1, "Unknown-route registration fell back to warn");
 	assert.strictEqual(
@@ -462,26 +444,18 @@ QUnit.test("invalid guardRouter config values warn and fall back to defaults", a
 QUnit.test("non-object guardRouter config warns and falls back to defaults", function (assert: Assert) {
 	router.destroy();
 
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router = createRouter({
 			guardRouter: ["invalid"] as unknown as GuardRouterOptions,
 		});
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.deepEqual(
 		warnings,
 		[
 			{
 				message: "Invalid guardRouter config value, falling back to defaults",
-				details: "invalid",
+				details: '["invalid"]',
 			},
 		],
 		"Non-plain-object guardRouter config emits a fallback warning",
@@ -492,17 +466,9 @@ QUnit.test("unknown route registration policy 'ignore' registers route guard sil
 	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
 
 	const guard: GuardFn = () => true;
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router.addRouteGuard("missing", guard);
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(warnings.length, 0, "No warning was logged");
 	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
@@ -513,17 +479,9 @@ QUnit.test("unknown route registration policy 'ignore' registers leave guard sil
 	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
 
 	const guard: LeaveGuardFn = () => true;
-	const warnings: Array<{ message: string; details?: string }> = [];
-	const originalWarning = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
-
-	try {
+	const warnings = captureWarnings(() => {
 		router.addLeaveGuard("missing", guard);
-	} finally {
-		Log.warning = originalWarning;
-	}
+	});
 
 	assert.strictEqual(warnings.length, 0, "No warning was logged");
 	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
@@ -561,6 +519,28 @@ QUnit.test(
 		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
 		assert.notOk(enterGuards.has("missing"), "Enter guard was not partially registered");
 		assert.notOk(leaveGuards.has("missing"), "Leave guard was not partially registered");
+	},
+);
+
+QUnit.test(
+	"unknown route registration policy 'throw' rejects object form even when both handlers are invalid",
+	function (assert: Assert) {
+		recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+		assert.throws(
+			() =>
+				router.addRouteGuard("missing", {
+					beforeEnter: "notAFunction" as unknown as GuardFn,
+					beforeLeave: 42 as unknown as LeaveGuardFn,
+				}),
+			/unknown route "missing"/,
+			"Throw policy fires before handler validity causes early return",
+		);
+
+		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		assert.notOk(enterGuards.has("missing"), "No enter guard was registered");
+		assert.notOk(leaveGuards.has("missing"), "No leave guard was registered");
 	},
 );
 
@@ -4020,18 +4000,10 @@ QUnit.test(
 			navToPreflight: "bypass",
 		});
 
-		const warnings: Array<{ message: string; details?: string }> = [];
-		const originalWarning = Log.warning;
-		Log.warning = (message: string, details?: string) => {
-			warnings.push({ message, details });
-		};
-
-		try {
+		const warnings = captureWarnings(() => {
 			router.addRouteGuard("missing", () => true);
 			router.addRouteGuard("protected", () => false);
-		} finally {
-			Log.warning = originalWarning;
-		}
+		});
 
 		router.initialize();
 		await waitForRoute(router, "home");

@@ -99,7 +99,7 @@ export interface RouteGuardConfig {
 /**
  * Policy used when a guard is registered for a route name that does not exist yet.
  *
- * Configure this through `sap.ui5/routing/config/guardRouter/unknownRouteGuardRegistration`
+ * Configure this through `sap.ui5.routing.config.guardRouter.unknownRouteGuardRegistration`
  * in `manifest.json`, or by passing `guardRouter` in the router constructor config.
  *
  * - `"ignore"` registers silently.
@@ -111,7 +111,7 @@ export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
 /**
  * Strategy used for programmatic `navTo()` calls.
  *
- * Configure this through `sap.ui5/routing/config/guardRouter/navToPreflight`
+ * Configure this through `sap.ui5.routing.config.guardRouter.navToPreflight`
  * in `manifest.json`, or by passing `guardRouter` in the router constructor config.
  *
  * - `"guard"` runs guards before the hash changes.

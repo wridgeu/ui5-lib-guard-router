@@ -91,7 +91,11 @@ const DEFAULT_GUARD_ROUTER_OPTIONS: ResolvedGuardRouterOptions = {
 function normalizeGuardRouterOptions(options: unknown): ResolvedGuardRouterOptions {
 	if (!isRecord(options)) {
 		if (options != null) {
-			Log.warning("Invalid guardRouter config value, falling back to defaults", String(options), LOG_COMPONENT);
+			Log.warning(
+				"Invalid guardRouter config value, falling back to defaults",
+				JSON.stringify(options),
+				LOG_COMPONENT,
+			);
 		}
 		return { ...DEFAULT_GUARD_ROUTER_OPTIONS };
 	}
@@ -215,8 +219,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	) {
 		const rawConfig = isRecord(config) ? config : {};
 		const guardRouterOptions = normalizeGuardRouterOptions(rawConfig.guardRouter);
-		const baseConfig = { ...rawConfig };
-		delete baseConfig.guardRouter;
+		const { guardRouter: _, ...baseConfig } = rawConfig;
 
 		// @ts-expect-error UI5 runtime passes a fifth hash changer argument here.
 		super(routes, baseConfig, owner, targetsConfig, routerHashChanger);
@@ -298,11 +301,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 				return this;
 			}
 
+			this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
+
 			if (!enterGuard && !leaveGuard) {
 				return this;
 			}
-
-			this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
 
 			if (enterGuard) {
 				addToGuardMap(this._enterGuards, routeName, enterGuard);
@@ -592,6 +595,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 
 		if (skipGuards) {
+			this._pendingHash = targetHash;
 			this._guardBypassedHash = targetHash;
 			super.navTo(routeName, parameters, componentTargetInfo, replace);
 			if (this._guardBypassedHash === targetHash) {
@@ -737,6 +741,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
+		// Guard-bypassed: navTo() was called with skipGuards or navToPreflight
+		// is "bypass". Commit without running guards, mirroring the preflight-
+		// approved path above.
 		if (this._guardBypassedHash !== null && newHash === this._guardBypassedHash) {
 			this._guardBypassedHash = null;
 			this._commitNavigation(newHash, this.getRouteInfoByHash(newHash)?.name ?? "");
