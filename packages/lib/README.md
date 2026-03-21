@@ -676,6 +676,41 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **URL bar shows target hash, then reverts**: This is expected for async guards. The `HashChanger` updates the URL before `parse()` runs. See [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards) for the architectural explanation and the busy-indicator pattern.
 
+## Testing
+
+### Running tests
+
+The library ships three QUnit test suites that run in headless Chrome via WebdriverIO:
+
+```bash
+# All three suites (Router, NativeRouterCompat, UpstreamParity)
+npm run test:qunit
+
+# Full matrix including OpenUI5 1.120 compatibility lane and E2E
+npm run test:full
+```
+
+### Accessing private members in tests
+
+The router's internal state (phase model, guard registries, generation counter) uses TypeScript's `private` keyword for encapsulation. Tests inspect these internals via [`Reflect.get`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect/get):
+
+```typescript
+const phase = Reflect.get(router, "_phase");
+const generation = Reflect.get(router, "_parseGeneration");
+```
+
+This works because TypeScript `private` is a [compile-time-only constraint](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-8.html). The property exists as a regular enumerable property at runtime, so `Reflect.get` reads it without any cast or `as any`. The alternative -- ECMAScript `#private` fields -- enforces privacy at runtime via `WeakMap`-backed storage. Properties declared with `#` are invisible to `Reflect.get`, bracket notation, and any other external access. The trade-off:
+
+|                                  | TypeScript `private`                | ECMAScript `#private`                                      |
+| -------------------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| Enforcement                      | Compile-time only                   | Runtime (engine-level)                                     |
+| `Reflect.get` access             | Works                               | Returns `undefined`                                        |
+| Bracket notation (`obj["prop"]`) | Works                               | Returns `undefined`                                        |
+| Test inspection                  | Straightforward                     | Requires dedicated accessors                               |
+| UI5 compatibility                | Full (prototype-based class system) | Limited (UI5 metadata introspection cannot see `#` fields) |
+
+This library uses TypeScript `private` because UI5's `ManagedObject.extend()` class system relies on prototype-based inheritance and runtime metadata introspection, which is incompatible with ECMAScript `#private` fields. `Reflect.get` is the established pattern across the test suite for inspecting internal state without type-safety escape hatches.
+
 ## Compatibility
 
 > [!IMPORTANT]
