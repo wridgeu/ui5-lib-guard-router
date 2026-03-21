@@ -62,10 +62,6 @@
 		"routing": {
 			"config": {
 				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
-					"navToPreflight": "guard"
-				},
 				"type": "View",
 				"viewType": "XML",
 				"path": "demo.app.view",

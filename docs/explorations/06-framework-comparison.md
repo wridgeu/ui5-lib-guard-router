@@ -313,22 +313,22 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 - **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.guard.router`'s generation counter, but heavier. (Note: `ui5.guard.router` now also exposes an `AbortSignal` on `GuardContext`, used alongside the generation counter.)
 - **`beforeLoad` hooks**: Run parent-to-child, each contributing to accumulated context
 - **Context accumulation**: Parent route context flows to children (type-safe)
-- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.guard.router`'s committing/redirect phase.
+- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.guard.router`'s `_redirecting` flag.
 - **`cause` parameter**: `beforeLoad` receives `'preload' | 'enter' | 'stay'` to distinguish navigation reasons
 - **No generation counter**: Uses `latestLoadPromise` tracking + AbortController instead
 
 ### Comparison with ui5.guard.router
 
-| Feature             | TanStack Router              | ui5.guard.router                           |
-| ------------------- | ---------------------------- | ------------------------------------------ |
-| Async model         | Fully async                  | Sync-first, async fallback                 |
-| Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`            |
-| Leave guards        | `useBlocker` (history-level) | `addLeaveGuard()`                          |
-| Blocking layer      | History library              | Router `parse()`                           |
-| Context passing     | Parent-to-child accumulation | Via `GuardContext`                         |
-| Staleness detection | AbortController per match    | Generation counter + AbortSignal           |
-| Bypass mechanism    | `ignoreBlocker` option       | Committing/redirect phase (redirects only) |
-| Type safety         | Full route tree types        | Interface-based                            |
+| Feature             | TanStack Router              | ui5.guard.router                     |
+| ------------------- | ---------------------------- | ------------------------------------ |
+| Async model         | Fully async                  | Sync-first, async fallback           |
+| Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`      |
+| Leave guards        | `useBlocker` (history-level) | `addLeaveGuard()`                    |
+| Blocking layer      | History library              | Router `parse()`                     |
+| Context passing     | Parent-to-child accumulation | Via `GuardContext`                   |
+| Staleness detection | AbortController per match    | Generation counter + AbortSignal     |
+| Bypass mechanism    | `ignoreBlocker` option       | `_redirecting` flag (redirects only) |
+| Type safety         | Full route tree types        | Interface-based                      |
 
 For a detailed source code analysis, see [Alternative 12: TanStack Router Deep Dive](./12-tanstack-router-deep-dive.md).
 

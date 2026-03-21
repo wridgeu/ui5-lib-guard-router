@@ -13,18 +13,18 @@ Override `navTo()` to run the same shared guard pipeline (`_evaluateGuards`) _be
 - **`navTo()` preflight**: guards run before the hash changes. Blocked navigations never push a history entry. Redirected navigations go directly to the final target.
 - **`parse()` fallback**: guards run after the hash changes (browser back/forward, URL bar, direct `HashChanger.setHash()`). Best-effort hash repair via `replaceHash()`.
 
-The committing/preflight phase tells `parse()` to skip guard re-evaluation for navigations already approved by the preflight.
+A `_preflightApprovedHash` flag tells `parse()` to skip guard re-evaluation for navigations already approved by the preflight.
 
 ## Key Design Decisions
 
-| Decision                  | Choice                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------- |
-| Preflight phase           | Committing/preflight phase: lightweight, matches `_suppressedHash` pattern                      |
-| Redirect during preflight | Bypass preflight via committing/redirect phase, matching existing redirect-bypass-guards design |
-| Async navTo timing        | Hash deferred until guard resolves, no premature hash change                                    |
-| Same-hash redirect        | Still goes through `_redirect()` / `navTo()` so `componentTargetInfo` is preserved              |
-| Guard execution count     | Exactly once per navigation via committing/preflight handshake                                  |
-| Generation counter        | Shared `_parseGeneration` for both paths                                                        |
+| Decision                  | Choice                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| Preflight flag            | `_preflightApprovedHash: string \| null`: lightweight, matches `_suppressedHash` pattern  |
+| Redirect during preflight | Bypass preflight via `_redirecting` flag, matching existing redirect-bypass-guards design |
+| Async navTo timing        | Hash deferred until guard resolves, no premature hash change                              |
+| Same-hash redirect        | Still goes through `_redirect()` / `navTo()` so `componentTargetInfo` is preserved        |
+| Guard execution count     | Exactly once per navigation via `_preflightApprovedHash` handshake                        |
+| Generation counter        | Shared `_parseGeneration` for both paths                                                  |
 
 ## Non-Goals
 

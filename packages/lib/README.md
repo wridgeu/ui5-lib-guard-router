@@ -58,8 +58,8 @@ import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 import type { NavigationResult } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 
-// Advanced: object form for redirect-with-parameters, router options, and enter+leave registration
-import type { GuardRedirect, GuardNavToOptions, GuardRouterOptions, RouteGuardConfig } from "ui5/guard/router/types";
+// Advanced: object form for redirect-with-parameters and enter+leave registration
+import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 ```
 
 ### Serving the library
@@ -129,11 +129,7 @@ server:
 		},
 		"routing": {
 			"config": {
-				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
-					"navToPreflight": "guard"
-				}
+				"routerClass": "ui5.guard.router.Router"
 			}
 		}
 	}
@@ -183,7 +179,7 @@ The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/api/sap.m.r
 - **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. If a guard blocks or redirects, the hash never changes, so no history entry is created.
 - **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks or redirects, the router restores the previous hash via `replaceHash()`.
 
-Both entry points feed the same guard pipeline. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths, while router options let you tune how programmatic `navTo()` calls are handled.
+Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
 
 Because it extends the mobile router directly, all existing `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) works unchanged.
 
@@ -213,55 +209,7 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 ### Unknown routes during registration
 
-By default, `addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
-
-### Router options
-
-Configure router options manifest-first under `sap.ui5.routing.config.guardRouter`:
-
-```json
-{
-	"sap.ui5": {
-		"routing": {
-			"config": {
-				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
-					"navToPreflight": "guard"
-				}
-			}
-		}
-	}
-}
-```
-
-The same shape is also accepted in the router constructor config for tests or standalone usage.
-`guardRouter` is a custom extension key consumed by this library; native UI5 routing ignores it.
-
-| Option                          | Values                          | Default   | Effect                                                                                      |
-| ------------------------------- | ------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `unknownRouteGuardRegistration` | `"ignore"`, `"warn"`, `"throw"` | `"warn"`  | Controls whether unknown-route guard registration is silent, warns, or throws synchronously |
-| `navToPreflight`                | `"guard"`, `"bypass"`, `"off"`  | `"guard"` | Controls how programmatic `navTo()` calls interact with the guard pipeline                  |
-
-`navToPreflight` modes:
-
-| Mode       | Programmatic `navTo()`                                    | Browser back/forward / URL bar |
-| ---------- | --------------------------------------------------------- | ------------------------------ |
-| `"guard"`  | Guards run before the hash changes                        | Guards run in `parse()`        |
-| `"bypass"` | Guards are skipped                                        | Guards still run in `parse()`  |
-| `"off"`    | No preflight; `parse()` handles the hash after it changes | Guards run in `parse()`        |
-
-Per-call `navTo()` options support one-shot guard bypass for a single programmatic navigation:
-
-```typescript
-router.navTo("detail", { id: "42" }, true, { skipGuards: true });
-router.navTo("home", {}, {}, { skipGuards: true });
-router.navTo("home", {}, {}, true, { skipGuards: true });
-```
-
-To avoid ambiguity with UI5's `componentTargetInfo` object, pass `GuardNavToOptions` only in the fourth or fifth argument position.
-
-The per-call option is additive only: `skipGuards: true` forces bypass for that call, but there is no per-call flag to force one navigation back through guards when the router is globally configured with `navToPreflight: "bypass"`.
+`addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
 
 ### GuardContext
 
@@ -705,10 +653,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `removeGuard called with invalid guard, ignoring`                                   | Non-function passed to `removeGuard()`                                                              |
 | warning | `removeRouteGuard called with invalid guard, ignoring`                              | Non-function passed to `removeRouteGuard()`                                                         |
 | warning | `removeLeaveGuard called with invalid guard, ignoring`                              | Non-function passed to `removeLeaveGuard()`                                                         |
-| warning | `Invalid guardRouter config value, falling back to defaults`                        | `guardRouter` exists but is not a plain object, so the router uses defaults                         |
-| warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time and `unknownRouteGuardRegistration` is `"warn"`           |
-| warning | `Invalid guardRouter.unknownRouteGuardRegistration value, falling back to "warn"`   | Unsupported `guardRouter.unknownRouteGuardRegistration` config value                                |
-| warning | `Invalid guardRouter.navToPreflight value, falling back to "guard"`                 | Unsupported `guardRouter.navToPreflight` config value                                               |
+| warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time                                                           |
 | warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |

@@ -182,7 +182,7 @@ _runLeaveGuards(context: LeaveGuardContext): LeaveGuardResult | Promise<LeaveGua
 3. Async leave guard with MessageBox-style Promise
 4. Leave guard only runs when leaving its registered route
 5. Leave guard does not run on initial navigation (no `fromRoute`)
-6. Leave guard does not run during redirects (committing/redirect phase)
+6. Leave guard does not run during redirects (`_redirecting = true`)
 7. Multiple leave guards: first `false` short-circuits
 8. Leave guards run before enter guards (execution order)
 9. Leave guard + enter guard: leave allows, enter blocks
