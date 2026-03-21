@@ -4434,7 +4434,9 @@ QUnit.test("meta is fresh for each navigation (not carried across)", async funct
 	await waitForRoute(router, "home");
 
 	const metaSnapshots: Map<string, unknown>[] = [];
+	const metaInitialStates: boolean[] = [];
 	router.addGuard((context: GuardContext) => {
+		metaInitialStates.push(context.meta.has("visited"));
 		metaSnapshots.push(context.meta);
 		context.meta.set("visited", true);
 		return true;
@@ -4448,5 +4450,5 @@ QUnit.test("meta is fresh for each navigation (not carried across)", async funct
 
 	assert.strictEqual(metaSnapshots.length, 2, "guard ran twice");
 	assert.notStrictEqual(metaSnapshots[0], metaSnapshots[1], "each navigation gets a different Map instance");
-	assert.notOk(metaSnapshots[1]!.has("visited"), "second navigation meta does not carry data from first");
+	assert.notOk(metaInitialStates[1], "second navigation meta starts without data from first");
 });
