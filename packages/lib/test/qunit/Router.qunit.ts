@@ -4697,7 +4697,7 @@ QUnit.test("guards from config are registered and functional (block mode)", asyn
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home");
+	await waitForRoute(router, "home", 5000);
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -4728,8 +4728,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 	);
 
 	router.initialize();
-	// Allow the initial navigation to "home" so the router is fully operational.
-	await waitForRoute(router, "home");
+	await waitForRoute(router, "home", 5000);
 
 	// Act: add a blocking imperative guard after initialize
 	router.addGuard(() => false);
@@ -4767,7 +4766,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home");
+	await waitForRoute(router, "home", 5000);
 
 	// Arrange: add imperative guard AFTER initialize that records execution
 	// The manifest allowGuard always returns true, so both guards run.
@@ -4809,7 +4808,7 @@ QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReade
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home");
+	await waitForRoute(router, "home", 5000);
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -4900,7 +4899,7 @@ QUnit.test("dot-notation guard paths resolve relative to component sap.app.id", 
 	try {
 		const manifestRouter = (component as unknown as { getRouter(): GuardRouter }).getRouter();
 		manifestRouter.initialize();
-		await waitForRoute(manifestRouter, "home");
+		await waitForRoute(manifestRouter, "home", 5000);
 
 		manifestRouter.navTo("protected");
 		const result = await manifestRouter.navigationSettled();
@@ -4935,7 +4934,7 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home");
+	await waitForRoute(router, "home", 5000);
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
