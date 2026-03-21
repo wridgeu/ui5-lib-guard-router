@@ -523,6 +523,9 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	// _bIsInitialized would be true again.
 	const isInitialized = Reflect.get(router, "_bIsInitialized") as boolean;
 	assert.notOk(isInitialized, "Router was not re-initialized after destroy() during block loading");
+
+	// Re-assign so afterEach doesn't double-destroy (MobileRouter.destroy is not idempotent).
+	router = createRouter();
 });
 
 // ============================================================

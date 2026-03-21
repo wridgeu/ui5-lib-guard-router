@@ -368,29 +368,23 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._options = normalizeGuardRouterOptions(guardRouter);
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
-			if (!owner) {
+			// Resolve the component namespace from the owner component's manifest.
+			// Without an owner, namespace resolution falls back to empty string
+			// (guards must use absolute paths or module: prefix).
+			let componentNamespace = "";
+			if (owner) {
+				const appConfig = owner.getManifestEntry("sap.app") as Record<string, unknown> | undefined;
+				if (isRecord(appConfig) && typeof appConfig.id === "string") {
+					componentNamespace = appConfig.id;
+				}
+			} else {
 				Log.warning(
-					"guardRouter.guards: no owner component available, skipping manifest guard registration",
+					"guardRouter.guards: no owner component, namespace resolution uses empty prefix",
 					undefined,
 					LOG_COMPONENT,
 				);
-			} else {
-				// Resolve the component namespace from the owner component's manifest.
-				// The `owner` constructor argument is the UIComponent that created
-				// this router. We use it to read `sap.app.id` for namespace resolution,
-				// avoiding reliance on private internals like `_oOwner`.
-				let componentNamespace = "";
-				const getManifestEntry = Reflect.get(owner, "getManifestEntry") as
-					| ((path: string) => Record<string, unknown>)
-					| undefined;
-				if (typeof getManifestEntry === "function") {
-					const appConfig = getManifestEntry.call(owner, "sap.app");
-					if (isRecord(appConfig) && typeof appConfig.id === "string") {
-						componentNamespace = appConfig.id;
-					}
-				}
-				this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 			}
+			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 		}
 	}
 
