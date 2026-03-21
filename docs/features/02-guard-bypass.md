@@ -8,7 +8,7 @@
 
 ## Problem
 
-Every `navTo()` call goes through the full guard pipeline (except redirects via `_redirecting`). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
+Every `navTo()` call goes through the full guard pipeline (except redirects via the committing/redirect phase). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
 
 - **Save & Navigate**: User saves a form, then navigates away. The leave guard shouldn't fire because the data is already saved.
 - **Logout**: Navigate to login regardless of any guards. The user explicitly wants to leave.
@@ -91,7 +91,7 @@ navTo(
 
 ```typescript
 parse(this: RouterInstance, newHash: string): void {
-    if (this._suppressNextParse) { /* ... existing ... */ }
+    if (this._suppressedHash !== null) { /* ... existing ... */ }
 
     // Skip guards when explicitly requested (e.g., Save & Navigate)
     if (this._skipNextGuards) {
@@ -100,14 +100,14 @@ parse(this: RouterInstance, newHash: string): void {
         return;
     }
 
-    if (this._redirecting) { /* ... existing ... */ }
+    if (this._phase.kind === "committing") { /* ... existing ... */ }
     // ... rest of guard pipeline ...
 }
 ```
 
 ### Flag Safety
 
-The `_skipNextGuards` flag follows the same pattern as `_suppressNextParse`:
+The `_skipNextGuards` flag follows a similar pattern to `_suppressedHash`:
 
 - Set immediately before the call that triggers `parse()`
 - Consumed (reset to `false`) at the start of `parse()`

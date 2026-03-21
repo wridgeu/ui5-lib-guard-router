@@ -166,11 +166,9 @@ flowchart TD
     suppress -- "yes" --> smatch{hash matches?}
     smatch -- "yes" --> sclear["clear flag"] --> ret(["return"])
     smatch -- "no" --> sclear2["clear flag"] --> redir
-    suppress -- "no" --> redir{_redirecting?}
-    redir -- "yes" --> bypass(["_commitNavigation()"])
-    redir -- "no" --> preflight{preflightApproved?}
-    preflight -- "yes" --> bypass
-    preflight -- "no" --> samehash{same as _currentHash?}
+    suppress -- "no" --> redir{committing phase?}
+    redir -- "yes (redirect/preflight)" --> bypass(["_commitNavigation()"])
+    redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
     samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
 
@@ -210,9 +208,10 @@ a newer navigation started, the stale result is discarded.
    A QUnit test validates this assumption.
 
 3. **Redirect targets bypass guards.** When a guard redirects from route A to route B,
-   the resulting `navTo` triggers a re-entrant `parse()` with `_redirecting = true`,
-   which skips all guard evaluation. This prevents infinite loops but means route B's
-   guards are **not** evaluated during a redirect. Design guard chains accordingly.
+   the router enters the committing/redirect phase before calling `navTo`. The
+   re-entrant `parse()` sees the committing phase and skips all guard evaluation.
+   This prevents infinite loops but means route B's guards are **not** evaluated
+   during a redirect. Design guard chains accordingly.
 
 ## Two-Entry-Point Model: navTo() Preflight + parse() Fallback
 
@@ -223,27 +222,28 @@ same shared guard pipeline (`_evaluateGuards()`).
 Programmatic navigation:
   navTo(route, params)
     → _evaluateGuards(hash, route, params)
-        → allow  → set _preflightApprovedHash, call super.navTo()
+        → allow  → enter committing/preflight phase, call super.navTo()
         → block  → _blockNavigation(hash, restoreHash=false), flush Blocked settlement
-        → redirect → _redirect(target), which sets _redirecting=true and calls this.navTo(target)
+        → redirect → _redirect(target), which enters committing/redirect phase and calls this.navTo(target)
 
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
-    → _preflightApprovedHash matches? → clear flag, _commitNavigation()
+    → committing/preflight phase matches? → transition to idle, _commitNavigation()
     → otherwise → _evaluateGuards(hash, route, params)
         → allow  → _commitNavigation()
         → block  → _blockNavigation() + _restoreHash()
         → redirect → _redirect() via navTo(replace=true)
 ```
 
-### The \_preflightApprovedHash handshake
+### The preflight handshake
 
-When `navTo()` runs guards and they allow navigation, the router stores the approved
-hash in `_preflightApprovedHash` before calling `super.navTo()`. The parent router
-triggers a hash change, which re-enters through `parse()`. On entry, `parse()` checks
-`_preflightApprovedHash`: if the incoming hash matches, it clears the flag and commits
-immediately without re-running guards. This avoids double evaluation while keeping
-`parse()` as the authoritative commit path.
+When `navTo()` runs guards and they allow navigation, the router enters the
+committing/preflight phase (which records the approved hash) before calling
+`super.navTo()`. The parent router triggers a hash change, which re-enters through
+`parse()`. On entry, `parse()` checks the committing/preflight phase: if the incoming
+hash matches, the phase transitions to idle and the router commits immediately without
+re-running guards. This avoids double evaluation while keeping `parse()` as the
+authoritative commit path.
 
 ### Why parse() remains authoritative
 
@@ -307,8 +307,8 @@ After guards complete, the result is applied inline:
 | `false`                     | `_blockNavigation()` → restore previous hash                |
 | `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true`               |
 
-Redirects set `_redirecting = true` before calling `navTo()`, causing the re-entrant
-`parse()` to bypass all guards and commit immediately.
+Redirects enter the committing/redirect phase before calling `navTo()`, causing the
+re-entrant `parse()` to bypass all guards and commit immediately.
 
 ## Async Concurrency Control
 
@@ -344,9 +344,9 @@ result carries a `NavigationOutcome` enum value indicating how the navigation re
 
 ```mermaid
 flowchart TD
-    call(["navigationSettled()"]) --> pending{_pendingHash set?}
-    pending -- "null" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
-    pending -- "non-null" --> push["push resolver<br/>into _settlementResolvers"]
+    call(["navigationSettled()"]) --> pending{phase is evaluating?}
+    pending -- "no (idle)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
+    pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
 
     subgraph "Guard pipeline terminal actions"
         commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
@@ -371,14 +371,14 @@ outcome is that the user stays on the current route. This ensures:
 
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
-- `_commitNavigation` uses the `_redirecting` flag and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
-- `_cancelPendingNavigation` only flushes when `_pendingHash` is non-null, avoiding
+- `_commitNavigation` uses the phase origin (committing/redirect vs. other) and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
+- `_cancelPendingNavigation` only flushes when the router is in the evaluating phase, avoiding
   spurious settlement signals during initialization or when no navigation is in flight
 - `_lastSettlement` caches the most recent result so that `navigationSettled()` called
   after a synchronous navigation still returns the correct outcome. This handles the
   common case where sync guards settle within the same tick as `navTo()`, leaving
-  `_pendingHash` null before any caller has a chance to register a resolver. The cache
-  is reset on `stop()` and `destroy()`
+  the router in the idle phase before any caller has a chance to register a resolver.
+  The cache is reset on `stop()` and `destroy()`
 
 ## FLP Integration
 
@@ -437,21 +437,26 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                    | Type                                | Purpose                                                         |
-| ------------------------ | ----------------------------------- | --------------------------------------------------------------- |
-| `_globalGuards`          | `GuardFn[]`                         | Guards that run for every navigation                            |
-| `_enterGuards`           | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name                      |
-| `_leaveGuards`           | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name                      |
-| `_currentRoute`          | `string`                            | Name of the currently active route                              |
-| `_currentHash`           | `string \| null`                    | Hash of the active route, `null` before first                   |
-| `_pendingHash`           | `string \| null`                    | Hash being evaluated by async guards                            |
-| `_redirecting`           | `boolean`                           | True during guard-triggered redirect                            |
-| `_parseGeneration`       | `number`                            | Monotonic counter for async invalidation                        |
-| `_suppressedHash`        | `string \| null`                    | Hash to suppress in the next `parse()` call                     |
-| `_abortController`       | `AbortController \| null`           | Aborted when navigation is superseded                           |
-| `_settlementResolvers`   | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                         |
-| `_lastSettlement`        | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)            |
-| `_preflightApprovedHash` | `string \| null`                    | Hash approved by navTo() preflight; cleared by parse() on match |
+| Field                  | Type                                | Purpose                                                               |
+| ---------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| `_globalGuards`        | `GuardFn[]`                         | Guards that run for every navigation                                  |
+| `_enterGuards`         | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name                            |
+| `_leaveGuards`         | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name                            |
+| `_currentRoute`        | `string`                            | Name of the currently active route                                    |
+| `_currentHash`         | `string \| null`                    | Hash of the active route, `null` before first                         |
+| `_phase`               | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below) |
+| `_parseGeneration`     | `number`                            | Monotonic counter for async invalidation                              |
+| `_suppressedHash`      | `string \| null`                    | Hash to suppress in the next `parse()` call                           |
+| `_settlementResolvers` | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                               |
+| `_lastSettlement`      | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                  |
+
+`RouterPhase` is a discriminated union with three variants:
+
+| Phase        | Shape                                                                                               | Description                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `idle`       | `{ kind: "idle" }`                                                                                  | No navigation in progress                                                                |
+| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt }`                                                | Guards are running; attempt carries hash, route, AbortController, and generation counter |
+| `committing` | `{ kind: "committing", hash: string, route: string, origin: "preflight" \| "redirect" \| "parse" }` | Navigation is being committed; `origin` distinguishes the entry path                     |
 
 ## Monorepo Tooling
 

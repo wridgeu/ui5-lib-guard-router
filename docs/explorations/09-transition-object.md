@@ -214,11 +214,12 @@ _createTransition(
             }
             used = true;
             // Directly commit the navigation, bypassing guards
-            router._redirecting = true;
+            // by entering the committing/redirect phase
+            router._phase = { kind: "committing", hash: targetHash, route, origin: "redirect" };
             try {
                 router.navTo(route, (routeInfo ? routeInfo.arguments : {}), undefined, true);
             } finally {
-                router._redirecting = false;
+                router._phase = { kind: "idle" };
             }
         }
     };

@@ -252,7 +252,7 @@ catch (err) {
 }
 ```
 
-**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). This is analogous to `ui5.guard.router`'s `_redirecting` flag, which also bypasses guards during redirects.
+**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). This is analogous to `ui5.guard.router`'s committing/redirect phase, which also bypasses guards during redirects.
 
 ---
 
@@ -328,7 +328,7 @@ The generation counter remains the primary staleness mechanism (checked after ea
 
 ### 3. `ignoreBlocker` for Redirects
 
-TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.guard.router` achieves the same with `_redirecting = true`. Both prevent infinite redirect loops.
+TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.guard.router` achieves the same by entering the committing/redirect phase. Both prevent infinite redirect loops.
 
 ### 4. Match Caching
 
@@ -382,7 +382,7 @@ ui5.guard.router:
 | **Guard execution**  | In `loadMatches()` (async)            | In `parse()` (sync path preferred) |
 | **Staleness**        | AbortController per match             | Generation counter + AbortSignal   |
 | **Concurrent nav**   | Cancel matches + latest promise wins  | Generation check after each await  |
-| **Redirect bypass**  | `ignoreBlocker: true`                 | `_redirecting = true`              |
+| **Redirect bypass**  | `ignoreBlocker: true`                 | Committing/redirect phase          |
 | **State management** | `@tanstack/store` (reactive)          | Internal properties on router      |
 | **Match caching**    | `cachedMatches` array                 | Delegated to UI5 target caching    |
 
