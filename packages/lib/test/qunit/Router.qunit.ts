@@ -1307,7 +1307,7 @@ QUnit.test("Guard that returns redirect does not cause infinite loop", async fun
 
 QUnit.test("Multiple route guards with cross-redirects settle correctly", async function (assert: Assert) {
 	// forbidden → redirects to protected, protected → redirects to home
-	// But redirect is re-entrant (_redirecting=true) so it bypasses guards.
+	// But redirect is re-entrant (committing/redirect phase) so it bypasses guards.
 	// We should end up on protected, not home.
 	router.addRouteGuard("forbidden", () => "protected");
 	router.addRouteGuard("protected", () => "home");
@@ -2226,7 +2226,7 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 	const result = await router.navigationSettled();
 
 	// The redirect from forbidden back to home should NOT trigger
-	// the leave guard again because _redirecting bypasses all guards
+	// the leave guard again because the committing/redirect phase bypasses all guards
 	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Navigation resulted in redirect");
 	assert.strictEqual(leaveGuardCallCount, 1, "Leave guard ran exactly once (for initial leave, not during redirect)");
 });
@@ -3452,7 +3452,7 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-QUnit.test("Redirect target's own guard is bypassed by _redirecting flag", async function (assert: Assert) {
+QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("forbidden", () => false);
 	router.initialize();
@@ -4176,9 +4176,9 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
 	// A global guard blocks everything except "home".
 	//
-	// Bug: _flushSettlement fires the navigationSettled event synchronously while
-	// _redirecting=true. Any navTo() from that handler sees _redirecting=true and
-	// calls super.navTo() directly, bypassing the guard pipeline.
+	// Regression guard: _flushSettlement fires the navigationSettled event
+	// synchronously. The phase is set to idle before _flushSettlement, so
+	// navTo() from the handler enters the full guard pipeline.
 	router.addRouteGuard("forbidden", () => "home");
 	router.addGuard((ctx: GuardContext) => ctx.toRoute === "home");
 
@@ -4189,8 +4189,8 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	const handler = (evt: Router$NavigationSettledEvent): void => {
 		if (evt.getParameter("status") === NavigationOutcome.Redirected && !nestedNavFired) {
 			nestedNavFired = true;
-			// This fires synchronously during _flushSettlement while _redirecting=true.
-			// The guard should still block this navTo, but the bug bypasses it.
+			// This fires synchronously during _flushSettlement while _phase is idle.
+			// The guard should block this navTo.
 			router.navTo("protected");
 		}
 	};
@@ -4286,3 +4286,374 @@ QUnit.test(
 		assert.strictEqual(events.length, 1, "Handler no longer receives events after detach without oListener");
 	},
 );
+
+// ============================================================
+// Module: State machine phase model (issues #38 + #39)
+// ============================================================
+QUnit.module("Router - State machine phase model", safeDestroyHooks);
+
+function getPhase(target: GuardRouter): {
+	kind: string;
+	attempt?: object;
+	hash?: string;
+	route?: string;
+	origin?: string;
+} {
+	return Reflect.get(target, "_phase") as ReturnType<typeof getPhase>;
+}
+
+function getParseGeneration(target: GuardRouter): number {
+	return Reflect.get(target, "_parseGeneration") as number;
+}
+
+QUnit.test("phase is idle after construction", function (assert: Assert) {
+	assert.deepEqual(getPhase(router), { kind: "idle" }, "Freshly constructed router is in idle phase");
+});
+
+QUnit.test("phase is idle after initialize and initial route settles", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after initial route commits");
+});
+
+QUnit.test("phase is evaluating during async guard execution", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating while async guard is pending");
+	assert.ok(phase.attempt, "Attempt object exists during evaluating phase");
+	assert.strictEqual((phase.attempt as { hash: string }).hash, "protected", "Attempt carries the target hash");
+	assert.strictEqual((phase.attempt as { route: string }).route, "protected", "Attempt carries the target route");
+	assert.ok(
+		(phase.attempt as { controller: AbortController }).controller instanceof AbortController,
+		"Attempt has an AbortController",
+	);
+	assert.strictEqual(
+		typeof (phase.attempt as { generation: number }).generation,
+		"number",
+		"Attempt has a generation number",
+	);
+
+	resolveGuard(true);
+	await waitForRoute(router, "protected");
+
+	assert.strictEqual(
+		getPhase(router).kind,
+		"idle",
+		"Phase returns to idle after async guard resolves and navigation commits",
+	);
+});
+
+QUnit.test("phase is idle after navigation is blocked", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard blocks navigation");
+});
+
+QUnit.test("phase is idle after navigation is redirected", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => "forbidden");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard redirects navigation");
+});
+
+QUnit.test(
+	"phase is idle after pending navigation is cancelled by superseding navigation",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		let resolveGuard!: (value: boolean) => void;
+		const guard: GuardFn = () =>
+			new Promise<boolean>((resolve) => {
+				resolveGuard = resolve;
+			});
+		router.addGuard(guard);
+
+		router.navTo("protected");
+		assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating during first navigation");
+
+		// Supersede with a new navigation -- removes the guard first so the second one commits
+		router.removeGuard(guard);
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+
+		assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after superseding navigation commits");
+
+		// Resolve the orphaned guard -- should have no effect
+		resolveGuard(true);
+		await nextTick();
+		assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves");
+	},
+);
+
+QUnit.test("attempt AbortController signal is aborted on cancellation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	const phase = getPhase(router);
+	const signal = (phase.attempt as { controller: AbortController }).controller.signal;
+	assert.notOk(signal.aborted, "Signal is not aborted while guard is pending");
+
+	// Supersede to cancel
+	router.removeGuard(guard);
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.ok(signal.aborted, "Signal is aborted after cancellation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("parseGeneration increments on cancellation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const genBefore = getParseGeneration(router);
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+
+	// Cancel via superseding navigation
+	router.removeGuard(guard);
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.ok(getParseGeneration(router) > genBefore, "Generation counter incremented after cancellation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("phase is idle after stop()", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop()");
+});
+
+QUnit.test("phase is idle after stop() cancels pending async navigation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop() cancels pending navigation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("phase is idle after destroy()", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.destroy();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy()");
+});
+
+QUnit.test("phase is idle after destroy() cancels pending async navigation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before destroy");
+
+	router.destroy();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy() cancels pending navigation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("attempt has correct hash for parameterised routes", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("detail", { id: "99" });
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating");
+	assert.strictEqual(
+		(phase.attempt as { hash: string }).hash,
+		"detail/99",
+		"Attempt hash includes resolved parameters",
+	);
+	assert.strictEqual((phase.attempt as { route: string }).route, "detail", "Attempt route is the route name");
+
+	resolveGuard(true);
+	await waitForRoute(router, "detail");
+});
+
+QUnit.test("no evaluating phase when no guards are registered", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Spy on phase transitions by polling -- since no guards means sync commit,
+	// phase should never be "evaluating" for a guardless navigation.
+	const phaseBeforeNav = getPhase(router);
+	assert.strictEqual(phaseBeforeNav.kind, "idle", "Phase is idle before navigation");
+
+	router.navTo("protected");
+	// After sync navTo returns, phase should already be idle (committed synchronously)
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle immediately after sync guardless navTo");
+
+	await waitForRoute(router, "protected");
+});
+
+QUnit.test("phase is evaluating during parse-path async guard (direct hash change)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	// Direct hash change triggers parse(), not navTo preflight
+	HashChanger.getInstance().setHash("protected");
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating during parse-path async guard");
+	assert.strictEqual(
+		(phase.attempt as { hash: string }).hash,
+		"protected",
+		"Attempt hash matches the direct hash change",
+	);
+
+	resolveGuard(true);
+	await waitForRoute(router, "protected");
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after parse-path guard resolves");
+});
+
+QUnit.test("stale async guard is discarded after stop() via phase check", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop");
+
+	// Resolve the orphaned guard after stop -- phase is idle, so the result
+	// must be discarded even though no new navigation bumped the generation.
+	resolveGuard(true);
+	await nextTick();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves post-stop");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"",
+		"Hash was not changed by stale guard resolution after stop",
+	);
+});
+
+QUnit.test("settlement outcome reflects bypass origin (skipGuards)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Bypassed navigation settles as Committed");
+	assert.strictEqual(result.route, "protected", "Settlement route is the bypassed target");
+});
+
+QUnit.test("settlement outcome reflects redirect origin", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addRouteGuard("protected", () => "forbidden");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected navigation settles as Redirected");
+	assert.strictEqual(result.route, "forbidden", "Settlement route is the redirect target");
+});
+
+QUnit.test("settlement outcome reflects parse-path origin (direct hash change)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Committed,
+		"Parse-path guardless navigation settles as Committed",
+	);
+	assert.strictEqual(result.route, "protected", "Settlement route is the hash change target");
+});
