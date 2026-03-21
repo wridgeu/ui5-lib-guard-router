@@ -17,6 +17,7 @@ import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import {
 	addGuardUnsafe,
 	addLeaveGuardUnsafe,
+	addRouteDynamic,
 	addRouteGuardUnsafe,
 	assertBlocked,
 	captureWarnings,
@@ -213,71 +214,97 @@ QUnit.test("addRouteGuard returns this for chaining", function (assert: Assert) 
 	);
 });
 
-QUnit.test("addRouteGuard warns for unknown route but still registers the guard", function (assert: Assert) {
-	const guard: GuardFn = () => true;
-	const warnings = captureWarnings(() => {
-		router.addRouteGuard("missing", guard);
-	});
+QUnit.test(
+	"addRouteGuard warns for unknown route but guard runs after route is added",
+	async function (assert: Assert) {
+		let guardCalled = false;
+		const guard: GuardFn = () => {
+			guardCalled = true;
+			return true;
+		};
+		const warnings = captureWarnings(() => {
+			router.addRouteGuard("missing", guard);
+		});
 
-	assert.strictEqual(warnings.length, 1, "One warning was logged");
-	assert.strictEqual(
-		warnings[0]?.message,
-		"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
-		"Warning message explains the non-blocking behavior",
-	);
-	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
+		assert.strictEqual(warnings.length, 1, "One warning was logged");
+		assert.strictEqual(
+			warnings[0]?.message,
+			"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+			"Warning message explains the non-blocking behavior",
+		);
+		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-	const pipeline = Reflect.get(router, "_pipeline") as {
-		_enterGuards: Map<string, GuardFn[]>;
-		_leaveGuards: Map<string, LeaveGuardFn[]>;
-	};
-	const enterGuards = pipeline._enterGuards;
-	assert.strictEqual(enterGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
-});
+		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.initialize();
+		router.navTo("missing");
+		await router.navigationSettled();
+		assert.ok(guardCalled, "Guard registered for unknown route runs after route is added");
+	},
+);
 
 QUnit.test(
-	"addRouteGuard object form warns once for unknown route and registers both guards",
-	function (assert: Assert) {
-		const enterGuard: GuardFn = () => true;
-		const leaveGuard: LeaveGuardFn = () => true;
+	"addRouteGuard object form warns once for unknown route and both guards run after route is added",
+	async function (assert: Assert) {
+		let enterCalled = false;
+		let leaveCalled = false;
+		const enterGuard: GuardFn = () => {
+			enterCalled = true;
+			return true;
+		};
+		const leaveGuard: LeaveGuardFn = () => {
+			leaveCalled = true;
+			return true;
+		};
 		const warnings = captureWarnings(() => {
 			router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
 		});
 
 		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
 
-		const pipeline = Reflect.get(router, "_pipeline") as {
-			_enterGuards: Map<string, GuardFn[]>;
-			_leaveGuards: Map<string, LeaveGuardFn[]>;
-		};
-		const enterGuards = pipeline._enterGuards;
-		const leaveGuards = pipeline._leaveGuards;
-		assert.strictEqual(enterGuards.get("missing")?.[0], enterGuard, "Enter guard registered");
-		assert.strictEqual(leaveGuards.get("missing")?.[0], leaveGuard, "Leave guard registered");
+		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.initialize();
+
+		router.navTo("missing");
+		await router.navigationSettled();
+		assert.ok(enterCalled, "Enter guard registered for unknown route runs");
+
+		router.navTo("home");
+		await router.navigationSettled();
+		assert.ok(leaveCalled, "Leave guard registered for unknown route runs when leaving");
 	},
 );
 
-QUnit.test("addLeaveGuard warns for unknown route but still registers the guard", function (assert: Assert) {
-	const guard: LeaveGuardFn = () => true;
-	const warnings = captureWarnings(() => {
-		router.addLeaveGuard("missing", guard);
-	});
+QUnit.test(
+	"addLeaveGuard warns for unknown route but guard runs after route is added",
+	async function (assert: Assert) {
+		let guardCalled = false;
+		const guard: LeaveGuardFn = () => {
+			guardCalled = true;
+			return true;
+		};
+		const warnings = captureWarnings(() => {
+			router.addLeaveGuard("missing", guard);
+		});
 
-	assert.strictEqual(warnings.length, 1, "One warning was logged");
-	assert.strictEqual(
-		warnings[0]?.message,
-		"addLeaveGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
-		"Warning message explains the non-blocking behavior",
-	);
-	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
+		assert.strictEqual(warnings.length, 1, "One warning was logged");
+		assert.strictEqual(
+			warnings[0]?.message,
+			"addLeaveGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+			"Warning message explains the non-blocking behavior",
+		);
+		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-	const pipeline = Reflect.get(router, "_pipeline") as {
-		_enterGuards: Map<string, GuardFn[]>;
-		_leaveGuards: Map<string, LeaveGuardFn[]>;
-	};
-	const leaveGuards = pipeline._leaveGuards;
-	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
-});
+		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.initialize();
+
+		router.navTo("missing");
+		await router.navigationSettled();
+
+		router.navTo("home");
+		await router.navigationSettled();
+		assert.ok(guardCalled, "Leave guard registered for unknown route runs when leaving");
+	},
+);
 
 QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (assert: Assert) {
 	addRouteGuardUnsafe(router, "protected", null);

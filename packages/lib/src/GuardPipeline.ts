@@ -1,9 +1,7 @@
 import Log from "sap/base/Log";
 import type { GuardFn, GuardContext, GuardResult, GuardRedirect, LeaveGuardFn } from "./types";
 
-// Intentionally a separate log component from Router. Guard evaluation
-// messages now appear under this component instead of "ui5.guard.router.Router".
-const LOG_COMPONENT = "ui5.guard.router.GuardPipeline";
+const LOG_COMPONENT = "ui5.guard.router.Router";
 
 function isGuardRedirect(value: unknown): value is GuardRedirect {
 	if (typeof value !== "object" || value === null) {
@@ -20,7 +18,7 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
  * We intentionally do not use `instanceof Promise` because that misses
  * cross-realm Promises and PromiseLike/thenable objects.
  */
-export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
 		return false;
 	}
@@ -43,6 +41,8 @@ export type GuardDecision =
  * leave -> global-enter -> route-enter pipeline. Pure logic with
  * no dependency on Router state beyond the current route name
  * passed into evaluate().
+ *
+ * @namespace ui5.guard.router
  */
 export default class GuardPipeline {
 	private _globalGuards: GuardFn[] = [];

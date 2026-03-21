@@ -13,11 +13,25 @@ import type {
 	RouteGuardConfig,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
-import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
+import GuardPipeline, { type GuardDecision } from "./GuardPipeline";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
+
+/**
+ * Promises/A+ thenable detection via duck typing.
+ *
+ * We intentionally do not use `instanceof Promise` because that misses
+ * cross-realm Promises and PromiseLike/thenable objects.
+ */
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+		return false;
+	}
+
+	return typeof (value as PromiseLike<T>).then === "function";
+}
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
 	return typeof guard === "object" && guard !== null;
