@@ -234,5 +234,5 @@ export interface GuardRouter extends MobileRouter {
 	 * @param fnFunction - The handler function to detach.
 	 * @param oListener - Context object on which the given function had to be called.
 	 */
-	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener: object): GuardRouter;
+	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
 }

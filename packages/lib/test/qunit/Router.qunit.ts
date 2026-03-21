@@ -9,6 +9,7 @@ import type {
 	GuardRouter,
 	LeaveGuardFn,
 	RouteGuardConfig,
+	Router$NavigationSettledEvent,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$BypassedEvent, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
@@ -3727,7 +3728,7 @@ QUnit.test("fires on bypassed navigation", async function (assert) {
 QUnit.test("detachNavigationSettled stops delivery", async function (assert) {
 	const events: string[] = [];
 	const oListener = {};
-	const handler = (event: Parameters<Parameters<typeof router.attachNavigationSettled>[0]>[0]) => {
+	const handler = (event: Router$NavigationSettledEvent) => {
 		events.push(event.getParameter("status") as string);
 	};
 
@@ -3742,3 +3743,124 @@ QUnit.test("detachNavigationSettled stops delivery", async function (assert) {
 	await router.navigationSettled();
 	assert.strictEqual(events.length, 1, "Handler no longer receives events after detach");
 });
+
+// ============================================================
+// Module: Redirect guard bypass regression
+// ============================================================
+QUnit.module("Router - Redirect guard bypass regression", standardHooks);
+
+QUnit.test("navTo from navigationSettled handler during redirect still runs guards", async function (assert: Assert) {
+	// A guard on "forbidden" redirects to "home".
+	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
+	// A global guard blocks everything except "home".
+	//
+	// Bug: _flushSettlement fires the navigationSettled event synchronously while
+	// _redirecting=true. Any navTo() from that handler sees _redirecting=true and
+	// calls super.navTo() directly, bypassing the guard pipeline.
+	router.addRouteGuard("forbidden", () => "home");
+	router.addGuard((ctx: GuardContext) => ctx.toRoute === "home");
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let nestedNavFired = false;
+	const handler = (evt: Router$NavigationSettledEvent): void => {
+		if (evt.getParameter("status") === NavigationOutcome.Redirected && !nestedNavFired) {
+			nestedNavFired = true;
+			// This fires synchronously during _flushSettlement while _redirecting=true.
+			// The guard should still block this navTo, but the bug bypasses it.
+			router.navTo("protected");
+		}
+	};
+
+	router.attachNavigationSettled(handler);
+
+	router.navTo("forbidden");
+	await nextTick();
+	await router.navigationSettled();
+
+	assert.strictEqual(getHash(), "", "Hash stayed on home -- guard blocked the nested navTo('protected')");
+});
+
+// ============================================================
+// Module: Async leave guard abort check before enter phase
+// ============================================================
+QUnit.module("Router - Async leave guard abort check before enter phase", standardHooks);
+
+QUnit.test(
+	"enter guards do not run for superseded navigation after async leave guard resolves",
+	async function (assert: Assert) {
+		let enterGuardCalledWhileAborted = false;
+
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		// Async leave guard that resolves after manual trigger.
+		// Track each promise so we can resolve the first (superseded) one.
+		const leaveResolvers: Array<(value: boolean) => void> = [];
+		router.addLeaveGuard(
+			"home",
+			() =>
+				new Promise<boolean>((resolve) => {
+					leaveResolvers.push(resolve);
+				}),
+		);
+
+		// Enter guard on "protected" that tracks if it was called with an aborted signal
+		router.addRouteGuard("protected", (ctx: GuardContext) => {
+			if (ctx.signal.aborted) {
+				enterGuardCalledWhileAborted = true;
+			}
+			return true;
+		});
+
+		// Start navigating to "protected" -- triggers async leave guard (leaveResolvers[0])
+		router.navTo("protected");
+
+		// Supersede: navigate via setHash so we bypass the leave guard path entirely
+		// and land directly on "forbidden" through parse().
+		// This cancels the first navigation's pipeline.
+		HashChanger.getInstance().setHash("forbidden");
+		// Resolve the second leave guard so "forbidden" can commit
+		leaveResolvers[1](true);
+		await waitForRoute(router, "forbidden");
+
+		// Now resolve the FIRST (superseded) leave guard.
+		// The enter guard for "protected" should NOT fire because the signal is aborted.
+		leaveResolvers[0](true);
+		await nextTick();
+
+		assert.notOk(
+			enterGuardCalledWhileAborted,
+			"Enter guard was not called with an aborted signal for the superseded navigation",
+		);
+	},
+);
+
+// ============================================================
+// Module: detachNavigationSettled oListener optional
+// ============================================================
+QUnit.module("Router - detachNavigationSettled oListener optional", standardHooks);
+
+QUnit.test(
+	"detachNavigationSettled works without oListener when attached without one",
+	async function (assert: Assert) {
+		const events: string[] = [];
+
+		const handler = (event: Router$NavigationSettledEvent) => {
+			events.push(event.getParameter("status") as string);
+		};
+
+		router.attachNavigationSettled(handler);
+		router.initialize();
+		await waitForRoute(router, "home");
+		assert.strictEqual(events.length, 1, "Handler received initial settlement");
+
+		// Detach without oListener -- this should compile and work at runtime
+		(router as GuardRouter).detachNavigationSettled(handler);
+
+		router.navTo("forbidden");
+		await router.navigationSettled();
+		assert.strictEqual(events.length, 1, "Handler no longer receives events after detach without oListener");
+	},
+);

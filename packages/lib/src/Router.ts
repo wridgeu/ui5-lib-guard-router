@@ -334,7 +334,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param fnFunction - The handler function to detach.
 	 * @param oListener - Context object on which the given function had to be called.
 	 */
-	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener: object): this {
+	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this {
 		this.detachEvent("navigationSettled", fnFunction as Function, oListener);
 		return this;
 	}
@@ -704,6 +704,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (isPromiseLike(leaveResult)) {
 				return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
 					if (allowed !== true) return { action: "block" };
+					if (context.signal.aborted) return { action: "block" };
 					return runEnterPhase();
 				});
 			}
@@ -777,12 +778,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * run for the correct (new) route rather than the old one.
 	 */
 	private _commitNavigation(hash: string, route?: string): void {
+		const wasRedirecting = this._redirecting;
 		this._pendingHash = null;
 		this._abortController = null;
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
 		this._flushSettlement({
-			status: this._redirecting
+			status: wasRedirecting
 				? NavigationOutcome.Redirected
 				: this._currentRoute === ""
 					? NavigationOutcome.Bypassed
@@ -790,6 +792,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash,
 		});
+		// Clear _redirecting before super.parse fires routeMatched/patternMatched
+		// handlers, so that any navTo() from those handlers goes through the full
+		// guard pipeline instead of bypassing it via the _redirecting early-return.
+		this._redirecting = false;
 		super.parse(hash);
 	}
 
