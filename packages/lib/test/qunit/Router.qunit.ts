@@ -1,6 +1,7 @@
 import sinon from "sinon";
 import DataType from "sap/ui/base/DataType";
 import Log from "sap/base/Log";
+import Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
 	GuardContext,
@@ -4739,4 +4740,94 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	// Manifest guard is at index 0, imperative at index 1
 	const globalGuards = Reflect.get(router, "_globalGuards") as GuardFn[];
 	assert.strictEqual(globalGuards.length, 2, "both manifest and imperative guards registered");
+});
+
+QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReader)", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					"*": [
+						"ui5/guard/router/qunit/fixtures/guards/metaWriterGuard",
+						"ui5/guard/router/qunit/fixtures/guards/metaReaderGuard",
+					],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "metaReader allowed because metaWriter set data");
+});
+
+// ============================================================
+// Module: Declarative manifest guards -- lazy loading
+// ============================================================
+QUnit.module("Router - Declarative manifest guards (lazy loading)", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("lazy guard loads module on first navigation and blocks", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "lazy-loaded guard blocks navigation");
+});
+
+// ============================================================
+// Module: Manifest-driven router instantiation
+// ============================================================
+QUnit.module("Router - Manifest-driven instantiation");
+
+QUnit.test("UIComponent creates router with manifest-provided guardRouter options", async function (assert: Assert) {
+	const component = await Component.create({
+		name: "ui5.guard.router.qunit.fixtures.manifest",
+	});
+
+	try {
+		const manifestRouter = component.getRouter() as GuardRouter;
+		const options = Reflect.get(manifestRouter, "_options") as Record<string, unknown>;
+		assert.strictEqual(options.unknownRouteGuardRegistration, "ignore", "option read from manifest");
+		assert.strictEqual(options.navToPreflight, "guard", "option read from manifest");
+	} finally {
+		component.destroy();
+	}
 });
