@@ -74,7 +74,7 @@ type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redi
  * own AbortController; the guard pipeline receives the signal from the
  * caller-created AbortController.
  */
-type GuardContextBase = Omit<GuardContext, "signal">;
+type GuardContextBase = Omit<GuardContext, "signal" | "meta">;
 
 /** Snapshot of an in-flight navigation being evaluated by the guard pipeline. */
 interface NavigationAttempt {
@@ -712,7 +712,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return { action: "allow" };
 		}
 
-		const context: GuardContext = { ...baseContext, signal };
+		const context: GuardContext = { ...baseContext, signal, meta: new Map() };
 
 		const processEnterResult = (
 			enterResult: GuardResult | Promise<GuardResult>,
