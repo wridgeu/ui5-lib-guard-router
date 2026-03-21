@@ -158,6 +158,13 @@ export default class GuardPipeline {
 		if (guards.length === 0) map.delete(key);
 	}
 
+	/**
+	 * Run leave guards for the current route. Returns boolean (no redirects).
+	 *
+	 * The guard array is snapshot-copied before iteration so that guards
+	 * may safely add/remove themselves (e.g. one-shot guards) without
+	 * affecting the current pipeline run.
+	 */
 	private _runLeaveGuards(currentRoute: string, context: GuardContext): boolean | Promise<boolean> {
 		const registered = this._leaveGuards.get(currentRoute);
 		if (!registered || registered.length === 0) return true;
@@ -190,6 +197,7 @@ export default class GuardPipeline {
 		return true;
 	}
 
+	/** Run global guards, then route-specific guards. Stays sync when possible. */
 	private _runEnterGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		const globalResult = this._runGuards(this._globalGuards, context);
 
@@ -204,11 +212,19 @@ export default class GuardPipeline {
 		return this._runRouteGuards(toRoute, context);
 	}
 
+	/** Run route-specific guards if any are registered. */
 	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._enterGuards.has(toRoute)) return true;
 		return this._runGuards(this._enterGuards.get(toRoute)!, context);
 	}
 
+	/**
+	 * Run guards sync; switch to async path if a Promise is returned.
+	 *
+	 * The guard array is snapshot-copied before iteration so that guards
+	 * may safely add/remove themselves (e.g. one-shot guards) without
+	 * affecting the current pipeline run.
+	 */
 	private _runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
 		guards = guards.slice();
 		for (let i = 0; i < guards.length; i++) {
@@ -238,6 +254,18 @@ export default class GuardPipeline {
 		return true;
 	}
 
+	/**
+	 * Continue guard array async from the first Promise onward.
+	 *
+	 * Shared by both enter and leave guard pipelines. The `onBlock` callback
+	 * determines what to return for non-true results: leave guards always
+	 * return `false`, enter guards validate and may return redirects.
+	 *
+	 * `guards` is typed as `GuardFn[]` for reuse. Leave guard callers
+	 * pass `LeaveGuardFn[]` which is assignable (narrower return type).
+	 *
+	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
+	 */
 	private async _continueGuardsAsync(
 		pendingResult: PromiseLike<GuardResult>,
 		guards: GuardFn[],
@@ -272,6 +300,7 @@ export default class GuardPipeline {
 		}
 	}
 
+	/** Validate a non-true guard result; invalid values become false. */
 	private _validateGuardResult(result: unknown): GuardResult {
 		if (typeof result === "boolean") return result;
 		if (typeof result === "string" && result.length > 0) return result;
@@ -280,6 +309,7 @@ export default class GuardPipeline {
 		return false;
 	}
 
+	/** Validate a leave guard result; non-boolean values log a warning and block. */
 	private _validateLeaveGuardResult(result: unknown): boolean {
 		if (typeof result === "boolean") return result;
 		Log.warning("Leave guard returned non-boolean value, treating as block", String(result), LOG_COMPONENT);
