@@ -70,10 +70,39 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
 type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redirect"; target: string | GuardRedirect };
 
 /**
- * Guard context without the AbortSignal. Callers build this; `_evaluateGuards`
- * creates the AbortController and produces the full `GuardContext` internally.
+ * Guard context without the AbortSignal. Callers build this and create their
+ * own AbortController; the guard pipeline receives the signal from the
+ * caller-created AbortController.
  */
 type GuardContextBase = Omit<GuardContext, "signal">;
+
+/** Snapshot of an in-flight navigation being evaluated by the guard pipeline. */
+interface NavigationAttempt {
+	readonly hash: string;
+	readonly route: string;
+	readonly controller: AbortController;
+	readonly generation: number;
+}
+
+interface PhaseIdle {
+	readonly kind: "idle";
+}
+
+interface PhaseEvaluating {
+	readonly kind: "evaluating";
+	readonly attempt: NavigationAttempt;
+}
+
+interface PhaseCommitting {
+	readonly kind: "committing";
+	readonly hash: string;
+	readonly route: string;
+	readonly origin: "preflight" | "redirect" | "parse";
+}
+
+type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
+
+const IDLE: PhaseIdle = { kind: "idle" };
 
 /**
  * Router with navigation guard support.
@@ -105,14 +134,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
 	private _currentRoute = "";
 	private _currentHash: string | null = null;
-	private _pendingHash: string | null = null;
-	private _redirecting = false;
+	private _phase: RouterPhase = IDLE;
 	private _parseGeneration = 0;
 	private _suppressedHash: string | null = null;
-	private _abortController: AbortController | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
-	private _preflightApprovedHash: string | null = null;
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -288,7 +314,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 */
 	navigationSettled(): Promise<NavigationResult> {
-		if (this._pendingHash === null) {
+		if (this._phase.kind !== "evaluating") {
 			return Promise.resolve(
 				this._lastSettlement ?? {
 					status: NavigationOutcome.Committed,
@@ -363,8 +389,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * Same-hash navigations are deduped: if the target hash matches
 	 * `_currentHash`, any pending navigation is cancelled and the call
-	 * returns without navigating. If it matches `_pendingHash`, the
-	 * in-flight preflight continues undisturbed.
+	 * returns without navigating. If it matches the in-flight attempt's
+	 * hash, the in-flight preflight continues undisturbed.
 	 *
 	 * When all guards are synchronous, the decision and the resulting
 	 * hash change happen in the same tick. When any guard returns a
@@ -375,7 +401,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * `hashChanged` synchronously, causing `parse()` to re-enter in the
 	 * same call stack (validated by test).
 	 *
-	 * @override sap.m.routing.Router#navTo
+	 * @override sap.ui.core.routing.Router#navTo
 	 */
 	override navTo(
 		routeName: string,
@@ -400,9 +426,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			replace = bReplace;
 		}
 
-		// Redirect path: _redirect() calls this.navTo() with _redirecting=true.
-		// Bypass preflight -- parse() will commit directly via the _redirecting flag.
-		if (this._redirecting) {
+		// Redirect path: _redirect() calls this.navTo() while in committing/redirect phase.
+		// Bypass preflight -- parse() will commit directly via the committing phase.
+		if (this._phase.kind === "committing" && this._phase.origin === "redirect") {
 			super.navTo(routeName, parameters, componentTargetInfo, replace);
 			return this;
 		}
@@ -431,15 +457,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		// Pending-hash dedup: if an async preflight for this exact hash is
 		// already running, don't cancel and restart it.
-		if (this._pendingHash !== null && targetHash === this._pendingHash) {
+		if (this._phase.kind === "evaluating" && targetHash === this._phase.attempt.hash) {
 			return this;
 		}
 
 		// Cancel any pending navigation (including previous async preflight).
 		this._cancelPendingNavigation();
+
+		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
-		this._pendingHash = targetHash;
+		this._phase = {
+			kind: "evaluating",
+			attempt: { hash: targetHash, route: toRoute, controller, generation },
+		};
 
 		const context: GuardContextBase = {
 			toRoute,
@@ -449,12 +480,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromHash: this._currentHash ?? "",
 		};
 
-		const decision = this._evaluateGuards(context);
+		const decision = this._evaluateGuards(context, controller.signal);
 
 		if (isPromiseLike(decision)) {
 			decision
 				.then((d: GuardDecision) => {
-					if (generation !== this._parseGeneration) {
+					if (generation !== this._parseGeneration || this._phase.kind !== "evaluating") {
 						Log.debug(
 							"Async preflight result discarded (superseded by newer navigation)",
 							targetHash,
@@ -473,6 +504,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 					);
 				})
 				.catch((error: unknown) => {
+					// Only check generation here, not phase. If _redirect threw and its
+					// finally already reset phase to idle, we still need to drain
+					// settlement resolvers via _blockNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
 						`Async preflight guard failed for route "${routeName}", blocking navigation`,
@@ -498,8 +532,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Apply a preflight guard decision. For "allow", set the approved-hash
-	 * marker and call super.navTo(). For "block", flush settlement without
+	 * Apply a preflight guard decision. For "allow", enter the committing
+	 * phase and call super.navTo(). For "block", flush settlement without
 	 * touching the hash. For "redirect", navigate to the redirect target.
 	 */
 	private _applyPreflightDecision(
@@ -513,12 +547,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	): void {
 		switch (decision.action) {
 			case "allow":
-				this._preflightApprovedHash = targetHash;
+				this._phase = { kind: "committing", hash: targetHash, route: toRoute, origin: "preflight" };
 				super.navTo(routeName, parameters, componentTargetInfo, bReplace);
 				// Safety: if super.navTo didn't trigger parse (e.g. hash didn't change),
 				// clear the marker to avoid stale state.
-				if (this._preflightApprovedHash === targetHash) {
-					this._preflightApprovedHash = null;
+				if (this._phase.kind === "committing" && this._phase.hash === targetHash) {
 					// Hash didn't change, so parse() wasn't called. Commit manually.
 					this._commitNavigation(targetHash, toRoute);
 				}
@@ -554,17 +587,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._suppressedHash = null;
 		}
 
-		if (this._redirecting) {
-			this._commitNavigation(newHash);
-			return;
-		}
-
-		// Preflight-approved: navTo() already ran guards and approved this hash.
-		// Commit without re-running guards. Assumes super.navTo() fires
-		// hashChanged synchronously (validated by test).
-		if (this._preflightApprovedHash !== null && newHash === this._preflightApprovedHash) {
-			this._preflightApprovedHash = null;
-			this._commitNavigation(newHash, this.getRouteInfoByHash(newHash)?.name ?? "");
+		if (this._phase.kind === "committing") {
+			this._commitNavigation(
+				newHash,
+				this._phase.route !== "" ? this._phase.route : (this.getRouteInfoByHash(newHash)?.name ?? ""),
+			);
 			return;
 		}
 
@@ -577,9 +604,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const toRoute = routeInfo?.name ?? "";
 
 		this._cancelPendingNavigation();
+
+		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
-		this._pendingHash = newHash;
+		this._phase = {
+			kind: "evaluating",
+			attempt: { hash: newHash, route: toRoute, controller, generation },
+		};
 
 		const context: GuardContextBase = {
 			toRoute,
@@ -589,12 +621,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromHash: this._currentHash ?? "",
 		};
 
-		const decision = this._evaluateGuards(context);
+		const decision = this._evaluateGuards(context, controller.signal);
 
 		if (isPromiseLike(decision)) {
 			decision
 				.then((d: GuardDecision) => {
-					if (generation !== this._parseGeneration) {
+					if (generation !== this._parseGeneration || this._phase.kind !== "evaluating") {
 						Log.debug(
 							"Async guard result discarded (superseded by newer navigation)",
 							newHash,
@@ -605,6 +637,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 					this._applyDecision(d, newHash, toRoute);
 				})
 				.catch((error: unknown) => {
+					// Only check generation here, not phase. If _redirect threw and its
+					// finally already reset phase to idle, we still need to drain
+					// settlement resolvers via _blockNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
 						`Guard pipeline failed for "${newHash}", blocking navigation`,
@@ -629,10 +664,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @override sap.ui.core.routing.Router#stop
 	 */
 	override stop(): this {
+		// Cancel first so in-flight navigationSettled() resolvers receive the
+		// Cancelled result before _lastSettlement is cleared below.
 		this._cancelPendingNavigation();
-		this._redirecting = false;
 		this._suppressedHash = null;
-		this._preflightApprovedHash = null;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
@@ -643,20 +678,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Invalidate any in-flight async guard work. Bumps the generation counter
 	 * so pending `.then()` callbacks see they are stale, aborts the signal,
-	 * and clears the pending hash.
+	 * and transitions to idle.
 	 */
 	private _cancelPendingNavigation(): void {
 		++this._parseGeneration;
-		this._abortController?.abort();
-		this._abortController = null;
-		if (this._pendingHash !== null) {
+		if (this._phase.kind === "evaluating") {
+			this._phase.attempt.controller.abort();
 			this._flushSettlement({
 				status: NavigationOutcome.Cancelled,
 				route: this._currentRoute,
 				hash: this._currentHash ?? "",
 			});
 		}
-		this._pendingHash = null;
+		this._phase = IDLE;
 	}
 
 	/**
@@ -666,7 +700,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * Shared by navTo() preflight and parse() fallback.
 	 */
-	private _evaluateGuards(baseContext: GuardContextBase): GuardDecision | Promise<GuardDecision> {
+	private _evaluateGuards(
+		baseContext: GuardContextBase,
+		signal: AbortSignal,
+	): GuardDecision | Promise<GuardDecision> {
 		const hasLeaveGuards = this._currentRoute !== "" && this._leaveGuards.has(this._currentRoute);
 		const hasEnterGuards =
 			this._globalGuards.length > 0 || (baseContext.toRoute !== "" && this._enterGuards.has(baseContext.toRoute));
@@ -675,8 +712,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return { action: "allow" };
 		}
 
-		this._abortController = new AbortController();
-		const context: GuardContext = { ...baseContext, signal: this._abortController.signal };
+		const context: GuardContext = { ...baseContext, signal };
 
 		const processEnterResult = (
 			enterResult: GuardResult | Promise<GuardResult>,
@@ -759,6 +795,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _applyDecision(decision: GuardDecision, hash: string, route: string): void {
 		switch (decision.action) {
 			case "allow":
+				this._phase = { kind: "committing", hash, route, origin: "parse" };
 				this._commitNavigation(hash, route);
 				break;
 			case "block":
@@ -778,13 +815,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * run for the correct (new) route rather than the old one.
 	 */
 	private _commitNavigation(hash: string, route?: string): void {
-		const wasRedirecting = this._redirecting;
-		this._pendingHash = null;
-		this._abortController = null;
+		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
 		this._currentHash = hash;
 		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
+		// Transition to idle before super.parse so that routeMatched/patternMatched
+		// handlers that call navTo() go through the full guard pipeline.
+		this._phase = IDLE;
 		this._flushSettlement({
-			status: wasRedirecting
+			status: wasRedirect
 				? NavigationOutcome.Redirected
 				: this._currentRoute === ""
 					? NavigationOutcome.Bypassed
@@ -792,10 +830,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash,
 		});
-		// Clear _redirecting before super.parse fires routeMatched/patternMatched
-		// handlers, so that any navTo() from those handlers goes through the full
-		// guard pipeline instead of bypassing it via the _redirecting early-return.
-		this._redirecting = false;
 		super.parse(hash);
 	}
 
@@ -924,8 +958,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/** Perform a guard redirect (string route name or GuardRedirect object). */
 	private _redirect(target: string | GuardRedirect, attemptedHash?: string, restoreHash = true): void {
-		this._pendingHash = null;
-		this._abortController = null;
 		const settlementBefore = this._lastSettlement;
 		const targetName = typeof target === "string" ? target : target.route;
 		let targetHash: string | null = null;
@@ -939,7 +971,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 		}
 		const redirectsToCurrentHash = targetHash !== null && targetHash === (this._currentHash ?? "");
-		this._redirecting = true;
+		this._phase = { kind: "committing", hash: targetHash ?? "", route: targetName, origin: "redirect" };
 		try {
 			if (typeof target === "string") {
 				this.navTo(target, {}, {}, true);
@@ -947,7 +979,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
 			}
 		} finally {
-			this._redirecting = false;
+			// Exception recovery: if navTo() threw before parse() could call
+			// _commitNavigation, reset phase so it doesn't remain stuck at
+			// committing. On success _commitNavigation already set phase to idle,
+			// so this is a no-op. The safety net below may re-enter committing
+			// if the hash didn't change but no error occurred.
+			if (this._phase.kind === "committing") {
+				this._phase = IDLE;
+			}
 		}
 
 		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the
@@ -957,12 +996,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// current route. Log a warning so the developer sees the bad target.
 		if (this._lastSettlement === settlementBefore) {
 			if (redirectsToCurrentHash) {
-				this._redirecting = true;
-				try {
-					this._commitNavigation(this._currentHash ?? "", this._currentRoute);
-				} finally {
-					this._redirecting = false;
-				}
+				this._phase = {
+					kind: "committing",
+					hash: this._currentHash ?? "",
+					route: this._currentRoute,
+					origin: "redirect",
+				};
+				this._commitNavigation(this._currentHash ?? "", this._currentRoute);
 				return;
 			}
 			Log.warning(
@@ -981,8 +1021,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * never changed.
 	 */
 	private _blockNavigation(attemptedHash?: string, restoreHash = true): void {
-		this._pendingHash = null;
-		this._abortController = null;
+		this._phase = IDLE;
 		this._flushSettlement({
 			status: NavigationOutcome.Blocked,
 			route: this._currentRoute,
@@ -1019,9 +1058,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._enterGuards.clear();
 		this._leaveGuards.clear();
 		this._cancelPendingNavigation();
-		this._redirecting = false;
 		this._suppressedHash = null;
-		this._preflightApprovedHash = null;
 		this._lastSettlement = null;
 		super.destroy();
 		return this;
