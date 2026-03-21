@@ -281,8 +281,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
+			if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
+				return this;
+			}
 			let hasHandler = false;
-			this._warnIfRouteUnknown(routeName, "addRouteGuard");
 
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
@@ -315,7 +317,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addRouteGuard");
+		if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
+			return this;
+		}
 		addToGuardMap(this._enterGuards, routeName, guard);
 		return this;
 	}
@@ -365,20 +369,38 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addLeaveGuard");
+		if (!this._handleUnknownRouteRegistration(routeName, "addLeaveGuard")) {
+			return this;
+		}
 		addToGuardMap(this._leaveGuards, routeName, guard);
 		return this;
 	}
 
-	private _warnIfRouteUnknown(routeName: string, methodName: "addRouteGuard" | "addLeaveGuard"): void {
-		if (this.getRoute(routeName)) {
-			return;
+	/**
+	 * Handle guard registration for a potentially unknown route.
+	 * Returns `true` if registration should proceed, `false` if not.
+	 */
+	private _handleUnknownRouteRegistration(routeName: string, methodName: string): boolean {
+		if (this.getRoute(routeName)) return true;
+
+		switch (this._options.unknownRouteGuardRegistration) {
+			case "ignore":
+				return true;
+			case "throw":
+				throw new Error(
+					`${methodName} called for unknown route "${routeName}". ` +
+						`Set guardRouter.unknownRouteGuardRegistration to "warn" or "ignore" to allow this.`,
+				);
+			case "warn":
+			default:
+				Log.warning(
+					`${methodName} called for unknown route; guard will still register. ` +
+						`If the route is added later via addRoute(), this warning can be ignored.`,
+					routeName,
+					LOG_COMPONENT,
+				);
+				return true;
 		}
-		Log.warning(
-			`${methodName} called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.`,
-			routeName,
-			LOG_COMPONENT,
-		);
 	}
 
 	/**

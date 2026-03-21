@@ -4381,6 +4381,67 @@ QUnit.test("invalid option values warn individually and fall back", function (as
 });
 
 // ============================================================
+// Module: Router options -- unknownRouteGuardRegistration
+// ============================================================
+QUnit.module("Router - unknownRouteGuardRegistration", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test('"ignore" registers silently for unknown routes', function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteGuardRegistration: "ignore" });
+	const guard: GuardFn = () => true;
+
+	const warnings = captureWarnings(() => {
+		router.addRouteGuard("nonexistent", guard);
+		router.addLeaveGuard("nonexistent", guard);
+	});
+
+	assert.strictEqual(warnings.length, 0, "no warnings logged");
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.strictEqual(enterGuards.get("nonexistent")?.length, 1, "guard registered despite unknown route");
+});
+
+QUnit.test('"throw" prevents registration and throws', function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteGuardRegistration: "throw" });
+
+	assert.throws(
+		() => router.addRouteGuard("nonexistent", () => true),
+		/unknown route/i,
+		"addRouteGuard throws for unknown route",
+	);
+
+	assert.throws(
+		() => router.addLeaveGuard("nonexistent", () => true),
+		/unknown route/i,
+		"addLeaveGuard throws for unknown route",
+	);
+
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.notOk(enterGuards.has("nonexistent"), "guard was not registered after throw");
+});
+
+QUnit.test('"throw" with config object is all-or-nothing', function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteGuardRegistration: "throw" });
+
+	assert.throws(
+		() => router.addRouteGuard("nonexistent", { beforeEnter: () => true, beforeLeave: () => true }),
+		/unknown route/i,
+		"config form also throws for unknown route",
+	);
+
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+	assert.notOk(enterGuards.has("nonexistent"), "enter guard not registered");
+	assert.notOk(leaveGuards.has("nonexistent"), "leave guard not registered - all-or-nothing");
+});
+
+// ============================================================
 // Module: Guard context meta bag
 // ============================================================
 QUnit.module("Router - Guard context meta bag", {
