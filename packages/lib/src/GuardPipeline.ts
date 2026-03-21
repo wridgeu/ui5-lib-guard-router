@@ -91,13 +91,10 @@ export default class GuardPipeline {
 	 * plain values; returns a Promise only when an async guard is encountered.
 	 *
 	 * @param context - Complete guard context including AbortSignal.
-	 *   Callers must ensure `context.fromRoute === currentRoute` -- the async
-	 *   error path in `_continueGuardsAsync` reads `context.fromRoute` for
-	 *   leave-guard error messages.
-	 * @param currentRoute - The currently active route name. Empty string skips leave guards.
+	 *   `context.fromRoute` controls leave-guard lookup: empty string skips leave guards.
 	 */
-	evaluate(context: GuardContext, currentRoute: string): GuardDecision | Promise<GuardDecision> {
-		const hasLeaveGuards = currentRoute !== "" && this._leaveGuards.has(currentRoute);
+	evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision> {
+		const hasLeaveGuards = context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
 		const hasEnterGuards =
 			this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
 
@@ -126,7 +123,7 @@ export default class GuardPipeline {
 		};
 
 		if (hasLeaveGuards) {
-			const leaveResult = this._runLeaveGuards(currentRoute, context);
+			const leaveResult = this._runLeaveGuards(context);
 
 			if (isPromiseLike(leaveResult)) {
 				return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
@@ -165,8 +162,8 @@ export default class GuardPipeline {
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	private _runLeaveGuards(currentRoute: string, context: GuardContext): boolean | Promise<boolean> {
-		const registered = this._leaveGuards.get(currentRoute);
+	private _runLeaveGuards(context: GuardContext): boolean | Promise<boolean> {
+		const registered = this._leaveGuards.get(context.fromRoute);
 		if (!registered || registered.length === 0) return true;
 
 		const guards = registered.slice();
@@ -187,7 +184,7 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Leave guard [${i}] on route "${currentRoute}" threw, blocking navigation`,
+					`Leave guard [${i}] on route "${context.fromRoute}" threw, blocking navigation`,
 					String(error),
 					LOG_COMPONENT,
 				);
@@ -244,7 +241,7 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Enter guard [${i}] for route "${context.toRoute}" threw, blocking navigation`,
+					`Enter guard [${i}] on route "${context.toRoute}" threw, blocking navigation`,
 					String(error),
 					LOG_COMPONENT,
 				);

@@ -70,23 +70,25 @@ matching, target loading, or event firing occurs.
 |   |                            |    |                               |  |
 |   | addGuard()                 |    | navTo() override              |  |
 |   | removeGuard()              |    | parse() override              |  |
-|   | addRouteGuard()            |    | _evaluateGuards()             |  |
-|   | removeRouteGuard()         |    | _applyPreflightDecision()     |  |
-|   | addLeaveGuard()            |    | _applyDecision()              |  |
-|   | removeLeaveGuard()         |    | _runLeaveGuards()             |  |
-|   | navigationSettled()        |    | _runEnterGuards()             |  |
-|   | attachNavigationSettled()  |    | _runRouteGuards()             |  |
-|   | detachNavigationSettled()  |    | _runGuards()                  |  |
-|   +----------------------------+    | _cancelPendingNavigation()    |  |
-|                                     | _continueGuardsAsync()        |  |
-|                                     | _validateGuardResult()        |  |
-|                                     | _validateLeaveGuardResult()   |  |
-|                                     | _commitNavigation()           |  |
-|                                     | _redirect()                   |  |
-|                                     | _blockNavigation()            |  |
-|                                     | _flushSettlement()            |  |
-|                                     | _restoreHash()                |  |
+|   | addRouteGuard()            |    | _applyPreflightDecision()     |  |
+|   | removeRouteGuard()         |    | _applyDecision()              |  |
+|   | addLeaveGuard()            |    | _cancelPendingNavigation()    |  |
+|   | removeLeaveGuard()         |    | _commitNavigation()           |  |
+|   | navigationSettled()        |    | _redirect()                   |  |
+|   | attachNavigationSettled()  |    | _blockNavigation()            |  |
+|   | detachNavigationSettled()  |    | _flushSettlement()            |  |
+|   +----------------------------+    | _restoreHash()                |  |
 |                                     +-------------------------------+  |
+|                                                                        |
+|   +------------------------------------------------------------------+ |
+|   | _pipeline: GuardPipeline                                         | |
+|   |                                                                  | |
+|   | evaluate(context)  — leave → global enter → route enter          | |
+|   | addGlobalGuard / removeGlobalGuard                               | |
+|   | addEnterGuard / removeEnterGuard                                 | |
+|   | addLeaveGuard / removeLeaveGuard                                 | |
+|   | clear()                                                          | |
+|   +------------------------------------------------------------------+ |
 +----------------------------------------------------------------------+
          |
          | super.parse(hash)
@@ -216,12 +218,12 @@ a newer navigation started, the stale result is discarded.
 ## Two-Entry-Point Model: navTo() Preflight + parse() Fallback
 
 The router intercepts navigation through two complementary entry points that feed the
-same shared guard pipeline (`_evaluateGuards()`).
+same shared guard pipeline (`_pipeline.evaluate()`).
 
 ```
 Programmatic navigation:
   navTo(route, params)
-    → _evaluateGuards(hash, route, params)
+    → _pipeline.evaluate(context)
         → allow  → enter committing/preflight phase, call super.navTo()
         → block  → _blockNavigation(hash, restoreHash=false), flush Blocked settlement
         → redirect → _redirect(target), which enters committing/redirect phase and calls this.navTo(target)
@@ -229,7 +231,7 @@ Programmatic navigation:
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
     → committing/preflight phase matches? → transition to idle, _commitNavigation()
-    → otherwise → _evaluateGuards(hash, route, params)
+    → otherwise → _pipeline.evaluate(context)
         → allow  → _commitNavigation()
         → block  → _blockNavigation() + _restoreHash()
         → redirect → _redirect() via navTo(replace=true)
@@ -439,9 +441,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 | Field                  | Type                                | Purpose                                                               |
 | ---------------------- | ----------------------------------- | --------------------------------------------------------------------- |
-| `_globalGuards`        | `GuardFn[]`                         | Guards that run for every navigation                                  |
-| `_enterGuards`         | `Map<string, GuardFn[]>`            | Route-specific enter guards, by route name                            |
-| `_leaveGuards`         | `Map<string, LeaveGuardFn[]>`       | Route-specific leave guards, by route name                            |
+| `_pipeline`            | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)      |
 | `_currentRoute`        | `string`                            | Name of the currently active route                                    |
 | `_currentHash`         | `string \| null`                    | Hash of the active route, `null` before first                         |
 | `_phase`               | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below) |

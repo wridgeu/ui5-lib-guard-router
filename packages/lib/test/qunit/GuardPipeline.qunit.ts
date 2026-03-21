@@ -17,8 +17,8 @@ function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 		toRoute: "target",
 		toHash: "target",
 		toArguments: {},
-		fromRoute: "current",
-		fromHash: "current",
+		fromRoute: "",
+		fromHash: "",
 		signal: new AbortController().signal,
 		...overrides,
 	};
@@ -31,13 +31,13 @@ QUnit.module("GuardPipeline - evaluate");
 
 QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "No guards means allow");
 });
 
 QUnit.test("empty pipeline allows when currentRoute is empty string", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
-	const result = pipeline.evaluate(createContext({ fromRoute: "" }), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Initial navigation with no guards allows");
 });
 
@@ -54,7 +54,7 @@ QUnit.test("clear removes all guards", function (assert: Assert) {
 
 	pipeline.clear();
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "All guards cleared");
 });
 
@@ -64,7 +64,7 @@ QUnit.test("removeGlobalGuard removes by reference", function (assert: Assert) {
 	pipeline.addGlobalGuard(guard);
 	pipeline.removeGlobalGuard(guard);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Guard removed, navigation allowed");
 });
 
@@ -74,7 +74,7 @@ QUnit.test("removeEnterGuard removes by reference", function (assert: Assert) {
 	pipeline.addEnterGuard("target", guard);
 	pipeline.removeEnterGuard("target", guard);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Enter guard removed");
 });
 
@@ -84,8 +84,21 @@ QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
 	pipeline.addLeaveGuard("current", guard);
 	pipeline.removeLeaveGuard("current", guard);
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "Leave guard removed");
+});
+
+QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const guard: GuardFn = () => false;
+	pipeline.addGlobalGuard(() => true);
+
+	pipeline.removeGlobalGuard(guard);
+	pipeline.removeEnterGuard("target", guard);
+	pipeline.removeLeaveGuard("current", guard as unknown as LeaveGuardFn);
+
+	const result = pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "allow" }, "Pipeline unaffected by removing non-existent guards");
 });
 
 // ============================================================
@@ -96,21 +109,21 @@ QUnit.module("GuardPipeline - global guards");
 QUnit.test("global guard returning true allows", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => true);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 });
 
 QUnit.test("global guard returning false blocks", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => false);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("global guard returning string redirects", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => "login");
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "login" });
 });
 
@@ -118,7 +131,7 @@ QUnit.test("global guard returning GuardRedirect object redirects", function (as
 	const pipeline = new GuardPipeline();
 	const redirect = { route: "login", parameters: { reason: "auth" } };
 	pipeline.addGlobalGuard(() => redirect);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: redirect });
 });
 
@@ -138,7 +151,7 @@ QUnit.test("first non-true global guard short-circuits", function (assert: Asser
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(calls, [1, 2], "Third guard never called");
 });
 
@@ -150,14 +163,14 @@ QUnit.module("GuardPipeline - route enter guards");
 QUnit.test("route enter guard blocks", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addEnterGuard("target", () => false);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("route enter guard redirects", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addEnterGuard("target", () => "other");
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "other" });
 });
 
@@ -173,7 +186,7 @@ QUnit.test("global guards run before route guards", function (assert: Assert) {
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(order, ["global", "route"]);
 });
 
@@ -189,7 +202,7 @@ QUnit.test("route guard skipped when global guard blocks", function (assert: Ass
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(called, ["global"], "Route guard never called");
 });
 
@@ -201,7 +214,7 @@ QUnit.module("GuardPipeline - leave guards");
 QUnit.test("leave guard blocks navigation", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("current", () => false);
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 });
 
@@ -221,14 +234,14 @@ QUnit.test("leave guard allows, then enter guards run", function (assert: Assert
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "current");
+	pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(order, ["leave", "global", "route"]);
 });
 
 QUnit.test("leave guards skipped when currentRoute is empty string", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("", () => false);
-	const result = pipeline.evaluate(createContext({ fromRoute: "" }), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "No leave guards checked for empty currentRoute");
 });
 
@@ -244,7 +257,7 @@ QUnit.test("leave guard blocking skips enter guards", function (assert: Assert) 
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "current");
+	pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(called, ["leave"], "Enter guards never called");
 });
 
@@ -258,7 +271,7 @@ QUnit.test("invalid guard return value treated as block", function (this: SinonT
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard((() => 42) as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(warnStub.calledOnce, "Warning logged");
 });
@@ -268,7 +281,7 @@ QUnit.test("leave guard returning non-boolean treated as block", function (this:
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("current", (() => "nope") as unknown as LeaveGuardFn);
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(warnStub.calledOnce, "Warning logged for non-boolean leave guard");
 });
@@ -278,7 +291,7 @@ QUnit.test("empty string guard return treated as block", function (this: SinonTe
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard((() => "") as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
@@ -294,7 +307,7 @@ QUnit.test("sync guard that throws blocks navigation", function (this: SinonTest
 		throw new Error("boom");
 	});
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
@@ -306,7 +319,7 @@ QUnit.test("sync leave guard that throws blocks navigation", function (this: Sin
 		throw new Error("leave boom");
 	});
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
@@ -316,7 +329,7 @@ QUnit.test("async guard that rejects blocks navigation", async function (this: S
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.reject(new Error("async boom")));
 
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
@@ -330,7 +343,7 @@ QUnit.test("guard error after signal aborted does not log", async function (this
 		return Promise.reject(new Error("aborted boom"));
 	});
 
-	const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.notCalled, "Error suppressed when signal aborted");
 });
@@ -343,21 +356,21 @@ QUnit.module("GuardPipeline - async");
 QUnit.test("async global guard that allows", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve(true));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 });
 
 QUnit.test("async global guard that blocks", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve(false));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("async global guard that redirects", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve("login"));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "login" });
 });
 
@@ -377,7 +390,7 @@ QUnit.test("mixed sync-async pipeline", async function (assert: Assert) {
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 	assert.deepEqual(order, [1, 2, 3], "All guards ran in order");
 });
@@ -394,7 +407,7 @@ QUnit.test("async leave guard blocks before enter guards", async function (asser
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext(), "current");
+	const result = await pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.deepEqual(called, ["leave"], "Enter guards never called");
 });
@@ -413,7 +426,7 @@ QUnit.test("abort signal checked between async guards", async function (assert: 
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
 	assert.deepEqual(result, { action: "block" }, "Blocked due to abort");
 	assert.deepEqual(called, [1], "Second guard never called");
 });
@@ -434,7 +447,7 @@ QUnit.test("async leave guard allows then enter guards run", async function (ass
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext(), "current");
+	const result = await pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" });
 	assert.deepEqual(order, ["leave", "global", "route"], "Full pipeline ran after async leave guard allowed");
 });
@@ -446,7 +459,7 @@ QUnit.test(
 		const pipeline = new GuardPipeline();
 		pipeline.addGlobalGuard(() => Promise.resolve(42 as unknown as boolean));
 
-		const result = await pipeline.evaluate(createContext(), "");
+		const result = await pipeline.evaluate(createContext());
 		assert.deepEqual(result, { action: "block" });
 		assert.ok(warnStub.calledOnce, "Warning logged for invalid async return");
 	},
@@ -463,7 +476,7 @@ QUnit.test(
 			return Promise.reject(new Error("leave aborted"));
 		});
 
-		const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "current");
+		const result = await pipeline.evaluate(createContext({ signal: controller.signal, fromRoute: "current" }));
 		assert.deepEqual(result, { action: "block" });
 		assert.ok(errorStub.notCalled, "Leave guard error suppressed when signal aborted");
 	},
@@ -483,9 +496,9 @@ QUnit.test("guard can remove itself during iteration", function (assert: Assert)
 	pipeline.addGlobalGuard(oneShotGuard);
 	pipeline.addGlobalGuard(() => true);
 
-	const result1 = pipeline.evaluate(createContext(), "");
+	const result1 = pipeline.evaluate(createContext());
 	assert.deepEqual(result1, { action: "allow" }, "First call: both guards run, allow");
 
-	const result2 = pipeline.evaluate(createContext(), "");
+	const result2 = pipeline.evaluate(createContext());
 	assert.deepEqual(result2, { action: "allow" }, "Second call: one-shot removed, still allow");
 });

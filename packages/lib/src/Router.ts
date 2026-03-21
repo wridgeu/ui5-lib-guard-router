@@ -437,7 +437,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			signal: controller.signal,
 		};
 
-		const decision = this._pipeline.evaluate(context, this._currentRoute);
+		const decision = this._pipeline.evaluate(context);
 
 		if (isPromiseLike(decision)) {
 			decision
@@ -579,7 +579,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			signal: controller.signal,
 		};
 
-		const decision = this._pipeline.evaluate(context, this._currentRoute);
+		const decision = this._pipeline.evaluate(context);
 
 		if (isPromiseLike(decision)) {
 			decision
