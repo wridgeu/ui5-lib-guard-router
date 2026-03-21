@@ -4513,3 +4513,105 @@ QUnit.test("meta is fresh for each navigation (not carried across)", async funct
 	assert.notStrictEqual(metaSnapshots[0], metaSnapshots[1], "each navigation gets a different Map instance");
 	assert.notOk(metaInitialStates[1], "second navigation meta starts without data from first");
 });
+
+// ============================================================
+// Module: Router options -- navToPreflight
+// ============================================================
+QUnit.module("Router - navToPreflight", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test('"bypass" skips guards for programmatic navTo', async function (assert: Assert) {
+	router = createRouterWithOptions({ navToPreflight: "bypass" });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "navigation committed despite blocking guard");
+	assert.strictEqual(result.route, "protected", "reached target route");
+});
+
+QUnit.test('"bypass" still guards browser-initiated hash changes', async function (assert: Assert) {
+	router = createRouterWithOptions({ navToPreflight: "bypass" });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "browser hash change is still guarded");
+});
+
+QUnit.test('"off" defers guard evaluation to parse() fallback', async function (assert: Assert) {
+	router = createRouterWithOptions({ navToPreflight: "off" });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard ran via parse() fallback and blocked");
+	assert.strictEqual(getHash(), "", "hash restored to previous hash after block");
+});
+
+// ============================================================
+// Module: Router options -- skipGuards
+// ============================================================
+QUnit.module("Router - skipGuards", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+		router.initialize();
+	},
+	afterEach: standardHooks.afterEach,
+});
+
+QUnit.test("skipGuards bypasses guards for a single navTo call", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+	await waitForRoute(router, "protected");
+
+	assert.strictEqual(getHash(), "protected", "navigated despite blocking guard");
+});
+
+QUnit.test("skipGuards produces NavigationOutcome.Committed", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "skipGuards settles as Committed");
+	assert.strictEqual(result.route, "protected", "reached target route");
+});
+
+QUnit.test("skipGuards does not affect subsequent navTo calls", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+	await waitForRoute(router, "protected");
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "next navTo without skipGuards is still guarded");
+});

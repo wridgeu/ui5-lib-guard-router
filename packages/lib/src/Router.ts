@@ -5,6 +5,7 @@ import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
 	GuardContext,
+	GuardNavToOptions,
 	GuardResult,
 	GuardRedirect,
 	GuardRouter,
@@ -528,20 +529,37 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bReplace?: boolean,
 	): this;
 	override navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+	override navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
+	override navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfo?: Record<string, ComponentTargetParameters>,
+		bReplace?: boolean,
+		options?: GuardNavToOptions,
+	): this;
 	override navTo(
 		routeName: string,
 		parameters?: object,
 		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
-		bReplace?: boolean,
+		replaceOrOptions?: boolean | GuardNavToOptions,
+		options?: GuardNavToOptions,
 	): this {
-		// Normalize the two overload shapes into a single set of arguments.
+		// Normalize the overload shapes into a single set of arguments.
 		let componentTargetInfo: Record<string, ComponentTargetParameters> | undefined;
 		let replace: boolean | undefined;
+		let guardOptions: GuardNavToOptions | undefined;
 		if (typeof componentTargetInfoOrReplace === "boolean") {
+			// Short form: navTo(name, params, replace, options?)
 			replace = componentTargetInfoOrReplace;
+			guardOptions =
+				typeof replaceOrOptions === "object" && replaceOrOptions !== null
+					? (replaceOrOptions as GuardNavToOptions)
+					: undefined;
 		} else {
+			// Long form: navTo(name, params, componentTargetInfo, replace, options?)
 			componentTargetInfo = componentTargetInfoOrReplace;
-			replace = bReplace;
+			replace = typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined;
+			guardOptions = options;
 		}
 
 		// Redirect path: _redirect() calls this.navTo() while in committing/redirect phase.
@@ -582,6 +600,27 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Cancel any pending navigation (including previous async preflight).
 		this._cancelPendingNavigation();
 
+		const skipGuards = guardOptions?.skipGuards === true;
+
+		// Bypass mode: skip guards for programmatic navTo() -- commit directly.
+		if (skipGuards || this._options.navToPreflight === "bypass") {
+			this._phase = { kind: "committing", hash: targetHash, route: toRoute, origin: "preflight" };
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			// Safety: if super.navTo didn't trigger parse (e.g. hash didn't change),
+			// clear the marker to avoid stale state.
+			if (this._phase.kind === "committing" && this._phase.hash === targetHash) {
+				this._commitNavigation(targetHash, toRoute);
+			}
+			return this;
+		}
+
+		// Off mode: defer guard evaluation to parse() fallback.
+		if (this._options.navToPreflight === "off") {
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
+		// Default "guard" mode: evaluate guards before hash change.
 		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
