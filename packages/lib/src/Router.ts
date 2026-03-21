@@ -699,8 +699,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Apply a preflight guard decision. For "allow", set the approved-hash
-	 * marker and call super.navTo(). For "block", flush settlement without
+	 * Apply a preflight guard decision. For "allow", enter the committing
+	 * phase and call super.navTo(). For "block", flush settlement without
 	 * touching the hash. For "redirect", navigate to the redirect target.
 	 */
 	private _applyPreflightDecision(
@@ -841,8 +841,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Invalidate any in-flight async guard work. Bumps the generation counter
-	 * so pending `.then()` callbacks see they are stale, aborts the signal,
-	 * and clears the pending hash.
+	 * so pending `.then()` callbacks see they are stale, aborts the signal
+	 * if evaluating, and transitions to idle.
 	 */
 	private _cancelPendingNavigation(): void {
 		++this._parseGeneration;
@@ -1142,10 +1142,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: targetName,
 			origin: "redirect",
 		};
-		if (typeof target === "string") {
-			this.navTo(target, {}, {}, true);
-		} else {
-			this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+		try {
+			if (typeof target === "string") {
+				this.navTo(target, {}, {}, true);
+			} else {
+				this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+			}
+		} finally {
+			// If navTo() threw before parse() could commit, reset the phase so
+			// the router is not permanently stuck bypassing guards.
+			if (this._phase.kind === "committing") {
+				this._phase = IDLE;
+			}
 		}
 
 		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the

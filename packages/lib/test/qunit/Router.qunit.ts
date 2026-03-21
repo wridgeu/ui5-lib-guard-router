@@ -4657,3 +4657,34 @@ QUnit.test("settlement outcome reflects parse-path origin (direct hash change)",
 	);
 	assert.strictEqual(result.route, "protected", "Settlement route is the hash change target");
 });
+
+QUnit.test("phase recovers to idle when redirect target throws", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Guard redirects to "detail" without providing mandatory {id} parameter.
+	// super.navTo() throws for missing mandatory params, which must not leave
+	// the phase stuck at committing/redirect.
+	router.addRouteGuard("protected", () => "detail");
+
+	try {
+		router.navTo("protected");
+	} catch {
+		// Expected: super.navTo("detail", {}) throws for missing mandatory {id}
+	}
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase recovered to idle after redirect threw");
+
+	// Verify guards still work on subsequent navigation (not permanently bypassed)
+	router.removeRouteGuard("protected", () => "detail");
+	const blockGuard: GuardFn = () => false;
+	router.addGuard(blockGuard);
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"Guard pipeline still works after recovered redirect failure",
+	);
+});
