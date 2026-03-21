@@ -29,6 +29,9 @@ export default {
 		Router: {
 			title: "QUnit Tests for ui5.guard.router.Router",
 		},
+		RouterOptions: {
+			title: "QUnit Tests for Router Options and Manifest Guards",
+		},
 		NativeRouterCompat: {
 			title: "QUnit Tests for Native Router Compatibility",
 		},
