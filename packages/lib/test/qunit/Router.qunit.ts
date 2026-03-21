@@ -4326,3 +4326,74 @@ QUnit.test("async redirect failure drains settlement resolvers", async function 
 	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after async redirect failure");
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Async redirect failure settles as Blocked");
 });
+
+// ============================================================
+// Module: Guard context meta bag
+// ============================================================
+QUnit.module("Router - Guard context meta bag", {
+	beforeEach: function () {
+		initHashChanger();
+		router = createRouter();
+		router.initialize();
+	},
+	afterEach: standardHooks.afterEach,
+});
+
+QUnit.test("guard receives a meta Map on context", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	let receivedMeta: Map<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		receivedMeta = context.meta;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.ok(receivedMeta instanceof Map, "meta is a Map instance");
+	assert.strictEqual(receivedMeta!.size, 0, "meta starts empty");
+});
+
+QUnit.test("meta is shared across leave and enter guards in the same pipeline", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	let enterMeta: Map<string, unknown> | undefined;
+
+	router.addLeaveGuard("home", (context: GuardContext) => {
+		context.meta.set("fromLeave", true);
+		return true;
+	});
+
+	router.addGuard((context: GuardContext) => {
+		enterMeta = context.meta;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.ok(enterMeta instanceof Map, "enter guard received meta");
+	assert.strictEqual(enterMeta!.get("fromLeave"), true, "enter guard sees data set by leave guard");
+});
+
+QUnit.test("meta is fresh for each navigation (not carried across)", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	const metaSnapshots: Map<string, unknown>[] = [];
+	router.addGuard((context: GuardContext) => {
+		metaSnapshots.push(context.meta);
+		context.meta.set("visited", true);
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.strictEqual(metaSnapshots.length, 2, "guard ran twice");
+	assert.notStrictEqual(metaSnapshots[0], metaSnapshots[1], "each navigation gets a different Map instance");
+	assert.notOk(metaSnapshots[1]!.has("visited"), "second navigation meta does not carry data from first");
+});
