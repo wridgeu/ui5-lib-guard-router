@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.1...v1.3.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* **router:** restore exception safety in redirect and fix stale JSDoc ([5951e4a](https://github.com/wridgeu/ui5-lib-guard-router/commit/5951e4a9c6fcda4839182895a2a227872b4bf89e))
+
+
+### Code Refactoring
+
+* **router:** replace boolean flags with state machine and navigation attempt ([76ed6d7](https://github.com/wridgeu/ui5-lib-guard-router/commit/76ed6d70f441faab9b03dc0b299d8e1b1f0ecbbb)), closes [#38](https://github.com/wridgeu/ui5-lib-guard-router/issues/38) [#39](https://github.com/wridgeu/ui5-lib-guard-router/issues/39)
+* **router:** state machine + navigation attempt ([fdece90](https://github.com/wridgeu/ui5-lib-guard-router/commit/fdece90fb03fdf168682ee12ac8bcd7698696787))
+* **router:** state machine + navigation attempt ([#43](https://github.com/wridgeu/ui5-lib-guard-router/issues/43)) ([fdece90](https://github.com/wridgeu/ui5-lib-guard-router/commit/fdece90fb03fdf168682ee12ac8bcd7698696787))
+
 ## [1.3.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.0...v1.3.1) (2026-03-21)
 
 
