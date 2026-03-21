@@ -4831,3 +4831,69 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 		component.destroy();
 	}
 });
+
+// ============================================================
+// Module: Manifest guard module path resolution
+// ============================================================
+QUnit.module("Router - Manifest guard module path resolution", {
+	afterEach: function () {
+		try {
+			router.destroy();
+		} catch {
+			/* may not exist if test used component router */
+		}
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("dot-notation guard paths resolve relative to component sap.app.id", async function (assert: Assert) {
+	initHashChanger();
+	const component = await Component.create({
+		name: "ui5.guard.router.qunit.fixtures.manifest",
+	});
+
+	try {
+		const manifestRouter = (component as unknown as { getRouter(): GuardRouter }).getRouter();
+		manifestRouter.initialize();
+		await waitForRoute(manifestRouter, "home");
+
+		manifestRouter.navTo("protected");
+		const result = await manifestRouter.navigationSettled();
+
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Blocked,
+			"guard loaded via dot-notation path blocks navigation",
+		);
+	} finally {
+		component.destroy();
+	}
+});
+
+QUnit.test('"module:" prefix bypasses namespace resolution', async function (assert: Assert) {
+	initHashChanger();
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["module:ui5.guard.router.qunit.fixtures.guards.blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard loaded via module: prefix blocks navigation");
+});

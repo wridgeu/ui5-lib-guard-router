@@ -14,7 +14,10 @@
 				"guardRouter": {
 					"unknownRouteGuardRegistration": "ignore",
 					"navToPreflight": "guard",
-					"guardLoading": "block"
+					"guardLoading": "block",
+					"guards": {
+						"protected": ["guards.blockGuard"]
+					}
 				}
 			},
 			"routes": [

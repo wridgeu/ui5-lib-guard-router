@@ -368,24 +368,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
 			// Resolve the component namespace from the owner component's manifest.
-			// The router may be owned by a UIComponent that has getOwnerComponent/getManifestEntry,
-			// but these methods are not part of the MobileRouter type signature. Use Reflect.get
-			// to access them safely without a double type assertion.
+			// The parent Router stores the UIComponent as `_oOwner` (private).
+			// It is not part of the MobileRouter type signature, so we use
+			// Reflect.get to access it safely without a type assertion.
 			let componentNamespace = "";
-			const getOwnerComponent = Reflect.get(this, "getOwnerComponent") as
-				| (() => Record<string, unknown> | undefined)
-				| undefined;
-			if (typeof getOwnerComponent === "function") {
-				const ownerComponent = getOwnerComponent.call(this);
-				if (ownerComponent) {
-					const getManifestEntry = Reflect.get(ownerComponent, "getManifestEntry") as
-						| ((path: string) => Record<string, unknown>)
-						| undefined;
-					if (typeof getManifestEntry === "function") {
-						const appConfig = getManifestEntry.call(ownerComponent, "sap.app");
-						if (isRecord(appConfig) && typeof appConfig.id === "string") {
-							componentNamespace = appConfig.id;
-						}
+			const ownerComponent = Reflect.get(this, "_oOwner") as Record<string, unknown> | undefined;
+			if (ownerComponent) {
+				const getManifestEntry = Reflect.get(ownerComponent, "getManifestEntry") as
+					| ((path: string) => Record<string, unknown>)
+					| undefined;
+				if (typeof getManifestEntry === "function") {
+					const appConfig = getManifestEntry.call(ownerComponent, "sap.app");
+					if (isRecord(appConfig) && typeof appConfig.id === "string") {
+						componentNamespace = appConfig.id;
 					}
 				}
 			}
