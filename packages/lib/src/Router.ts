@@ -384,7 +384,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					if (typeof getManifestEntry === "function") {
 						const appConfig = getManifestEntry.call(ownerComponent, "sap.app");
 						if (isRecord(appConfig) && typeof appConfig.id === "string") {
-							componentNamespace = appConfig.id.replace(/\./g, "/");
+							componentNamespace = appConfig.id;
 						}
 					}
 				}
@@ -1459,11 +1459,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 			const { modulePath } = descriptor;
 			const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
 				const cached = sap.ui.require(modulePath) as GuardFn | undefined;
-				if (cached) return cached(context);
+				if (cached) {
+					if (typeof cached !== "function") {
+						Log.warning(
+							`guardRouter.guards: module "${modulePath}" did not export a function, skipping`,
+							undefined,
+							LOG_COMPONENT,
+						);
+						return true;
+					}
+					return cached(context);
+				}
 				return new Promise<GuardResult>((resolve, reject) => {
 					sap.ui.require(
 						[modulePath],
 						(fn: GuardFn) => {
+							if (typeof fn !== "function") {
+								Log.warning(
+									`guardRouter.guards: module "${modulePath}" did not export a function, skipping`,
+									undefined,
+									LOG_COMPONENT,
+								);
+								resolve(true);
+								return;
+							}
 							resolve(fn(context));
 						},
 						reject,
