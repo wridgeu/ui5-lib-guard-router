@@ -252,7 +252,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Accepts either an enter guard function or a configuration object with
 	 * `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
@@ -275,7 +275,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Leave guards run when navigating away from the route. They can allow or
 	 * block the navigation, but they cannot redirect.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */

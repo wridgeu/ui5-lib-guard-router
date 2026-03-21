@@ -75,9 +75,9 @@ function removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): vo
 type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redirect"; target: string | GuardRedirect };
 
 /**
- * Guard context without the AbortSignal. Callers build this and create their
- * own AbortController; the guard pipeline receives the signal from the
- * caller-created AbortController.
+ * Guard context without AbortSignal or meta bag. Callers build this base
+ * and create their own AbortController; the guard pipeline adds `signal`
+ * and a fresh `meta` Map before invoking guards.
  */
 type GuardContextBase = Omit<GuardContext, "signal" | "meta">;
 
@@ -358,6 +358,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[] = [];
+	private _destroyed = false;
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -367,12 +368,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._options = normalizeGuardRouterOptions(guardRouter);
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
-			// Resolve the component namespace from the owner component's manifest.
-			// The `owner` constructor argument is the UIComponent that created
-			// this router. We use it to read `sap.app.id` for namespace resolution,
-			// avoiding reliance on private internals like `_oOwner`.
-			let componentNamespace = "";
-			if (owner) {
+			if (!owner) {
+				Log.warning(
+					"guardRouter.guards: no owner component available, skipping manifest guard registration",
+					undefined,
+					LOG_COMPONENT,
+				);
+			} else {
+				// Resolve the component namespace from the owner component's manifest.
+				// The `owner` constructor argument is the UIComponent that created
+				// this router. We use it to read `sap.app.id` for namespace resolution,
+				// avoiding reliance on private internals like `_oOwner`.
+				let componentNamespace = "";
 				const getManifestEntry = Reflect.get(owner, "getManifestEntry") as
 					| ((path: string) => Record<string, unknown>)
 					| undefined;
@@ -382,8 +389,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 						componentNamespace = appConfig.id;
 					}
 				}
+				this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 			}
-			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 		}
 	}
 
@@ -409,12 +416,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return super.initialize();
 		}
 
-		// "block" mode: load all modules, then initialize
+		// "block" mode: load all modules, then initialize.
+		// Guard against destroy() being called while modules are still loading.
 		this._loadAndRegisterGuards(descriptors)
 			.then(() => {
-				super.initialize();
+				if (!this._destroyed) super.initialize();
 			})
 			.catch((err: unknown) => {
+				if (this._destroyed) return;
 				Log.error(
 					"guardRouter.guards: module loading failed, initializing without manifest guards",
 					String(err),
@@ -464,7 +473,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
@@ -549,7 +558,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */
@@ -1398,48 +1407,70 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Load guard modules via `sap.ui.require` (async callback form) and
-	 * register each resolved function with the appropriate guard API.
+	 * Load guard modules individually via `sap.ui.require` and register
+	 * each resolved function with the appropriate guard API.
+	 *
+	 * Each module is loaded in its own `sap.ui.require` call so that a
+	 * single invalid path only skips that guard (with a warning) rather
+	 * than failing the entire batch. Once all loads settle, guards
+	 * register in declaration order. Registration errors (e.g. from
+	 * `unknownRouteGuardRegistration: "throw"`) are caught per-module.
 	 */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const modulePaths = descriptors.map((d) => d.modulePath);
-			sap.ui.require(
-				modulePaths,
-				(...modules: Function[]) => {
-					for (let i = 0; i < descriptors.length; i++) {
-						const descriptor = descriptors[i];
-						const guardFn = modules[i];
+		const promises = descriptors.map((descriptor) => {
+			return new Promise<GuardFn | null>((resolve) => {
+				sap.ui.require(
+					[descriptor.modulePath],
+					(guardFn: unknown) => {
 						if (typeof guardFn !== "function") {
 							Log.warning(
 								`guardRouter.guards: module "${descriptor.modulePath}" did not export a function, skipping`,
 								undefined,
 								LOG_COMPONENT,
 							);
-							continue;
+							resolve(null);
+							return;
 						}
-						this._registerGuardFromDescriptor(descriptor, guardFn);
-					}
-					resolve();
-				},
-				(err: Error) => {
-					Log.error("guardRouter.guards: failed to load guard modules", String(err), LOG_COMPONENT);
-					reject(err);
-				},
-			);
+						resolve(guardFn as GuardFn);
+					},
+					(err: Error) => {
+						Log.warning(
+							`guardRouter.guards: failed to load module "${descriptor.modulePath}", skipping`,
+							String(err),
+							LOG_COMPONENT,
+						);
+						resolve(null);
+					},
+				);
+			});
+		});
+		return Promise.all(promises).then((modules) => {
+			for (let i = 0; i < descriptors.length; i++) {
+				const guardFn = modules[i];
+				if (guardFn === null) continue;
+				try {
+					this._registerGuardFromDescriptor(descriptors[i], guardFn);
+				} catch (err: unknown) {
+					Log.error(
+						`guardRouter.guards: failed to register "${descriptors[i].modulePath}"`,
+						String(err),
+						LOG_COMPONENT,
+					);
+				}
+			}
 		});
 	}
 
 	/**
 	 * Route a parsed guard descriptor to the correct registration method.
 	 */
-	private _registerGuardFromDescriptor(descriptor: GuardDescriptor, guardFn: Function): void {
+	private _registerGuardFromDescriptor(descriptor: GuardDescriptor, guardFn: GuardFn): void {
 		if (descriptor.route === "*") {
-			this.addGuard(guardFn as GuardFn);
+			this.addGuard(guardFn);
 		} else if (descriptor.type === "leave") {
 			this.addLeaveGuard(descriptor.route, guardFn as LeaveGuardFn);
 		} else {
-			this.addRouteGuard(descriptor.route, guardFn as GuardFn);
+			this.addRouteGuard(descriptor.route, guardFn);
 		}
 	}
 
@@ -1489,6 +1520,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
 	override destroy(): this {
+		this._destroyed = true;
 		this._globalGuards = [];
 		this._enterGuards.clear();
 		this._leaveGuards.clear();

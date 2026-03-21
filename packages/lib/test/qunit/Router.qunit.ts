@@ -321,6 +321,39 @@ QUnit.test("destroy cleans up guards so they no longer run", async function (ass
 	assert.notOk(guardCalled, "Guards from destroyed router instance were not called");
 });
 
+QUnit.test("destroy() during block-mode loading prevents re-initialization", async function (assert: Assert) {
+	router.destroy();
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["nonexistent/guard/module"],
+				},
+			},
+		} as object,
+	);
+
+	// Start async module loading, then immediately destroy.
+	router.initialize();
+	router.destroy();
+
+	// Wait for sap.ui.require error callbacks + Promise.all to settle.
+	await nextTick(200);
+
+	// UI5's destroy() resets _bIsInitialized to false. If the .then()
+	// callback ignored the _destroyed flag and called super.initialize(),
+	// _bIsInitialized would be true again.
+	const isInitialized = Reflect.get(router, "_bIsInitialized") as boolean;
+	assert.notOk(isInitialized, "Router was not re-initialized after destroy() during block loading");
+});
+
 QUnit.test("addGuard ignores non-function input", async function (assert: Assert) {
 	addGuardUnsafe(router, null);
 	addGuardUnsafe(router, 42);
