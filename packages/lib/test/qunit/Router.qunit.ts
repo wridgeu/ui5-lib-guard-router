@@ -227,7 +227,11 @@ QUnit.test("addRouteGuard warns for unknown route but still registers the guard"
 	);
 	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	const pipeline = Reflect.get(router, "_pipeline") as {
+		_enterGuards: Map<string, GuardFn[]>;
+		_leaveGuards: Map<string, LeaveGuardFn[]>;
+	};
+	const enterGuards = pipeline._enterGuards;
 	assert.strictEqual(enterGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
 
@@ -242,8 +246,12 @@ QUnit.test(
 
 		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
 
-		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
-		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		const pipeline = Reflect.get(router, "_pipeline") as {
+			_enterGuards: Map<string, GuardFn[]>;
+			_leaveGuards: Map<string, LeaveGuardFn[]>;
+		};
+		const enterGuards = pipeline._enterGuards;
+		const leaveGuards = pipeline._leaveGuards;
 		assert.strictEqual(enterGuards.get("missing")?.[0], enterGuard, "Enter guard registered");
 		assert.strictEqual(leaveGuards.get("missing")?.[0], leaveGuard, "Leave guard registered");
 	},
@@ -263,7 +271,11 @@ QUnit.test("addLeaveGuard warns for unknown route but still registers the guard"
 	);
 	assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+	const pipeline = Reflect.get(router, "_pipeline") as {
+		_enterGuards: Map<string, GuardFn[]>;
+		_leaveGuards: Map<string, LeaveGuardFn[]>;
+	};
+	const leaveGuards = pipeline._leaveGuards;
 	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
 
