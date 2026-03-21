@@ -1,4 +1,3 @@
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import GuardPipeline from "ui5/guard/router/GuardPipeline";
 import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
@@ -242,96 +241,141 @@ QUnit.test("leave guard blocking skips enter guards", function (assert: Assert) 
 // ============================================================
 // Module: validation
 // ============================================================
-QUnit.module("GuardPipeline - validation", {
-	afterEach: function () {
-		sinon.restore();
-	},
-});
+QUnit.module("GuardPipeline - validation");
 
 QUnit.test("invalid guard return value treated as block", function (assert: Assert) {
-	const warnStub = sinon.stub(Log, "warning");
-	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard((() => 42) as unknown as GuardFn);
+	const warnings: string[] = [];
+	const original = Log.warning;
+	Log.warning = (msg: string) => {
+		warnings.push(msg);
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addGlobalGuard((() => 42) as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(warnStub.calledOnce, "Warning logged");
+		const result = pipeline.evaluate(createContext(), "");
+		assert.deepEqual(result, { action: "block" });
+		assert.strictEqual(warnings.length, 1, "Warning logged");
+	} finally {
+		Log.warning = original;
+	}
 });
 
 QUnit.test("leave guard returning non-boolean treated as block", function (assert: Assert) {
-	const warnStub = sinon.stub(Log, "warning");
-	const pipeline = new GuardPipeline();
-	pipeline.addLeaveGuard("current", (() => "nope") as unknown as LeaveGuardFn);
+	const warnings: string[] = [];
+	const original = Log.warning;
+	Log.warning = (msg: string) => {
+		warnings.push(msg);
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addLeaveGuard("current", (() => "nope") as unknown as LeaveGuardFn);
 
-	const result = pipeline.evaluate(createContext(), "current");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(warnStub.calledOnce, "Warning logged for non-boolean leave guard");
+		const result = pipeline.evaluate(createContext(), "current");
+		assert.deepEqual(result, { action: "block" });
+		assert.strictEqual(warnings.length, 1, "Warning logged for non-boolean leave guard");
+	} finally {
+		Log.warning = original;
+	}
 });
 
 QUnit.test("empty string guard return treated as block", function (assert: Assert) {
-	sinon.stub(Log, "warning");
-	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard((() => "") as unknown as GuardFn);
+	const original = Log.warning;
+	Log.warning = () => {};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addGlobalGuard((() => "") as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
-	assert.deepEqual(result, { action: "block" });
+		const result = pipeline.evaluate(createContext(), "");
+		assert.deepEqual(result, { action: "block" });
+	} finally {
+		Log.warning = original;
+	}
 });
 
 // ============================================================
 // Module: error handling
 // ============================================================
-QUnit.module("GuardPipeline - error handling", {
-	afterEach: function () {
-		sinon.restore();
-	},
-});
+QUnit.module("GuardPipeline - error handling");
 
 QUnit.test("sync guard that throws blocks navigation", function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
-	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard(() => {
-		throw new Error("boom");
-	});
+	let errorLogged = false;
+	const original = Log.error;
+	Log.error = () => {
+		errorLogged = true;
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addGlobalGuard(() => {
+			throw new Error("boom");
+		});
 
-	const result = pipeline.evaluate(createContext(), "");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(errorStub.calledOnce, "Error was logged");
+		const result = pipeline.evaluate(createContext(), "");
+		assert.deepEqual(result, { action: "block" });
+		assert.ok(errorLogged, "Error was logged");
+	} finally {
+		Log.error = original;
+	}
 });
 
 QUnit.test("sync leave guard that throws blocks navigation", function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
-	const pipeline = new GuardPipeline();
-	pipeline.addLeaveGuard("current", () => {
-		throw new Error("leave boom");
-	});
+	let errorLogged = false;
+	const original = Log.error;
+	Log.error = () => {
+		errorLogged = true;
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addLeaveGuard("current", () => {
+			throw new Error("leave boom");
+		});
 
-	const result = pipeline.evaluate(createContext(), "current");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(errorStub.calledOnce, "Error was logged");
+		const result = pipeline.evaluate(createContext(), "current");
+		assert.deepEqual(result, { action: "block" });
+		assert.ok(errorLogged, "Error was logged");
+	} finally {
+		Log.error = original;
+	}
 });
 
 QUnit.test("async guard that rejects blocks navigation", async function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
-	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard(() => Promise.reject(new Error("async boom")));
+	let errorLogged = false;
+	const original = Log.error;
+	Log.error = () => {
+		errorLogged = true;
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addGlobalGuard(() => Promise.reject(new Error("async boom")));
 
-	const result = await pipeline.evaluate(createContext(), "");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(errorStub.calledOnce, "Error was logged");
+		const result = await pipeline.evaluate(createContext(), "");
+		assert.deepEqual(result, { action: "block" });
+		assert.ok(errorLogged, "Error was logged");
+	} finally {
+		Log.error = original;
+	}
 });
 
 QUnit.test("guard error after signal aborted does not log", async function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
-	const pipeline = new GuardPipeline();
-	const controller = new AbortController();
-	pipeline.addGlobalGuard(() => {
-		controller.abort();
-		return Promise.reject(new Error("aborted boom"));
-	});
+	let errorLogged = false;
+	const original = Log.error;
+	Log.error = () => {
+		errorLogged = true;
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		const controller = new AbortController();
+		pipeline.addGlobalGuard(() => {
+			controller.abort();
+			return Promise.reject(new Error("aborted boom"));
+		});
 
-	const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
-	assert.deepEqual(result, { action: "block" });
-	assert.ok(errorStub.notCalled, "Error suppressed when signal aborted");
+		const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
+		assert.deepEqual(result, { action: "block" });
+		assert.notOk(errorLogged, "Error suppressed when signal aborted");
+	} finally {
+		Log.error = original;
+	}
 });
 
 // ============================================================
