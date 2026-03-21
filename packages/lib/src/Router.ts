@@ -11,6 +11,7 @@ import type {
 	GuardRouter,
 	GuardLoading,
 	LeaveGuardFn,
+	ManifestRouteGuardConfig,
 	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
@@ -127,6 +128,138 @@ function isGuardLoading(v: unknown): v is GuardLoading {
 	return v === "block" || v === "lazy";
 }
 
+/** Parsed guard declaration from the manifest `guards` block. */
+interface GuardDescriptor {
+	readonly route: string; // "*" for global, route name for per-route
+	readonly type: "enter" | "leave";
+	readonly modulePath: string;
+}
+
+/**
+ * Resolve a dot-notation module path following UI5 routing conventions.
+ * Mirrors `sap.ui.core.routing.Target._getEffectiveObjectName()`.
+ *
+ * - Paths prefixed with `"module:"` are treated as absolute (the prefix is
+ *   stripped and dots become slashes).
+ * - All other paths are prefixed with the component namespace.
+ */
+function resolveGuardModulePath(dotPath: string, componentNamespace: string): string {
+	if (dotPath.startsWith("module:")) {
+		return dotPath.slice("module:".length).replace(/\./g, "/");
+	}
+	const fullDotPath = componentNamespace ? componentNamespace + "." + dotPath : dotPath;
+	return fullDotPath.replace(/\./g, "/");
+}
+
+/**
+ * Parse the `guards` block from the guardRouter config into an array of
+ * {@link GuardDescriptor} objects.
+ *
+ * Handles:
+ * - `"*"` key with `string[]` -> global enter guards
+ * - Route name with `string[]` (shorthand) -> enter guards
+ * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
+ * - `"*"` with object form -> warn, treat enter as global
+ * - `"*"` leave -> warn, skip (global leave guards not supported)
+ * - Invalid entries -> warn, skip
+ */
+function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
+	if (!isRecord(guards)) {
+		Log.warning("guardRouter.guards is not a plain object, skipping", JSON.stringify(guards), LOG_COMPONENT);
+		return [];
+	}
+
+	const descriptors: GuardDescriptor[] = [];
+
+	for (const [key, value] of Object.entries(guards)) {
+		if (Array.isArray(value)) {
+			// Shorthand: string[] -> enter guards
+			for (const entry of value) {
+				if (typeof entry !== "string" || entry.length === 0) {
+					Log.warning(
+						`guardRouter.guards["${key}"]: invalid entry, skipping`,
+						JSON.stringify(entry),
+						LOG_COMPONENT,
+					);
+					continue;
+				}
+				descriptors.push({
+					route: key,
+					type: "enter",
+					modulePath: resolveGuardModulePath(entry, componentNamespace),
+				});
+			}
+		} else if (isRecord(value)) {
+			const config = value as ManifestRouteGuardConfig;
+
+			if (key === "*" && config.leave !== undefined) {
+				Log.warning(
+					'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
+					undefined,
+					LOG_COMPONENT,
+				);
+			}
+
+			if (key === "*" && config.enter === undefined && config.leave !== undefined) {
+				// Only leave on global -> already warned, nothing to add
+				continue;
+			}
+
+			if (key === "*" && (config.enter !== undefined || config.leave !== undefined)) {
+				Log.warning(
+					'guardRouter.guards["*"]: object form for global guards; treating enter as global',
+					undefined,
+					LOG_COMPONENT,
+				);
+			}
+
+			if (Array.isArray(config.enter)) {
+				for (const entry of config.enter) {
+					if (typeof entry !== "string" || entry.length === 0) {
+						Log.warning(
+							`guardRouter.guards["${key}"].enter: invalid entry, skipping`,
+							JSON.stringify(entry),
+							LOG_COMPONENT,
+						);
+						continue;
+					}
+					descriptors.push({
+						route: key,
+						type: "enter",
+						modulePath: resolveGuardModulePath(entry, componentNamespace),
+					});
+				}
+			}
+
+			if (key !== "*" && Array.isArray(config.leave)) {
+				for (const entry of config.leave) {
+					if (typeof entry !== "string" || entry.length === 0) {
+						Log.warning(
+							`guardRouter.guards["${key}"].leave: invalid entry, skipping`,
+							JSON.stringify(entry),
+							LOG_COMPONENT,
+						);
+						continue;
+					}
+					descriptors.push({
+						route: key,
+						type: "leave",
+						modulePath: resolveGuardModulePath(entry, componentNamespace),
+					});
+				}
+			}
+		} else {
+			Log.warning(
+				`guardRouter.guards["${key}"]: expected string[] or { enter?, leave? }, skipping`,
+				JSON.stringify(value),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	return descriptors;
+}
+
 interface ResolvedGuardRouterOptions {
 	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
 	readonly navToPreflight: NavToPreflightMode;
@@ -224,6 +357,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _suppressedHash: string | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
+	private _pendingGuardDescriptors: GuardDescriptor[] = [];
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, ...rest] = args;
@@ -231,6 +365,70 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const { guardRouter, ...cleanConfig } = isRecord(rawConfig) ? rawConfig : ({} as Record<string, unknown>);
 		super(routes, isRecord(rawConfig) ? (cleanConfig as typeof config) : config, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
+
+		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
+			// Resolve the component namespace from the owner component's manifest.
+			// The router may be owned by a UIComponent that has getOwnerComponent/getManifestEntry,
+			// but these methods are not part of the MobileRouter type signature. Use Reflect.get
+			// to access them safely without a double type assertion.
+			let componentNamespace = "";
+			const getOwnerComponent = Reflect.get(this, "getOwnerComponent") as
+				| (() => Record<string, unknown> | undefined)
+				| undefined;
+			if (typeof getOwnerComponent === "function") {
+				const ownerComponent = getOwnerComponent.call(this);
+				if (ownerComponent) {
+					const getManifestEntry = Reflect.get(ownerComponent, "getManifestEntry") as
+						| ((path: string) => Record<string, unknown>)
+						| undefined;
+					if (typeof getManifestEntry === "function") {
+						const appConfig = getManifestEntry.call(ownerComponent, "sap.app");
+						if (isRecord(appConfig) && typeof appConfig.id === "string") {
+							componentNamespace = appConfig.id.replace(/\./g, "/");
+						}
+					}
+				}
+			}
+			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
+		}
+	}
+
+	/**
+	 * Initialize the router. When manifest guards are declared and
+	 * `guardLoading` is `"block"`, module loading starts and
+	 * `super.initialize()` is deferred until all modules are loaded.
+	 * In `"lazy"` mode, lazy wrappers are registered synchronously
+	 * and `super.initialize()` is called immediately.
+	 *
+	 * @override sap.ui.core.routing.Router#initialize
+	 */
+	override initialize(): this {
+		if (this._pendingGuardDescriptors.length === 0) {
+			return super.initialize();
+		}
+
+		const descriptors = this._pendingGuardDescriptors;
+		this._pendingGuardDescriptors = [];
+
+		if (this._options.guardLoading === "lazy") {
+			this._registerLazyGuards(descriptors);
+			return super.initialize();
+		}
+
+		// "block" mode: load all modules, then initialize
+		this._loadAndRegisterGuards(descriptors)
+			.then(() => {
+				super.initialize();
+			})
+			.catch((err: unknown) => {
+				Log.error(
+					"guardRouter.guards: module loading failed, initializing without manifest guards",
+					String(err),
+					LOG_COMPONENT,
+				);
+				super.initialize();
+			});
+		return this;
 	}
 
 	/**
@@ -1205,11 +1403,83 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
+	/**
+	 * Load guard modules via `sap.ui.require` (async callback form) and
+	 * register each resolved function with the appropriate guard API.
+	 */
+	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const modulePaths = descriptors.map((d) => d.modulePath);
+			sap.ui.require(
+				modulePaths,
+				(...modules: Function[]) => {
+					for (let i = 0; i < descriptors.length; i++) {
+						const descriptor = descriptors[i];
+						const guardFn = modules[i];
+						if (typeof guardFn !== "function") {
+							Log.warning(
+								`guardRouter.guards: module "${descriptor.modulePath}" did not export a function, skipping`,
+								undefined,
+								LOG_COMPONENT,
+							);
+							continue;
+						}
+						this._registerGuardFromDescriptor(descriptor, guardFn);
+					}
+					resolve();
+				},
+				(err: Error) => {
+					Log.error("guardRouter.guards: failed to load guard modules", String(err), LOG_COMPONENT);
+					reject(err);
+				},
+			);
+		});
+	}
+
+	/**
+	 * Route a parsed guard descriptor to the correct registration method.
+	 */
+	private _registerGuardFromDescriptor(descriptor: GuardDescriptor, guardFn: Function): void {
+		if (descriptor.route === "*") {
+			this.addGuard(guardFn as GuardFn);
+		} else if (descriptor.type === "leave") {
+			this.addLeaveGuard(descriptor.route, guardFn as LeaveGuardFn);
+		} else {
+			this.addRouteGuard(descriptor.route, guardFn as GuardFn);
+		}
+	}
+
+	/**
+	 * Register lazy wrapper functions that load guard modules on first use.
+	 * The wrapper calls `sap.ui.require(path)` synchronously first (returns
+	 * the cached module if already loaded), then falls back to async loading.
+	 */
+	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
+		for (const descriptor of descriptors) {
+			const { modulePath } = descriptor;
+			const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+				const cached = sap.ui.require(modulePath) as GuardFn | undefined;
+				if (cached) return cached(context);
+				return new Promise<GuardResult>((resolve, reject) => {
+					sap.ui.require(
+						[modulePath],
+						(fn: GuardFn) => {
+							resolve(fn(context));
+						},
+						reject,
+					);
+				});
+			};
+			this._registerGuardFromDescriptor(descriptor, lazyGuard);
+		}
+	}
+
 	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
 	override destroy(): this {
 		this._globalGuards = [];
 		this._enterGuards.clear();
 		this._leaveGuards.clear();
+		this._pendingGuardDescriptors = [];
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;

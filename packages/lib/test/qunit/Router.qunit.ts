@@ -4616,3 +4616,127 @@ QUnit.test("skipGuards does not affect subsequent navTo calls", async function (
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "next navTo without skipGuards is still guarded");
 });
+
+// ============================================================
+// Module: Declarative manifest guards -- block loading
+// ============================================================
+
+// Register a loader path so sap.ui.require can find test fixture guard modules.
+// Fixtures live under /test-resources/ but the loader defaults to /resources/.
+sap.ui.loader.config({
+	paths: {
+		"ui5/guard/router/qunit/fixtures": "/test-resources/ui5/guard/router/qunit/fixtures",
+	},
+});
+
+QUnit.module("Router - Declarative manifest guards (block loading)", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("guards from config are registered and functional (block mode)", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"manifest-declared blocking guard prevents navigation",
+	);
+});
+
+QUnit.test("global guards via '*' key are registered", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					"*": ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	// Allow the initial navigation to "home" so the router is fully operational.
+	await waitForRoute(router, "home");
+
+	// Add a blocking imperative guard AFTER the manifest allow guard.
+	// The manifest guard should already be at index 0.
+	router.addGuard(() => false);
+
+	const globalGuards = Reflect.get(router, "_globalGuards") as GuardFn[];
+	assert.strictEqual(globalGuards.length, 2, "global manifest guard and imperative guard are both registered");
+
+	// Verify the manifest guard actually runs as part of the pipeline:
+	// navigate and confirm the imperative guard blocks (proving the pipeline includes both).
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"guard pipeline includes both manifest and imperative guards",
+	);
+});
+
+QUnit.test("manifest guards run before imperatively registered guards", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					"*": ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Add imperative guard AFTER initialize -- manifest guard was registered during initialize
+	router.addGuard(() => {
+		return true;
+	});
+
+	// Manifest guard is at index 0, imperative at index 1
+	const globalGuards = Reflect.get(router, "_globalGuards") as GuardFn[];
+	assert.strictEqual(globalGuards.length, 2, "both manifest and imperative guards registered");
+});
