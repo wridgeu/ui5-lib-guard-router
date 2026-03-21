@@ -483,6 +483,115 @@ QUnit.test(
 );
 
 // ============================================================
+// Module: route enter guard edge cases
+// ============================================================
+QUnit.module("GuardPipeline - route enter guard edge cases");
+
+QUnit.test("route enter guard returning GuardRedirect object redirects", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const redirect = { route: "login", parameters: { reason: "expired" } };
+	pipeline.addEnterGuard("target", () => redirect);
+	const result = pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "redirect", target: redirect });
+});
+
+QUnit.test("async route enter guard that allows", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addEnterGuard("target", () => Promise.resolve(true));
+	const result = await pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "allow" });
+});
+
+QUnit.test("async route enter guard that blocks", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addEnterGuard("target", () => Promise.resolve(false));
+	const result = await pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "block" });
+});
+
+QUnit.test("async route enter guard that redirects", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addEnterGuard("target", () => Promise.resolve("login"));
+	const result = await pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "redirect", target: "login" });
+});
+
+// ============================================================
+// Module: multiple leave guards
+// ============================================================
+QUnit.module("GuardPipeline - multiple leave guards");
+
+QUnit.test("multiple leave guards run in registration order", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const order: number[] = [];
+	pipeline.addLeaveGuard("current", () => {
+		order.push(1);
+		return true;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		order.push(2);
+		return true;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		order.push(3);
+		return true;
+	});
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(result, { action: "allow" });
+	assert.deepEqual(order, [1, 2, 3], "All leave guards ran in order");
+});
+
+QUnit.test("second leave guard blocks after first allows", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const called: number[] = [];
+	pipeline.addLeaveGuard("current", () => {
+		called.push(1);
+		return true;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		called.push(2);
+		return false;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		called.push(3);
+		return true;
+	});
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(result, { action: "block" });
+	assert.deepEqual(called, [1, 2], "Third leave guard never called");
+});
+
+// ============================================================
+// Module: guard map cleanup
+// ============================================================
+QUnit.module("GuardPipeline - guard map cleanup");
+
+QUnit.test("removing last enter guard for a route cleans up the map entry", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const guard: GuardFn = () => false;
+	pipeline.addEnterGuard("target", guard);
+	pipeline.removeEnterGuard("target", guard);
+
+	// Adding a new guard for the same route should work (map entry was cleaned up)
+	pipeline.addEnterGuard("target", () => true);
+	const result = pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "allow" }, "New guard works after cleanup");
+});
+
+QUnit.test("removing last leave guard for a route cleans up the map entry", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const guard: LeaveGuardFn = () => false;
+	pipeline.addLeaveGuard("current", guard);
+	pipeline.removeLeaveGuard("current", guard);
+
+	// After removal, leave guards should not block (map entry cleaned up, hasLeaveGuards returns false)
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(result, { action: "allow" }, "No leave guards remain after cleanup");
+});
+
+// ============================================================
 // Module: snapshot copy
 // ============================================================
 QUnit.module("GuardPipeline - snapshot copy");

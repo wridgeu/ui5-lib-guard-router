@@ -1,6 +1,6 @@
 # Guard Pipeline Extraction — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: Completed.** Code snippets match the final implementation. See `09-guard-pipeline-extraction.md` for the authoritative spec.
 
 **Goal:** Extract the guard evaluation logic from `Router.ts` into a standalone `GuardPipeline` class, keeping all public API and behavioral tests unchanged.
 
@@ -18,17 +18,18 @@
 
 - Create: `packages/lib/src/GuardPipeline.ts`
 
-- [ ] **Step 1: Create the file with imports, types, and utility functions**
+- [x] **Step 1: Create the file with imports, types, and utility functions**
 
-Move `isGuardRedirect`, `isPromiseLike`, and `GuardDecision` from `Router.ts`. Export `isPromiseLike` and `GuardDecision` (Router needs both). Keep `isGuardRedirect` module-private.
+Move `isGuardRedirect`, `isPromiseLike`, and `GuardDecision` from `Router.ts`. Export `GuardDecision` (Router needs it). Keep `isGuardRedirect` and `isPromiseLike` module-private (Router keeps its own copy of `isPromiseLike`).
 
 ```typescript
 import Log from "sap/base/Log";
 import type { GuardFn, GuardContext, GuardResult, GuardRedirect, LeaveGuardFn } from "./types";
 
-// Intentionally a separate log component from Router. Guard evaluation
-// messages now appear under this component instead of "ui5.guard.router.Router".
-const LOG_COMPONENT = "ui5.guard.router.GuardPipeline";
+// Uses the Router's log component to preserve backward-compatible log output.
+// Guard evaluation messages remain under "ui5.guard.router.Router" rather than
+// introducing a new observable component string.
+const LOG_COMPONENT = "ui5.guard.router.Router";
 
 function isGuardRedirect(value: unknown): value is GuardRedirect {
 	if (typeof value !== "object" || value === null) {
@@ -44,7 +45,7 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
  * We intentionally do not use `instanceof Promise` because that misses
  * cross-realm Promises and PromiseLike/thenable objects.
  */
-export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
 		return false;
 	}
@@ -60,7 +61,7 @@ export type GuardDecision =
 	| { action: "redirect"; target: string | GuardRedirect };
 ```
 
-- [ ] **Step 2: Add the GuardPipeline class with storage fields and management methods**
+- [x] **Step 2: Add the GuardPipeline class with storage fields and management methods**
 
 ```typescript
 /**
@@ -131,17 +132,17 @@ export default class GuardPipeline {
 }
 ```
 
-- [ ] **Step 3: Verify typecheck passes**
+- [x] **Step 3: Verify typecheck passes**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS (new file compiles, Router unchanged yet)
 
-- [ ] **Step 4: Verify lint passes**
+- [x] **Step 4: Verify lint passes**
 
 Run: `npm run lint` from repo root
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/lib/src/GuardPipeline.ts
@@ -158,27 +159,24 @@ git commit -m "refactor(router): add GuardPipeline class with guard storage mana
 
 Move all 8 evaluation methods from Router into the pipeline class. Key changes from the Router versions:
 
-- `_evaluateGuards` becomes `evaluate` (public) — receives `GuardContext` directly (signal already included), receives `currentRoute` as parameter
-- `_runLeaveGuards` receives `currentRoute` as parameter instead of reading `this._currentRoute`
+- `_evaluateGuards` becomes `evaluate` (public) — receives `GuardContext` directly (signal already included), uses `context.fromRoute` for leave-guard lookup
+- `_runLeaveGuards` uses `context.fromRoute` directly (no separate `currentRoute` parameter)
 - `_runEnterGuards` reads `this._globalGuards` directly (drops the `globalGuards` parameter)
 - All other methods transfer as-is with minimal signature changes
 
-- [ ] **Step 1: Add the `evaluate` method (was `_evaluateGuards`)**
+- [x] **Step 1: Add the `evaluate` method (was `_evaluateGuards`)**
 
 ```typescript
 /**
- * Run the full guard pipeline (leave → global enter → route enter) and
+ * Run the full guard pipeline (leave -> global enter -> route enter) and
  * return a normalized decision. Stays synchronous when all guards return
  * plain values; returns a Promise only when an async guard is encountered.
  *
  * @param context - Complete guard context including AbortSignal.
- *   Callers must ensure `context.fromRoute === currentRoute` — the async
- *   error path in `_continueGuardsAsync` reads `context.fromRoute` for
- *   leave-guard error messages.
- * @param currentRoute - The currently active route name. Empty string skips leave guards.
+ *   `context.fromRoute` controls leave-guard lookup: empty string skips leave guards.
  */
-evaluate(context: GuardContext, currentRoute: string): GuardDecision | Promise<GuardDecision> {
-	const hasLeaveGuards = currentRoute !== "" && this._leaveGuards.has(currentRoute);
+evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision> {
+	const hasLeaveGuards = context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
 	const hasEnterGuards =
 		this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
 
@@ -207,7 +205,7 @@ evaluate(context: GuardContext, currentRoute: string): GuardDecision | Promise<G
 	};
 
 	if (hasLeaveGuards) {
-		const leaveResult = this._runLeaveGuards(currentRoute, context);
+		const leaveResult = this._runLeaveGuards(context);
 
 		if (isPromiseLike(leaveResult)) {
 			return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
@@ -223,11 +221,11 @@ evaluate(context: GuardContext, currentRoute: string): GuardDecision | Promise<G
 }
 ```
 
-- [ ] **Step 2: Add `_runLeaveGuards` (receives `currentRoute` as parameter)**
+- [x] **Step 2: Add `_runLeaveGuards` (uses `context.fromRoute` directly)**
 
 ```typescript
-private _runLeaveGuards(currentRoute: string, context: GuardContext): boolean | Promise<boolean> {
-	const registered = this._leaveGuards.get(currentRoute);
+private _runLeaveGuards(context: GuardContext): boolean | Promise<boolean> {
+	const registered = this._leaveGuards.get(context.fromRoute);
 	if (!registered || registered.length === 0) return true;
 
 	const guards = registered.slice();
@@ -248,7 +246,7 @@ private _runLeaveGuards(currentRoute: string, context: GuardContext): boolean | 
 			if (result !== true) return this._validateLeaveGuardResult(result);
 		} catch (error) {
 			Log.error(
-				`Leave guard [${i}] on route "${currentRoute}" threw, blocking navigation`,
+				`Leave guard [${i}] on route "${context.fromRoute}" threw, blocking navigation`,
 				String(error),
 				LOG_COMPONENT,
 			);
@@ -259,7 +257,7 @@ private _runLeaveGuards(currentRoute: string, context: GuardContext): boolean | 
 }
 ```
 
-- [ ] **Step 3: Add `_runEnterGuards` (reads `this._globalGuards` directly)**
+- [x] **Step 3: Add `_runEnterGuards` (reads `this._globalGuards` directly)**
 
 ```typescript
 private _runEnterGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
@@ -277,7 +275,7 @@ private _runEnterGuards(toRoute: string, context: GuardContext): GuardResult | P
 }
 ```
 
-- [ ] **Step 4: Add remaining private methods (`_runRouteGuards`, `_runGuards`, `_continueGuardsAsync`, `_validateGuardResult`, `_validateLeaveGuardResult`)**
+- [x] **Step 4: Add remaining private methods (`_runRouteGuards`, `_runGuards`, `_continueGuardsAsync`, `_validateGuardResult`, `_validateLeaveGuardResult`)**
 
 These transfer from Router with no signature changes:
 
@@ -306,7 +304,7 @@ private _runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Prom
 			if (result !== true) return this._validateGuardResult(result);
 		} catch (error) {
 			Log.error(
-				`Enter guard [${i}] for route "${context.toRoute}" threw, blocking navigation`,
+				`Enter guard [${i}] on route "${context.toRoute}" threw, blocking navigation`,
 				String(error),
 				LOG_COMPONENT,
 			);
@@ -365,12 +363,12 @@ private _validateLeaveGuardResult(result: unknown): boolean {
 }
 ```
 
-- [ ] **Step 5: Verify typecheck passes**
+- [x] **Step 5: Verify typecheck passes**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS (GuardPipeline compiles, Router unchanged yet)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/lib/src/GuardPipeline.ts
@@ -387,7 +385,7 @@ git commit -m "refactor(router): add evaluate pipeline methods to GuardPipeline"
 
 This is the critical task — Router delegates to the pipeline. Must be done atomically (all changes in one commit) so the code is never in a broken intermediate state.
 
-- [ ] **Step 1: Update imports**
+- [x] **Step 1: Update imports**
 
 Replace the current imports and remove module-level utilities that moved.
 
@@ -402,12 +400,12 @@ Remove these module-level functions from `Router.ts`:
 Add import:
 
 ```typescript
-import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
+import GuardPipeline, { type GuardDecision } from "./GuardPipeline";
 ```
 
 Keep `isRouteGuardConfig` — it stays on Router.
 
-- [ ] **Step 2: Replace guard storage fields with pipeline instance**
+- [x] **Step 2: Replace guard storage fields with pipeline instance**
 
 Remove:
 
@@ -423,7 +421,7 @@ Add:
 private _pipeline = new GuardPipeline();
 ```
 
-- [ ] **Step 3: Update `addGuard` to delegate**
+- [x] **Step 3: Update `addGuard` to delegate**
 
 ```typescript
 addGuard(guard: GuardFn): this {
@@ -436,7 +434,7 @@ addGuard(guard: GuardFn): this {
 }
 ```
 
-- [ ] **Step 4: Update `removeGuard` to delegate**
+- [x] **Step 4: Update `removeGuard` to delegate**
 
 ```typescript
 removeGuard(guard: GuardFn): this {
@@ -449,7 +447,7 @@ removeGuard(guard: GuardFn): this {
 }
 ```
 
-- [ ] **Step 5: Update `addRouteGuard` to delegate**
+- [x] **Step 5: Update `addRouteGuard` to delegate**
 
 Replace `addToGuardMap(this._enterGuards, ...)` with `this._pipeline.addEnterGuard(...)` and `addToGuardMap(this._leaveGuards, ...)` with `this._pipeline.addLeaveGuard(...)`.
 
@@ -496,7 +494,7 @@ addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 }
 ```
 
-- [ ] **Step 6: Update `removeRouteGuard` to delegate**
+- [x] **Step 6: Update `removeRouteGuard` to delegate**
 
 Replace `removeFromGuardMap(this._enterGuards, ...)` with `this._pipeline.removeEnterGuard(...)`.
 
@@ -520,7 +518,7 @@ removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 }
 ```
 
-- [ ] **Step 7: Update `addLeaveGuard` to delegate**
+- [x] **Step 7: Update `addLeaveGuard` to delegate**
 
 ```typescript
 addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
@@ -534,7 +532,7 @@ addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 }
 ```
 
-- [ ] **Step 8: Update `removeLeaveGuard` to delegate**
+- [x] **Step 8: Update `removeLeaveGuard` to delegate**
 
 ```typescript
 removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
@@ -547,7 +545,7 @@ removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 }
 ```
 
-- [ ] **Step 9: Update `navTo` evaluation call site**
+- [x] **Step 9: Update `navTo` evaluation call site**
 
 Replace (around line 475-483):
 
@@ -565,12 +563,12 @@ const context: GuardContext = {
 	fromHash: this._currentHash ?? "",
 	signal: controller.signal,
 };
-const decision = this._pipeline.evaluate(context, this._currentRoute);
+const decision = this._pipeline.evaluate(context);
 ```
 
 Note: `GuardContextBase` type can be removed since we now build `GuardContext` directly.
 
-- [ ] **Step 10: Update `parse` evaluation call site**
+- [x] **Step 10: Update `parse` evaluation call site**
 
 Same pattern as navTo:
 
@@ -588,10 +586,10 @@ const context: GuardContext = {
 	fromHash: this._currentHash ?? "",
 	signal: controller.signal,
 };
-const decision = this._pipeline.evaluate(context, this._currentRoute);
+const decision = this._pipeline.evaluate(context);
 ```
 
-- [ ] **Step 11: Update `destroy` to use pipeline.clear()**
+- [x] **Step 11: Update `destroy` to use pipeline.clear()**
 
 ```typescript
 override destroy(): this {
@@ -606,7 +604,7 @@ override destroy(): this {
 
 Note: `stop()` does NOT call `clear()` — guards are intentionally preserved across stop/restart.
 
-- [ ] **Step 12: Remove dead code from Router.ts**
+- [x] **Step 12: Remove dead code from Router.ts**
 
 Remove the following (now in GuardPipeline):
 
@@ -622,17 +620,17 @@ Remove the following (now in GuardPipeline):
 
 Clean up unused imports: remove `GuardResult` from the Router import (no longer referenced). Keep `GuardRedirect` — it is still used by `_redirect`.
 
-- [ ] **Step 13: Verify typecheck passes**
+- [x] **Step 13: Verify typecheck passes**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS
 
-- [ ] **Step 14: Verify lint passes**
+- [x] **Step 14: Verify lint passes**
 
 Run: `npm run lint` from repo root
 Expected: PASS
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts packages/lib/src/GuardPipeline.ts
@@ -641,46 +639,33 @@ git commit -m "refactor(router): delegate guard storage and evaluation to GuardP
 
 ---
 
-### Task 4: Fix introspection tests
+### Task 4: Replace introspection tests with behavioral tests
 
 **Files:**
 
 - Modify: `packages/lib/test/qunit/Router.qunit.ts`
+- Modify: `packages/lib/test/qunit/testHelpers.ts`
 
-Four test assertions use `Reflect.get(router, "_enterGuards")` and `Reflect.get(router, "_leaveGuards")` to verify guards registered for unknown routes. These now live inside `this._pipeline`. Update these to reach through: `Reflect.get(Reflect.get(router, "_pipeline"), "_enterGuards")`.
+Three test functions used `Reflect.get(router, "_enterGuards")` and `Reflect.get(router, "_leaveGuards")` to verify guards registered for unknown routes. Replace with behavioral tests that use `addRouteDynamic` to add the route, then verify the guard actually runs by navigating.
 
-- [ ] **Step 1: Identify and update the 4 introspection lines**
+- [x] **Step 1: Add `addRouteDynamic` helper to `testHelpers.ts`**
 
-Lines ~230, ~245-246, ~266 in `Router.qunit.ts`. Update:
+Wraps `sap.ui.core.routing.Router#addRoute` via `getRouterMethod` to avoid the incorrect UI5 type signature.
 
-```typescript
-// Old:
-const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
-// New:
-const pipeline = Reflect.get(router, "_pipeline") as {
-	_enterGuards: Map<string, GuardFn[]>;
-	_leaveGuards: Map<string, LeaveGuardFn[]>;
-};
-const enterGuards = pipeline._enterGuards;
+- [x] **Step 2: Replace the 3 introspection tests with behavioral equivalents**
 
-// Old:
-const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
-// New:
-const leaveGuards = pipeline._leaveGuards;
-```
+1. `addRouteGuard warns for unknown route but guard runs after route is added`
+2. `addRouteGuard object form warns once for unknown route and both guards run after route is added`
+3. `addLeaveGuard warns for unknown route but guard runs after route is added`
 
-Apply to all 3 test functions that use introspection:
+Each test: register guard for unknown route, assert warning, add the route via `addRouteDynamic`, initialize, navigate, assert the guard was called.
 
-1. `addRouteGuard warns for unknown route but still registers the guard` (~line 230)
-2. `addRouteGuard object form warns once for unknown route and registers both guards` (~line 245-246)
-3. `addLeaveGuard warns for unknown route but still registers the guard` (~line 266)
-
-- [ ] **Step 2: Verify typecheck passes**
+- [x] **Step 2: Verify typecheck passes**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/lib/test/qunit/Router.qunit.ts
@@ -693,17 +678,17 @@ git commit -m "test(router): update introspection tests to reach through GuardPi
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run all QUnit tests**
+- [x] **Step 1: Run all QUnit tests**
 
 Run from repo root: `npm run test:qunit`
 Expected: All 4,328 tests pass. No behavioral changes.
 
-- [ ] **Step 2: Run typecheck**
+- [x] **Step 2: Run typecheck**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS
 
-- [ ] **Step 3: Run lint + format check**
+- [x] **Step 3: Run lint + format check**
 
 Run: `npm run check` from repo root
 Expected: PASS
@@ -719,41 +704,50 @@ Expected: PASS
 
 Pipeline tests run without Router, HashChanger, or UI5 routing runtime. They only need `GuardPipeline` and `GuardContext`.
 
-- [ ] **Step 1: Create test file with imports and helper**
+- [x] **Step 1: Create test file with imports and helper**
 
 ```typescript
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import GuardPipeline from "ui5/guard/router/GuardPipeline";
 import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
+
+/**
+ * Sinon-qunit-bridge injects `stub`, `spy`, `mock` onto the QUnit test
+ * context (`this`) via a per-test sandbox that is auto-restored in afterEach.
+ * Using `this.stub` (sandbox) rather than `sinon.stub` (global) ensures
+ * stubs are cleaned up between tests without manual restore.
+ */
+interface SinonTestContext {
+	stub: sinon.SinonStubStatic;
+}
 
 function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 	return {
 		toRoute: "target",
 		toHash: "target",
 		toArguments: {},
-		fromRoute: "current",
-		fromHash: "current",
+		fromRoute: "",
+		fromHash: "",
 		signal: new AbortController().signal,
 		...overrides,
 	};
 }
 ```
 
-- [ ] **Step 2: Add empty pipeline and guard management tests**
+- [x] **Step 2: Add empty pipeline and guard management tests**
 
 ```typescript
 QUnit.module("GuardPipeline - evaluate");
 
 QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "No guards means allow");
 });
 
 QUnit.test("empty pipeline allows when currentRoute is empty string", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
-	const result = pipeline.evaluate(createContext({ fromRoute: "" }), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Initial navigation with no guards allows");
 });
 
@@ -767,7 +761,7 @@ QUnit.test("clear removes all guards", function (assert: Assert) {
 
 	pipeline.clear();
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "All guards cleared");
 });
 
@@ -777,7 +771,7 @@ QUnit.test("removeGlobalGuard removes by reference", function (assert: Assert) {
 	pipeline.addGlobalGuard(guard);
 	pipeline.removeGlobalGuard(guard);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Guard removed, navigation allowed");
 });
 
@@ -787,7 +781,7 @@ QUnit.test("removeEnterGuard removes by reference", function (assert: Assert) {
 	pipeline.addEnterGuard("target", guard);
 	pipeline.removeEnterGuard("target", guard);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Enter guard removed");
 });
 
@@ -797,12 +791,12 @@ QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
 	pipeline.addLeaveGuard("current", guard);
 	pipeline.removeLeaveGuard("current", guard);
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "Leave guard removed");
 });
 ```
 
-- [ ] **Step 3: Add global guard decision tests**
+- [x] **Step 3: Add global guard decision tests**
 
 ```typescript
 QUnit.module("GuardPipeline - global guards");
@@ -810,21 +804,21 @@ QUnit.module("GuardPipeline - global guards");
 QUnit.test("global guard returning true allows", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => true);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 });
 
 QUnit.test("global guard returning false blocks", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => false);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("global guard returning string redirects", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => "login");
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "login" });
 });
 
@@ -832,7 +826,7 @@ QUnit.test("global guard returning GuardRedirect object redirects", function (as
 	const pipeline = new GuardPipeline();
 	const redirect = { route: "login", parameters: { reason: "auth" } };
 	pipeline.addGlobalGuard(() => redirect);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: redirect });
 });
 
@@ -852,12 +846,12 @@ QUnit.test("first non-true global guard short-circuits", function (assert: Asser
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(calls, [1, 2], "Third guard never called");
 });
 ```
 
-- [ ] **Step 4: Add route-specific enter guard tests**
+- [x] **Step 4: Add route-specific enter guard tests**
 
 ```typescript
 QUnit.module("GuardPipeline - route enter guards");
@@ -865,14 +859,14 @@ QUnit.module("GuardPipeline - route enter guards");
 QUnit.test("route enter guard blocks", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addEnterGuard("target", () => false);
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("route enter guard redirects", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addEnterGuard("target", () => "other");
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "other" });
 });
 
@@ -888,7 +882,7 @@ QUnit.test("global guards run before route guards", function (assert: Assert) {
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(order, ["global", "route"]);
 });
 
@@ -904,12 +898,12 @@ QUnit.test("route guard skipped when global guard blocks", function (assert: Ass
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "");
+	pipeline.evaluate(createContext());
 	assert.deepEqual(called, ["global"], "Route guard never called");
 });
 ```
 
-- [ ] **Step 5: Add leave guard tests**
+- [x] **Step 5: Add leave guard tests**
 
 ```typescript
 QUnit.module("GuardPipeline - leave guards");
@@ -917,7 +911,7 @@ QUnit.module("GuardPipeline - leave guards");
 QUnit.test("leave guard blocks navigation", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("current", () => false);
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 });
 
@@ -937,14 +931,14 @@ QUnit.test("leave guard allows, then enter guards run", function (assert: Assert
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "current");
+	pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(order, ["leave", "global", "route"]);
 });
 
 QUnit.test("leave guards skipped when currentRoute is empty string", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("", () => false);
-	const result = pipeline.evaluate(createContext({ fromRoute: "" }), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "No leave guards checked for empty currentRoute");
 });
 
@@ -960,97 +954,89 @@ QUnit.test("leave guard blocking skips enter guards", function (assert: Assert) 
 		return true;
 	});
 
-	pipeline.evaluate(createContext(), "current");
+	pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(called, ["leave"], "Enter guards never called");
 });
 ```
 
-- [ ] **Step 6: Add validation tests**
+- [x] **Step 6: Add validation tests**
 
-Uses sinon stubs for log interception (project already depends on sinon). A shared sandbox in `afterEach` ensures stubs never leak.
+Uses `this.stub` from sinon-qunit-bridge for log interception. The bridge auto-restores stubs between tests.
 
 ```typescript
-QUnit.module("GuardPipeline - validation", {
-	afterEach: function () {
-		sinon.restore();
-	},
-});
+QUnit.module("GuardPipeline - validation");
 
-QUnit.test("invalid guard return value treated as block", function (assert: Assert) {
-	const warnStub = sinon.stub(Log, "warning");
+QUnit.test("invalid guard return value treated as block", function (this: SinonTestContext, assert: Assert) {
+	const warnStub = this.stub(Log, "warning");
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard((() => 42) as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(warnStub.calledOnce, "Warning logged");
 });
 
-QUnit.test("leave guard returning non-boolean treated as block", function (assert: Assert) {
-	const warnStub = sinon.stub(Log, "warning");
+QUnit.test("leave guard returning non-boolean treated as block", function (this: SinonTestContext, assert: Assert) {
+	const warnStub = this.stub(Log, "warning");
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("current", (() => "nope") as unknown as LeaveGuardFn);
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(warnStub.calledOnce, "Warning logged for non-boolean leave guard");
 });
 
-QUnit.test("empty string guard return treated as block", function (assert: Assert) {
-	sinon.stub(Log, "warning");
+QUnit.test("empty string guard return treated as block", function (this: SinonTestContext, assert: Assert) {
+	this.stub(Log, "warning");
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard((() => "") as unknown as GuardFn);
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 ```
 
-- [ ] **Step 7: Add error handling tests**
+- [x] **Step 7: Add error handling tests**
 
 ```typescript
-QUnit.module("GuardPipeline - error handling", {
-	afterEach: function () {
-		sinon.restore();
-	},
-});
+QUnit.module("GuardPipeline - error handling");
 
-QUnit.test("sync guard that throws blocks navigation", function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
+QUnit.test("sync guard that throws blocks navigation", function (this: SinonTestContext, assert: Assert) {
+	const errorStub = this.stub(Log, "error");
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => {
 		throw new Error("boom");
 	});
 
-	const result = pipeline.evaluate(createContext(), "");
+	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
 
-QUnit.test("sync leave guard that throws blocks navigation", function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
+QUnit.test("sync leave guard that throws blocks navigation", function (this: SinonTestContext, assert: Assert) {
+	const errorStub = this.stub(Log, "error");
 	const pipeline = new GuardPipeline();
 	pipeline.addLeaveGuard("current", () => {
 		throw new Error("leave boom");
 	});
 
-	const result = pipeline.evaluate(createContext(), "current");
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
 
-QUnit.test("async guard that rejects blocks navigation", async function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
+QUnit.test("async guard that rejects blocks navigation", async function (this: SinonTestContext, assert: Assert) {
+	const errorStub = this.stub(Log, "error");
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.reject(new Error("async boom")));
 
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
 
-QUnit.test("guard error after signal aborted does not log", async function (assert: Assert) {
-	const errorStub = sinon.stub(Log, "error");
+QUnit.test("guard error after signal aborted does not log", async function (this: SinonTestContext, assert: Assert) {
+	const errorStub = this.stub(Log, "error");
 	const pipeline = new GuardPipeline();
 	const controller = new AbortController();
 	pipeline.addGlobalGuard(() => {
@@ -1058,13 +1044,13 @@ QUnit.test("guard error after signal aborted does not log", async function (asse
 		return Promise.reject(new Error("aborted boom"));
 	});
 
-	const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
 	assert.deepEqual(result, { action: "block" });
 	assert.ok(errorStub.notCalled, "Error suppressed when signal aborted");
 });
 ```
 
-- [ ] **Step 8: Add async pipeline tests**
+- [x] **Step 8: Add async pipeline tests**
 
 ```typescript
 QUnit.module("GuardPipeline - async");
@@ -1072,21 +1058,21 @@ QUnit.module("GuardPipeline - async");
 QUnit.test("async global guard that allows", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve(true));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 });
 
 QUnit.test("async global guard that blocks", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve(false));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "block" });
 });
 
 QUnit.test("async global guard that redirects", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	pipeline.addGlobalGuard(() => Promise.resolve("login"));
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "redirect", target: "login" });
 });
 
@@ -1106,7 +1092,7 @@ QUnit.test("mixed sync-async pipeline", async function (assert: Assert) {
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext(), "");
+	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 	assert.deepEqual(order, [1, 2, 3], "All guards ran in order");
 });
@@ -1123,7 +1109,7 @@ QUnit.test("async leave guard blocks before enter guards", async function (asser
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext(), "current");
+	const result = await pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "block" });
 	assert.deepEqual(called, ["leave"], "Enter guards never called");
 });
@@ -1142,13 +1128,13 @@ QUnit.test("abort signal checked between async guards", async function (assert: 
 		return true;
 	});
 
-	const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "");
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
 	assert.deepEqual(result, { action: "block" }, "Blocked due to abort");
 	assert.deepEqual(called, [1], "Second guard never called");
 });
 ```
 
-- [ ] **Step 9: Add self-removal test**
+- [x] **Step 9: Add self-removal test**
 
 ```typescript
 QUnit.module("GuardPipeline - snapshot copy");
@@ -1162,15 +1148,15 @@ QUnit.test("guard can remove itself during iteration", function (assert: Assert)
 	pipeline.addGlobalGuard(oneShotGuard);
 	pipeline.addGlobalGuard(() => true);
 
-	const result1 = pipeline.evaluate(createContext(), "");
+	const result1 = pipeline.evaluate(createContext());
 	assert.deepEqual(result1, { action: "allow" }, "First call: both guards run, allow");
 
-	const result2 = pipeline.evaluate(createContext(), "");
+	const result2 = pipeline.evaluate(createContext());
 	assert.deepEqual(result2, { action: "allow" }, "Second call: one-shot removed, still allow");
 });
 ```
 
-- [ ] **Step 10: Register in test suite**
+- [x] **Step 10: Register in test suite**
 
 Add to `testsuite.qunit.ts`:
 
@@ -1180,12 +1166,12 @@ GuardPipeline: {
 },
 ```
 
-- [ ] **Step 11: Verify typecheck passes**
+- [x] **Step 11: Verify typecheck passes**
 
 Run: `npm run typecheck` from repo root
 Expected: PASS
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add packages/lib/test/qunit/GuardPipeline.qunit.ts packages/lib/test/qunit/testsuite.qunit.ts
@@ -1198,17 +1184,17 @@ git commit -m "test(router): add standalone GuardPipeline unit tests"
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run full check (format + lint + typecheck)**
+- [x] **Step 1: Run full check (format + lint + typecheck)**
 
 Run: `npm run check` from repo root
 Expected: PASS
 
-- [ ] **Step 2: Run QUnit tests**
+- [x] **Step 2: Run QUnit tests**
 
 Run: `npm run test:qunit` from repo root
 Expected: All tests pass (existing 4,328 + new pipeline tests)
 
-- [ ] **Step 3: Run E2E tests**
+- [x] **Step 3: Run E2E tests**
 
 Run: `npm run test:e2e` from repo root
 Expected: All E2E tests pass unchanged
