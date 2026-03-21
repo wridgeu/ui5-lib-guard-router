@@ -23,6 +23,7 @@ The router provides:
 | 03  | [Transition Object](./03-transition-object.md)                           | Medium   | None       | Proposed        |
 | 04  | [Route Metadata](./04-route-metadata.md)                                 | Low      | None       | Proposed        |
 | 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md) | Medium   | None       | Implemented     |
+| 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)       | High     | None       | Proposed        |
 
 ## Architecture Analysis
 
@@ -35,6 +36,12 @@ The router provides:
 | #   | Feature                                    | Priority | Depends On | Status          |
 | --- | ------------------------------------------ | -------- | ---------- | --------------- |
 | 06  | [navTo Preflight](./06-navto-preflight.md) | High     | None       | **Implemented** |
+
+## Refactoring
+
+| #   | Feature                                                        | Priority | Depends On | Status   |
+| --- | -------------------------------------------------------------- | -------- | ---------- | -------- |
+| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md) | Medium   | None       | Proposed |
 
 ## Status Notes
 
