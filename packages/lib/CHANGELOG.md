@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.0...v1.3.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* **router:** prevent guard bypass during redirects and fix event API ([be9de35](https://github.com/wridgeu/ui5-lib-guard-router/commit/be9de3548ef5d35319a184b24ffb0d3be1a5a9c1))
+
 ## [1.3.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.2.0...v1.3.0) (2026-03-20)
 
 
