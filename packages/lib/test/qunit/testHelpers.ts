@@ -11,6 +11,21 @@ export interface CapturedWarning {
 
 export const GuardRouterClass = Router;
 
+export function createRouterWithOptions(guardRouter: Record<string, unknown>): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+			{ name: "detail", pattern: "detail/{id}" },
+		],
+		{
+			async: true,
+			guardRouter,
+		},
+	);
+}
+
 function getRouterMethod(router: GuardRouter, methodName: string): (...args: unknown[]) => unknown {
 	const method = Reflect.get(router, methodName);
 	if (typeof method !== "function") {

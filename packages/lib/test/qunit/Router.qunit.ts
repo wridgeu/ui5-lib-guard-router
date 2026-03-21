@@ -21,6 +21,7 @@ import {
 	assertBlocked,
 	captureWarnings,
 	captureWarningsAsync,
+	createRouterWithOptions,
 	GuardRouterClass,
 	initHashChanger,
 	nextTick,
@@ -4325,6 +4326,58 @@ QUnit.test("async redirect failure drains settlement resolvers", async function 
 
 	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after async redirect failure");
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Async redirect failure settles as Blocked");
+});
+
+// ============================================================
+// Module: Router options -- constructor
+// ============================================================
+QUnit.module("Router - Router options - constructor", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("constructor accepts guardRouter config and does not leak it to parent", function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteGuardRegistration: "ignore", navToPreflight: "guard" });
+	const options = Reflect.get(router, "_options") as Record<string, unknown>;
+
+	assert.strictEqual(options.unknownRouteGuardRegistration, "ignore", "unknownRouteGuardRegistration is read");
+	assert.strictEqual(options.navToPreflight, "guard", "navToPreflight is read");
+});
+
+QUnit.test("malformed guardRouter config warns and uses defaults", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions("not-an-object" as unknown as Record<string, unknown>);
+	});
+	const options = Reflect.get(router, "_options") as Record<string, unknown>;
+
+	assert.strictEqual(options.unknownRouteGuardRegistration, "warn", "falls back to default");
+	assert.strictEqual(options.navToPreflight, "guard", "falls back to default");
+	assert.ok(warnings.length > 0, "warning logged for non-object config");
+});
+
+QUnit.test("invalid option values warn individually and fall back", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions({
+			unknownRouteGuardRegistration: "invalid",
+			navToPreflight: 42,
+			guardLoading: null,
+		});
+	});
+	const options = Reflect.get(router, "_options") as Record<string, unknown>;
+
+	assert.strictEqual(
+		options.unknownRouteGuardRegistration,
+		"warn",
+		"invalid unknownRouteGuardRegistration falls back",
+	);
+	assert.strictEqual(options.navToPreflight, "guard", "invalid navToPreflight falls back");
+	assert.strictEqual(options.guardLoading, "block", "invalid guardLoading falls back");
+	assert.strictEqual(warnings.length, 3, "one warning per invalid option");
 });
 
 // ============================================================

@@ -8,10 +8,13 @@ import type {
 	GuardResult,
 	GuardRedirect,
 	GuardRouter,
+	GuardLoading,
 	LeaveGuardFn,
+	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
+	UnknownRouteGuardRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 
@@ -104,6 +107,86 @@ type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
 
 const IDLE: PhaseIdle = { kind: "idle" };
 
+/** Type guard for plain objects. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
+}
+
+function isUnknownRouteGuardRegistrationPolicy(v: unknown): v is UnknownRouteGuardRegistrationPolicy {
+	return v === "ignore" || v === "warn" || v === "throw";
+}
+
+function isNavToPreflightMode(v: unknown): v is NavToPreflightMode {
+	return v === "guard" || v === "bypass" || v === "off";
+}
+
+function isGuardLoading(v: unknown): v is GuardLoading {
+	return v === "block" || v === "lazy";
+}
+
+interface ResolvedGuardRouterOptions {
+	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
+	readonly navToPreflight: NavToPreflightMode;
+	readonly guardLoading: GuardLoading;
+}
+
+const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
+	unknownRouteGuardRegistration: "warn",
+	navToPreflight: "guard",
+	guardLoading: "block",
+};
+
+function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
+	if (!isRecord(raw)) {
+		if (raw !== undefined) {
+			Log.warning("guardRouter config is not a plain object, using defaults", JSON.stringify(raw), LOG_COMPONENT);
+		}
+		return DEFAULT_OPTIONS;
+	}
+
+	const result = { ...DEFAULT_OPTIONS };
+
+	if (raw.unknownRouteGuardRegistration !== undefined) {
+		if (isUnknownRouteGuardRegistrationPolicy(raw.unknownRouteGuardRegistration)) {
+			result.unknownRouteGuardRegistration = raw.unknownRouteGuardRegistration;
+		} else {
+			Log.warning(
+				"guardRouter.unknownRouteGuardRegistration has invalid value, using default",
+				JSON.stringify(raw.unknownRouteGuardRegistration),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	if (raw.navToPreflight !== undefined) {
+		if (isNavToPreflightMode(raw.navToPreflight)) {
+			result.navToPreflight = raw.navToPreflight;
+		} else {
+			Log.warning(
+				"guardRouter.navToPreflight has invalid value, using default",
+				JSON.stringify(raw.navToPreflight),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	if (raw.guardLoading !== undefined) {
+		if (isGuardLoading(raw.guardLoading)) {
+			result.guardLoading = raw.guardLoading;
+		} else {
+			Log.warning(
+				"guardRouter.guardLoading has invalid value, using default",
+				JSON.stringify(raw.guardLoading),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	return result;
+}
+
 /**
  * Router with navigation guard support.
  *
@@ -129,6 +212,7 @@ const IDLE: PhaseIdle = { kind: "idle" };
  * @extends sap.m.routing.Router
  */
 export default class Router extends MobileRouter implements GuardRouter {
+	private _options: ResolvedGuardRouterOptions = DEFAULT_OPTIONS;
 	private _globalGuards: GuardFn[] = [];
 	private _enterGuards = new Map<string, GuardFn[]>();
 	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
@@ -139,6 +223,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _suppressedHash: string | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
+
+	constructor(
+		routes?: object | object[],
+		config: (object & { guardRouter?: unknown }) | undefined = {},
+		owner?: object,
+		targetsConfig?: object,
+		routerHashChanger?: object,
+	) {
+		const { guardRouter, ...cleanConfig } = isRecord(config) ? config : ({} as Record<string, unknown>);
+		super(routes, isRecord(config) ? cleanConfig : config, owner, targetsConfig, routerHashChanger);
+		this._options = normalizeGuardRouterOptions(guardRouter);
+	}
 
 	/**
 	 * Register a global guard that runs for every navigation.
