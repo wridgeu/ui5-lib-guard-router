@@ -133,6 +133,8 @@ interface GuardDescriptor {
 	readonly route: string; // "*" for global, route name for per-route
 	readonly type: "enter" | "leave";
 	readonly modulePath: string;
+	readonly name: string;
+	readonly exportKey?: string;
 }
 
 /**
@@ -149,6 +151,27 @@ function resolveGuardModulePath(dotPath: string, componentNamespace: string): st
 	}
 	const fullDotPath = componentNamespace ? componentNamespace + "." + dotPath : dotPath;
 	return fullDotPath.replace(/\./g, "/");
+}
+
+/**
+ * Split a manifest guard entry on the first `#` to separate the module path
+ * from an optional export key, then derive a human-readable guard name.
+ */
+function parseGuardEntry(
+	entry: string,
+	componentNamespace: string,
+): { modulePath: string; name: string; exportKey?: string } {
+	const hashIndex = entry.indexOf("#");
+	const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex);
+	const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1);
+
+	const modulePath = resolveGuardModulePath(rawPath, componentNamespace);
+
+	// Name: export key if present, otherwise last segment of the dot path
+	const lastSegment = rawPath.split(".").pop() ?? rawPath;
+	const name = exportKey ?? lastSegment;
+
+	return { modulePath, name, exportKey };
 }
 
 /**
@@ -183,10 +206,13 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 					);
 					continue;
 				}
+				const parsed = parseGuardEntry(entry, componentNamespace);
 				descriptors.push({
 					route: key,
 					type: "enter",
-					modulePath: resolveGuardModulePath(entry, componentNamespace),
+					modulePath: parsed.modulePath,
+					name: parsed.name,
+					exportKey: parsed.exportKey,
 				});
 			}
 		} else if (isRecord(value)) {
@@ -223,10 +249,13 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 						);
 						continue;
 					}
+					const parsed = parseGuardEntry(entry, componentNamespace);
 					descriptors.push({
 						route: key,
 						type: "enter",
-						modulePath: resolveGuardModulePath(entry, componentNamespace),
+						modulePath: parsed.modulePath,
+						name: parsed.name,
+						exportKey: parsed.exportKey,
 					});
 				}
 			}
@@ -241,10 +270,13 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 						);
 						continue;
 					}
+					const parsed = parseGuardEntry(entry, componentNamespace);
 					descriptors.push({
 						route: key,
 						type: "leave",
-						modulePath: resolveGuardModulePath(entry, componentNamespace),
+						modulePath: parsed.modulePath,
+						name: parsed.name,
+						exportKey: parsed.exportKey,
 					});
 				}
 			}

@@ -4,6 +4,7 @@ import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureWarnings,
+	captureWarningsAsync,
 	createRouterWithOptions,
 	GuardRouterClass,
 	initHashChanger,
@@ -652,4 +653,165 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 	const result = await router.navigationSettled();
 
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard loaded via module: prefix blocks navigation");
+});
+
+// ============================================================
+// Module: Cherry-pick syntax
+// ============================================================
+QUnit.module("Router - Cherry-pick syntax", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("cherry-pick by name from object module registers only that guard", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkAuth"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Committed,
+		"cherry-picked checkAuth (returns true) allows navigation",
+	);
+});
+
+QUnit.test("cherry-pick by name selects blocking guard", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"cherry-picked checkRole (returns false) blocks navigation",
+	);
+});
+
+QUnit.test("cherry-pick by index from array module", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#1"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"cherry-picked index 1 (blockSecond) blocks navigation",
+	);
+});
+
+QUnit.test("cherry-pick from single-function module ignores # and still works", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard#nonexistent"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "function module still blocks despite #");
+});
+
+QUnit.test("invalid cherry-pick key warns and skips", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#doesNotExist"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("doesNotExist")),
+		"warning logged for nonexistent export key",
+	);
 });
