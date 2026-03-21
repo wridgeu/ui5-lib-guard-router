@@ -155,9 +155,13 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "block"`.
  */
 export interface GuardRouterOptions {
+	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */
 	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
+	/** Strategy for evaluating guards on programmatic `navTo()` calls. Defaults to `"guard"`. */
 	navToPreflight?: NavToPreflightMode;
+	/** Strategy for loading manifest-declared guard modules. Defaults to `"block"`. */
 	guardLoading?: GuardLoading;
+	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
 }
 
