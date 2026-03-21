@@ -350,6 +350,123 @@ Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The
 3. **Route-specific enter guards** for the target (registration order)
 4. Pipeline **short-circuits** at the first non-`true` result
 
+## Manifest Configuration
+
+Guards can be declared directly in `manifest.json` using the `guardRouter` block inside `sap.ui5.routing.config`. This eliminates boilerplate in `Component.ts` for common guard patterns.
+
+```json
+{
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"guardRouter": {
+					"unknownRouteGuardRegistration": "warn",
+					"navToPreflight": "guard",
+					"guardLoading": "block",
+					"guards": {
+						"*": ["guards.authGuard"],
+						"admin": {
+							"enter": ["guards.adminGuard"],
+							"leave": ["guards.unsavedChangesGuard"]
+						}
+					}
+				}
+			}
+		}
+	}
+}
+```
+
+### Router options
+
+| Option                          | Values                              | Default   | Description                                                                                                                                   |
+| ------------------------------- | ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                       |
+| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`) |
+| `guardLoading`                  | `"block"` \| `"lazy"`               | `"block"` | Whether navigation waits for guards to finish loading before proceeding (`"block"`) or continues immediately (`"lazy"`)                       |
+
+### Declarative guards
+
+The `guards` map wires guard modules to routes without writing code in `Component.ts`.
+
+**Global guards** run on every navigation and are declared under the `"*"` key:
+
+```json
+"guards": {
+	"*": ["guards.authGuard"]
+}
+```
+
+**Per-route guards** use the route name as the key. The shorthand array form registers enter guards only:
+
+```json
+"guards": {
+	"admin": ["guards.adminGuard"]
+}
+```
+
+The full object form with `enter` and `leave` keys registers both enter and leave guards:
+
+```json
+"guards": {
+	"admin": {
+		"enter": ["guards.adminGuard"],
+		"leave": ["guards.unsavedChangesGuard"]
+	}
+}
+```
+
+**Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
+
+To use an absolute module path, prefix it with `"module:"`:
+
+```json
+"*": ["module:com/shared/guards/authGuard"]
+```
+
+### Guard module format
+
+Each entry in the guard array must be a module that exports a guard function as its default export:
+
+```typescript
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default function authGuard(context: GuardContext): GuardResult {
+	// standalone guard function
+	return true;
+}
+```
+
+The module is loaded once and the default export is called directly for each navigation. The function receives the same `GuardContext` as programmatically registered guards and returns the same `GuardResult` union.
+
+### Guard context `meta`
+
+Guards in the same pipeline can share data through `context.meta`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
+
+```typescript
+export default function firstGuard(context: GuardContext): GuardResult {
+	context.meta.set("userId", getCurrentUserId());
+	return true;
+}
+
+export default function secondGuard(context: GuardContext): GuardResult {
+	const userId = context.meta.get("userId");
+	// use userId from earlier guard in same pipeline
+	return true;
+}
+```
+
+This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
+
+### `skipGuards` option
+
+Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
+
+```typescript
+router.navTo("settings", {}, false, { skipGuards: true });
+```
+
 ## Examples
 
 ### Async guard with AbortSignal
