@@ -225,15 +225,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 
-	constructor(
-		routes?: object | object[],
-		config: (object & { guardRouter?: unknown }) | undefined = {},
-		owner?: object,
-		targetsConfig?: object,
-		routerHashChanger?: object,
-	) {
-		const { guardRouter, ...cleanConfig } = isRecord(config) ? config : ({} as Record<string, unknown>);
-		super(routes, isRecord(config) ? cleanConfig : config, owner, targetsConfig, routerHashChanger);
+	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
+		const [routes, config, ...rest] = args;
+		const rawConfig = config as Record<string, unknown> | undefined;
+		const { guardRouter, ...cleanConfig } = isRecord(rawConfig) ? rawConfig : ({} as Record<string, unknown>);
+		super(routes, isRecord(rawConfig) ? (cleanConfig as typeof config) : config, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
 	}
 

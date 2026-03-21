@@ -22,7 +22,7 @@ export function createRouterWithOptions(guardRouter: Record<string, unknown>): G
 		{
 			async: true,
 			guardRouter,
-		},
+		} as object,
 	);
 }
 

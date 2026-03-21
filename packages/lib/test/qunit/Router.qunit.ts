@@ -4395,11 +4395,12 @@ QUnit.module("Router - unknownRouteGuardRegistration", {
 
 QUnit.test('"ignore" registers silently for unknown routes', function (assert: Assert) {
 	router = createRouterWithOptions({ unknownRouteGuardRegistration: "ignore" });
-	const guard: GuardFn = () => true;
+	const enterGuard: GuardFn = () => true;
+	const leaveGuard: LeaveGuardFn = () => true;
 
 	const warnings = captureWarnings(() => {
-		router.addRouteGuard("nonexistent", guard);
-		router.addLeaveGuard("nonexistent", guard);
+		router.addRouteGuard("nonexistent", enterGuard);
+		router.addLeaveGuard("nonexistent", leaveGuard);
 	});
 
 	assert.strictEqual(warnings.length, 0, "no warnings logged");
