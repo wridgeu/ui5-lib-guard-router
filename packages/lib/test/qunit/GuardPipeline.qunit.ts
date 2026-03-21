@@ -9,7 +9,7 @@ import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types
  * stubs are cleaned up between tests without manual restore.
  */
 interface SinonTestContext {
-	stub: sinon.SinonSandbox["stub"];
+	stub: sinon.SinonStubStatic;
 }
 
 function createContext(overrides: Partial<GuardContext> = {}): GuardContext {

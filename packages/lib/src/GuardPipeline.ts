@@ -42,7 +42,7 @@ export type GuardDecision =
  * no dependency on Router state beyond the current route name
  * passed into evaluate().
  *
- * @private
+ * @namespace ui5.guard.router
  */
 export default class GuardPipeline {
 	private _globalGuards: GuardFn[] = [];
