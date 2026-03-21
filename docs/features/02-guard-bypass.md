@@ -8,7 +8,7 @@
 
 ## Problem
 
-Every `navTo()` call goes through the full guard pipeline (except redirects via `_redirecting`). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
+Every `navTo()` call goes through the full guard pipeline (except redirects via the committing/redirect phase). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
 
 - **Save & Navigate**: User saves a form, then navigates away. The leave guard shouldn't fire because the data is already saved.
 - **Logout**: Navigate to login regardless of any guards. The user explicitly wants to leave.
@@ -100,7 +100,7 @@ parse(this: RouterInstance, newHash: string): void {
         return;
     }
 
-    if (this._redirecting) { /* ... existing ... */ }
+    if (this._phase.kind === "committing") { /* ... existing ... */ }
     // ... rest of guard pipeline ...
 }
 ```

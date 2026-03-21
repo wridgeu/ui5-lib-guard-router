@@ -214,11 +214,12 @@ _createTransition(
             }
             used = true;
             // Directly commit the navigation, bypassing guards
-            router._redirecting = true;
+            // (enters committing/bypass phase internally)
+            router._enterCommittingPhase("bypass");
             try {
                 router.navTo(route, (routeInfo ? routeInfo.arguments : {}), undefined, true);
             } finally {
-                router._redirecting = false;
+                router._enterIdlePhase();
             }
         }
     };

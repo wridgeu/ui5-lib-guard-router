@@ -20,6 +20,7 @@ export default {
 		},
 		loader: {
 			paths: {
+				"ui5/guard/router/qunit": "test-resources/ui5/guard/router/qunit",
 				"ui5/guard/router": "resources/ui5/guard/router",
 			},
 		},

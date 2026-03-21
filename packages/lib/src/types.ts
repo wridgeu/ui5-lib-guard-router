@@ -97,6 +97,69 @@ export interface RouteGuardConfig {
 }
 
 /**
+ * Policy used when a guard is registered for a route name that does not exist yet.
+ *
+ * Configure this through `sap.ui5.routing.config.guardRouter.unknownRouteGuardRegistration`
+ * in `manifest.json`, or by passing `guardRouter` in the router constructor config.
+ *
+ * - `"ignore"` registers silently.
+ * - `"warn"` logs a warning and still registers.
+ * - `"throw"` throws synchronously and does not register.
+ */
+export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
+
+/**
+ * Strategy used for programmatic `navTo()` calls.
+ *
+ * Configure this through `sap.ui5.routing.config.guardRouter.navToPreflight`
+ * in `manifest.json`, or by passing `guardRouter` in the router constructor config.
+ *
+ * - `"guard"` runs guards before the hash changes.
+ * - `"bypass"` skips guards for programmatic `navTo()` calls only.
+ * - `"off"` disables the preflight path and lets `parse()` guard the hash change afterward.
+ */
+export type NavToPreflightMode = "guard" | "bypass" | "off";
+
+/**
+ * Router-level options for the guard router.
+ *
+ * These options are intended to be configured manifest-first under
+ * `sap.ui5.routing.config.guardRouter`, which is read automatically when UI5
+ * instantiates the router from `routerClass`. The same shape is also accepted
+ * in the router constructor config for tests or standalone instantiation.
+ *
+ * Defaults when omitted:
+ * - `unknownRouteGuardRegistration: "warn"`
+ * - `navToPreflight: "guard"`
+ */
+export interface GuardRouterOptions {
+	/**
+	 * Controls how `addRouteGuard()` and `addLeaveGuard()` behave when the route
+	 * name is unknown at registration time.
+	 */
+	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
+	/**
+	 * Controls how programmatic `navTo()` calls interact with the guard pipeline.
+	 */
+	navToPreflight?: NavToPreflightMode;
+}
+
+/**
+ * Per-navigation overrides for programmatic `navTo()` calls.
+ *
+ * These options apply only to the current `navTo()` call.
+ * `skipGuards: true` bypasses guards for the current programmatic navigation,
+ * including when the router's global `navToPreflight` mode is `"guard"` or `"off"`.
+ */
+export interface GuardNavToOptions {
+	/**
+	 * When `true`, skip all guards for this programmatic navigation only.
+	 * Browser-initiated hash changes still run through `parse()` as usual.
+	 */
+	skipGuards?: boolean;
+}
+
+/**
  * Result of a settled navigation, returned by `navigationSettled()`.
  */
 export interface NavigationResult {
@@ -134,6 +197,27 @@ export type Router$NavigationSettledEvent = Event<NavigationResult, GuardRouter>
  */
 export interface GuardRouter extends MobileRouter {
 	/**
+	 * Navigate using the standard UI5 overloads with optional guard-router-specific
+	 * per-call options.
+	 *
+	 * Supported forms are:
+	 * - `navTo(routeName, parameters?, replace?)`
+	 * - `navTo(routeName, parameters?, componentTargetInfo?, replace?)`
+	 * - `navTo(routeName, parameters?, replace?, options?)`
+	 * - `navTo(routeName, parameters?, componentTargetInfo?, options?)`
+	 * - `navTo(routeName, parameters?, componentTargetInfo?, replace?, options?)`
+	 *
+	 * To avoid ambiguity with UI5's `componentTargetInfo` object, pass
+	 * `GuardNavToOptions` only in the fourth or fifth argument position.
+	 */
+	navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
+		replaceOrOptions?: boolean | GuardNavToOptions,
+		options?: GuardNavToOptions,
+	): this;
+	/**
 	 * Register a global guard that runs for every navigation.
 	 *
 	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
@@ -153,7 +237,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Accepts either an enter guard function or a configuration object with
 	 * `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. Unknown routes are handled according to `guardRouter.unknownRouteGuardRegistration`.
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
@@ -176,7 +260,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Leave guards run when navigating away from the route. They can allow or
 	 * block the navigation, but they cannot redirect.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. Unknown routes are handled according to `guardRouter.unknownRouteGuardRegistration`.
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */

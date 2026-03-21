@@ -1,10 +1,13 @@
 import sinon from "sinon";
 import DataType from "sap/ui/base/DataType";
 import Log from "sap/base/Log";
+import Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type UIComponent from "sap/ui/core/UIComponent";
 import type {
 	GuardContext,
 	GuardFn,
+	GuardRouterOptions,
 	GuardRedirect,
 	GuardRouter,
 	LeaveGuardFn,
@@ -31,7 +34,7 @@ import {
 	waitForRoute,
 } from "./testHelpers";
 
-function createRouter(): GuardRouter {
+function createRouter(config?: { async?: boolean; guardRouter?: GuardRouterOptions }): GuardRouter {
 	return new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -41,11 +44,50 @@ function createRouter(): GuardRouter {
 		],
 		{
 			async: true,
+			...config,
 		},
 	);
 }
 
 let router: GuardRouter;
+
+function recreateRouter(guardRouter?: GuardRouterOptions): GuardRouter {
+	try {
+		router.destroy();
+	} catch {
+		/* already destroyed */
+	}
+	router = createRouter(guardRouter ? { guardRouter } : undefined);
+	return router;
+}
+
+async function createManifestComponent(guardRouter: unknown): Promise<UIComponent> {
+	return (await Component.create({
+		id: `manifest-component-${Date.now()}`,
+		name: "ui5.guard.router.qunit.fixtures.manifest",
+		manifest: {
+			"sap.app": {
+				id: "ui5.guard.router.qunit.fixtures.manifest",
+				type: "application",
+			},
+			"sap.ui5": {
+				dependencies: {
+					libs: {
+						"sap.m": {},
+					},
+				},
+				routing: {
+					config: {
+						async: true,
+						routerClass: "ui5.guard.router.Router",
+						guardRouter,
+					},
+					routes: [{ name: "home", pattern: "" }],
+				},
+			},
+		},
+	})) as UIComponent;
+}
 
 const standardHooks = {
 	beforeEach: function () {
@@ -82,6 +124,72 @@ QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: As
 	assert.strictEqual(type?.isValid(NavigationOutcome.Committed), true, "Known enum values are accepted");
 	assert.strictEqual(type?.isValid(NavigationOutcome.Bypassed), true, "Bypassed enum value is accepted");
 	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
+});
+
+QUnit.test(
+	"UIComponent routing manifest instantiates the configured routerClass with guardRouter options",
+	async function (assert) {
+		const component = await createManifestComponent({
+			unknownRouteGuardRegistration: "throw",
+			navToPreflight: "bypass",
+		});
+
+		try {
+			const manifestRouter = component.getRouter();
+			assert.ok(
+				manifestRouter.isA("ui5.guard.router.Router"),
+				"Manifest-created component uses the guard router class",
+			);
+			assert.deepEqual(
+				Reflect.get(manifestRouter, "_options"),
+				{
+					unknownRouteGuardRegistration: "throw",
+					navToPreflight: "bypass",
+				},
+				"Manifest-provided guardRouter options are normalized onto the router instance",
+			);
+			assert.notOk(
+				Object.prototype.hasOwnProperty.call(
+					Reflect.get(manifestRouter, "_oConfig") as Record<string, unknown>,
+					"guardRouter",
+				),
+				"Custom guardRouter config does not leak into the base router config when instantiated via UIComponent",
+			);
+		} finally {
+			component.destroy();
+		}
+	},
+);
+
+QUnit.test("UIComponent routing manifest warns and defaults malformed guardRouter config", async function (assert) {
+	let component: UIComponent | undefined;
+	const warnings = await captureWarningsAsync(async () => {
+		component = await createManifestComponent(["invalid"]);
+	});
+
+	try {
+		const manifestRouter = component!.getRouter();
+		assert.deepEqual(
+			warnings,
+			[
+				{
+					message: "Invalid guardRouter config value, falling back to defaults",
+					details: '["invalid"]',
+				},
+			],
+			"Malformed manifest guardRouter config emits the expected warning",
+		);
+		assert.deepEqual(
+			Reflect.get(manifestRouter, "_options"),
+			{
+				unknownRouteGuardRegistration: "warn",
+				navToPreflight: "guard",
+			},
+			"Malformed manifest guardRouter config falls back to defaults",
+		);
+	} finally {
+		component?.destroy();
+	}
 });
 
 // ============================================================
@@ -266,6 +374,175 @@ QUnit.test("addLeaveGuard warns for unknown route but still registers the guard"
 	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
 	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Guard still registered for the unknown route");
 });
+
+QUnit.test("constructor strips custom guardRouter config from the base router config", function (assert: Assert) {
+	recreateRouter({
+		unknownRouteGuardRegistration: "ignore",
+		navToPreflight: "off",
+	});
+
+	const baseConfig = Reflect.get(router, "_oConfig") as Record<string, unknown>;
+	assert.strictEqual(baseConfig.async, true, "Native config values are still forwarded");
+	assert.notOk(
+		Object.prototype.hasOwnProperty.call(baseConfig, "guardRouter"),
+		"Custom guardRouter config does not leak into the base router config",
+	);
+});
+
+QUnit.test("invalid guardRouter config values warn and fall back to defaults", async function (assert: Assert) {
+	router.destroy();
+
+	const warnings = captureWarnings(() => {
+		router = createRouter({
+			guardRouter: {
+				unknownRouteGuardRegistration:
+					"invalid" as unknown as GuardRouterOptions["unknownRouteGuardRegistration"],
+				navToPreflight: "invalid" as unknown as GuardRouterOptions["navToPreflight"],
+			},
+		});
+	});
+
+	assert.deepEqual(
+		warnings,
+		[
+			{
+				message: 'Invalid guardRouter.unknownRouteGuardRegistration value, falling back to "warn"',
+				details: "invalid",
+			},
+			{
+				message: 'Invalid guardRouter.navToPreflight value, falling back to "guard"',
+				details: "invalid",
+			},
+		],
+		"Invalid config values emitted fallback warnings",
+	);
+
+	const warnAgain = captureWarnings(() => {
+		router.addRouteGuard("missing", () => true);
+	});
+
+	assert.strictEqual(warnAgain.length, 1, "Unknown-route registration fell back to warn");
+	assert.strictEqual(
+		warnAgain[0]?.message,
+		"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+		"Fallback warning behavior matches the default policy",
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"Programmatic navigation still falls back to guarded preflight",
+	);
+});
+
+QUnit.test("non-object guardRouter config warns and falls back to defaults", function (assert: Assert) {
+	router.destroy();
+
+	const warnings = captureWarnings(() => {
+		router = createRouter({
+			guardRouter: ["invalid"] as unknown as GuardRouterOptions,
+		});
+	});
+
+	assert.deepEqual(
+		warnings,
+		[
+			{
+				message: "Invalid guardRouter config value, falling back to defaults",
+				details: '["invalid"]',
+			},
+		],
+		"Non-plain-object guardRouter config emits a fallback warning",
+	);
+});
+
+QUnit.test("unknown route registration policy 'ignore' registers route guard silently", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
+
+	const guard: GuardFn = () => true;
+	const warnings = captureWarnings(() => {
+		router.addRouteGuard("missing", guard);
+	});
+
+	assert.strictEqual(warnings.length, 0, "No warning was logged");
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.strictEqual(enterGuards.get("missing")?.[0], guard, "Guard registered silently");
+});
+
+QUnit.test("unknown route registration policy 'ignore' registers leave guard silently", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "ignore" });
+
+	const guard: LeaveGuardFn = () => true;
+	const warnings = captureWarnings(() => {
+		router.addLeaveGuard("missing", guard);
+	});
+
+	assert.strictEqual(warnings.length, 0, "No warning was logged");
+	const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+	assert.strictEqual(leaveGuards.get("missing")?.[0], guard, "Leave guard registered silently");
+});
+
+QUnit.test("unknown route registration policy 'throw' rejects direct route guards", function (assert: Assert) {
+	recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+	const guard: GuardFn = () => true;
+	assert.throws(
+		() => router.addRouteGuard("missing", guard),
+		/unknown route "missing"/,
+		"Unknown route registration throws synchronously",
+	);
+
+	const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+	assert.notOk(enterGuards.has("missing"), "Guard was not registered");
+});
+
+QUnit.test(
+	"unknown route registration policy 'throw' rejects object form without partial registration",
+	function (assert: Assert) {
+		recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+		const enterGuard: GuardFn = () => true;
+		const leaveGuard: LeaveGuardFn = () => true;
+		assert.throws(
+			() => router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard }),
+			/unknown route "missing"/,
+			"Object-form registration throws synchronously",
+		);
+
+		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		assert.notOk(enterGuards.has("missing"), "Enter guard was not partially registered");
+		assert.notOk(leaveGuards.has("missing"), "Leave guard was not partially registered");
+	},
+);
+
+QUnit.test(
+	"unknown route registration policy 'throw' rejects object form even when both handlers are invalid",
+	function (assert: Assert) {
+		recreateRouter({ unknownRouteGuardRegistration: "throw" });
+
+		assert.throws(
+			() =>
+				router.addRouteGuard("missing", {
+					beforeEnter: "notAFunction" as unknown as GuardFn,
+					beforeLeave: 42 as unknown as LeaveGuardFn,
+				}),
+			/unknown route "missing"/,
+			"Throw policy fires before handler validity causes early return",
+		);
+
+		const enterGuards = Reflect.get(router, "_enterGuards") as Map<string, GuardFn[]>;
+		const leaveGuards = Reflect.get(router, "_leaveGuards") as Map<string, LeaveGuardFn[]>;
+		assert.notOk(enterGuards.has("missing"), "No enter guard was registered");
+		assert.notOk(leaveGuards.has("missing"), "No leave guard was registered");
+	},
+);
 
 QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (assert: Assert) {
 	addRouteGuardUnsafe(router, "protected", null);
@@ -1030,7 +1307,7 @@ QUnit.test("Guard that returns redirect does not cause infinite loop", async fun
 
 QUnit.test("Multiple route guards with cross-redirects settle correctly", async function (assert: Assert) {
 	// forbidden → redirects to protected, protected → redirects to home
-	// But redirect is re-entrant (_redirecting=true) so it bypasses guards.
+	// But redirect is re-entrant (committing/redirect phase) so it bypasses guards.
 	// We should end up on protected, not home.
 	router.addRouteGuard("forbidden", () => "protected");
 	router.addRouteGuard("protected", () => "home");
@@ -1949,7 +2226,7 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 	const result = await router.navigationSettled();
 
 	// The redirect from forbidden back to home should NOT trigger
-	// the leave guard again because _redirecting bypasses all guards
+	// the leave guard again because the committing/redirect phase bypasses all guards
 	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Navigation resulted in redirect");
 	assert.strictEqual(leaveGuardCallCount, 1, "Leave guard ran exactly once (for initial leave, not during redirect)");
 });
@@ -3175,7 +3452,7 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-QUnit.test("Redirect target's own guard is bypassed by _redirecting flag", async function (assert: Assert) {
+QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("forbidden", () => false);
 	router.initialize();
@@ -3624,6 +3901,151 @@ QUnit.test("async redirect to nonexistent via navTo does not call _restoreHash",
 	}
 });
 
+QUnit.module("Router - navTo options", standardHooks);
+
+QUnit.test("navToPreflight 'bypass' skips guards for programmatic navTo", async function (assert) {
+	recreateRouter({ navToPreflight: "bypass" });
+
+	let guardCallCount = 0;
+	router.addRouteGuard("protected", () => {
+		guardCallCount++;
+		return false;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Programmatic navTo committed");
+	assert.strictEqual(result.route, "protected", "Navigation reached the target route");
+	assert.strictEqual(getHash(), "protected", "Hash updated to protected");
+	assert.strictEqual(guardCallCount, 0, "Route guard did not run for bypassed navTo");
+});
+
+QUnit.test("navToPreflight 'bypass' still guards browser-driven hash changes", async function (assert) {
+	recreateRouter({ navToPreflight: "bypass" });
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Browser hash change is still blocked");
+	assert.strictEqual(result.route, "home", "Router stays on the current route");
+	assert.strictEqual(getHash(), "", "Hash was restored to the previous route");
+});
+
+QUnit.test("navToPreflight 'off' defers programmatic navTo to parse fallback", async function (assert) {
+	recreateRouter({ navToPreflight: "off" });
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Blocked navigation settled via parse");
+		assert.strictEqual(restoreSpy.callCount, 1, "Hash restoration ran on the parse path");
+		assert.strictEqual(getHash(), "", "Hash restored after blocked navigation");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test("skipGuards overrides default preflight via the replace overload", async function (assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+
+	router.navTo("detail", { id: "42" }, true, { skipGuards: true });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
+	assert.strictEqual(result.route, "detail", "Detail route became active");
+	assert.strictEqual(getHash(), "detail/42", "Hash contains route parameters");
+});
+
+QUnit.test("skipGuards overrides navToPreflight 'off' via the full overload", async function (assert) {
+	recreateRouter({ navToPreflight: "off" });
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(() => false);
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("forbidden", {}, {}, true, { skipGuards: true });
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Per-call bypass committed");
+		assert.strictEqual(result.route, "forbidden", "Target route became active");
+		assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
+		assert.strictEqual(restoreSpy.callCount, 0, "Parse fallback did not restore the hash");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
+QUnit.test(
+	"combined ignore + bypass config keeps registration silent and bypasses navTo guards",
+	async function (assert) {
+		recreateRouter({
+			unknownRouteGuardRegistration: "ignore",
+			navToPreflight: "bypass",
+		});
+
+		const warnings = captureWarnings(() => {
+			router.addRouteGuard("missing", () => true);
+			router.addRouteGuard("protected", () => false);
+		});
+
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(warnings.length, 0, "Unknown route registration stayed silent");
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Programmatic navTo bypassed guards");
+		assert.strictEqual(result.route, "protected", "Navigation reached protected");
+	},
+);
+
+QUnit.test("combined throw + off config throws on registration and still uses parse fallback", async function (assert) {
+	recreateRouter({
+		unknownRouteGuardRegistration: "throw",
+		navToPreflight: "off",
+	});
+
+	assert.throws(
+		() => router.addLeaveGuard("missing", () => true),
+		/unknown route "missing"/,
+		"Unknown route registration threw under the combined config",
+	);
+
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
+	try {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Blocked navigation still used parse fallback");
+		assert.strictEqual(restoreSpy.callCount, 1, "Parse fallback restored the hash");
+		assert.strictEqual(getHash(), "", "Hash restored to home");
+	} finally {
+		restoreSpy.restore();
+	}
+});
+
 QUnit.module("Router - navigationSettled event", standardHooks);
 
 QUnit.test("fires on committed navigation", async function (assert) {
@@ -3754,9 +4176,9 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
 	// A global guard blocks everything except "home".
 	//
-	// Bug: _flushSettlement fires the navigationSettled event synchronously while
-	// _redirecting=true. Any navTo() from that handler sees _redirecting=true and
-	// calls super.navTo() directly, bypassing the guard pipeline.
+	// Regression guard: _flushSettlement fires the navigationSettled event
+	// synchronously. The phase is set to idle before _flushSettlement, so
+	// navTo() from the handler enters the full guard pipeline.
 	router.addRouteGuard("forbidden", () => "home");
 	router.addGuard((ctx: GuardContext) => ctx.toRoute === "home");
 
@@ -3767,8 +4189,8 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	const handler = (evt: Router$NavigationSettledEvent): void => {
 		if (evt.getParameter("status") === NavigationOutcome.Redirected && !nestedNavFired) {
 			nestedNavFired = true;
-			// This fires synchronously during _flushSettlement while _redirecting=true.
-			// The guard should still block this navTo, but the bug bypasses it.
+			// This fires synchronously during _flushSettlement while _phase is idle.
+			// The guard should block this navTo.
 			router.navTo("protected");
 		}
 	};
@@ -3864,3 +4286,405 @@ QUnit.test(
 		assert.strictEqual(events.length, 1, "Handler no longer receives events after detach without oListener");
 	},
 );
+
+// ============================================================
+// Module: State machine phase model (issues #38 + #39)
+// ============================================================
+QUnit.module("Router - State machine phase model", safeDestroyHooks);
+
+function getPhase(target: GuardRouter): {
+	kind: string;
+	attempt?: object;
+	hash?: string;
+	route?: string;
+	origin?: string;
+} {
+	return Reflect.get(target, "_phase") as ReturnType<typeof getPhase>;
+}
+
+function getParseGeneration(target: GuardRouter): number {
+	return Reflect.get(target, "_parseGeneration") as number;
+}
+
+QUnit.test("phase is idle after construction", function (assert: Assert) {
+	assert.deepEqual(getPhase(router), { kind: "idle" }, "Freshly constructed router is in idle phase");
+});
+
+QUnit.test("phase is idle after initialize and initial route settles", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after initial route commits");
+});
+
+QUnit.test("phase is evaluating during async guard execution", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating while async guard is pending");
+	assert.ok(phase.attempt, "Attempt object exists during evaluating phase");
+	assert.strictEqual((phase.attempt as { hash: string }).hash, "protected", "Attempt carries the target hash");
+	assert.strictEqual((phase.attempt as { route: string }).route, "protected", "Attempt carries the target route");
+	assert.ok(
+		(phase.attempt as { controller: AbortController }).controller instanceof AbortController,
+		"Attempt has an AbortController",
+	);
+	assert.strictEqual(
+		typeof (phase.attempt as { generation: number }).generation,
+		"number",
+		"Attempt has a generation number",
+	);
+
+	resolveGuard(true);
+	await waitForRoute(router, "protected");
+
+	assert.strictEqual(
+		getPhase(router).kind,
+		"idle",
+		"Phase returns to idle after async guard resolves and navigation commits",
+	);
+});
+
+QUnit.test("phase is idle after navigation is blocked", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard blocks navigation");
+});
+
+QUnit.test("phase is idle after navigation is redirected", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => "forbidden");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard redirects navigation");
+});
+
+QUnit.test(
+	"phase is idle after pending navigation is cancelled by superseding navigation",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		let resolveGuard!: (value: boolean) => void;
+		const guard: GuardFn = () =>
+			new Promise<boolean>((resolve) => {
+				resolveGuard = resolve;
+			});
+		router.addGuard(guard);
+
+		router.navTo("protected");
+		assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating during first navigation");
+
+		// Supersede with a new navigation -- removes the guard first so the second one commits
+		router.removeGuard(guard);
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+
+		assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after superseding navigation commits");
+
+		// Resolve the orphaned guard -- should have no effect
+		resolveGuard(true);
+		await nextTick();
+		assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves");
+	},
+);
+
+QUnit.test("attempt AbortController signal is aborted on cancellation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	const phase = getPhase(router);
+	const signal = (phase.attempt as { controller: AbortController }).controller.signal;
+	assert.notOk(signal.aborted, "Signal is not aborted while guard is pending");
+
+	// Supersede to cancel
+	router.removeGuard(guard);
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.ok(signal.aborted, "Signal is aborted after cancellation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("parseGeneration increments on cancellation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const genBefore = getParseGeneration(router);
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+
+	// Cancel via superseding navigation
+	router.removeGuard(guard);
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.ok(getParseGeneration(router) > genBefore, "Generation counter incremented after cancellation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("phase is idle after stop()", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop()");
+});
+
+QUnit.test("phase is idle after stop() cancels pending async navigation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop() cancels pending navigation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("phase is idle after destroy()", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.destroy();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy()");
+});
+
+QUnit.test("phase is idle after destroy() cancels pending async navigation", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before destroy");
+
+	router.destroy();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy() cancels pending navigation");
+
+	resolveGuard(true);
+});
+
+QUnit.test("attempt has correct hash for parameterised routes", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("detail", { id: "99" });
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating");
+	assert.strictEqual(
+		(phase.attempt as { hash: string }).hash,
+		"detail/99",
+		"Attempt hash includes resolved parameters",
+	);
+	assert.strictEqual((phase.attempt as { route: string }).route, "detail", "Attempt route is the route name");
+
+	resolveGuard(true);
+	await waitForRoute(router, "detail");
+});
+
+QUnit.test("no evaluating phase when no guards are registered", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Spy on phase transitions by polling -- since no guards means sync commit,
+	// phase should never be "evaluating" for a guardless navigation.
+	const phaseBeforeNav = getPhase(router);
+	assert.strictEqual(phaseBeforeNav.kind, "idle", "Phase is idle before navigation");
+
+	router.navTo("protected");
+	// After sync navTo returns, phase should already be idle (committed synchronously)
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle immediately after sync guardless navTo");
+
+	await waitForRoute(router, "protected");
+});
+
+QUnit.test("phase is evaluating during parse-path async guard (direct hash change)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	// Direct hash change triggers parse(), not navTo preflight
+	HashChanger.getInstance().setHash("protected");
+
+	const phase = getPhase(router);
+	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating during parse-path async guard");
+	assert.strictEqual(
+		(phase.attempt as { hash: string }).hash,
+		"protected",
+		"Attempt hash matches the direct hash change",
+	);
+
+	resolveGuard(true);
+	await waitForRoute(router, "protected");
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after parse-path guard resolves");
+});
+
+QUnit.test("stale async guard is discarded after stop() via phase check", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let resolveGuard!: (value: boolean) => void;
+	const guard: GuardFn = () =>
+		new Promise<boolean>((resolve) => {
+			resolveGuard = resolve;
+		});
+	router.addGuard(guard);
+
+	router.navTo("protected");
+	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
+
+	router.stop();
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop");
+
+	// Resolve the orphaned guard after stop -- phase is idle, so the result
+	// must be discarded even though no new navigation bumped the generation.
+	resolveGuard(true);
+	await nextTick();
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves post-stop");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"",
+		"Hash was not changed by stale guard resolution after stop",
+	);
+});
+
+QUnit.test("settlement outcome reflects bypass origin (skipGuards)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "Bypassed navigation settles as Committed");
+	assert.strictEqual(result.route, "protected", "Settlement route is the bypassed target");
+});
+
+QUnit.test("settlement outcome reflects redirect origin", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.addRouteGuard("protected", () => "forbidden");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected navigation settles as Redirected");
+	assert.strictEqual(result.route, "forbidden", "Settlement route is the redirect target");
+});
+
+QUnit.test("settlement outcome reflects parse-path origin (direct hash change)", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Committed,
+		"Parse-path guardless navigation settles as Committed",
+	);
+	assert.strictEqual(result.route, "protected", "Settlement route is the hash change target");
+});
+
+QUnit.test("phase recovers to idle when redirect target throws", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Guard redirects to "detail" without providing mandatory {id} parameter.
+	// super.navTo() throws for missing mandatory params, which must not leave
+	// the phase stuck at committing/redirect.
+	router.addRouteGuard("protected", () => "detail");
+
+	try {
+		router.navTo("protected");
+	} catch {
+		// Expected: super.navTo("detail", {}) throws for missing mandatory {id}
+	}
+
+	assert.strictEqual(getPhase(router).kind, "idle", "Phase recovered to idle after redirect threw");
+
+	// Verify guards still work on subsequent navigation (not permanently bypassed)
+	router.removeRouteGuard("protected", () => "detail");
+	const blockGuard: GuardFn = () => false;
+	router.addGuard(blockGuard);
+
+	router.navTo("forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"Guard pipeline still works after recovered redirect failure",
+	);
+});
