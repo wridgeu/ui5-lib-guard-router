@@ -136,7 +136,6 @@ export default class GuardPipeline {
 				});
 			}
 			if (leaveResult !== true) return { action: "block" };
-			if (context.signal.aborted) return { action: "block" };
 		}
 
 		return runEnterPhase();
