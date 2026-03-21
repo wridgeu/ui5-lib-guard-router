@@ -461,6 +461,67 @@ QUnit.test("abort signal checked between async guards", async function (assert: 
 	assert.deepEqual(called, [1], "Second guard never called");
 });
 
+QUnit.test("async leave guard allows then enter guards run", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const order: string[] = [];
+	pipeline.addLeaveGuard("current", () => {
+		order.push("leave");
+		return Promise.resolve(true);
+	});
+	pipeline.addGlobalGuard(() => {
+		order.push("global");
+		return true;
+	});
+	pipeline.addEnterGuard("target", () => {
+		order.push("route");
+		return true;
+	});
+
+	const result = await pipeline.evaluate(createContext(), "current");
+	assert.deepEqual(result, { action: "allow" });
+	assert.deepEqual(order, ["leave", "global", "route"], "Full pipeline ran after async leave guard allowed");
+});
+
+QUnit.test("async guard returning invalid value treated as block", async function (assert: Assert) {
+	const original = Log.warning;
+	const warnings: string[] = [];
+	Log.warning = (msg: string) => {
+		warnings.push(msg);
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		pipeline.addGlobalGuard(() => Promise.resolve(42 as unknown as boolean));
+
+		const result = await pipeline.evaluate(createContext(), "");
+		assert.deepEqual(result, { action: "block" });
+		assert.strictEqual(warnings.length, 1, "Warning logged for invalid async return");
+	} finally {
+		Log.warning = original;
+	}
+});
+
+QUnit.test("async leave guard error with aborted signal does not log", async function (assert: Assert) {
+	let errorLogged = false;
+	const original = Log.error;
+	Log.error = () => {
+		errorLogged = true;
+	};
+	try {
+		const pipeline = new GuardPipeline();
+		const controller = new AbortController();
+		pipeline.addLeaveGuard("current", () => {
+			controller.abort();
+			return Promise.reject(new Error("leave aborted"));
+		});
+
+		const result = await pipeline.evaluate(createContext({ signal: controller.signal }), "current");
+		assert.deepEqual(result, { action: "block" });
+		assert.notOk(errorLogged, "Leave guard error suppressed when signal aborted");
+	} finally {
+		Log.error = original;
+	}
+});
+
 // ============================================================
 // Module: snapshot copy
 // ============================================================
