@@ -130,21 +130,20 @@ export function getHash(): string {
 }
 
 /**
- * Capture `Log.warning` calls during `fn`, restoring the original in a
- * `finally` block so the stub never leaks to subsequent tests.
+ * Capture `Log.warning` calls during `fn` using a Sinon stub.
+ * The stub is restored automatically via `finally` to prevent leaks.
  */
 export function captureWarnings(fn: () => void): CapturedWarning[] {
-	const warnings: CapturedWarning[] = [];
-	const original = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
+	const stub = sinon.stub(Log, "warning");
 	try {
 		fn();
 	} finally {
-		Log.warning = original;
+		stub.restore();
 	}
-	return warnings;
+	return stub.getCalls().map((call) => ({
+		message: call.args[0] as string,
+		details: call.args[1] as string | undefined,
+	}));
 }
 
 /**
@@ -152,15 +151,14 @@ export function captureWarnings(fn: () => void): CapturedWarning[] {
  * the capture window.
  */
 export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedWarning[]> {
-	const warnings: CapturedWarning[] = [];
-	const original = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
+	const stub = sinon.stub(Log, "warning");
 	try {
 		await fn();
 	} finally {
-		Log.warning = original;
+		stub.restore();
 	}
-	return warnings;
+	return stub.getCalls().map((call) => ({
+		message: call.args[0] as string,
+		details: call.args[1] as string | undefined,
+	}));
 }
