@@ -4823,7 +4823,7 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 	});
 
 	try {
-		const manifestRouter = component.getRouter() as GuardRouter;
+		const manifestRouter = (component as unknown as { getRouter(): GuardRouter }).getRouter();
 		const options = Reflect.get(manifestRouter, "_options") as Record<string, unknown>;
 		assert.strictEqual(options.unknownRouteGuardRegistration, "ignore", "option read from manifest");
 		assert.strictEqual(options.navToPreflight, "guard", "option read from manifest");
