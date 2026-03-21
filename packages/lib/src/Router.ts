@@ -368,21 +368,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._options = normalizeGuardRouterOptions(guardRouter);
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
-			// Resolve the component namespace from the owner component's manifest.
-			// Without an owner, namespace resolution falls back to empty string
-			// (guards must use absolute paths or module: prefix).
 			let componentNamespace = "";
 			if (owner) {
 				const appConfig = owner.getManifestEntry("sap.app") as Record<string, unknown> | undefined;
 				if (isRecord(appConfig) && typeof appConfig.id === "string") {
 					componentNamespace = appConfig.id;
 				}
-			} else {
-				Log.warning(
-					"guardRouter.guards: no owner component, namespace resolution uses empty prefix",
-					undefined,
-					LOG_COMPONENT,
-				);
 			}
 			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 		}
