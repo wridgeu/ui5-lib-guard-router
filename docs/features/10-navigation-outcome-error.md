@@ -95,7 +95,11 @@ Currently returns `false`. Changes to return `{ action: "error", error }`. The e
 
 ### `evaluate()` changes
 
-Before doing the existing `true`/`false`/`string`/`GuardRedirect` mapping, check: if the result already has an `action` property (i.e., it is a `GuardDecision`), pass it through. Otherwise, map as before.
+Both the leave-guard and enter-guard result paths need the same passthrough logic: if the result already has an `action` property (i.e., it is a `GuardDecision`), return it directly instead of mapping it.
+
+**Leave-guard path:** The sync check `if (leaveResult !== true) return { action: "block" }` and the async `.then` callback `if (allowed !== true) return { action: "block" }` must first check whether the result is already a `GuardDecision` (the error variant) and pass it through. Without this, a leave-guard error decision would be silently converted to a plain block.
+
+**Enter-guard path:** The `processEnterResult` function that maps `true`/`false`/`string`/`GuardRedirect` to decisions must also check for an existing `GuardDecision` and pass it through.
 
 Updated result normalization:
 
@@ -156,7 +160,7 @@ These currently call `_blockNavigation()` when the pipeline promise fails. They 
 
 `packages/lib/src/library.ts`
 
-Add `"error"` to the `DataType.registerEnum` call so UI5's type system knows about the new value. Existing values unchanged.
+The `DataType.registerEnum` call passes the imported `NavigationOutcome` object, so the new `Error: "error"` value added in `NavigationOutcome.ts` flows through automatically. No code change in `library.ts` itself — verify the new value is registered by confirming the import chain.
 
 ## App usage
 
