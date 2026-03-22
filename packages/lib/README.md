@@ -665,7 +665,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Common issues
 
-**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains evaluate guards with loop detection](#redirect-chains-evaluate-guards-with-loop-detection).
+**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains](#redirect-chains).
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
 

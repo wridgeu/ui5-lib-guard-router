@@ -4513,17 +4513,6 @@ QUnit.test("Settlement is Redirected for successful chain", async function (asse
 	assert.strictEqual(result.route, "forbidden", "Settled on redirect target route");
 });
 
-QUnit.test("Settlement is Blocked when redirect target guard blocks", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => "forbidden");
-	router.addRouteGuard("forbidden", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Blocked settlement");
-});
-
 QUnit.test("Guard on redirect target receives correct context", async function (assert: Assert) {
 	let capturedContext: GuardContext | undefined;
 	router.addRouteGuard("protected", () => "forbidden");

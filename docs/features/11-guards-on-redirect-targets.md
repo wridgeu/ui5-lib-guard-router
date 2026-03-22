@@ -357,8 +357,9 @@ attempt accessible.
 
 ### Architecture Doc Update
 
-Remove or update the "Redirect targets bypass guards" section in
-`docs/reference/architecture.md` and the limitations section in the library README.
+The "Redirect targets bypass guards" section in `docs/reference/architecture.md`
+has been updated to describe guard evaluation with loop detection, and the library
+README's limitations section has been restructured accordingly.
 
 ## Test Cases
 
