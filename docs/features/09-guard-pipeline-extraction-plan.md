@@ -1,6 +1,6 @@
 # Guard Pipeline Extraction — Implementation Plan
 
-> **Status: Completed.** Code snippets match the final implementation. See `09-guard-pipeline-extraction.md` for the authoritative spec.
+> **Status: Completed.** See `09-guard-pipeline-extraction.md` for the authoritative spec. Note: error handling behavior was later changed by #50 (`10-navigation-outcome-error.md`) — guard throws now produce `NavigationOutcome.Error` instead of `Blocked`.
 
 **Goal:** Extract the guard evaluation logic from `Router.ts` into a standalone `GuardPipeline` class, keeping all public API and behavioral tests unchanged.
 

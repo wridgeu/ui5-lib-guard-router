@@ -463,14 +463,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
 					// finally already reset phase to idle, we still need to drain
-					// settlement resolvers via _blockNavigation.
+					// settlement resolvers via _errorNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
-						`Async preflight guard failed for route "${routeName}", blocking navigation`,
+						`Async preflight guard failed for route "${routeName}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(targetHash, false);
+					this._errorNavigation(error, targetHash, false);
 				});
 			return this;
 		}
@@ -492,6 +492,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Apply a preflight guard decision. For "allow", enter the committing
 	 * phase and call super.navTo(). For "block", flush settlement without
 	 * touching the hash. For "redirect", navigate to the redirect target.
+	 * For "error", flush Error settlement with the guard's error.
 	 */
 	private _applyPreflightDecision(
 		decision: GuardDecision,
@@ -520,6 +521,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._redirect(decision.target, targetHash, false);
 				break;
 			}
+			case "error":
+				this._errorNavigation(decision.error, targetHash, false);
+				break;
 		}
 	}
 
@@ -597,14 +601,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
 					// finally already reset phase to idle, we still need to drain
-					// settlement resolvers via _blockNavigation.
+					// settlement resolvers via _errorNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
-						`Guard pipeline failed for "${newHash}", blocking navigation`,
+						`Guard pipeline failed for "${newHash}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(newHash);
+					this._errorNavigation(error, newHash);
 				});
 			return;
 		}
@@ -665,6 +669,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 				break;
 			case "redirect":
 				this._redirect(decision.target, hash);
+				break;
+			case "error":
+				this._errorNavigation(decision.error, hash);
 				break;
 		}
 	}
@@ -775,9 +782,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Clear pending state and flush an Error settlement.
+	 * Same structure as `_blockNavigation` but with `NavigationOutcome.Error`
+	 * and the error that caused the failure.
+	 */
+	private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void {
+		this._phase = IDLE;
+		this._flushSettlement({
+			status: NavigationOutcome.Error,
+			route: this._currentRoute,
+			hash: this._currentHash ?? "",
+			error,
+		});
+		if (!restoreHash) return;
+		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
+			this._restoreHash("", false);
+			return;
+		}
+		this._restoreHash(this._currentHash ?? "");
+	}
+
+	/**
 	 * Restore the previous hash without creating a history entry.
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
-	 * `_currentRoute` stays unchanged because the blocked navigation never
+	 * `_currentRoute` stays unchanged because the navigation never
 	 * committed. The user remains on the same logical route.
 	 */
 	private _restoreHash(hash: string, suppressParse = true): void {

@@ -123,8 +123,9 @@ NavigationOutcome (UI5 enum)        NavigationResult
 | Committed      |  "committed"    | status: NavigationOutcome   |
 | Bypassed       |  "bypassed"     | route:  string              |
 | Blocked        |  "blocked"      | hash:   string              |
-| Redirected     |  "redirected"   +----------------------------+
-| Cancelled      |  "cancelled"
+| Redirected     |  "redirected"   | error?: unknown             |
+| Cancelled      |  "cancelled"    +----------------------------+
+| Error          |  "error"
 +----------------+
 
 GuardRouter (public interface)      Router (ES6 class)
@@ -297,7 +298,10 @@ flowchart TD
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
 
 Error handling: if a guard throws or its Promise rejects, the error is logged and
-navigation is blocked (`false`).
+re-thrown to `evaluate()`, which returns `{ action: "error", error }`. The Router
+settles the navigation as `NavigationOutcome.Error` with the thrown value on
+`result.error`. If the abort signal is already aborted, the error is swallowed and
+navigation is blocked instead (the navigation was cancelled, the error is expected).
 
 ## Guard Result Handling
 
@@ -355,12 +359,14 @@ flowchart TD
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
         redirect["_redirect()"] -- "flush (if target invalid)" --> fredirect["Blocked"]
+        errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
     end
 
     push -.-> commit
     push -.-> block
     push -.-> cancel
     push -.-> redirect
+    push -.-> errornav
 ```
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,

@@ -279,6 +279,7 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                                                 |
 | `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
+| `NavigationOutcome.Error`      | A guard threw or rejected; previous route stays active. `result.error` holds the thrown value           |
 
 A guard redirect that fails to trigger a follow-up navigation settles as `Blocked` because no route change commits. A nonexistent route name is the most common cause, and the router logs the target name to help diagnose it.
 
@@ -313,6 +314,9 @@ switch (result.status) {
 		break;
 	case NavigationOutcome.Redirected:
 		MessageToast.show(`Redirected to ${result.route}`);
+		break;
+	case NavigationOutcome.Error:
+		MessageBox.error("Navigation failed: " + String(result.error));
 		break;
 	case NavigationOutcome.Cancelled:
 		break; // superseded by a newer navigation
@@ -657,10 +661,10 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
-| error   | `Guard pipeline failed for "{hash}", blocking navigation`                           | Async guard pipeline rejected in `parse()` fallback path                                            |
-| error   | `Async preflight guard failed for route "{route}", blocking navigation`             | Async guard pipeline rejected in `navTo()` preflight path                                           |
-| error   | `Enter guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                        |
-| error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async leave guard threw an exception                                                        |
+| error   | `Guard pipeline failed for "{hash}", navigation failed`                             | Async guard pipeline rejected in `parse()` fallback path                                            |
+| error   | `Async preflight guard failed for route "{route}", navigation failed`               | Async guard pipeline rejected in `navTo()` preflight path                                           |
+| error   | `Enter guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async enter guard threw an exception                                                        |
+| error   | `Leave guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async leave guard threw an exception                                                        |
 | debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
 | debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |
 

@@ -101,15 +101,15 @@ Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library READ
 
 ## Error handling in guards
 
-A guard that throws (sync) or rejects (async) blocks navigation. The router logs the error at `error` level and treats the result as `false`.
+A guard that throws (sync) or rejects (async) settles navigation as `NavigationOutcome.Error`. This is distinct from `NavigationOutcome.Blocked` (guard returned `false`), allowing the app to show different UX for "access denied" vs "something went wrong." The thrown value is available on `result.error`.
 
 Sync:
 
 ```typescript
 router.addRouteGuard("risky", () => {
 	throw new Error("something broke");
-	// Navigation is blocked. The router logs:
-	// Enter guard [0] on route "risky" threw, blocking navigation
+	// Navigation settles as Error. The router logs:
+	// Enter guard [0] on route "risky" threw, navigation failed
 });
 ```
 
@@ -120,8 +120,22 @@ router.addRouteGuard("risky", async (context) => {
 	const res = await fetch("/api/check", { signal: context.signal });
 	if (!res.ok) throw new Error(`HTTP ${res.status}`);
 	return true;
-	// If fetch rejects, navigation is blocked and the error is logged.
+	// If fetch rejects, navigation settles as Error and the error is logged.
 });
+```
+
+Handling the distinction:
+
+```typescript
+const result = await router.navigationSettled();
+switch (result.status) {
+	case NavigationOutcome.Blocked:
+		MessageToast.show("Access denied");
+		break;
+	case NavigationOutcome.Error:
+		MessageBox.error("Navigation failed: " + String(result.error));
+		break;
+}
 ```
 
 Enable debug logging to see all guard errors. See the [Debugging and Troubleshooting section](../../packages/lib/README.md#debugging-and-troubleshooting) in the library README.
