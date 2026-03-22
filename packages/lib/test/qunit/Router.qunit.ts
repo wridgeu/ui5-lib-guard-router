@@ -1068,20 +1068,15 @@ QUnit.test("Guard that returns redirect does not cause infinite loop", async fun
 });
 
 QUnit.test("Multiple route guards with cross-redirects settle correctly", async function (assert: Assert) {
-	// forbidden → redirects to protected, protected → redirects to home
-	// But redirect is re-entrant (committing/redirect phase) so it bypasses guards.
-	// We should end up on protected, not home.
+	// forbidden -> redirects to protected -> redirects to home
+	// The redirect chain evaluates guards on each hop.
 	router.addRouteGuard("forbidden", () => "protected");
 	router.addRouteGuard("protected", () => "home");
 	router.initialize();
 
 	router.navTo("forbidden");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Cross-redirect settled on protected (re-entrant bypass)",
-	);
+	await waitForRoute(router, "home");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Cross-redirect chain followed to home");
 });
 
 // ============================================================
@@ -1988,7 +1983,7 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 	const result = await router.navigationSettled();
 
 	// The redirect from forbidden back to home should NOT trigger
-	// the leave guard again because the committing/redirect phase bypasses all guards
+	// the leave guard again because redirect hops use skipLeaveGuards
 	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Navigation resulted in redirect");
 	assert.strictEqual(leaveGuardCallCount, 1, "Leave guard ran exactly once (for initial leave, not during redirect)");
 });
@@ -3214,7 +3209,7 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase", async function (assert: Assert) {
+QUnit.test("Redirect target's own guard is evaluated (not bypassed)", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("forbidden", () => false);
 	router.initialize();
@@ -3222,12 +3217,7 @@ QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Redirected,
-		"Redirect committed despite target's blocking guard",
-	);
-	assert.strictEqual(result.route, "forbidden", "Landed on forbidden (guard was bypassed)");
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Redirect target's blocking guard blocks the chain");
 });
 
 QUnit.module("Router - navTo preflight", standardHooks);

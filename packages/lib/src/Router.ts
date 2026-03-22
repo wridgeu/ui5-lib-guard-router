@@ -105,7 +105,7 @@ interface RedirectChainContext {
  *   same tick; async guards fall back to a deferred path.
  * - `replaceHash` fires `hashChanged` synchronously (validated by test).
  * - `setHash` (via `super.navTo`) fires `hashChanged` synchronously (validated by test).
- * - Redirect targets bypass guards to prevent infinite loops.
+ * - Redirect targets are evaluated by the guard pipeline with loop detection.
  *
  * @namespace ui5.guard.router
  * @extends sap.m.routing.Router
@@ -538,7 +538,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(targetHash, false);
 				break;
 			case "redirect": {
-				this._redirect(decision.target, targetHash, false);
+				const { attempt } = this._phase as PhaseEvaluating;
+				const visited = new Set<string>();
+				visited.add(targetHash);
+				this._redirect(decision.target, {
+					visited,
+					attemptedHash: targetHash,
+					restoreHash: false,
+					fromRoute: this._currentRoute,
+					fromHash: this._currentHash ?? "",
+					signal: attempt.controller.signal,
+					generation: attempt.generation,
+				});
 				break;
 			}
 		}
@@ -684,9 +695,21 @@ export default class Router extends MobileRouter implements GuardRouter {
 			case "block":
 				this._blockNavigation(hash);
 				break;
-			case "redirect":
-				this._redirect(decision.target, hash);
+			case "redirect": {
+				const { attempt } = this._phase as PhaseEvaluating;
+				const visited = new Set<string>();
+				visited.add(hash);
+				this._redirect(decision.target, {
+					visited,
+					attemptedHash: hash,
+					restoreHash: true,
+					fromRoute: this._currentRoute,
+					fromHash: this._currentHash ?? "",
+					signal: attempt.controller.signal,
+					generation: attempt.generation,
+				});
 				break;
+			}
 		}
 	}
 
@@ -716,9 +739,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		super.parse(hash);
 	}
 
-	/** Perform a guard redirect (string route name or GuardRedirect object). */
-	private _redirect(target: string | GuardRedirect, attemptedHash?: string, restoreHash = true): void {
-		const settlementBefore = this._lastSettlement;
+	/** Perform a guard redirect with full guard evaluation on the target route. */
+	private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
 		const targetName = typeof target === "string" ? target : target.route;
 		let targetHash: string | null = null;
 		const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
@@ -730,47 +752,147 @@ export default class Router extends MobileRouter implements GuardRouter {
 				targetHash = null;
 			}
 		}
-		const redirectsToCurrentHash = targetHash !== null && targetHash === (this._currentHash ?? "");
-		this._phase = { kind: "committing", hash: targetHash ?? "", route: targetName, origin: "redirect" };
-		try {
-			if (typeof target === "string") {
-				this.navTo(target, {}, {}, true);
-			} else {
-				this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
-			}
-		} finally {
-			// Exception recovery: if navTo() threw before parse() could call
-			// _commitNavigation, reset phase so it doesn't remain stuck at
-			// committing. On success _commitNavigation already set phase to idle,
-			// so this is a no-op. The safety net below may re-enter committing
-			// if the hash didn't change but no error occurred.
-			if (this._phase.kind === "committing") {
-				this._phase = IDLE;
-			}
-		}
 
-		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the
-		// target route does not exist and the hash did not change), no
-		// _commitNavigation ran and _lastSettlement was not updated. Treat as
-		// blocked because the observable outcome is that the user stays on the
-		// current route. Log a warning so the developer sees the bad target.
-		if (this._lastSettlement === settlementBefore) {
-			if (redirectsToCurrentHash) {
-				this._phase = {
-					kind: "committing",
-					hash: this._currentHash ?? "",
-					route: this._currentRoute,
-					origin: "redirect",
-				};
-				this._commitNavigation(this._currentHash ?? "", this._currentRoute);
-				return;
-			}
-			Log.warning(
-				`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+		// Loop detection: visited set (exact hash match) + depth cap.
+		if (targetHash !== null && chain.visited.has(targetHash)) {
+			Log.error(
+				`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`,
 				undefined,
 				LOG_COMPONENT,
 			);
-			this._blockNavigation(attemptedHash, restoreHash);
+			this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			return;
+		}
+		if (chain.visited.size >= MAX_REDIRECT_DEPTH) {
+			Log.error(
+				`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ${[...chain.visited].join(" -> ")}`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			return;
+		}
+		if (targetHash !== null) {
+			chain.visited.add(targetHash);
+		}
+
+		// If the target route doesn't exist or the hash couldn't be resolved,
+		// attempt navTo (parent may fire bypassed) and fall back to blocked.
+		if (targetHash === null) {
+			const settlementBefore = this._lastSettlement;
+			this._phase = { kind: "committing", hash: "", route: targetName, origin: "redirect" };
+			try {
+				if (typeof target === "string") {
+					this.navTo(target, {}, {}, true);
+				} else {
+					this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+				}
+			} finally {
+				if (this._phase.kind === "committing") {
+					this._phase = IDLE;
+				}
+			}
+			if (this._lastSettlement === settlementBefore) {
+				Log.warning(
+					`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			}
+			return;
+		}
+
+		// Build guard context for the redirect target.
+		const routeInfo = this.getRouteInfoByHash(targetHash);
+		const context: GuardContext = {
+			toRoute: routeInfo?.name ?? "",
+			toHash: targetHash,
+			toArguments: routeInfo?.arguments ?? {},
+			fromRoute: chain.fromRoute,
+			fromHash: chain.fromHash,
+			signal: chain.signal,
+		};
+
+		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
+
+		if (isPromiseLike(decision)) {
+			decision
+				.then((d: GuardDecision) => {
+					if (chain.generation !== this._parseGeneration) return;
+					this._applyRedirectDecision(d, target, targetHash!, chain);
+				})
+				.catch((error: unknown) => {
+					if (chain.generation !== this._parseGeneration) return;
+					Log.error(
+						`Guard pipeline failed during redirect chain for "${targetName}", blocking navigation`,
+						String(error),
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				});
+			return;
+		}
+
+		this._applyRedirectDecision(decision, target, targetHash, chain);
+	}
+
+	/**
+	 * Apply a guard decision within a redirect chain. For "allow", enter
+	 * committing phase and delegate to navTo (which hits the existing bypass).
+	 * For "block", block the entire chain. For "redirect", recurse.
+	 */
+	private _applyRedirectDecision(
+		decision: GuardDecision,
+		target: string | GuardRedirect,
+		targetHash: string,
+		chain: RedirectChainContext,
+	): void {
+		switch (decision.action) {
+			case "allow": {
+				const targetName = typeof target === "string" ? target : target.route;
+				const settlementBefore = this._lastSettlement;
+				this._phase = { kind: "committing", hash: targetHash, route: targetName, origin: "redirect" };
+				try {
+					if (typeof target === "string") {
+						this.navTo(target, {}, {}, true);
+					} else {
+						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+					}
+				} finally {
+					if (this._phase.kind === "committing") {
+						this._phase = IDLE;
+					}
+				}
+				// Safety net: if navTo didn't produce a settlement (e.g. unknown route
+				// or redirect to current hash where HashChanger doesn't fire), handle it.
+				if (this._lastSettlement === settlementBefore) {
+					const redirectsToCurrentHash = targetHash === (this._currentHash ?? "");
+					if (redirectsToCurrentHash) {
+						this._phase = {
+							kind: "committing",
+							hash: this._currentHash ?? "",
+							route: this._currentRoute,
+							origin: "redirect",
+						};
+						this._commitNavigation(this._currentHash ?? "", this._currentRoute);
+						return;
+					}
+					Log.warning(
+						`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+						undefined,
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				}
+				break;
+			}
+			case "block":
+				this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				break;
+			case "redirect":
+				this._redirect(decision.target, chain);
+				break;
 		}
 	}
 
