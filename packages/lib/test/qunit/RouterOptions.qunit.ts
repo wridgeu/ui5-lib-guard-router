@@ -424,8 +424,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 });
 
 QUnit.test("manifest guards run before imperatively registered guards", async function (assert: Assert) {
-	// Arrange: router with manifest allow guard
-	const order: string[] = [];
+	// Arrange: router with metaWriterGuard as manifest guard -- it writes to context.bag
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -437,7 +436,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 				guardLoading: "block",
 				unknownRouteGuardRegistration: "ignore",
 				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
+					"*": ["ui5/guard/router/qunit/fixtures/guards/metaWriterGuard"],
 				},
 			},
 		} as object,
@@ -446,12 +445,11 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	router.initialize();
 	await waitForRoute(router, "home", 5000);
 
-	// Arrange: add imperative guard AFTER initialize that records execution
-	// The manifest allowGuard always returns true, so both guards run.
-	// We wrap addGuard to detect the manifest guard ran first by checking
-	// that at least two guards executed in the pipeline.
-	router.addGuard(() => {
-		order.push("imperative");
+	// Arrange: add imperative guard that reads from context.bag.
+	// If the manifest guard ran first, "writer" will already be present.
+	let manifestRanFirst = false;
+	router.addGuard((context: GuardContext) => {
+		manifestRanFirst = context.bag.has("writer");
 		return true;
 	});
 
@@ -459,9 +457,9 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	// Assert: imperative guard ran (manifest guard ran silently before it)
-	assert.strictEqual(order.length, 1, "imperative guard executed");
-	assert.strictEqual(order[0], "imperative", "imperative guard ran as part of the pipeline");
+	// Assert: imperative guard observed data written by the manifest guard,
+	// proving the manifest guard executed first.
+	assert.ok(manifestRanFirst, "manifest guard wrote to context.bag before imperative guard ran");
 });
 
 QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReader)", async function (assert: Assert) {
@@ -590,9 +588,22 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 			0,
 			"unknownRouteGuardRegistration='ignore' suppresses warnings",
 		);
-		// "guard" is the default navToPreflight -- just verify it's not "off" or "bypass" by checking
-		// that a blocking guard on preflight actually blocks (which is the default behavior)
-		assert.ok(true, "navToPreflight defaults to 'guard' (verified by all other preflight tests)");
+		// Verify navToPreflight='guard' was loaded from manifest: a blocking guard on the
+		// "protected" route must prevent navTo from changing the hash (preflight blocks).
+		// If navToPreflight were "off" or "bypass", the hash would change despite the guard.
+		initHashChanger();
+		manifestRouter.initialize();
+		await waitForRoute(manifestRouter, "home", 5000);
+
+		manifestRouter.navTo("protected");
+		const result = await manifestRouter.navigationSettled();
+
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Blocked,
+			"navToPreflight='guard' blocks navigation before hash change",
+		);
+		assert.strictEqual(getHash(), "", "hash unchanged because preflight blocked navTo");
 	} finally {
 		component.destroy();
 	}

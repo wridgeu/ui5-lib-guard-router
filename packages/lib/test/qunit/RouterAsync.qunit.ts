@@ -955,8 +955,8 @@ QUnit.test(
 		// Start navigating to "protected" -- triggers async leave guard (leaveResolvers[0])
 		router.navTo("protected");
 
-		// Supersede: navigate via setHash so we bypass the leave guard path entirely
-		// and land directly on "forbidden" through parse().
+		// Supersede: navigate via setHash to trigger the parse() path (browser-initiated
+		// navigation) rather than the navTo preflight path.
 		// This cancels the first navigation's pipeline.
 		HashChanger.getInstance().setHash("forbidden");
 		// Resolve the second leave guard so "forbidden" can commit
