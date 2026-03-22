@@ -432,11 +432,16 @@ No application logic changes needed beyond the guard definitions themselves.
 
 **Mitigation**: The `NativeRouterCompat.qunit.ts` test suite validates API parity with the native router. If a UI5 update changes `parse()`, these tests would catch it.
 
-### 5.2 Redirect targets bypass guards
+### 5.2 Redirect targets evaluate guards with loop detection
 
-When a guard redirects (e.g., "forbidden" → "home"), the redirect target's guards are **not** evaluated. This is by design to prevent infinite loops, but means you cannot chain guard-redirect-guard.
+When a guard redirects (e.g., "forbidden" → "home"), the redirect target's guards **are** evaluated before the navigation commits. If the target's guards also redirect, the chain continues recursively.
 
-**Mitigation**: Document this clearly. Design guard logic so redirect targets don't need their own guards, or use global guards for universal checks.
+Two safeguards prevent infinite loops:
+
+- **Visited-set detection**: A set tracks every hash evaluated in the current chain. Revisiting a hash is treated as a loop and blocks the navigation.
+- **Depth cap** (`MAX_REDIRECT_DEPTH = 10`): Chains exceeding 10 redirect hops are blocked, even if every hash is unique. This guards against unbounded chains with parameterized routes.
+
+Both safeguards log an error and settle the navigation as `Blocked`.
 
 ### 5.3 Async guard hash desync window
 

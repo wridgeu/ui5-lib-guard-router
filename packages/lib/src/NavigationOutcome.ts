@@ -19,6 +19,8 @@ const NavigationOutcome = Object.freeze({
 	Redirected: "redirected",
 	/** Navigation was cancelled before settling (superseded, stopped, or destroyed). */
 	Cancelled: "cancelled",
+	/** A guard threw or rejected; the previous route remains active. */
+	Error: "error",
 });
 
 type NavigationOutcome = (typeof NavigationOutcome)[keyof typeof NavigationOutcome];

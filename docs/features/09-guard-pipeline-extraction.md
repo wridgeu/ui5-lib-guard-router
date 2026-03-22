@@ -103,7 +103,7 @@ Leave guards are boolean-only: any non-boolean return logs a warning and blocks.
 
 ### Error handling
 
-If a guard function throws (sync) or its Promise rejects (async), the pipeline catches the error, logs it via `Log.error`, and returns `{ action: "block" }`. If the context's abort signal is already aborted at the time of the error, the error is not logged (the navigation was cancelled, the error is expected).
+If a guard function throws (sync) or its Promise rejects (async), the pipeline catches the error, logs it via `Log.error`, and re-throws. `evaluate()` catches the re-thrown error and returns `{ action: "error", error }`. If the context's abort signal is already aborted at the time of the error, the error is swallowed and the pipeline returns `false` (mapped to `{ action: "block" }`) — the navigation was cancelled, the error is expected. See `docs/features/10-navigation-outcome-error.md` for the full design.
 
 ### `clear()` behavior
 
@@ -206,8 +206,8 @@ Focused unit tests for the pipeline in isolation — no Router, no HashChanger, 
 - Abort signal checked between async guards
 - Guard self-removal during iteration (snapshot copy)
 - Invalid return values → validation warnings → block
-- Sync guard throws → block
-- Async guard rejects → block
+- Sync guard throws → error
+- Async guard rejects → error
 - Guard throws after signal aborted → block without logging
 - `clear()` removes all guards
 - Add/remove by reference semantics

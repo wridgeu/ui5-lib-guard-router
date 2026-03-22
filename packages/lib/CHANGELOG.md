@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.1...v1.3.2) (2026-03-22)
+
+
+### Code Refactoring
+
+* **router:** extract guard pipeline into standalone class ([65f6fc0](https://github.com/wridgeu/ui5-lib-guard-router/commit/65f6fc01c0ef477aac563707c8bbd13627a4aa13))
+* **router:** replace boolean flags with state machine and navigation attempt ([77b8484](https://github.com/wridgeu/ui5-lib-guard-router/commit/77b8484af4319181adc8fb22076c21f667f2a468)), closes [#38](https://github.com/wridgeu/ui5-lib-guard-router/issues/38) [#39](https://github.com/wridgeu/ui5-lib-guard-router/issues/39)
+
 ## [1.3.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.0...v1.3.1) (2026-03-21)
 
 

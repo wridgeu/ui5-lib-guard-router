@@ -1,8 +1,8 @@
 # Guards on Redirect Targets
 
 **Issue:** [#52](https://github.com/wridgeu/ui5-lib-guard-router/issues/52)
-**Status:** Design
-**Breaking change:** Yes -- previously skipped guards now run on redirect targets.
+**Status:** Implemented
+**Change type:** Feature -- guards now evaluate on redirect targets with loop detection.
 
 ## Problem
 
@@ -96,16 +96,20 @@ degenerate cases where parameters keep varying.
 ```typescript
 const MAX_REDIRECT_DEPTH = 10;
 
-// At the top of _redirect:
-if (chain.visited.has(targetHash) || chain.visited.size >= MAX_REDIRECT_DEPTH) {
-    Log.error(
-        `Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`,
-        ...,
-    );
+// At the top of _redirect, two separate checks:
+if (targetHash !== null && chain.visited.has(targetHash)) {
+    Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
     this._blockNavigation(chain.attemptedHash, chain.restoreHash);
     return;
 }
-chain.visited.add(targetHash);
+if (chain.visited.size > MAX_REDIRECT_DEPTH) {
+    Log.error(`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ...`, ...);
+    this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+    return;
+}
+if (targetHash !== null) {
+    chain.visited.add(targetHash);
+}
 ```
 
 ### Visited Set Lifecycle
@@ -161,22 +165,34 @@ empty `fromRoute`; that would hide context from guard functions.
 
 ```typescript
 private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
-    // 1. Resolve target route and hash (same as today)
+    // 1. Resolve target route and hash
     const targetName = typeof target === "string" ? target : target.route;
     const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
     const targetRoute = this.getRoute(targetName);
     // ... resolve targetHash via targetRoute.getURL(targetParameters) ...
 
-    // 2. Loop detection
-    if (chain.visited.has(targetHash) || chain.visited.size >= MAX_REDIRECT_DEPTH) {
+    // 2. Loop detection (two separate checks)
+    if (targetHash !== null && chain.visited.has(targetHash)) {
         Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
     }
-    chain.visited.add(targetHash);
+    if (chain.visited.size > MAX_REDIRECT_DEPTH) {
+        Log.error(`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ...`, ...);
+        this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+        return;
+    }
+    if (targetHash !== null) {
+        chain.visited.add(targetHash);
+    }
 
-    // 3. Build guard context for the redirect target
-    //    Use getRouteInfoByHash() to populate toArguments correctly.
+    // 3. Unknown route / unresolvable hash: attempt navTo, fall back to blocked
+    if (targetHash === null) {
+        // ... enter committing/redirect, call navTo, check if settlement occurred ...
+        return;
+    }
+
+    // 4. Build guard context for the redirect target
     const routeInfo = this.getRouteInfoByHash(targetHash);
     const context: GuardContext = {
         toRoute: routeInfo?.name ?? "",
@@ -187,16 +203,16 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         signal: chain.signal,          // shared signal
     };
 
-    // 4. Evaluate guards (skip leave guards -- they already ran on first hop)
+    // 5. Evaluate guards (skip leave guards -- they already ran on first hop)
     const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
-    // 5. Handle sync result
+    // 6. Handle sync result
     if (!isPromiseLike(decision)) {
         this._applyRedirectDecision(decision, target, targetHash, chain);
         return;
     }
 
-    // 6. Handle async result with generation check
+    // 7. Handle async result with generation check
     decision
         .then((d: GuardDecision) => {
             if (chain.generation !== this._parseGeneration) return; // superseded
@@ -228,7 +244,10 @@ private _applyRedirectDecision(
             } else {
                 this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
             }
-            // Existing safety net for failed redirect targets is preserved after this call.
+            // Safety net: if navTo didn't produce a settlement (e.g. unknown route
+            // or redirect to current hash where HashChanger doesn't fire), handle it.
+            // The redirectsToCurrentHash path is kept because the HashChanger does
+            // not fire hashChanged for a same-hash navTo.
             break;
         }
         case "block":
@@ -256,12 +275,12 @@ and discards the stale result.
 
 ### Redirect to Current Hash
 
-The current `_redirect` has a safety net for when the redirect target's hash equals
-`_currentHash` (the user is already on the target). With the new design, this case
-is handled naturally: the redirect target's guards are evaluated normally. If they
-allow, the chain commits with `NavigationOutcome.Redirected`. The special-case
-`redirectsToCurrentHash` path in the current code can be simplified or removed,
-since the guard evaluation + commit flow handles it.
+When a redirect target's hash equals `_currentHash` (the user is already on the
+target), the redirect target's guards are evaluated normally. If they allow, the
+chain commits with `NavigationOutcome.Redirected`. The `redirectsToCurrentHash`
+safety net in `_applyRedirectDecision` is kept because UI5's `HashChanger` does
+not fire `hashChanged` for a same-hash `navTo()`, so the normal commit path
+(parse → commitNavigation) would not trigger without it.
 
 ### Settlement
 

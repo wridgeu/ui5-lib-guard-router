@@ -279,6 +279,7 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                                                 |
 | `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
+| `NavigationOutcome.Error`      | A guard threw or rejected; previous route stays active. `result.error` holds the thrown value           |
 
 A guard redirect that fails to trigger a follow-up navigation settles as `Blocked` because no route change commits. A nonexistent route name is the most common cause, and the router logs the target name to help diagnose it.
 
@@ -313,6 +314,9 @@ switch (result.status) {
 		break;
 	case NavigationOutcome.Redirected:
 		MessageToast.show(`Redirected to ${result.route}`);
+		break;
+	case NavigationOutcome.Error:
+		MessageBox.error("Navigation failed: " + String(result.error));
 		break;
 	case NavigationOutcome.Cancelled:
 		break; // superseded by a newer navigation
@@ -537,18 +541,9 @@ No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navi
 
 See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
 
-## Limitations
-
-### Redirect chains evaluate guards with loop detection
+## Redirect chains
 
 When a guard redirects navigation from route A to route B, the router evaluates route B's guards before committing. If route B also redirects, the chain continues. Leave guards are skipped on redirect hops (they only run on the first navigation), but global and route-specific enter guards run on every hop.
-
-Two safeguards prevent infinite loops:
-
-- **Visited-set detection**: The router tracks every hash evaluated in the current chain. Revisiting a hash is treated as a loop and blocks the navigation.
-- **Depth cap (`MAX_REDIRECT_DEPTH = 10`)**: Chains that exceed 10 hops are blocked, even if every hash is unique. This guards against unbounded chains with parameterized routes.
-
-Both safeguards log an error and settle the navigation as `Blocked`.
 
 ```
 User navigates to "dashboard"
@@ -556,6 +551,15 @@ User navigates to "dashboard"
   → profile guard checks onboarding status ← this guard RUNS
   → onboarding guard allows → onboarding view renders
 ```
+
+Two safeguards prevent infinite redirect loops:
+
+- **Visited-set detection**: The router tracks every hash evaluated in the current chain. Revisiting a hash is treated as a loop and blocks the navigation.
+- **Depth cap** (10 hops): Chains that exceed 10 redirect hops are blocked, even if every hash is unique. This guards against unbounded chains with parameterized routes.
+
+Both safeguards log an error and settle the navigation as `Blocked`.
+
+## Limitations
 
 ### History guarantees differ by navigation source
 
@@ -650,12 +654,12 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
 | error   | `Guard redirect loop detected: {visited hashes}`                                    | A redirect chain revisited a hash already evaluated in the current chain                            |
-| error   | `Guard redirect chain exceeded maximum depth ({N}): {visited hashes}`               | A redirect chain exceeded the `MAX_REDIRECT_DEPTH` cap (10 hops)                                   |
+| error   | `Guard redirect chain exceeded maximum depth ({N}): {visited hashes}`               | A redirect chain exceeded the depth cap (10 hops)                                                   |
 | error   | `Guard pipeline failed during redirect chain for "{route}", blocking navigation`    | Async guard pipeline rejected while evaluating a redirect target                                    |
-| error   | `Guard pipeline failed for "{hash}", blocking navigation`                           | Async guard pipeline rejected in `parse()` fallback path                                            |
-| error   | `Async preflight guard failed for route "{route}", blocking navigation`             | Async guard pipeline rejected in `navTo()` preflight path                                           |
-| error   | `Enter guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                        |
-| error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async leave guard threw an exception                                                        |
+| error   | `Guard pipeline failed for "{hash}", navigation failed`                             | Async guard pipeline rejected in `parse()` fallback path                                            |
+| error   | `Async preflight guard failed for route "{route}", navigation failed`               | Async guard pipeline rejected in `navTo()` preflight path                                           |
+| error   | `Enter guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async enter guard threw an exception                                                        |
+| error   | `Leave guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async leave guard threw an exception                                                        |
 | debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
 | debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |
 

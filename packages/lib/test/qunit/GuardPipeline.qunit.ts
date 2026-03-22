@@ -322,58 +322,76 @@ QUnit.test("invalid return values treated as block", function (this: SinonTestCo
 // ============================================================
 QUnit.module("GuardPipeline - error handling");
 
-QUnit.test("throwing guards block and log errors", function (this: SinonTestContext, assert: Assert) {
+QUnit.test("throwing guards produce error decisions and log errors", function (this: SinonTestContext, assert: Assert) {
 	const errorStub = this.stub(Log, "error");
 
+	const enterError = new Error("boom");
 	const p1 = new GuardPipeline();
 	p1.addGlobalGuard(() => {
-		throw new Error("boom");
+		throw enterError;
 	});
-	assert.deepEqual(p1.evaluate(createContext()), { action: "block" }, "Enter guard throw blocks");
+	assert.deepEqual(
+		p1.evaluate(createContext()),
+		{ action: "error", error: enterError },
+		"Enter guard throw → error decision",
+	);
 
+	const leaveError = new Error("leave boom");
 	const p2 = new GuardPipeline();
 	p2.addLeaveGuard("current", () => {
-		throw new Error("leave boom");
+		throw leaveError;
 	});
 	assert.deepEqual(
 		p2.evaluate(createContext({ fromRoute: "current" })),
-		{ action: "block" },
-		"Leave guard throw blocks",
+		{ action: "error", error: leaveError },
+		"Leave guard throw → error decision",
 	);
 
 	assert.strictEqual(errorStub.callCount, 2, "Error logged for each throw");
 });
 
-QUnit.test("async guard that rejects blocks navigation", async function (this: SinonTestContext, assert: Assert) {
+QUnit.test("async guard that rejects produces error decision", async function (this: SinonTestContext, assert: Assert) {
 	const errorStub = this.stub(Log, "error");
 	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard(() => Promise.reject(new Error("async boom")));
+	const rejectedError = new Error("async boom");
+	pipeline.addGlobalGuard(() => Promise.reject(rejectedError));
 
 	const result = await pipeline.evaluate(createContext());
-	assert.deepEqual(result, { action: "block" });
+	assert.deepEqual(result, { action: "error", error: rejectedError });
 	assert.ok(errorStub.calledOnce, "Error was logged");
 });
 
-QUnit.test("aborted signal suppresses error logging", async function (this: SinonTestContext, assert: Assert) {
-	const errorStub = this.stub(Log, "error");
+QUnit.test(
+	"aborted signal suppresses error logging and produces block",
+	async function (this: SinonTestContext, assert: Assert) {
+		const errorStub = this.stub(Log, "error");
 
-	const c1 = new AbortController();
-	const p1 = new GuardPipeline();
-	p1.addGlobalGuard(() => {
-		c1.abort();
-		return Promise.reject(new Error("aborted"));
-	});
-	await p1.evaluate(createContext({ signal: c1.signal }));
-	assert.ok(errorStub.notCalled, "Enter guard error suppressed when signal aborted");
+		const c1 = new AbortController();
+		const p1 = new GuardPipeline();
+		p1.addGlobalGuard(() => {
+			c1.abort();
+			return Promise.reject(new Error("aborted"));
+		});
+		const r1 = await p1.evaluate(createContext({ signal: c1.signal }));
+		assert.deepEqual(r1, { action: "block" }, "Aborted enter guard → block (not error)");
+		assert.ok(errorStub.notCalled, "Enter guard error suppressed when signal aborted");
 
-	const c2 = new AbortController();
-	const p2 = new GuardPipeline();
-	p2.addLeaveGuard("current", () => {
-		c2.abort();
-		return Promise.reject(new Error("leave aborted"));
-	});
-	await p2.evaluate(createContext({ signal: c2.signal, fromRoute: "current" }));
-	assert.ok(errorStub.notCalled, "Leave guard error suppressed when signal aborted");
+		const c2 = new AbortController();
+		const p2 = new GuardPipeline();
+		p2.addLeaveGuard("current", () => {
+			c2.abort();
+			return Promise.reject(new Error("leave aborted"));
+		});
+		const r2 = await p2.evaluate(createContext({ signal: c2.signal, fromRoute: "current" }));
+		assert.deepEqual(r2, { action: "block" }, "Aborted leave guard → block (not error)");
+		assert.ok(errorStub.notCalled, "Leave guard error suppressed when signal aborted");
+	},
+);
+
+QUnit.test("guard returning false produces block, not error", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addGlobalGuard(() => false);
+	assert.deepEqual(pipeline.evaluate(createContext()), { action: "block" }, "false → block, not error");
 });
 
 // ============================================================

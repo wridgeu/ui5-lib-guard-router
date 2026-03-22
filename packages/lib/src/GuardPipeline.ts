@@ -32,7 +32,8 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 export type GuardDecision =
 	| { action: "allow" }
 	| { action: "block" }
-	| { action: "redirect"; target: string | GuardRedirect };
+	| { action: "redirect"; target: string | GuardRedirect }
+	| { action: "error"; error: unknown };
 
 /**
  * Standalone guard evaluation pipeline.
@@ -49,10 +50,12 @@ export default class GuardPipeline {
 	private _enterGuards = new Map<string, GuardFn[]>();
 	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
 
+	/** Register a guard that runs for every navigation. */
 	addGlobalGuard(guard: GuardFn): void {
 		this._globalGuards.push(guard);
 	}
 
+	/** Remove a previously registered global guard by reference. */
 	removeGlobalGuard(guard: GuardFn): void {
 		const index = this._globalGuards.indexOf(guard);
 		if (index !== -1) {
@@ -60,18 +63,42 @@ export default class GuardPipeline {
 		}
 	}
 
+	/**
+	 * Register an enter guard for a specific route.
+	 *
+	 * @param route - Route name as defined in `manifest.json`.
+	 * @param guard - Guard function to register.
+	 */
 	addEnterGuard(route: string, guard: GuardFn): void {
 		this._addToGuardMap(this._enterGuards, route, guard);
 	}
 
+	/**
+	 * Remove a previously registered enter guard by reference.
+	 *
+	 * @param route - Route name.
+	 * @param guard - Guard function to remove.
+	 */
 	removeEnterGuard(route: string, guard: GuardFn): void {
 		this._removeFromGuardMap(this._enterGuards, route, guard);
 	}
 
+	/**
+	 * Register a leave guard for a specific route.
+	 *
+	 * @param route - Route name as defined in `manifest.json`.
+	 * @param guard - Leave guard function to register.
+	 */
 	addLeaveGuard(route: string, guard: LeaveGuardFn): void {
 		this._addToGuardMap(this._leaveGuards, route, guard);
 	}
 
+	/**
+	 * Remove a previously registered leave guard by reference.
+	 *
+	 * @param route - Route name.
+	 * @param guard - Leave guard function to remove.
+	 */
 	removeLeaveGuard(route: string, guard: LeaveGuardFn): void {
 		this._removeFromGuardMap(this._leaveGuards, route, guard);
 	}
@@ -96,6 +123,8 @@ export default class GuardPipeline {
 	 * @param options.skipLeaveGuards - When true, leave guards are skipped even if
 	 *   `context.fromRoute` is set. Used by redirect chain hops to avoid re-running
 	 *   leave guards while still preserving `fromRoute` in the context.
+	 * @returns A synchronous {@link GuardDecision} when all guards return plain values,
+	 *   or a `Promise<GuardDecision>` when at least one guard returns a thenable.
 	 */
 	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
 		const hasLeaveGuards =
@@ -111,11 +140,15 @@ export default class GuardPipeline {
 			enterResult: GuardResult | Promise<GuardResult>,
 		): GuardDecision | Promise<GuardDecision> => {
 			if (isPromiseLike(enterResult)) {
-				return enterResult.then((r: GuardResult): GuardDecision => {
-					if (r === true) return { action: "allow" };
-					if (r === false) return { action: "block" };
-					return { action: "redirect", target: r };
-				});
+				return enterResult
+					.then((r: GuardResult): GuardDecision => {
+						if (r === true) return { action: "allow" };
+						if (r === false) return { action: "block" };
+						return { action: "redirect", target: r };
+					})
+					.catch((error: unknown): GuardDecision => {
+						return { action: "error", error };
+					});
 			}
 			if (enterResult === true) return { action: "allow" };
 			if (enterResult === false) return { action: "block" };
@@ -127,20 +160,28 @@ export default class GuardPipeline {
 			return processEnterResult(enterResult);
 		};
 
-		if (hasLeaveGuards) {
-			const leaveResult = this._runLeaveGuards(context);
+		try {
+			if (hasLeaveGuards) {
+				const leaveResult = this._runLeaveGuards(context);
 
-			if (isPromiseLike(leaveResult)) {
-				return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
-					if (allowed !== true) return { action: "block" };
-					if (context.signal.aborted) return { action: "block" };
-					return runEnterPhase();
-				});
+				if (isPromiseLike(leaveResult)) {
+					return leaveResult
+						.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
+							if (allowed !== true) return { action: "block" };
+							if (context.signal.aborted) return { action: "block" };
+							return runEnterPhase();
+						})
+						.catch((error: unknown): GuardDecision => {
+							return { action: "error", error };
+						});
+				}
+				if (leaveResult !== true) return { action: "block" };
 			}
-			if (leaveResult !== true) return { action: "block" };
-		}
 
-		return runEnterPhase();
+			return runEnterPhase();
+		} catch (error) {
+			return { action: "error", error };
+		}
 	}
 
 	private _addToGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): void {
@@ -189,11 +230,12 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Leave guard [${i}] on route "${context.fromRoute}" threw, blocking navigation`,
+					`Leave guard [${i}] on route "${context.fromRoute}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
-				return false;
+				if (context.signal.aborted) return false;
+				throw error;
 			}
 		}
 		return true;
@@ -246,11 +288,12 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Enter guard [${i}] on route "${context.toRoute}" threw, blocking navigation`,
+					`Enter guard [${i}] on route "${context.toRoute}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
-				return false;
+				if (context.signal.aborted) return false;
+				throw error;
 			}
 		}
 		return true;
@@ -293,10 +336,11 @@ export default class GuardPipeline {
 			if (!context.signal.aborted) {
 				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
-					`${label} [${guardIndex}] on route "${route}" threw, blocking navigation`,
+					`${label} [${guardIndex}] on route "${route}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
+				throw error;
 			}
 			return false;
 		}

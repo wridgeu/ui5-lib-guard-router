@@ -76,9 +76,9 @@ interface RedirectChainContext {
 	readonly attemptedHash: string | undefined;
 	/** Whether to restore the hash on block (true for parse path, false for preflight). */
 	readonly restoreHash: boolean;
-	/** Original source route — the route the user is currently on. */
+	/** Original source route -- the route the user is currently on. */
 	readonly fromRoute: string;
-	/** Original source hash — the hash the user is currently on. */
+	/** Original source hash -- the hash the user is currently on. */
 	readonly fromHash: string;
 	/** Shared AbortSignal from the original navigation. */
 	readonly signal: AbortSignal;
@@ -484,14 +484,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
 					// finally already reset phase to idle, we still need to drain
-					// settlement resolvers via _blockNavigation.
+					// settlement resolvers via _errorNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
-						`Async preflight guard failed for route "${routeName}", blocking navigation`,
+						`Async preflight guard failed for route "${routeName}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(targetHash, false);
+					this._errorNavigation(error, targetHash, false);
 				});
 			return this;
 		}
@@ -512,7 +512,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Apply a preflight guard decision. For "allow", enter the committing
 	 * phase and call super.navTo(). For "block", flush settlement without
-	 * touching the hash. For "redirect", navigate to the redirect target.
+	 * touching the hash. For "redirect", start a redirect chain.
+	 * For "error", flush Error settlement with the guard's error.
+	 *
+	 * @param decision - Normalized guard pipeline result.
+	 * @param routeName - Original route name passed to navTo().
+	 * @param parameters - Original route parameters.
+	 * @param componentTargetInfo - Optional component target info from the navTo() overload.
+	 * @param bReplace - Whether to replace the current history entry.
+	 * @param targetHash - Resolved hash for the target route.
+	 * @param toRoute - Resolved route name (may differ from routeName for nested routes).
 	 */
 	private _applyPreflightDecision(
 		decision: GuardDecision,
@@ -553,6 +562,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 				});
 				break;
 			}
+			case "error":
+				this._errorNavigation(decision.error, targetHash, false);
+				break;
 		}
 	}
 
@@ -630,14 +642,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
 					// finally already reset phase to idle, we still need to drain
-					// settlement resolvers via _blockNavigation.
+					// settlement resolvers via _errorNavigation.
 					if (generation !== this._parseGeneration) return;
 					Log.error(
-						`Guard pipeline failed for "${newHash}", blocking navigation`,
+						`Guard pipeline failed for "${newHash}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(newHash);
+					this._errorNavigation(error, newHash);
 				});
 			return;
 		}
@@ -712,6 +724,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 				});
 				break;
 			}
+			case "error":
+				this._errorNavigation(decision.error, hash);
+				break;
 		}
 	}
 
@@ -741,7 +756,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 		super.parse(hash);
 	}
 
-	/** Perform a guard redirect with full guard evaluation on the target route. */
+	/**
+	 * Evaluate guards on a redirect target and apply the resulting decision.
+	 *
+	 * Handles loop detection (visited-hash set + depth cap), unknown-route
+	 * fallback, sync/async guard evaluation, and recursive chaining when
+	 * the target's guard itself returns a redirect. All hops in a chain
+	 * share the same AbortSignal and generation counter from the original
+	 * navigation so that a superseding navigation correctly discards
+	 * in-flight redirect work.
+	 *
+	 * @param target - Redirect target: a route name string or {@link GuardRedirect} with parameters.
+	 * @param chain - Mutable context threaded through the redirect chain (visited set, signals, etc.).
+	 */
 	private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
 		const targetName = typeof target === "string" ? target : target.route;
 		let targetHash: string | null = null;
@@ -765,7 +792,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._blockNavigation(chain.attemptedHash, chain.restoreHash);
 			return;
 		}
-		if (chain.visited.size >= MAX_REDIRECT_DEPTH) {
+		if (chain.visited.size > MAX_REDIRECT_DEPTH) {
 			Log.error(
 				`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ${[...chain.visited].join(" -> ")}`,
 				undefined,
@@ -822,6 +849,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			decision
 				.then((d: GuardDecision) => {
 					if (chain.generation !== this._parseGeneration) return;
+					// targetHash is non-null: the null branch returned early above.
 					this._applyRedirectDecision(d, target, targetHash!, chain);
 				})
 				.catch((error: unknown) => {
@@ -843,6 +871,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Apply a guard decision within a redirect chain. For "allow", enter
 	 * committing phase and delegate to navTo (which hits the existing bypass).
 	 * For "block", block the entire chain. For "redirect", recurse.
+	 *
+	 * @param decision - Normalized guard pipeline result for this hop.
+	 * @param target - The redirect target (route name or {@link GuardRedirect}).
+	 * @param targetHash - Resolved hash for the redirect target (guaranteed non-null).
+	 * @param chain - Shared redirect chain context with visited set, signals, etc.
 	 */
 	private _applyRedirectDecision(
 		decision: GuardDecision,
@@ -895,6 +928,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			case "redirect":
 				this._redirect(decision.target, chain);
 				break;
+			case "error":
+				this._errorNavigation(decision.error, chain.attemptedHash, chain.restoreHash);
+				break;
 		}
 	}
 
@@ -920,9 +956,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Clear pending state and flush an Error settlement.
+	 * Same structure as `_blockNavigation` but with `NavigationOutcome.Error`
+	 * and the error that caused the failure.
+	 */
+	private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void {
+		this._phase = IDLE;
+		this._flushSettlement({
+			status: NavigationOutcome.Error,
+			route: this._currentRoute,
+			hash: this._currentHash ?? "",
+			error,
+		});
+		if (!restoreHash) return;
+		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
+			this._restoreHash("", false);
+			return;
+		}
+		this._restoreHash(this._currentHash ?? "");
+	}
+
+	/**
 	 * Restore the previous hash without creating a history entry.
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
-	 * `_currentRoute` stays unchanged because the blocked navigation never
+	 * `_currentRoute` stays unchanged because the navigation never
 	 * committed. The user remains on the same logical route.
 	 */
 	private _restoreHash(hash: string, suppressParse = true): void {
