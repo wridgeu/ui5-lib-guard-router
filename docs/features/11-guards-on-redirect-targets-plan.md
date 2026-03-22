@@ -313,7 +313,7 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
 		this._blockNavigation(chain.attemptedHash, chain.restoreHash);
 		return;
 	}
-	if (chain.visited.size >= MAX_REDIRECT_DEPTH) {
+	if (chain.visited.size > MAX_REDIRECT_DEPTH) {
 		Log.error(
 			`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ${[...chain.visited].join(" -> ")}`,
 			undefined,
@@ -483,8 +483,8 @@ target route. Loop detection uses a visited-set (tracking hashes)
 plus a MAX_REDIRECT_DEPTH=10 cap. Leave guards run only on the
 first hop.
 
-BREAKING CHANGE: Guards registered on redirect target routes now
-execute during redirect chains. Previously they were skipped.
+Guards registered on redirect target routes now execute during
+redirect chains. Previously they were skipped.
 ```
 
 ---

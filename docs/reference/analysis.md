@@ -277,15 +277,15 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 
 ### 3.3 Design Decisions
 
-| Decision                                  | Rationale                                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Override `parse()` not `navTo()`          | `navTo()` doesn't catch browser back/forward or direct URL changes                                                             |
-| Synchronous-first pipeline                | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync.  |
-| Async fallback with generation counter    | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.              |
-| Committing/redirect phase bypasses guards | Prevents infinite loops when a guard redirects to another guarded route                                                        |
-| `_suppressedHash` for hash restoration    | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                           |
-| Strict `true` for allow                   | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.   |
-| ES class with `@namespace` JSDoc          | `@namespace` triggers `babel-plugin-transform-modules-ui5` to emit `.extend()`, giving the class its own UI5 metadata identity |
+| Decision                                                | Rationale                                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Override `parse()` not `navTo()`                        | `navTo()` doesn't catch browser back/forward or direct URL changes                                                             |
+| Synchronous-first pipeline                              | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync.  |
+| Async fallback with generation counter                  | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.              |
+| Guards evaluate on redirect targets with loop detection | Visited-set + depth cap prevents infinite loops; committing/redirect phase used only for the final commit step                 |
+| `_suppressedHash` for hash restoration                  | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                           |
+| Strict `true` for allow                                 | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.   |
+| ES class with `@namespace` JSDoc                        | `@namespace` triggers `babel-plugin-transform-modules-ui5` to emit `.extend()`, giving the class its own UI5 metadata identity |
 
 ### 3.4 Guard API
 
@@ -398,7 +398,7 @@ No application logic changes needed beyond the guard definitions themselves.
 | Post-destroy settlement        | 2     | `navigationSettled()` after destroy resolves immediately; pending nav cancelled                                           |
 | Guard error after signal abort | 2     | Enter guard + leave guard error after abort silenced (no unhandled rejection)                                             |
 | Leave + enter guard combos     | 3     | Leave block settlement fields, leave-allow + enter-block, async leave-allow + async enter-redirect                        |
-| Redirect edge cases            | 2     | Global guard redirect short-circuits route guard; redirect target's own guard bypassed                                    |
+| Redirect edge cases            | 2     | Global guard redirect short-circuits route guard; redirect target's own guard is evaluated                                |
 | NativeCompat (API parity)      | 3     | isA, public routing methods, additional guard methods                                                                     |
 | NativeCompat (Route matching)  | 3     | match() known/unknown hashes, getRouteInfoByHash                                                                          |
 | NativeCompat (Navigation)      | 4     | navTo hash update, getRoute objects, initialize/stop, stop + init routeMatched                                            |

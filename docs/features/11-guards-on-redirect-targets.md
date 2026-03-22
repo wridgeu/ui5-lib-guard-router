@@ -257,6 +257,9 @@ private _applyRedirectDecision(
             // Recurse into next hop
             this._redirect(decision.target, chain);
             break;
+        case "error":
+            this._errorNavigation(decision.error, chain.attemptedHash, chain.restoreHash);
+            break;
     }
 }
 ```
@@ -286,11 +289,12 @@ not fire `hashChanged` for a same-hash `navTo()`, so the normal commit path
 
 The entire chain is one logical navigation. Only one settlement is flushed:
 
-| Chain outcome   | Settlement                                                |
-| --------------- | --------------------------------------------------------- |
-| Allow (end)     | `NavigationOutcome.Redirected`                            |
-| Block (any hop) | `NavigationOutcome.Blocked`                               |
-| Loop detected   | `NavigationOutcome.Blocked` + `Log.error` with chain path |
+| Chain outcome       | Settlement                                                |
+| ------------------- | --------------------------------------------------------- |
+| Allow (end)         | `NavigationOutcome.Redirected`                            |
+| Block (any hop)     | `NavigationOutcome.Blocked`                               |
+| Error (guard throw) | `NavigationOutcome.Error` + error on result               |
+| Loop detected       | `NavigationOutcome.Blocked` + `Log.error` with chain path |
 
 No intermediate settlements for redirect hops.
 
