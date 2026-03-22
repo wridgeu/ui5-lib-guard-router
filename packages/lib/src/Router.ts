@@ -65,6 +65,27 @@ type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
 
 const IDLE: PhaseIdle = { kind: "idle" };
 
+/** Maximum number of hops in a redirect chain before it is treated as a loop. */
+const MAX_REDIRECT_DEPTH = 10;
+
+/** State threaded through a redirect chain. */
+interface RedirectChainContext {
+	/** Hashes whose guards have been evaluated in this chain (mutated via .add()). */
+	visited: Set<string>;
+	/** Hash of the originally attempted navigation (for settlement / hash restore). */
+	readonly attemptedHash: string | undefined;
+	/** Whether to restore the hash on block (true for parse path, false for preflight). */
+	readonly restoreHash: boolean;
+	/** Original source route — the route the user is currently on. */
+	readonly fromRoute: string;
+	/** Original source hash — the hash the user is currently on. */
+	readonly fromHash: string;
+	/** Shared AbortSignal from the original navigation. */
+	readonly signal: AbortSignal;
+	/** Shared generation counter from the original navigation. */
+	readonly generation: number;
+}
+
 /**
  * Router with navigation guard support.
  *
