@@ -20,7 +20,7 @@ function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 		fromRoute: "",
 		fromHash: "",
 		signal: new AbortController().signal,
-		meta: new Map(),
+		bag: new Map(),
 		...overrides,
 	};
 }

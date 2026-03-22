@@ -171,53 +171,53 @@ QUnit.module("Router - Guard context meta bag", {
 	afterEach: standardHooks.afterEach,
 });
 
-QUnit.test("guard receives a meta Map on context", async function (assert: Assert) {
+QUnit.test("guard receives a bag Map on context", async function (assert: Assert) {
 	await waitForRoute(router, "home");
 
-	let receivedMeta: Map<string, unknown> | undefined;
+	let receivedBag: Map<string, unknown> | undefined;
 	router.addGuard((context: GuardContext) => {
-		receivedMeta = context.meta;
+		receivedBag = context.bag;
 		return true;
 	});
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	assert.ok(receivedMeta instanceof Map, "meta is a Map instance");
-	assert.strictEqual(receivedMeta!.size, 0, "meta starts empty");
+	assert.ok(receivedBag instanceof Map, "bag is a Map instance");
+	assert.strictEqual(receivedBag!.size, 0, "bag starts empty");
 });
 
-QUnit.test("meta is shared across leave and enter guards in the same pipeline", async function (assert: Assert) {
+QUnit.test("bag is shared across leave and enter guards in the same pipeline", async function (assert: Assert) {
 	await waitForRoute(router, "home");
 
-	let enterMeta: Map<string, unknown> | undefined;
+	let enterBag: Map<string, unknown> | undefined;
 
 	router.addLeaveGuard("home", (context: GuardContext) => {
-		context.meta.set("fromLeave", true);
+		context.bag.set("fromLeave", true);
 		return true;
 	});
 
 	router.addGuard((context: GuardContext) => {
-		enterMeta = context.meta;
+		enterBag = context.bag;
 		return true;
 	});
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	assert.ok(enterMeta instanceof Map, "enter guard received meta");
-	assert.strictEqual(enterMeta!.get("fromLeave"), true, "enter guard sees data set by leave guard");
+	assert.ok(enterBag instanceof Map, "enter guard received bag");
+	assert.strictEqual(enterBag!.get("fromLeave"), true, "enter guard sees data set by leave guard");
 });
 
-QUnit.test("meta is fresh for each navigation (not carried across)", async function (assert: Assert) {
+QUnit.test("bag is fresh for each navigation (not carried across)", async function (assert: Assert) {
 	await waitForRoute(router, "home");
 
-	const metaSnapshots: Map<string, unknown>[] = [];
-	const metaInitialStates: boolean[] = [];
+	const bagSnapshots: Map<string, unknown>[] = [];
+	const bagInitialStates: boolean[] = [];
 	router.addGuard((context: GuardContext) => {
-		metaInitialStates.push(context.meta.has("visited"));
-		metaSnapshots.push(context.meta);
-		context.meta.set("visited", true);
+		bagInitialStates.push(context.bag.has("visited"));
+		bagSnapshots.push(context.bag);
+		context.bag.set("visited", true);
 		return true;
 	});
 
@@ -227,9 +227,9 @@ QUnit.test("meta is fresh for each navigation (not carried across)", async funct
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
-	assert.strictEqual(metaSnapshots.length, 2, "guard ran twice");
-	assert.notStrictEqual(metaSnapshots[0], metaSnapshots[1], "each navigation gets a different Map instance");
-	assert.notOk(metaInitialStates[1], "second navigation meta starts without data from first");
+	assert.strictEqual(bagSnapshots.length, 2, "guard ran twice");
+	assert.notStrictEqual(bagSnapshots[0], bagSnapshots[1], "each navigation gets a different Map instance");
+	assert.notOk(bagInitialStates[1], "second navigation bag starts without data from first");
 });
 
 // ============================================================

@@ -502,18 +502,18 @@ When a module exports multiple guards, you can register a subset using `#` to se
 
 When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
 
-### Guard context `meta`
+### Guard context `bag`
 
-Guards in the same pipeline can share data through `context.meta`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
+Guards in the same pipeline can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
 
 ```typescript
 export default function firstGuard(context: GuardContext): GuardResult {
-	context.meta.set("userId", getCurrentUserId());
+	context.bag.set("userId", getCurrentUserId());
 	return true;
 }
 
 export default function secondGuard(context: GuardContext): GuardResult {
-	const userId = context.meta.get("userId");
+	const userId = context.bag.get("userId");
 	// use userId from earlier guard in same pipeline
 	return true;
 }

@@ -985,7 +985,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal: controller.signal,
-			meta: new Map(),
+			bag: new Map(),
 		};
 
 		const decision = this._pipeline.evaluate(context);
@@ -1152,7 +1152,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal: controller.signal,
-			meta: new Map(),
+			bag: new Map(),
 		};
 
 		const decision = this._pipeline.evaluate(context);
@@ -1375,7 +1375,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: chain.fromRoute,
 			fromHash: chain.fromHash,
 			signal: chain.signal,
-			meta: new Map(),
+			bag: new Map(),
 		};
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });

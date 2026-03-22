@@ -64,7 +64,7 @@ export interface GuardContext {
 	 * reads from or writes to it -- it is purely a carrier for inter-guard
 	 * communication.
 	 */
-	meta: Map<string, unknown>;
+	bag: Map<string, unknown>;
 }
 
 /**

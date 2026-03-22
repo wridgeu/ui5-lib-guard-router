@@ -84,8 +84,8 @@ import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export default function authGuard(context: GuardContext): GuardResult {
 	// Standalone function — no closure over component state.
-	// For shared state, use context.meta or a service/singleton pattern.
-	const user = context.meta.get("user");
+	// For shared state, use context.bag or a service/singleton pattern.
+	const user = context.bag.get("user");
 	return user ? true : "login";
 }
 ```
@@ -151,23 +151,23 @@ If the specified key does not exist or is not a function, a warning is logged an
 
 `sap.ui.require` caches modules globally. Once a guard module is loaded (by either loading strategy), subsequent calls to `sap.ui.require("module/path")` return the cached export synchronously. There is no re-loading overhead for repeated guard evaluations.
 
-## Guard Context `meta` Bag
+## Guard Context `bag`
 
 A shared mutable `Map<string, unknown>` on `GuardContext` for inter-guard data passing:
 
-- Created fresh per pipeline run in `_evaluateGuards()`.
+- Created fresh per pipeline run.
 - Shared across all guards in the same pipeline (leave → global enter → route enter).
 - The router never reads from or writes to it — it is purely a carrier.
 - Scoped to a single navigation attempt; garbage collected when the pipeline finishes.
 
-**Breaking change note**: `meta` is added as a required field on `GuardContext`. Existing guard functions that receive `GuardContext` are unaffected (they simply don't read `meta`). However, any application or test code that constructs a `GuardContext` literal will need to include `meta: new Map()`. This is a minor semver breaking change to the public type.
+**Breaking change note**: `bag` is added as a required field on `GuardContext`. Existing guard functions that receive `GuardContext` are unaffected (they simply don't read `bag`). However, any application or test code that constructs a `GuardContext` literal will need to include `bag: new Map()`. This is a minor semver breaking change to the public type.
 
 ```typescript
 // Guard A stores data
-context.meta.set("user", await fetchUser(context.signal));
+context.bag.set("user", await fetchUser(context.signal));
 
 // Guard B reads data (runs after Guard A in array order)
-const user = context.meta.get("user");
+const user = context.bag.get("user");
 ```
 
 ## Constructor and Initialization Flow
@@ -295,7 +295,7 @@ interface GuardContext {
 	fromRoute: string;
 	fromHash: string;
 	signal: AbortSignal;
-	meta: Map<string, unknown>; // NEW — breaking change to public type
+	bag: Map<string, unknown>; // NEW — breaking change to public type
 }
 
 // --- GuardRouter interface navTo overloads ---
@@ -438,7 +438,7 @@ Key properties:
 - Duplicate references (`"guards.security"` and `"guards.security#checkAuth"` in same route): each occurrence registers independently — `checkAuth` runs twice
 - Execution order with multi-guard modules: bare path inserts all guards at the module's position in manifest array; cherry-picks respect their individual positions
 
-### Guard context meta bag
+### Guard context bag
 
 - Fresh `Map` per pipeline run
 - Shared across leave → enter guards in same pipeline
@@ -454,13 +454,13 @@ Key properties:
 
 | Risk                                                          | Mitigation                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guard modules with closures can't access component state      | Document: manifest guards are standalone; use `context.meta` or services for shared state; imperative registration for component-bound guards                                                                                                      |
+| Guard modules with closures can't access component state      | Document: manifest guards are standalone; use `context.bag` or services for shared state; imperative registration for component-bound guards                                                                                                       |
 | Guard ordering is implicit (array order)                      | Document clearly; test array-order execution                                                                                                                                                                                                       |
 | Module paths are strings with no compile-time validation      | Graceful runtime warnings on invalid paths; future: UI5 linter rule                                                                                                                                                                                |
 | Manifest + imperative guards coexist                          | Well-defined order: manifest first, imperative second                                                                                                                                                                                              |
 | `guardLoading: "lazy"` may make first navigation async        | Preload hint in constructor makes cache hit the common case. On cache miss behavior is identical to previous lazy mode. Document that guard modules should be kept small for best results.                                                         |
 | `navToPreflight: "off"` inherits parse() fallback limitations | Document that `"off"` is unsuitable for apps relying on `navigationSettled()` after `navTo()` with async guards. Combining `"off"` with `guardLoading: "lazy"` compounds the latency since the first guard evaluation also loads the module async. |
-| `meta` on `GuardContext` is a breaking type change            | Minor semver bump; existing guard functions are unaffected, only code constructing `GuardContext` literals needs updating                                                                                                                          |
+| `bag` on `GuardContext` is a breaking type change             | Minor semver bump; existing guard functions are unaffected, only code constructing `GuardContext` literals needs updating                                                                                                                          |
 
 ## Out of Scope
 
