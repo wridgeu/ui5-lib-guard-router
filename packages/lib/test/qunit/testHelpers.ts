@@ -14,6 +14,20 @@ export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
+export function createRouter(): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+			{ name: "detail", pattern: "detail/{id}" },
+		],
+		{
+			async: true,
+		},
+	);
+}
+
 export function createRouterWithOptions(guardRouter: Record<string, unknown>): GuardRouter {
 	return new GuardRouterClass(
 		[
