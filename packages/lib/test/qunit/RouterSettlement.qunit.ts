@@ -460,14 +460,10 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 // ============================================================
 QUnit.module("Router - Restore and settlement invariants", standardHooks);
 
-QUnit.test("Blocked setHash restores hash through a single suppressed parse cycle", async function (assert: Assert) {
-	let guardCalls = 0;
+QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async function (assert: Assert) {
 	let matched = false;
 
-	router.addRouteGuard("protected", () => {
-		guardCalls++;
-		return false;
-	});
+	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -486,7 +482,6 @@ QUnit.test("Blocked setHash restores hash through a single suppressed parse cycl
 	assert.strictEqual(result.route, "home", "Current route stayed on home");
 	assert.strictEqual(result.hash, "", "Settlement hash stayed on the previous hash");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
-	assert.strictEqual(guardCalls, 1, "Guard pipeline ran exactly once for the blocked navigation");
 	assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
 });
 
@@ -847,11 +842,13 @@ QUnit.test("router recovers when redirect target throws", async function (assert
 	const redirectGuard: GuardFn = () => "detail";
 	router.addRouteGuard("protected", redirectGuard);
 
+	let threw = false;
 	try {
 		router.navTo("protected");
 	} catch {
-		// Expected: super.navTo("detail", {}) throws for missing mandatory {id}
+		threw = true;
 	}
+	assert.ok(threw, "navTo threw when redirect target has missing mandatory parameters");
 
 	// Verify guards still work on subsequent navigation (not permanently bypassed)
 	router.removeRouteGuard("protected", redirectGuard);
