@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -41,7 +41,7 @@ async function main() {
 	const [npmCommand, npmBaseArgs] = npmArgs();
 
 	try {
-		await access(path.join(libDir, "dist", "index.d.ts"));
+		await stat(path.join(libDir, "dist", "index.d.ts"));
 
 		const tarballName = runAndCapture(npmCommand, [...npmBaseArgs, "pack", "--silent"], { cwd: libDir });
 		tarballPath = path.join(libDir, tarballName.split(/\r?\n/u).at(-1));
@@ -132,9 +132,9 @@ async function main() {
 			{ cwd: tempDir },
 		);
 
-		await access(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "LICENSE"));
-		await access(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "dist", "index.d.ts"));
-		await access(
+		await stat(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "LICENSE"));
+		await stat(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "dist", "index.d.ts"));
+		await stat(
 			path.join(
 				tempDir,
 				"node_modules",
