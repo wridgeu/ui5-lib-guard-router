@@ -538,6 +538,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(targetHash, false);
 				break;
 			case "redirect": {
+				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
 				const { attempt } = this._phase as PhaseEvaluating;
 				const visited = new Set<string>();
 				visited.add(targetHash);
@@ -696,6 +697,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(hash);
 				break;
 			case "redirect": {
+				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
 				const { attempt } = this._phase as PhaseEvaluating;
 				const visited = new Set<string>();
 				visited.add(hash);

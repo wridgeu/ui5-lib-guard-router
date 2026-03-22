@@ -4415,10 +4415,9 @@ QUnit.test("Redirect loop (A -> B -> A) is detected and blocked", async function
 
 	const errors = await captureErrorsAsync(async () => {
 		router.navTo("protected");
-		await router.navigationSettled();
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Loop blocked");
 	});
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Loop blocked");
 	assert.ok(
 		errors.some((e) => e.message.includes("redirect loop detected")),
 		"Error logged about redirect loop",
@@ -4521,10 +4520,9 @@ QUnit.test("Self-redirect (A -> A) detected as loop", async function (assert: As
 
 	const errors = await captureErrorsAsync(async () => {
 		router.navTo("protected");
-		await router.navigationSettled();
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Self-redirect blocked");
 	});
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Self-redirect blocked");
 	assert.ok(
 		errors.some((e) => e.message.includes("redirect loop detected")),
 		"Loop detection error logged",
@@ -4575,10 +4573,9 @@ QUnit.test("Max redirect depth exceeded blocks with error", async function (asse
 
 	const errors = await captureErrorsAsync(async () => {
 		router.navTo("detail", { id: "0" });
-		await router.navigationSettled();
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Depth exceeded blocked");
 	});
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Depth exceeded blocked");
 	assert.ok(callCount <= 10, `Guard called at most 10 times (was ${callCount})`);
 	assert.ok(
 		errors.some((e) => e.message.includes("maximum depth")),
