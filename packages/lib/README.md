@@ -513,11 +513,13 @@ export default function firstGuard(context: GuardContext): GuardResult {
 }
 
 export default function secondGuard(context: GuardContext): GuardResult {
-	const userId = context.bag.get("userId");
-	// use userId from earlier guard in same pipeline
+	const userId = context.bag.get("userId") as string | undefined;
+	if (!userId) return "login";
 	return true;
 }
 ```
+
+The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This matches how UI5 handles untyped model data (`getProperty()` returns `any`) and avoids generic complexity that can't flow through UI5's class system.
 
 This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
 
