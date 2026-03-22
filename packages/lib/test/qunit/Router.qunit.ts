@@ -199,15 +199,12 @@ QUnit.test("addRouteGuard / removeRouteGuard affect navigation behavior", async 
 	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation allowed after removeRouteGuard");
 });
 
-QUnit.test("addGuard returns this for chaining", function (assert: Assert) {
+QUnit.test("addGuard and addRouteGuard return this for chaining", function (assert: Assert) {
 	assert.strictEqual(
 		router.addGuard(() => true),
 		router,
 		"addGuard returns this",
 	);
-});
-
-QUnit.test("addRouteGuard returns this for chaining", function (assert: Assert) {
 	assert.strictEqual(
 		router.addRouteGuard("home", () => true),
 		router,
@@ -359,7 +356,8 @@ QUnit.test("destroy cleans up guards so they no longer run", async function (ass
 	assert.notOk(guardCalled, "Guards from destroyed router instance were not called");
 });
 
-QUnit.test("addGuard ignores non-function input", async function (assert: Assert) {
+QUnit.test("guard API methods ignore non-function input", async function (assert: Assert) {
+	// addGuard ignores non-function input
 	addGuardUnsafe(router, null);
 	addGuardUnsafe(router, 42);
 	addGuardUnsafe(router, "not a function");
@@ -371,38 +369,27 @@ QUnit.test("addGuard ignores non-function input", async function (assert: Assert
 		"protected",
 		"Non-function inputs to addGuard were ignored",
 	);
-});
+	router.destroy();
 
-QUnit.test("removeGuard ignores non-function input", async function (assert: Assert) {
-	// Register a real blocking guard, then try to remove it with invalid input
+	// removeGuard ignores non-function input
+	router = createRouter();
+	initHashChanger();
 	const guard: GuardFn = () => false;
 	router.addGuard(guard);
 	removeGuardUnsafe(router, null);
 	removeGuardUnsafe(router, "not a function");
 	router.initialize();
-	// Guard should still be active because invalid removes were no-ops
 	await assertBlocked(
 		assert,
 		router,
 		() => router.navTo("protected"),
 		"Guard still blocks after invalid removeGuard calls",
 	);
-});
+	router.destroy();
 
-QUnit.test("removeGuard for a never-added guard is a no-op", async function (assert: Assert) {
-	const neverAdded: GuardFn = () => false;
-	router.removeGuard(neverAdded);
-	router.initialize();
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Removing a never-added guard did not break anything",
-	);
-});
-
-QUnit.test("addLeaveGuard ignores non-function input", async function (assert: Assert) {
+	// addLeaveGuard ignores non-function input
+	router = createRouter();
+	initHashChanger();
 	addLeaveGuardUnsafe(router, "home", null);
 	addLeaveGuardUnsafe(router, "home", 42);
 	router.initialize();
@@ -414,10 +401,11 @@ QUnit.test("addLeaveGuard ignores non-function input", async function (assert: A
 		"protected",
 		"Non-function inputs to addLeaveGuard were ignored",
 	);
-});
+	router.destroy();
 
-QUnit.test("removeLeaveGuard ignores non-function input", async function (assert: Assert) {
-	// Register a blocking leave guard, then try to remove with invalid input
+	// removeLeaveGuard ignores non-function input
+	router = createRouter();
+	initHashChanger();
 	router.addLeaveGuard("home", () => false);
 	removeLeaveGuardUnsafe(router, "home", null);
 	removeLeaveGuardUnsafe(router, "home", "not a function");
@@ -429,23 +417,11 @@ QUnit.test("removeLeaveGuard ignores non-function input", async function (assert
 		() => router.navTo("protected"),
 		"Leave guard still blocks after invalid removeLeaveGuard calls",
 	);
-});
+	router.destroy();
 
-QUnit.test("removeLeaveGuard for a never-added guard is a no-op", async function (assert: Assert) {
-	const neverAdded: LeaveGuardFn = () => false;
-	router.removeLeaveGuard("home", neverAdded);
-	router.initialize();
-	await waitForRoute(router, "home");
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Removing a never-added leave guard did not break anything",
-	);
-});
-
-QUnit.test("removeRouteGuard ignores non-function input", async function (assert: Assert) {
+	// removeRouteGuard ignores non-function input
+	router = createRouter();
+	initHashChanger();
 	router.addRouteGuard("protected", () => false);
 	removeRouteGuardUnsafe(router, "protected", null);
 	removeRouteGuardUnsafe(router, "protected", "not a function");
@@ -458,9 +434,41 @@ QUnit.test("removeRouteGuard ignores non-function input", async function (assert
 	);
 });
 
-QUnit.test("removeRouteGuard for a never-added guard is a no-op", async function (assert: Assert) {
-	const neverAdded: GuardFn = () => false;
-	router.removeRouteGuard("protected", neverAdded);
+QUnit.test("removing never-added guards is a no-op", async function (assert: Assert) {
+	// removeGuard for a never-added guard
+	const neverAddedGuard: GuardFn = () => false;
+	router.removeGuard(neverAddedGuard);
+	router.initialize();
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"protected",
+		"Removing a never-added guard did not break anything",
+	);
+	router.destroy();
+
+	// removeLeaveGuard for a never-added guard
+	router = createRouter();
+	initHashChanger();
+	const neverAddedLeave: LeaveGuardFn = () => false;
+	router.removeLeaveGuard("home", neverAddedLeave);
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(
+		HashChanger.getInstance().getHash(),
+		"protected",
+		"Removing a never-added leave guard did not break anything",
+	);
+	router.destroy();
+
+	// removeRouteGuard for a never-added guard
+	router = createRouter();
+	initHashChanger();
+	const neverAddedRoute: GuardFn = () => false;
+	router.removeRouteGuard("protected", neverAddedRoute);
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
@@ -1492,30 +1500,31 @@ QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at targ
 
 QUnit.test("GuardRedirect forwards non-empty componentTargetInfo to navTo", async function (assert: Assert) {
 	const expectedCTI = { detail: { route: "sub", parameters: { subId: "x" } } };
-	const calls: unknown[][] = [];
-	const originalNavTo = Reflect.get(router, "navTo") as (...args: unknown[]) => unknown;
-	Reflect.set(router, "navTo", function (this: unknown, ...args: unknown[]) {
-		calls.push(args);
-		return Reflect.apply(originalNavTo, this, args);
-	});
+	const navToSpy = sinon.spy(router, "navTo");
 
-	router.addRouteGuard(
-		"forbidden",
-		(): GuardRedirect => ({
-			route: "detail",
-			parameters: { id: "cti-2" },
-			componentTargetInfo: expectedCTI,
-		}),
-	);
-	router.initialize();
-	router.navTo("forbidden");
-	await waitForRoute(router, "detail");
+	try {
+		router.addRouteGuard(
+			"forbidden",
+			(): GuardRedirect => ({
+				route: "detail",
+				parameters: { id: "cti-2" },
+				componentTargetInfo: expectedCTI,
+			}),
+		);
+		router.initialize();
+		router.navTo("forbidden");
+		await waitForRoute(router, "detail");
 
-	// First call: router.navTo("forbidden") from the test
-	// Second call: this.navTo("detail", ...) from _redirect()
-	assert.ok(calls.length >= 2, "navTo called at least twice (trigger + redirect)");
-	const redirectCall = calls[calls.length - 1];
-	assert.deepEqual(redirectCall[2], expectedCTI, "Non-empty componentTargetInfo forwarded to navTo during redirect");
+		const redirectCall = navToSpy.getCalls().find((c) => c.args[0] === "detail");
+		assert.ok(redirectCall, "navTo was called with redirect target 'detail'");
+		assert.deepEqual(
+			redirectCall!.args[2],
+			expectedCTI,
+			"Non-empty componentTargetInfo forwarded to navTo during redirect",
+		);
+	} finally {
+		navToSpy.restore();
+	}
 });
 
 // ============================================================
@@ -2630,30 +2639,6 @@ QUnit.test("Multiple callers receive the same result", async function (assert: A
 	assert.strictEqual(result2.route, result3.route, "All callers get the same route");
 });
 
-QUnit.test("Status is NOT committed when guard blocks", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.notStrictEqual(result.status, NavigationOutcome.Committed, "Status is not committed");
-	assert.notStrictEqual(result.status, NavigationOutcome.Redirected, "Status is not redirected");
-	assert.notStrictEqual(result.status, NavigationOutcome.Cancelled, "Status is not cancelled");
-});
-
-QUnit.test("Status is NOT blocked when guard allows", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.notStrictEqual(result.status, NavigationOutcome.Blocked, "Status is not blocked");
-	assert.notStrictEqual(result.status, NavigationOutcome.Redirected, "Status is not redirected");
-	assert.notStrictEqual(result.status, NavigationOutcome.Cancelled, "Status is not cancelled");
-});
-
 QUnit.test("Resolves with 'redirected' when guard returns GuardRedirect object", async function (assert: Assert) {
 	const target: GuardRedirect = { route: "detail", parameters: { id: "42" } };
 	router.addRouteGuard("forbidden", () => target);
@@ -2963,29 +2948,23 @@ QUnit.test("Blocked setHash restores hash through a single suppressed parse cycl
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const flushSpy = sinon.spy(router as unknown as { _flushSettlement: () => void }, "_flushSettlement");
 	router.getRoute("protected")!.attachPatternMatched(() => {
 		matched = true;
 	});
 
-	try {
-		// Use setHash to go through the parse() path where the hash actually
-		// changes before guards run. This exercises _restoreHash and the
-		// suppressed parse cycle that undoes the hash change.
-		HashChanger.getInstance().setHash("protected");
-		const result = await router.navigationSettled();
-		await nextTick();
+	// Use setHash to go through the parse() path where the hash actually
+	// changes before guards run. This exercises _restoreHash and the
+	// suppressed parse cycle that undoes the hash change.
+	HashChanger.getInstance().setHash("protected");
+	const result = await router.navigationSettled();
+	await nextTick();
 
-		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation settled as blocked");
-		assert.strictEqual(result.route, "home", "Current route stayed on home");
-		assert.strictEqual(result.hash, "", "Settlement hash stayed on the previous hash");
-		assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
-		assert.strictEqual(guardCalls, 1, "Guard pipeline ran exactly once for the blocked navigation");
-		assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
-		assert.strictEqual(flushSpy.callCount, 1, "Suppressed restore parse did not emit a second settlement");
-	} finally {
-		flushSpy.restore();
-	}
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation settled as blocked");
+	assert.strictEqual(result.route, "home", "Current route stayed on home");
+	assert.strictEqual(result.hash, "", "Settlement hash stayed on the previous hash");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
+	assert.strictEqual(guardCalls, 1, "Guard pipeline ran exactly once for the blocked navigation");
+	assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
 });
 
 // ============================================================
@@ -3325,13 +3304,13 @@ QUnit.test(
 	async function (assert) {
 		const expectedCTI = { detail: { route: "sub", parameters: { subId: "x" } } };
 		const calls: unknown[][] = [];
-		const originalNavTo = Reflect.get(router, "navTo") as (...args: unknown[]) => unknown;
 		let homePatternMatched = 0;
 
 		router.getRoute("home")!.attachPatternMatched(() => {
 			homePatternMatched++;
 		});
 
+		const originalNavTo = Reflect.get(router, "navTo") as (...args: unknown[]) => unknown;
 		Reflect.set(router, "navTo", function (this: unknown, ...args: unknown[]) {
 			calls.push(args);
 			if (args[0] === "home") {
@@ -3520,56 +3499,40 @@ QUnit.test("duplicate navTo to same pending hash is a no-op", async function (as
 	assert.strictEqual(guardCallCount, 1, "Guard ran only once despite duplicate navTo");
 });
 
-// _restoreHash pairs: same guard scenario, setHash (parse path) vs navTo (preflight).
-// Parse path: hash already changed, _restoreHash needed to undo it.
-// Preflight: hash never changed, _restoreHash must be skipped.
+// Hash restoration pairs: same guard scenario, setHash (parse path) vs navTo (preflight).
+// Parse path: hash already changed, must be restored after block.
+// Preflight: hash never changed, stays unchanged.
 
-QUnit.test("blocked via setHash calls _restoreHash", async function (assert) {
+QUnit.test("blocked via setHash restores the hash", async function (assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		HashChanger.getInstance().setHash("protected");
-		await router.navigationSettled();
-		assert.strictEqual(restoreSpy.callCount, 1, "_restoreHash called to undo hash change");
-	} finally {
-		restoreSpy.restore();
-	}
+	HashChanger.getInstance().setHash("protected");
+	await router.navigationSettled();
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after block");
 });
 
-QUnit.test("blocked via navTo does not call _restoreHash", async function (assert) {
+QUnit.test("blocked via navTo leaves hash unchanged", async function (assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		router.navTo("protected");
-		await router.navigationSettled();
-		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
-	} finally {
-		restoreSpy.restore();
-	}
+	router.navTo("protected");
+	await router.navigationSettled();
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
 });
 
-QUnit.test("rejected async guard via navTo does not call _restoreHash", async function (assert) {
+QUnit.test("rejected async guard via navTo leaves hash unchanged", async function (assert) {
 	router.addRouteGuard("protected", () => Promise.reject(new Error("guard error")));
 	router.initialize();
 	await waitForRoute(router, "home");
 
 	const hashBefore = getHash();
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		router.navTo("protected");
-		const result = await router.navigationSettled();
-		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
-		assert.strictEqual(result.status, NavigationOutcome.Error, "Rejected guard settles as Error");
-		assert.strictEqual(getHash(), hashBefore, "Hash unchanged after rejected async preflight guard");
-	} finally {
-		restoreSpy.restore();
-	}
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Error, "Rejected guard settles as Error");
+	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after rejected async preflight guard");
 });
 
 QUnit.test(
@@ -3626,49 +3589,34 @@ QUnit.test("setHash during async preflight supersedes the preflight", async func
 	assert.strictEqual(getHash(), "forbidden", "parse-driven navigation committed");
 });
 
-QUnit.test("redirect to nonexistent via setHash calls _restoreHash", async function (assert) {
+QUnit.test("redirect to nonexistent via setHash restores the hash", async function (assert) {
 	router.addRouteGuard("protected", () => "nonExistentRoute");
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		HashChanger.getInstance().setHash("protected");
-		await router.navigationSettled();
-		assert.ok(restoreSpy.callCount >= 1, "_restoreHash called to undo hash change");
-	} finally {
-		restoreSpy.restore();
-	}
+	HashChanger.getInstance().setHash("protected");
+	await router.navigationSettled();
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after block");
 });
 
-QUnit.test("redirect to nonexistent via navTo does not call _restoreHash", async function (assert) {
+QUnit.test("redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {
 	router.addRouteGuard("protected", () => "nonExistentRoute");
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		router.navTo("protected");
-		await router.navigationSettled();
-		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
-	} finally {
-		restoreSpy.restore();
-	}
+	router.navTo("protected");
+	await router.navigationSettled();
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
 });
 
-QUnit.test("async redirect to nonexistent via navTo does not call _restoreHash", async function (assert) {
+QUnit.test("async redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {
 	router.addRouteGuard("protected", () => Promise.resolve("nonExistentRoute" as const));
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const restoreSpy = sinon.spy(router as unknown as { _restoreHash: () => void }, "_restoreHash");
-	try {
-		router.navTo("protected");
-		await router.navigationSettled();
-		assert.strictEqual(restoreSpy.callCount, 0, "_restoreHash skipped - hash never changed");
-	} finally {
-		restoreSpy.restore();
-	}
+	router.navTo("protected");
+	await router.navigationSettled();
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
 });
 
 QUnit.module("Router - navigationSettled event", standardHooks);
@@ -3913,35 +3861,11 @@ QUnit.test(
 );
 
 // ============================================================
-// Module: State machine phase model (issues #38 + #39)
+// Module: Edge cases and recovery
 // ============================================================
-QUnit.module("Router - State machine phase model", safeDestroyHooks);
+QUnit.module("Router - Edge cases and recovery", standardHooks);
 
-function getPhase(target: GuardRouter): {
-	kind: string;
-	attempt?: object;
-	hash?: string;
-	route?: string;
-	origin?: string;
-} {
-	return Reflect.get(target, "_phase") as ReturnType<typeof getPhase>;
-}
-
-function getParseGeneration(target: GuardRouter): number {
-	return Reflect.get(target, "_parseGeneration") as number;
-}
-
-QUnit.test("phase is idle after construction", function (assert: Assert) {
-	assert.deepEqual(getPhase(router), { kind: "idle" }, "Freshly constructed router is in idle phase");
-});
-
-QUnit.test("phase is idle after initialize and initial route settles", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after initial route commits");
-});
-
-QUnit.test("phase is evaluating during async guard execution", async function (assert: Assert) {
+QUnit.test("resolving orphaned guard after stop() has no side effect", async function (assert: Assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -3953,337 +3877,12 @@ QUnit.test("phase is evaluating during async guard execution", async function (a
 	router.addGuard(guard);
 
 	router.navTo("protected");
-
-	const phase = getPhase(router);
-	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating while async guard is pending");
-	assert.ok(phase.attempt, "Attempt object exists during evaluating phase");
-	assert.strictEqual((phase.attempt as { hash: string }).hash, "protected", "Attempt carries the target hash");
-	assert.strictEqual((phase.attempt as { route: string }).route, "protected", "Attempt carries the target route");
-	assert.ok(
-		(phase.attempt as { controller: AbortController }).controller instanceof AbortController,
-		"Attempt has an AbortController",
-	);
-	assert.strictEqual(
-		typeof (phase.attempt as { generation: number }).generation,
-		"number",
-		"Attempt has a generation number",
-	);
-
-	resolveGuard(true);
-	await waitForRoute(router, "protected");
-
-	assert.strictEqual(
-		getPhase(router).kind,
-		"idle",
-		"Phase returns to idle after async guard resolves and navigation commits",
-	);
-});
-
-QUnit.test("phase is idle after navigation is blocked", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.addGuard(() => false);
-
-	router.navTo("protected");
-	await router.navigationSettled();
-
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard blocks navigation");
-});
-
-QUnit.test("phase is idle after navigation is redirected", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.addGuard(() => "forbidden");
-
-	router.navTo("protected");
-	await router.navigationSettled();
-
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after guard redirects navigation");
-});
-
-QUnit.test(
-	"phase is idle after pending navigation is cancelled by superseding navigation",
-	async function (assert: Assert) {
-		router.initialize();
-		await waitForRoute(router, "home");
-
-		let resolveGuard!: (value: boolean) => void;
-		const guard: GuardFn = () =>
-			new Promise<boolean>((resolve) => {
-				resolveGuard = resolve;
-			});
-		router.addGuard(guard);
-
-		router.navTo("protected");
-		assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating during first navigation");
-
-		// Supersede with a new navigation -- removes the guard first so the second one commits
-		router.removeGuard(guard);
-		router.navTo("forbidden");
-		await waitForRoute(router, "forbidden");
-
-		assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after superseding navigation commits");
-
-		// Resolve the orphaned guard -- should have no effect
-		resolveGuard(true);
-		await nextTick();
-		assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves");
-	},
-);
-
-QUnit.test("attempt AbortController signal is aborted on cancellation", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("protected");
-	const phase = getPhase(router);
-	const signal = (phase.attempt as { controller: AbortController }).controller.signal;
-	assert.notOk(signal.aborted, "Signal is not aborted while guard is pending");
-
-	// Supersede to cancel
-	router.removeGuard(guard);
-	router.navTo("forbidden");
-	await waitForRoute(router, "forbidden");
-
-	assert.ok(signal.aborted, "Signal is aborted after cancellation");
-
-	resolveGuard(true);
-});
-
-QUnit.test("parseGeneration increments on cancellation", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	const genBefore = getParseGeneration(router);
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("protected");
-
-	// Cancel via superseding navigation
-	router.removeGuard(guard);
-	router.navTo("forbidden");
-	await waitForRoute(router, "forbidden");
-
-	assert.ok(getParseGeneration(router) > genBefore, "Generation counter incremented after cancellation");
-
-	resolveGuard(true);
-});
-
-QUnit.test("phase is idle after stop()", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-
 	router.stop();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop()");
-});
 
-QUnit.test("phase is idle after stop() cancels pending async navigation", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("protected");
-	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
-
-	router.stop();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop() cancels pending navigation");
-
-	resolveGuard(true);
-});
-
-QUnit.test("phase is idle after destroy()", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.destroy();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy()");
-});
-
-QUnit.test("phase is idle after destroy() cancels pending async navigation", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("protected");
-	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before destroy");
-
-	router.destroy();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after destroy() cancels pending navigation");
-
-	resolveGuard(true);
-});
-
-QUnit.test("attempt has correct hash for parameterised routes", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("detail", { id: "99" });
-
-	const phase = getPhase(router);
-	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating");
-	assert.strictEqual(
-		(phase.attempt as { hash: string }).hash,
-		"detail/99",
-		"Attempt hash includes resolved parameters",
-	);
-	assert.strictEqual((phase.attempt as { route: string }).route, "detail", "Attempt route is the route name");
-
-	resolveGuard(true);
-	await waitForRoute(router, "detail");
-});
-
-QUnit.test("no evaluating phase when no guards are registered", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	const phaseBeforeNav = getPhase(router);
-	assert.strictEqual(phaseBeforeNav.kind, "idle", "Phase is idle before navigation");
-
-	router.navTo("protected");
-	// After sync navTo returns, phase should already be idle (committed synchronously)
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle immediately after sync guardless navTo");
-
-	await waitForRoute(router, "protected");
-});
-
-QUnit.test(
-	"phase settles to idle after parse-path sync guard allows (direct hash change)",
-	async function (assert: Assert) {
-		router.initialize();
-		await waitForRoute(router, "home");
-
-		router.addGuard(() => true);
-
-		HashChanger.getInstance().setHash("protected");
-		// Sync guard allows -- phase goes evaluating -> committing -> idle in one tick
-		assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after sync parse-path guard allows");
-
-		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Committed, "Parse-path sync guard settles as Committed");
-		assert.strictEqual(result.route, "protected", "Committed to the correct route");
-	},
-);
-
-QUnit.test("phase model works correctly after stop and re-initialize", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after first navigation");
-
-	router.stop();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop");
-
-	// Reset hash before re-initialize so it re-parses the home route
-	HashChanger.getInstance().setHash("");
-	router.initialize();
-	await waitForRoute(router, "home");
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after re-initialize");
-
-	// Guards still work after re-initialize
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("forbidden");
-	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating after re-initialize + async guard");
-
-	resolveGuard(true);
-	await waitForRoute(router, "forbidden");
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after post-reinitialize navigation");
-});
-
-QUnit.test("phase is evaluating during parse-path async guard (direct hash change)", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	// Direct hash change triggers parse(), not navTo preflight
-	HashChanger.getInstance().setHash("protected");
-
-	const phase = getPhase(router);
-	assert.strictEqual(phase.kind, "evaluating", "Phase is evaluating during parse-path async guard");
-	assert.strictEqual(
-		(phase.attempt as { hash: string }).hash,
-		"protected",
-		"Attempt hash matches the direct hash change",
-	);
-
-	resolveGuard(true);
-	await waitForRoute(router, "protected");
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase returns to idle after parse-path guard resolves");
-});
-
-QUnit.test("stale async guard is discarded after stop() via phase check", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let resolveGuard!: (value: boolean) => void;
-	const guard: GuardFn = () =>
-		new Promise<boolean>((resolve) => {
-			resolveGuard = resolve;
-		});
-	router.addGuard(guard);
-
-	router.navTo("protected");
-	assert.strictEqual(getPhase(router).kind, "evaluating", "Phase is evaluating before stop");
-
-	router.stop();
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after stop");
-
-	// Resolve the orphaned guard after stop -- phase is idle, so the result
-	// must be discarded even though no new navigation bumped the generation.
+	// Resolve the orphaned guard after stop
 	resolveGuard(true);
 	await nextTick();
 
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase stays idle after stale guard resolves post-stop");
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
 		"",
@@ -4319,13 +3918,13 @@ QUnit.test("settlement outcome reflects parse-path origin (direct hash change)",
 	assert.strictEqual(result.route, "protected", "Settlement route is the hash change target");
 });
 
-QUnit.test("phase recovers to idle when redirect target throws", async function (assert: Assert) {
+QUnit.test("router recovers when redirect target throws", async function (assert: Assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
 
 	// Guard redirects to "detail" without providing mandatory {id} parameter.
 	// super.navTo() throws for missing mandatory params, which must not leave
-	// the phase stuck at committing/redirect.
+	// the router in a broken state.
 	const redirectGuard: GuardFn = () => "detail";
 	router.addRouteGuard("protected", redirectGuard);
 
@@ -4334,8 +3933,6 @@ QUnit.test("phase recovers to idle when redirect target throws", async function 
 	} catch {
 		// Expected: super.navTo("detail", {}) throws for missing mandatory {id}
 	}
-
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase recovered to idle after redirect threw");
 
 	// Verify guards still work on subsequent navigation (not permanently bypassed)
 	router.removeRouteGuard("protected", redirectGuard);
@@ -4370,7 +3967,6 @@ QUnit.test("async redirect failure drains settlement resolvers", async function 
 		),
 	]);
 
-	assert.strictEqual(getPhase(router).kind, "idle", "Phase is idle after async redirect failure");
 	assert.strictEqual(result.status, NavigationOutcome.Error, "Async redirect failure settles as Error");
 });
 

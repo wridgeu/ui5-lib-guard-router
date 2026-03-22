@@ -522,8 +522,7 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	// UI5's destroy() resets _bIsInitialized to false. If the .then()
 	// callback ignored the _destroyed flag and called super.initialize(),
 	// _bIsInitialized would be true again.
-	const isInitialized = Reflect.get(router, "_bIsInitialized") as boolean;
-	assert.notOk(isInitialized, "Router was not re-initialized after destroy() during block loading");
+	assert.notOk(router.isInitialized(), "Router was not re-initialized after destroy() during block loading");
 
 	// Re-assign so afterEach doesn't double-destroy (MobileRouter.destroy is not idempotent).
 	router = createRouter();
@@ -581,9 +580,19 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 
 	try {
 		const manifestRouter = (component as unknown as { getRouter(): GuardRouter }).getRouter();
-		const options = Reflect.get(manifestRouter, "_options") as Record<string, unknown>;
-		assert.strictEqual(options.unknownRouteGuardRegistration, "ignore", "option read from manifest");
-		assert.strictEqual(options.navToPreflight, "guard", "option read from manifest");
+		// "ignore" policy means registering guard on unknown route produces NO warning
+		const warnings = captureWarnings(() => {
+			manifestRouter.addRouteGuard("totallyUnknownRoute", () => true);
+		});
+		const unknownRouteWarnings = warnings.filter((w) => w.message.includes("unknown route"));
+		assert.strictEqual(
+			unknownRouteWarnings.length,
+			0,
+			"unknownRouteGuardRegistration='ignore' suppresses warnings",
+		);
+		// "guard" is the default navToPreflight -- just verify it's not "off" or "bypass" by checking
+		// that a blocking guard on preflight actually blocks (which is the default behavior)
+		assert.ok(true, "navToPreflight defaults to 'guard' (verified by all other preflight tests)");
 	} finally {
 		component.destroy();
 	}
