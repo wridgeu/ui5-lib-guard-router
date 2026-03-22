@@ -24,6 +24,12 @@ The router provides:
 | 04  | [Route Metadata](./04-route-metadata.md)                                 | Low      | None       | Proposed        |
 | 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md) | Medium   | None       | Implemented     |
 
+## Refactoring
+
+| #   | Feature                                                                                                         | Priority | Depends On | Status          |
+| --- | --------------------------------------------------------------------------------------------------------------- | -------- | ---------- | --------------- |
+| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md) ([plan](./09-guard-pipeline-extraction-plan.md)) | Medium   | #38, #39   | **Implemented** |
+
 ## Architecture Analysis
 
 | #   | Topic                                                    | Conclusion                                                                            |
@@ -43,6 +49,7 @@ The router provides:
 - `03` transition object and `04` route metadata remain open proposals
 - `06` navTo preflight is implemented and shipped
 - `07` vendored upstream router parity is implemented as a dedicated parity lane with raw upstream snapshots, executable ports, sync/verify scripts, and CI coverage
+- `09` guard pipeline extraction is implemented — `GuardPipeline` class owns guard storage and evaluation, Router delegates
 
 ## Framework Comparison Summary
 

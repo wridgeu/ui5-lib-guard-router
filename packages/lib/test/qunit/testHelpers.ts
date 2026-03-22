@@ -44,6 +44,18 @@ export function removeLeaveGuardUnsafe(router: GuardRouter, routeName: string, g
 }
 
 /**
+ * Dynamically add a route to a router.
+ *
+ * Uses the inherited `sap.ui.core.routing.Router#addRoute` API. The `oParent`
+ * parameter is optional at runtime (no parent = top-level route), but the UI5
+ * type declarations mark it as required. We call through `getRouterMethod` to
+ * avoid fighting the incorrect type signature.
+ */
+export function addRouteDynamic(router: GuardRouter, config: { name: string; pattern: string }): void {
+	getRouterMethod(router, "addRoute")(config);
+}
+
+/**
  * Initialize HashChanger for tests (idempotent).
  */
 export function initHashChanger(): void {

@@ -659,7 +659,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
 | error   | `Guard pipeline failed for "{hash}", blocking navigation`                           | Async guard pipeline rejected in `parse()` fallback path                                            |
 | error   | `Async preflight guard failed for route "{route}", blocking navigation`             | Async guard pipeline rejected in `navTo()` preflight path                                           |
-| error   | `Enter guard [{n}] for/on route "{route}" threw, blocking navigation`               | Sync or async enter guard threw an exception                                                        |
+| error   | `Enter guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                        |
 | error   | `Leave guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async leave guard threw an exception                                                        |
 | debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
 | debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |

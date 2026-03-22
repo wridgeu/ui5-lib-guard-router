@@ -109,7 +109,7 @@ Sync:
 router.addRouteGuard("risky", () => {
 	throw new Error("something broke");
 	// Navigation is blocked. The router logs:
-	// Enter guard [0] for route "risky" threw, blocking navigation
+	// Enter guard [0] on route "risky" threw, blocking navigation
 });
 ```
 
