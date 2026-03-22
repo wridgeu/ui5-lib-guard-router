@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { createServer } from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -140,6 +141,66 @@ function registerSignalHandlers() {
 	});
 }
 
+function isPortFree(port) {
+	return new Promise((resolve) => {
+		const server = createServer();
+		server.once("error", () => resolve(false));
+		server.listen(port, "127.0.0.1", () => {
+			server.close(() => resolve(true));
+		});
+	});
+}
+
+function findPidsOnPort(port) {
+	const portStr = String(port);
+	try {
+		if (process.platform === "win32") {
+			const output = execFileSync("netstat", ["-ano"], { encoding: "utf8", stdio: "pipe" });
+			const pids = new Set();
+			for (const line of output.split("\n")) {
+				if (!line.includes("LISTENING")) continue;
+				const columns = line.trim().split(/\s+/);
+				const local = columns[1] ?? "";
+				if (!local.endsWith(`:${portStr}`)) continue;
+				const pid = columns.at(-1);
+				if (pid && /^\d+$/.test(pid) && pid !== "0") pids.add(pid);
+			}
+			return [...pids];
+		}
+		const output = execFileSync("lsof", ["-ti", `:${portStr}`], {
+			encoding: "utf8",
+			stdio: "pipe",
+		});
+		return output
+			.trim()
+			.split("\n")
+			.filter((pid) => /^\d+$/.test(pid));
+	} catch {
+		return [];
+	}
+}
+
+async function freePort(port) {
+	if (await isPortFree(port)) return;
+
+	const pids = findPidsOnPort(port);
+	if (pids.length === 0) {
+		console.log(`Port ${port} is occupied but could not identify the process`);
+		return;
+	}
+
+	for (const pid of pids) {
+		console.log(`Killing stale process on port ${port} (PID ${pid})`);
+		try {
+			if (process.platform === "win32") {
+				execFileSync("taskkill", ["/PID", pid, "/T", "/F"], { stdio: "ignore" });
+			} else {
+				process.kill(Number(pid), "SIGKILL");
+			}
+		} catch {}
+	}
+}
+
 async function main() {
 	registerSignalHandlers();
 
@@ -151,6 +212,11 @@ async function main() {
 
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
 		throw new Error("Invalid --timeout-ms value");
+	}
+
+	const port = new URL(readyUrl).port;
+	if (port) {
+		await freePort(port);
 	}
 
 	activeServer = spawnNpmScript(serverScript, {
