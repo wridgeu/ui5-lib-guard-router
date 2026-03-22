@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.2...v1.4.0) (2026-03-22)
+
+
+### Features
+
+* **router:** distinguish guard errors from intentional blocks ([#50](https://github.com/wridgeu/ui5-lib-guard-router/issues/50)) ([9c467db](https://github.com/wridgeu/ui5-lib-guard-router/commit/9c467dbd8fd0ec43c208c9c8bc7cbd5d6222786c))
+* **router:** evaluate guards on redirect targets ([#52](https://github.com/wridgeu/ui5-lib-guard-router/issues/52)) ([#54](https://github.com/wridgeu/ui5-lib-guard-router/issues/54)) ([551dbe8](https://github.com/wridgeu/ui5-lib-guard-router/commit/551dbe8ac121a74badab2f9719cbabadd43c2dce))
+
 ## [1.3.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.1...v1.3.2) (2026-03-22)
 
 
