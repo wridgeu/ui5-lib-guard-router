@@ -832,11 +832,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
+		// Narrowed after the null-branch early return; const carries it into the async closure.
+		const resolvedHash: string = targetHash;
+
 		// Build guard context for the redirect target.
-		const routeInfo = this.getRouteInfoByHash(targetHash);
+		const routeInfo = this.getRouteInfoByHash(resolvedHash);
 		const context: GuardContext = {
 			toRoute: routeInfo?.name ?? "",
-			toHash: targetHash,
+			toHash: resolvedHash,
 			toArguments: routeInfo?.arguments ?? {},
 			fromRoute: chain.fromRoute,
 			fromHash: chain.fromHash,
@@ -849,8 +852,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			decision
 				.then((d: GuardDecision) => {
 					if (chain.generation !== this._parseGeneration) return;
-					// targetHash is non-null: the null branch returned early above.
-					this._applyRedirectDecision(d, target, targetHash!, chain);
+					this._applyRedirectDecision(d, target, resolvedHash, chain);
 				})
 				.catch((error: unknown) => {
 					if (chain.generation !== this._parseGeneration) return;
@@ -864,7 +866,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		this._applyRedirectDecision(decision, target, targetHash, chain);
+		this._applyRedirectDecision(decision, target, resolvedHash, chain);
 	}
 
 	/**
