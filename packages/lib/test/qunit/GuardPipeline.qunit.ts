@@ -20,6 +20,7 @@ function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 		fromRoute: "",
 		fromHash: "",
 		signal: new AbortController().signal,
+		bag: new Map(),
 		...overrides,
 	};
 }
@@ -547,18 +548,14 @@ QUnit.test("skipLeaveGuards skips leave guards even when fromRoute is set", func
 	assert.deepEqual(called, ["global"], "Leave guard was skipped, global guard ran");
 });
 
-QUnit.test("skipLeaveGuards false still runs leave guards", function (assert: Assert) {
-	const pipeline = new GuardPipeline();
-	pipeline.addLeaveGuard("current", () => false);
+QUnit.test("skipLeaveGuards defaults to running leave guards", function (assert: Assert) {
+	const p1 = new GuardPipeline();
+	p1.addLeaveGuard("current", () => false);
+	const r1 = p1.evaluate(createContext({ fromRoute: "current" }), { skipLeaveGuards: false });
+	assert.deepEqual(r1, { action: "block" }, "Leave guard blocks when skipLeaveGuards is false");
 
-	const result = pipeline.evaluate(createContext({ fromRoute: "current" }), { skipLeaveGuards: false });
-	assert.deepEqual(result, { action: "block" }, "Leave guard blocks when skipLeaveGuards is false");
-});
-
-QUnit.test("skipLeaveGuards omitted still runs leave guards (backward compat)", function (assert: Assert) {
-	const pipeline = new GuardPipeline();
-	pipeline.addLeaveGuard("current", () => false);
-
-	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
-	assert.deepEqual(result, { action: "block" }, "Leave guard blocks when options omitted");
+	const p2 = new GuardPipeline();
+	p2.addLeaveGuard("current", () => false);
+	const r2 = p2.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(r2, { action: "block" }, "Leave guard blocks when options omitted");
 });

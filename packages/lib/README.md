@@ -354,6 +354,183 @@ Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The
 3. **Route-specific enter guards** for the target (registration order)
 4. Pipeline **short-circuits** at the first non-`true` result
 
+## Manifest Configuration
+
+Guards can be declared directly in `manifest.json` using the `guardRouter` block inside `sap.ui5.routing.config`. This eliminates boilerplate in `Component.ts` for common guard patterns.
+
+```json
+{
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"guardRouter": {
+					"unknownRouteGuardRegistration": "warn",
+					"navToPreflight": "guard",
+					"guardLoading": "lazy",
+					"guards": {
+						"*": ["guards.authGuard"],
+						"admin": {
+							"enter": ["guards.adminGuard"],
+							"leave": ["guards.unsavedChangesGuard"]
+						}
+					}
+				}
+			}
+		}
+	}
+}
+```
+
+### Router options
+
+| Option                          | Values                              | Default   | Description                                                                                                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
+| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
+| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
+
+### Declarative guards
+
+The `guards` map wires guard modules to routes without writing code in `Component.ts`.
+
+**Global guards** run on every navigation and are declared under the `"*"` key:
+
+```json
+"guards": {
+	"*": ["guards.authGuard"]
+}
+```
+
+**Per-route guards** use the route name as the key. The shorthand array form registers enter guards only:
+
+```json
+"guards": {
+	"admin": ["guards.adminGuard"]
+}
+```
+
+The full object form with `enter` and `leave` keys registers both enter and leave guards:
+
+```json
+"guards": {
+	"admin": {
+		"enter": ["guards.adminGuard"],
+		"leave": ["guards.unsavedChangesGuard"]
+	}
+}
+```
+
+**Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
+
+To use an absolute module path, prefix it with `"module:"`:
+
+```json
+"*": ["module:com/shared/guards/authGuard"]
+```
+
+### Guard module format
+
+Each entry in the guard array is a module whose default export is one of three shapes:
+
+**Shape 1: Function (single guard)**
+
+```typescript
+// guards/auth.ts
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default function authGuard(context: GuardContext): GuardResult {
+	return isAuthenticated() ? true : "login";
+}
+```
+
+**Shape 2: Array (ordered guards)**
+
+```typescript
+// guards/checks.ts — registered as "checks#0", "checks#1"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default [
+	function checkAuth(context: GuardContext): GuardResult {
+		return true;
+	},
+	function checkRole(context: GuardContext): GuardResult {
+		return false;
+	},
+];
+```
+
+**Shape 3: Plain Object (named guards)**
+
+```typescript
+// guards/security.ts — registered as "checkAuth", "checkRole"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default {
+	checkAuth(context: GuardContext): GuardResult {
+		/* ... */ return true;
+	},
+	checkRole(context: GuardContext): GuardResult {
+		/* ... */ return false;
+	},
+};
+```
+
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+
+### Cherry-pick syntax
+
+When a module exports multiple guards, you can register a subset using `#` to select by name or index:
+
+```json
+{
+	"guards": {
+		"admin": ["guards.security#checkAuth", "guards.security#checkRole"],
+		"dashboard": ["guards.security"],
+		"settings": ["guards.checks#1"],
+		"*": ["guards.logging"]
+	}
+}
+```
+
+| Syntax                               | Behavior                                      |
+| ------------------------------------ | --------------------------------------------- |
+| `"guards.security"`                  | Register all exports (key/array order)        |
+| `"guards.security#checkAuth"`        | Register only that named export               |
+| `"guards.security#1"`                | Register by index (array or object key order) |
+| `"module:some.lib.guards#checkAuth"` | `module:` prefix composes with `#`            |
+
+When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
+
+### Guard context `bag`
+
+Guards in the same pipeline can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
+
+```typescript
+export default function firstGuard(context: GuardContext): GuardResult {
+	context.bag.set("userId", getCurrentUserId());
+	return true;
+}
+
+export default function secondGuard(context: GuardContext): GuardResult {
+	const userId = context.bag.get("userId") as string | undefined;
+	if (!userId) return "login";
+	return true;
+}
+```
+
+The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This matches how UI5 handles untyped model data (`getProperty()` returns `any`) and avoids generic complexity that can't flow through UI5's class system.
+
+This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
+
+### `skipGuards` option
+
+Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
+
+```typescript
+router.navTo("settings", {}, false, { skipGuards: true });
+```
+
 ## Examples
 
 ### Async guard with AbortSignal

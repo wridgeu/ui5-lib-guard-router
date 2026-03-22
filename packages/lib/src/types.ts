@@ -58,6 +58,13 @@ export interface GuardContext {
 	 * Pass to `fetch()` or other cancellable APIs to avoid wasted work.
 	 */
 	signal: AbortSignal;
+	/**
+	 * Shared mutable bag for passing data between guards within a single
+	 * pipeline run. Created fresh per navigation attempt. The router never
+	 * reads from or writes to it -- it is purely a carrier for inter-guard
+	 * communication.
+	 */
+	bag: Map<string, unknown>;
 }
 
 /**
@@ -94,6 +101,79 @@ export interface RouteGuardConfig {
 	beforeEnter?: GuardFn;
 	/** Guard that runs before leaving this route */
 	beforeLeave?: LeaveGuardFn;
+}
+
+/**
+ * Policy for guard registration against unknown route names.
+ *
+ * - `"ignore"` -- register silently.
+ * - `"warn"` -- log a warning and still register (default).
+ * - `"throw"` -- throw synchronously; guard is not registered.
+ */
+export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
+
+/**
+ * Strategy for programmatic `navTo()` guard evaluation.
+ *
+ * - `"guard"` -- run guards before the hash changes (default).
+ * - `"bypass"` -- skip guards for programmatic `navTo()` only.
+ * - `"off"` -- disable preflight; `parse()` guards the hash change afterward.
+ */
+export type NavToPreflightMode = "guard" | "bypass" | "off";
+
+/**
+ * Strategy for loading manifest-declared guard modules.
+ *
+ * - `"block"` -- delay `initialize()` until all modules are loaded.
+ * - `"lazy"` -- register lazy wrappers that load modules on first use (default).
+ */
+export type GuardLoading = "block" | "lazy";
+
+/**
+ * Per-route guard declaration in the manifest.
+ */
+export interface ManifestRouteGuardConfig {
+	/** Enter guard module paths (dot notation, relative to component namespace). */
+	enter?: string[];
+	/** Leave guard module paths (dot notation, relative to component namespace). */
+	leave?: string[];
+}
+
+/**
+ * Guard declarations in the manifest `guardRouter.guards` block.
+ *
+ * Keys are route names or `"*"` for global guards.
+ * Values are either a `string[]` shorthand (enter guards only)
+ * or a {@link ManifestRouteGuardConfig} object with `enter` and/or `leave` arrays.
+ */
+export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardConfig>;
+
+/**
+ * Router-level options for the guard router.
+ *
+ * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
+ * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`.
+ */
+export interface GuardRouterOptions {
+	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */
+	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
+	/** Strategy for evaluating guards on programmatic `navTo()` calls. Defaults to `"guard"`. */
+	navToPreflight?: NavToPreflightMode;
+	/** Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`. */
+	guardLoading?: GuardLoading;
+	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
+	guards?: ManifestGuardConfig;
+}
+
+/**
+ * Per-navigation overrides for programmatic `navTo()` calls.
+ */
+export interface GuardNavToOptions {
+	/**
+	 * When `true`, skip all guards for this navigation only.
+	 * Browser-initiated hash changes still run through `parse()`.
+	 */
+	skipGuards?: boolean;
 }
 
 /**
@@ -139,6 +219,25 @@ export type Router$NavigationSettledEvent = Event<NavigationResult, GuardRouter>
  */
 export interface GuardRouter extends MobileRouter {
 	/**
+	 * Navigate with optional guard-router-specific per-call options.
+	 */
+	navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+	navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfo?: Record<string, ComponentTargetParameters>,
+		bReplace?: boolean,
+	): this;
+	navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
+	navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfo?: Record<string, ComponentTargetParameters>,
+		bReplace?: boolean,
+		options?: GuardNavToOptions,
+	): this;
+
+	/**
 	 * Register a global guard that runs for every navigation.
 	 *
 	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
@@ -158,7 +257,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Accepts either an enter guard function or a configuration object with
 	 * `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
@@ -181,7 +280,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Leave guards run when navigating away from the route. They can allow or
 	 * block the navigation, but they cannot redirect.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */
