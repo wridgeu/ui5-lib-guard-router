@@ -32,7 +32,8 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 export type GuardDecision =
 	| { action: "allow" }
 	| { action: "block" }
-	| { action: "redirect"; target: string | GuardRedirect };
+	| { action: "redirect"; target: string | GuardRedirect }
+	| { action: "error"; error: unknown };
 
 /**
  * Standalone guard evaluation pipeline.
@@ -106,11 +107,15 @@ export default class GuardPipeline {
 			enterResult: GuardResult | Promise<GuardResult>,
 		): GuardDecision | Promise<GuardDecision> => {
 			if (isPromiseLike(enterResult)) {
-				return enterResult.then((r: GuardResult): GuardDecision => {
-					if (r === true) return { action: "allow" };
-					if (r === false) return { action: "block" };
-					return { action: "redirect", target: r };
-				});
+				return enterResult
+					.then((r: GuardResult): GuardDecision => {
+						if (r === true) return { action: "allow" };
+						if (r === false) return { action: "block" };
+						return { action: "redirect", target: r };
+					})
+					.catch((error: unknown): GuardDecision => {
+						return { action: "error", error };
+					});
 			}
 			if (enterResult === true) return { action: "allow" };
 			if (enterResult === false) return { action: "block" };
@@ -122,20 +127,28 @@ export default class GuardPipeline {
 			return processEnterResult(enterResult);
 		};
 
-		if (hasLeaveGuards) {
-			const leaveResult = this._runLeaveGuards(context);
+		try {
+			if (hasLeaveGuards) {
+				const leaveResult = this._runLeaveGuards(context);
 
-			if (isPromiseLike(leaveResult)) {
-				return leaveResult.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
-					if (allowed !== true) return { action: "block" };
-					if (context.signal.aborted) return { action: "block" };
-					return runEnterPhase();
-				});
+				if (isPromiseLike(leaveResult)) {
+					return leaveResult
+						.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
+							if (allowed !== true) return { action: "block" };
+							if (context.signal.aborted) return { action: "block" };
+							return runEnterPhase();
+						})
+						.catch((error: unknown): GuardDecision => {
+							return { action: "error", error };
+						});
+				}
+				if (leaveResult !== true) return { action: "block" };
 			}
-			if (leaveResult !== true) return { action: "block" };
-		}
 
-		return runEnterPhase();
+			return runEnterPhase();
+		} catch (error) {
+			return { action: "error", error };
+		}
 	}
 
 	private _addToGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): void {
@@ -184,11 +197,12 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Leave guard [${i}] on route "${context.fromRoute}" threw, blocking navigation`,
+					`Leave guard [${i}] on route "${context.fromRoute}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
-				return false;
+				if (context.signal.aborted) return false;
+				throw error;
 			}
 		}
 		return true;
@@ -241,11 +255,12 @@ export default class GuardPipeline {
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
 				Log.error(
-					`Enter guard [${i}] on route "${context.toRoute}" threw, blocking navigation`,
+					`Enter guard [${i}] on route "${context.toRoute}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
-				return false;
+				if (context.signal.aborted) return false;
+				throw error;
 			}
 		}
 		return true;
@@ -288,10 +303,11 @@ export default class GuardPipeline {
 			if (!context.signal.aborted) {
 				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
-					`${label} [${guardIndex}] on route "${route}" threw, blocking navigation`,
+					`${label} [${guardIndex}] on route "${route}" threw, navigation failed`,
 					String(error),
 					LOG_COMPONENT,
 				);
+				throw error;
 			}
 			return false;
 		}
