@@ -1,4 +1,5 @@
 import { spawn, execFileSync } from "node:child_process";
+import { once } from "node:events";
 import { createServer } from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -28,13 +29,9 @@ function npmArgs() {
 	return [process.execPath, [process.env.npm_execpath]];
 }
 
-function waitForExit(child) {
-	return new Promise((resolve, reject) => {
-		child.once("error", reject);
-		child.once("exit", (code, signal) => {
-			resolve({ code, signal });
-		});
-	});
+async function waitForExit(child) {
+	const [code, signal] = await once(child, "exit");
+	return { code, signal };
 }
 
 function spawnNpmScript(script, extra = {}) {
@@ -85,13 +82,9 @@ async function stopServer(server) {
 	}
 
 	if (process.platform === "win32") {
-		const child = spawn("taskkill", ["/PID", String(server.pid), "/T", "/F"], {
-			stdio: "ignore",
-		});
-		await new Promise((resolve) => {
-			child.once("exit", resolve);
-			child.once("error", resolve);
-		});
+		try {
+			execFileSync("taskkill", ["/PID", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+		} catch {}
 		return;
 	}
 
@@ -133,12 +126,8 @@ function registerSignalHandlers() {
 		});
 	};
 
-	process.once("SIGINT", () => {
-		stopAndExit("SIGINT");
-	});
-	process.once("SIGTERM", () => {
-		stopAndExit("SIGTERM");
-	});
+	process.once("SIGINT", stopAndExit);
+	process.once("SIGTERM", stopAndExit);
 }
 
 function isPortFree(port) {
