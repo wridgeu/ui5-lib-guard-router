@@ -347,12 +347,18 @@ router.attachNavigationSettled((event) => {
 
 Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works.
 
+### Error handling
+
+When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. This is distinct from `Blocked` (intentional denial) — `Error` indicates an unexpected failure.
+
 ### Execution order
 
 1. **Leave guards** for the current route (registration order)
 2. **Global enter guards** (registration order)
 3. **Route-specific enter guards** for the target (registration order)
 4. Pipeline **short-circuits** at the first non-`true` result
+
+Each phase short-circuits on the first non-`true` result. If a leave guard blocks, no enter guards run. If a global guard redirects, route-specific guards are skipped.
 
 ## Manifest Configuration
 
@@ -428,6 +434,41 @@ To use an absolute module path, prefix it with `"module:"`:
 ```json
 "*": ["module:com/shared/guards/authGuard"]
 ```
+
+### Complete example
+
+manifest.json:
+
+```json
+{
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"guardRouter": {
+					"guards": {
+						"*": ["guards.authGuard"],
+						"admin": { "enter": ["guards.roleGuard"], "leave": ["guards.unsavedGuard"] }
+					}
+				}
+			}
+		}
+	}
+}
+```
+
+guards/authGuard.ts:
+
+```typescript
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default function authGuard(context: GuardContext): GuardResult {
+	if (!isAuthenticated()) return "login";
+	return true;
+}
+```
+
+The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
 
 ### Guard module format
 
