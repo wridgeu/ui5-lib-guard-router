@@ -86,6 +86,12 @@
 								id="navForbiddenBtn"
 								text="Go to Forbidden Page (always redirects home)"
 								press=".onNavToForbidden"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="navAdminBtn"
+								text="Go to Admin Page (chain: admin → protected)"
+								press=".onNavToAdmin"
 								width="100%" />
 						</content>
 					</Panel>
