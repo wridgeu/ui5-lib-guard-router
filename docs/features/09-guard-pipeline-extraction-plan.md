@@ -681,7 +681,7 @@ git commit -m "test(router): update introspection tests to reach through GuardPi
 - [x] **Step 1: Run all QUnit tests**
 
 Run from repo root: `npm run test:qunit`
-Expected: All 4,328 tests pass. No behavioral changes.
+Expected: All 234 Router tests pass. No behavioral changes.
 
 - [x] **Step 2: Run typecheck**
 
@@ -1192,7 +1192,7 @@ Expected: PASS
 - [x] **Step 2: Run QUnit tests**
 
 Run: `npm run test:qunit` from repo root
-Expected: All tests pass (existing 4,328 + new pipeline tests)
+Expected: All tests pass (existing 234 Router + new pipeline tests)
 
 - [x] **Step 3: Run E2E tests**
 

@@ -185,7 +185,7 @@ const decision = this._pipeline.evaluate(context);
 
 ### Existing tests
 
-All 4,328 existing test cases in `Router.qunit.ts` pass unchanged. The Router's public API does not change.
+All 234 existing tests in `Router.qunit.ts` pass unchanged. The Router's public API does not change.
 
 ### New test file
 
