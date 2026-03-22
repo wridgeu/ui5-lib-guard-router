@@ -1278,3 +1278,33 @@ QUnit.test("module: prefix with cherry-pick composes correctly", async function 
 
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "module: prefix + #checkAuth works together");
 });
+
+QUnit.test("leave guard from multi-guard object module", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					home: {
+						leave: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+					},
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Try to leave "home" -- checkRole returns false, should block
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "cherry-picked leave guard from object module blocks");
+});

@@ -1697,7 +1697,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 				continue;
 			}
 
-			// Cache miss: register an expander that loads, expands once, and runs guard[0]
+			// Cache miss: register an expander that loads, expands once, and runs guard[0].
+			// NOTE: Guards 1..N are appended to the guard array on first invocation,
+			// which means they execute AFTER any imperative guards registered between
+			// initialize() and first navigation. This differs from block mode where
+			// all guards occupy contiguous positions. In practice this is rare because
+			// the preload hint fires in the constructor and modules are typically cached
+			// by the time initialize() runs.
 			let expanded = false;
 			const lazyExpander = (context: GuardContext): PromiseLike<GuardResult> => {
 				return new Promise<GuardResult>((resolve, reject) => {
