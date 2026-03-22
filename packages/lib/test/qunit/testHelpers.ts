@@ -4,10 +4,13 @@ import Router from "ui5/guard/router/Router";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardRouter } from "ui5/guard/router/types";
 
-export interface CapturedWarning {
+export interface CapturedLogEntry {
 	message: string;
 	details?: string;
 }
+
+/** @deprecated Use {@link CapturedLogEntry} instead. */
+export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
@@ -56,6 +59,18 @@ export function addLeaveGuardUnsafe(router: GuardRouter, routeName: string, guar
 
 export function removeLeaveGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
 	getRouterMethod(router, "removeLeaveGuard")(routeName, guard);
+}
+
+/**
+ * Dynamically add a route to a router.
+ *
+ * Uses the inherited `sap.ui.core.routing.Router#addRoute` API. The `oParent`
+ * parameter is optional at runtime (no parent = top-level route), but the UI5
+ * type declarations mark it as required. We call through `getRouterMethod` to
+ * avoid fighting the incorrect type signature.
+ */
+export function addRouteDynamic(router: GuardRouter, config: { name: string; pattern: string }): void {
+	getRouterMethod(router, "addRoute")(config);
 }
 
 /**
@@ -161,4 +176,40 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 		message: call.args[0] as string,
 		details: call.args[1] as string | undefined,
 	}));
+}
+
+/**
+ * Capture `Log.error` calls during `fn`, restoring the original in a
+ * `finally` block so the stub never leaks to subsequent tests.
+ */
+export function captureErrors(fn: () => void): CapturedLogEntry[] {
+	const errors: CapturedLogEntry[] = [];
+	const original = Log.error;
+	Log.error = (message: string, details?: string) => {
+		errors.push({ message, details });
+	};
+	try {
+		fn();
+	} finally {
+		Log.error = original;
+	}
+	return errors;
+}
+
+/**
+ * Async variant of {@link captureErrors} for tests that `await` inside
+ * the capture window.
+ */
+export async function captureErrorsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
+	const errors: CapturedLogEntry[] = [];
+	const original = Log.error;
+	Log.error = (message: string, details?: string) => {
+		errors.push({ message, details });
+	};
+	try {
+		await fn();
+	} finally {
+		Log.error = original;
+	}
+	return errors;
 }

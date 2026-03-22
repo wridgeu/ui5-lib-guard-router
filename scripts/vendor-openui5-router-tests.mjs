@@ -28,6 +28,7 @@ async function fetchJson(url) {
 			accept: "application/vnd.github+json",
 			"user-agent": "ui5-lib-guard-router-vendor-script",
 		},
+		signal: AbortSignal.timeout(30_000),
 	});
 
 	if (!response.ok) {
@@ -43,6 +44,7 @@ async function fetchText(url) {
 		headers: {
 			"user-agent": "ui5-lib-guard-router-vendor-script",
 		},
+		signal: AbortSignal.timeout(30_000),
 	});
 
 	if (!response.ok) {

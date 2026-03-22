@@ -190,10 +190,15 @@ export interface NavigationResult {
 	route: string;
 	/**
 	 * Hash associated with the settled state.
-	 * For blocked or cancelled navigations this is usually the hash the router stayed on;
+	 * For blocked, error, or cancelled navigations this is usually the hash the router stayed on;
 	 * for committed, bypassed, and redirected navigations it is the hash from the winning path.
 	 */
 	hash: string;
+	/**
+	 * The error that caused the navigation to fail.
+	 * Present only when `status` is `NavigationOutcome.Error`.
+	 */
+	error?: unknown;
 }
 
 /**

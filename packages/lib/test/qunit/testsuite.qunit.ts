@@ -26,6 +26,9 @@ export default {
 		module: "./{name}.qunit",
 	},
 	tests: {
+		GuardPipeline: {
+			title: "QUnit Tests for ui5.guard.router.GuardPipeline",
+		},
 		Router: {
 			title: "QUnit Tests for ui5.guard.router.Router",
 		},

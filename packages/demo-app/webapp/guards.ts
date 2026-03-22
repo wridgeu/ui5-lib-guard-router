@@ -92,6 +92,16 @@ export const blockedGuard: GuardFn = () => false;
 export const forbiddenGuard: GuardFn = () => "home";
 
 /**
+ * Guard that always redirects to "protected".
+ *
+ * Demonstrates a redirect chain: navigating to "admin" redirects to
+ * "protected", whose own auth guard then runs. When logged out, the
+ * chain continues to "home" (admin -> protected -> home). When logged
+ * in, the chain stops at "protected" (admin -> protected).
+ */
+export const adminGuard: GuardFn = () => "protected";
+
+/**
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
@@ -183,10 +193,10 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
  * Guard that demonstrates error handling behavior.
  *
  * Reference implementation: not used in the runnable demo. It shows that a
- * thrown guard error is logged and treated like a blocked navigation.
+ * thrown guard error is logged and settles as `NavigationOutcome.Error`.
  *
  * @example
- * // Register as global guard to block all navigation on error
+ * // Register as global guard to fail navigation on error
  * const errorModel = new JSONModel({ simulateError: false });
  * router.addGuard(createErrorDemoGuard(errorModel));
  *
