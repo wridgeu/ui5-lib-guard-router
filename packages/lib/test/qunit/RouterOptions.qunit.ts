@@ -956,3 +956,72 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "valid guard allows, invalid entries skipped");
 });
+
+// ============================================================
+// Module: Pattern 5 loading (preload + lazy default)
+// ============================================================
+QUnit.module("Router - Pattern 5 loading", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				// No guardLoading specified -- should default to "lazy"
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	// In lazy mode, initialize() is synchronous
+	router.initialize();
+
+	// The guard should still work on first navigation (lazy loads it)
+	await waitForRoute(router, "home", 5000);
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "default lazy mode: guard blocks on first navigation");
+});
+
+QUnit.test("lazy mode guard works on first navigation", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "lazy guard blocks on first navigation");
+});
