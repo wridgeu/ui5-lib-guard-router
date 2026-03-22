@@ -4,19 +4,20 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 
 ## Pattern overview
 
-| Pattern                                                            | Guard type           | Sync / Async | Reference                                                            |
-| ------------------------------------------------------------------ | -------------------- | ------------ | -------------------------------------------------------------------- |
-| [Authentication guard](#authentication-guard)                      | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
-| [Async permission check](#async-permission-check-with-abortsignal) | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
-| [Always block](#always-block)                                      | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
-| [Always redirect](#always-redirect)                                | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
-| [Dirty form leave guard](#dirty-form-leave-guard)                  | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
-| [Redirect with parameters](#redirect-with-parameters)              | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
-| [Error handling](#error-handling-in-guards)                        | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
-| [Guard factories](#guard-factories)                                | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
-| [Controller-level lifecycle](#controller-level-guard-lifecycle)    | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
-| [Object form (enter + leave)](#object-form-enter--leave)           | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
-| [Settlement for UI feedback](#settlement-for-ui-feedback)          | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
+| Pattern                                                               | Guard type           | Sync / Async | Reference                                                            |
+| --------------------------------------------------------------------- | -------------------- | ------------ | -------------------------------------------------------------------- |
+| [Authentication guard](#authentication-guard)                         | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
+| [Async permission check](#async-permission-check-with-abortsignal)    | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
+| [Always block](#always-block)                                         | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
+| [Always redirect](#always-redirect)                                   | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
+| [Dirty form leave guard](#dirty-form-leave-guard)                     | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
+| [Redirect with parameters](#redirect-with-parameters)                 | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
+| [Error handling](#error-handling-in-guards)                           | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
+| [Guard factories](#guard-factories)                                   | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
+| [Controller-level lifecycle](#controller-level-guard-lifecycle)       | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
+| [Object form (enter + leave)](#object-form-enter--leave)              | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
+| [Chained authorization](#chained-authorization-redirect-chain-guards) | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
+| [Settlement for UI feedback](#settlement-for-ui-feedback)             | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
 Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). Controller lifecycle and object-form examples also reference `Component.ts` and `Home.controller.ts` where noted in the table above.
 
@@ -201,6 +202,31 @@ router.removeRouteGuard("protected", guardConfig);
 ```
 
 Reference: `Component.ts` guard registration.
+
+## Chained authorization (redirect chain guards)
+
+When a guard redirects to another route, that route's guards also run. This enables multi-step authorization chains where each route independently decides whether to allow, block, or redirect further.
+
+```typescript
+// Route "admin" requires admin role, redirects non-admins to "dashboard"
+router.addRouteGuard("admin", () => {
+	return userModel.getProperty("/isAdmin") ? true : "dashboard";
+});
+
+// Route "dashboard" requires onboarding, redirects to "onboarding"
+router.addRouteGuard("dashboard", () => {
+	return userModel.getProperty("/onboarded") ? true : "onboarding";
+});
+
+// Result: non-admin user navigating to "admin" is redirected to "dashboard",
+// then "dashboard"'s guard checks onboarding and may redirect to "onboarding".
+```
+
+On redirect hops, `context.fromRoute` and `context.fromHash` always refer to the **original** source route (where the user currently is), not the intermediate redirect target. This lets guards reason about where the user is coming from, regardless of how many hops preceded them.
+
+Leave guards run only on the first hop (the initial navigation). Redirect chain hops skip leave guards to avoid re-prompting the user after they already confirmed leaving.
+
+The router detects redirect loops (e.g., A → B → A) via a visited-hash set, and caps chain depth at 10 hops. Both safeguards block the navigation and log an error. See the [library README redirect chain section](../../packages/lib/README.md#redirect-chains) for details.
 
 ## Settlement for UI feedback
 

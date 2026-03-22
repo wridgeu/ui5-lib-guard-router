@@ -91,6 +91,11 @@
 					"name": "forbidden",
 					"pattern": "forbidden",
 					"target": "forbidden"
+				},
+				{
+					"name": "admin",
+					"pattern": "admin",
+					"target": "admin"
 				}
 			],
 			"targets": {
@@ -118,6 +123,11 @@
 					"name": "NotFound",
 					"id": "notFoundView",
 					"level": 3
+				},
+				"admin": {
+					"name": "Admin",
+					"id": "adminView",
+					"level": 2
 				}
 			}
 		}

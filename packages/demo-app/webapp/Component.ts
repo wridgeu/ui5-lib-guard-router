@@ -8,6 +8,7 @@ import {
 	createAsyncPermissionGuard,
 	createDirtyFormGuard,
 	forbiddenGuard,
+	adminGuard,
 } from "./guards";
 import { createRuntimeModel } from "./model/runtime";
 
@@ -44,6 +45,7 @@ export default class Component extends UIComponent {
 
 		router.addRouteGuard("blocked", blockedGuard);
 		router.addRouteGuard("forbidden", forbiddenGuard);
+		router.addRouteGuard("admin", adminGuard);
 		router.addRouteGuard("protected", {
 			beforeEnter: createAsyncPermissionGuard(authModel),
 			beforeLeave: createDirtyFormGuard(formModel),

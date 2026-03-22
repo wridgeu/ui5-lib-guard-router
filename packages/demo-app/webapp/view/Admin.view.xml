@@ -1,0 +1,15 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.controller.Admin">
+	<Page id="adminPage" title="Admin Page" titleAlignment="Center">
+		<content>
+			<VBox class="sapUiMediumMargin" alignItems="Start">
+				<MessageStrip
+					text="You should never see this page. The guard always redirects to Protected, which checks authentication."
+					type="Error"
+					showIcon="true" />
+			</VBox>
+		</content>
+	</Page>
+</mvc:View>

@@ -4,10 +4,13 @@ import Router from "ui5/guard/router/Router";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardRouter } from "ui5/guard/router/types";
 
-export interface CapturedWarning {
+export interface CapturedLogEntry {
 	message: string;
 	details?: string;
 }
+
+/** @deprecated Use {@link CapturedLogEntry} instead. */
+export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
@@ -160,4 +163,40 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 		Log.warning = original;
 	}
 	return warnings;
+}
+
+/**
+ * Capture `Log.error` calls during `fn`, restoring the original in a
+ * `finally` block so the stub never leaks to subsequent tests.
+ */
+export function captureErrors(fn: () => void): CapturedLogEntry[] {
+	const errors: CapturedLogEntry[] = [];
+	const original = Log.error;
+	Log.error = (message: string, details?: string) => {
+		errors.push({ message, details });
+	};
+	try {
+		fn();
+	} finally {
+		Log.error = original;
+	}
+	return errors;
+}
+
+/**
+ * Async variant of {@link captureErrors} for tests that `await` inside
+ * the capture window.
+ */
+export async function captureErrorsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
+	const errors: CapturedLogEntry[] = [];
+	const original = Log.error;
+	Log.error = (message: string, details?: string) => {
+		errors.push({ message, details });
+	};
+	try {
+		await fn();
+	} finally {
+		Log.error = original;
+	}
+	return errors;
 }

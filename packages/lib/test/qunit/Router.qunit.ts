@@ -20,6 +20,7 @@ import {
 	addRouteDynamic,
 	addRouteGuardUnsafe,
 	assertBlocked,
+	captureErrorsAsync,
 	captureWarnings,
 	captureWarningsAsync,
 	GuardRouterClass,
@@ -1076,20 +1077,15 @@ QUnit.test("Guard that returns redirect does not cause infinite loop", async fun
 });
 
 QUnit.test("Multiple route guards with cross-redirects settle correctly", async function (assert: Assert) {
-	// forbidden → redirects to protected, protected → redirects to home
-	// But redirect is re-entrant (committing/redirect phase) so it bypasses guards.
-	// We should end up on protected, not home.
+	// forbidden -> redirects to protected -> redirects to home
+	// The redirect chain evaluates guards on each hop.
 	router.addRouteGuard("forbidden", () => "protected");
 	router.addRouteGuard("protected", () => "home");
 	router.initialize();
 
 	router.navTo("forbidden");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Cross-redirect settled on protected (re-entrant bypass)",
-	);
+	await waitForRoute(router, "home");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Cross-redirect chain followed to home");
 });
 
 // ============================================================
@@ -2002,7 +1998,7 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 	const result = await router.navigationSettled();
 
 	// The redirect from forbidden back to home should NOT trigger
-	// the leave guard again because the committing/redirect phase bypasses all guards
+	// the leave guard again because redirect hops use skipLeaveGuards
 	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Navigation resulted in redirect");
 	assert.strictEqual(leaveGuardCallCount, 1, "Leave guard ran exactly once (for initial leave, not during redirect)");
 });
@@ -3231,7 +3227,7 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase", async function (assert: Assert) {
+QUnit.test("Redirect target's own guard is evaluated (not bypassed)", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("forbidden", () => false);
 	router.initialize();
@@ -3239,12 +3235,7 @@ QUnit.test("Redirect target's own guard is bypassed by committing/redirect phase
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Redirected,
-		"Redirect committed despite target's blocking guard",
-	);
-	assert.strictEqual(result.route, "forbidden", "Landed on forbidden (guard was bypassed)");
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Redirect target's blocking guard blocks the chain");
 });
 
 QUnit.module("Router - navTo preflight", standardHooks);
@@ -4441,4 +4432,247 @@ QUnit.test("idle replay after error returns Error status with error", async func
 	const replay = await router.navigationSettled();
 	assert.strictEqual(replay.status, NavigationOutcome.Error, "Replay returns Error");
 	assert.strictEqual(replay.error, thrownError, "Replay includes the error");
+});
+
+// ============================================================
+// Module: Guards on redirect targets
+// ============================================================
+QUnit.module("Router - Guards on redirect targets", standardHooks);
+
+QUnit.test("Guard on redirect target is evaluated", async function (assert: Assert) {
+	const called: string[] = [];
+	router.addRouteGuard("protected", () => {
+		called.push("protected");
+		return "forbidden";
+	});
+	router.addRouteGuard("forbidden", () => {
+		called.push("forbidden");
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+	assert.deepEqual(called, ["protected", "forbidden"], "Both guards ran");
+	assert.strictEqual(getHash(), "forbidden", "Landed on redirect target");
+});
+
+QUnit.test("Guard on redirect target blocks entire chain", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Chain blocked");
+	assert.strictEqual(getHash(), "", "Hash unchanged (preflight)");
+});
+
+QUnit.test("Redirect chain follows multiple hops (A -> B -> C)", async function (assert: Assert) {
+	// Chain: protected -> forbidden -> detail (avoids redirecting back to current route)
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => ({ route: "detail", parameters: { id: "chain" } }));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "detail");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Settled as Redirected");
+	assert.strictEqual(getHash(), "detail/chain", "Landed on final hop");
+});
+
+QUnit.test("Redirect loop (A -> B -> A) is detected and blocked", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => "protected");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const errors = await captureErrorsAsync(async () => {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Loop blocked");
+	});
+	assert.ok(
+		errors.some((e) => e.message.includes("redirect loop detected")),
+		"Error logged about redirect loop",
+	);
+});
+
+QUnit.test("Settlement is Redirected for successful chain", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
+	assert.strictEqual(result.route, "forbidden", "Settled on redirect target route");
+});
+
+QUnit.test("Guard on redirect target receives correct context", async function (assert: Assert) {
+	let capturedContext: GuardContext | undefined;
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", (ctx: GuardContext) => {
+		capturedContext = ctx;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+	assert.ok(capturedContext, "Guard on redirect target was called");
+	assert.strictEqual(capturedContext!.toRoute, "forbidden", "toRoute is redirect target");
+	assert.strictEqual(capturedContext!.toHash, "forbidden", "toHash is redirect target hash");
+	assert.strictEqual(capturedContext!.fromRoute, "home", "fromRoute is original source");
+	assert.strictEqual(capturedContext!.fromHash, "", "fromHash is original source hash");
+});
+
+QUnit.test("Leave guards run only on first hop, not on redirect hops", async function (assert: Assert) {
+	let leaveCallCount = 0;
+	router.addLeaveGuard("home", () => {
+		leaveCallCount++;
+		return true;
+	});
+	router.addRouteGuard("protected", () => "forbidden");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(leaveCallCount, 1, "Leave guard ran exactly once (first hop only)");
+});
+
+QUnit.test("Async guards in redirect chain work correctly", async function (assert: Assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(10);
+		return "forbidden";
+	});
+	router.addRouteGuard("forbidden", async () => {
+		await nextTick(10);
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(getHash(), "forbidden", "Async chain resolved to redirect target");
+});
+
+QUnit.test("Superseding navigation during async redirect chain cancels the chain", async function (assert: Assert) {
+	router.addRouteGuard("protected", async () => {
+		await nextTick(50);
+		return "forbidden";
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	// Supersede before the async guard resolves
+	router.navTo("detail", { id: "1" });
+	await waitForRoute(router, "detail");
+	assert.strictEqual(getHash(), "detail/1", "Superseding navigation won");
+});
+
+QUnit.test("Self-redirect (A -> A) detected as loop", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "protected");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const errors = await captureErrorsAsync(async () => {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Self-redirect blocked");
+	});
+	assert.ok(
+		errors.some((e) => e.message.includes("redirect loop detected")),
+		"Loop detection error logged",
+	);
+});
+
+QUnit.test("Redirect to unknown route is treated as blocked", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "nonexistent");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const warnings = await captureWarningsAsync(async () => {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Unknown redirect target blocked");
+	});
+	assert.ok(
+		warnings.some((w) => w.message.includes("did not produce a navigation")),
+		"Warning logged about failed redirect",
+	);
+});
+
+QUnit.test("Guard on redirect target that throws settles as Error", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => {
+		throw new Error("guard explosion");
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Error, "Chain settles as Error when guard throws");
+});
+
+QUnit.test("Max redirect depth exceeded blocks with error", async function (assert: Assert) {
+	// Create a chain that exceeds MAX_REDIRECT_DEPTH (10) using parameterized redirects
+	// to the same route with different params (different hashes, avoids visited-set detection).
+	let callCount = 0;
+	router.addRouteGuard("detail", (ctx: GuardContext) => {
+		callCount++;
+		const currentId = Number(ctx.toArguments.id ?? "0");
+		return { route: "detail", parameters: { id: String(currentId + 1) } };
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const errors = await captureErrorsAsync(async () => {
+		router.navTo("detail", { id: "0" });
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Depth exceeded blocked");
+	});
+	// 1 initial guard call + MAX_REDIRECT_DEPTH (10) redirect hops = 11 total
+	assert.ok(callCount <= 11, `Guard called at most 11 times (was ${callCount})`);
+	assert.ok(
+		errors.some((e) => e.message.includes("maximum depth")),
+		"Error logged about max depth",
+	);
+});
+
+QUnit.test("Redirect chain works via parse (browser back/forward)", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// Simulate browser navigation (hash change without navTo)
+	HashChanger.getInstance().setHash("protected");
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(getHash(), "forbidden", "Parse-path redirect chain resolved");
+});
+
+QUnit.test("Redirect to current hash evaluates guards and commits", async function (assert: Assert) {
+	let homeGuardCalled = false;
+	router.addRouteGuard("protected", () => "home");
+	router.addRouteGuard("home", () => {
+		homeGuardCalled = true;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
+	assert.ok(homeGuardCalled, "Guard on redirect target (current hash) was evaluated");
 });

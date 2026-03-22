@@ -65,6 +65,27 @@ type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
 
 const IDLE: PhaseIdle = { kind: "idle" };
 
+/** Maximum number of hops in a redirect chain before it is treated as a loop. */
+const MAX_REDIRECT_DEPTH = 10;
+
+/** State threaded through a redirect chain. */
+interface RedirectChainContext {
+	/** Hashes whose guards have been evaluated in this chain (mutated via .add()). */
+	visited: Set<string>;
+	/** Hash of the originally attempted navigation (for settlement / hash restore). */
+	readonly attemptedHash: string | undefined;
+	/** Whether to restore the hash on block (true for parse path, false for preflight). */
+	readonly restoreHash: boolean;
+	/** Original source route -- the route the user is currently on. */
+	readonly fromRoute: string;
+	/** Original source hash -- the hash the user is currently on. */
+	readonly fromHash: string;
+	/** Shared AbortSignal from the original navigation. */
+	readonly signal: AbortSignal;
+	/** Shared generation counter from the original navigation. */
+	readonly generation: number;
+}
+
 /**
  * Router with navigation guard support.
  *
@@ -84,7 +105,7 @@ const IDLE: PhaseIdle = { kind: "idle" };
  *   same tick; async guards fall back to a deferred path.
  * - `replaceHash` fires `hashChanged` synchronously (validated by test).
  * - `setHash` (via `super.navTo`) fires `hashChanged` synchronously (validated by test).
- * - Redirect targets bypass guards to prevent infinite loops.
+ * - Redirect targets are evaluated by the guard pipeline with loop detection.
  *
  * @namespace ui5.guard.router
  * @extends sap.m.routing.Router
@@ -491,8 +512,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Apply a preflight guard decision. For "allow", enter the committing
 	 * phase and call super.navTo(). For "block", flush settlement without
-	 * touching the hash. For "redirect", navigate to the redirect target.
+	 * touching the hash. For "redirect", start a redirect chain.
 	 * For "error", flush Error settlement with the guard's error.
+	 *
+	 * @param decision - Normalized guard pipeline result.
+	 * @param routeName - Original route name passed to navTo().
+	 * @param parameters - Original route parameters.
+	 * @param componentTargetInfo - Optional component target info from the navTo() overload.
+	 * @param bReplace - Whether to replace the current history entry.
+	 * @param targetHash - Resolved hash for the target route.
+	 * @param toRoute - Resolved route name (may differ from routeName for nested routes).
 	 */
 	private _applyPreflightDecision(
 		decision: GuardDecision,
@@ -518,7 +547,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(targetHash, false);
 				break;
 			case "redirect": {
-				this._redirect(decision.target, targetHash, false);
+				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
+				const { attempt } = this._phase as PhaseEvaluating;
+				const visited = new Set<string>();
+				visited.add(targetHash);
+				this._redirect(decision.target, {
+					visited,
+					attemptedHash: targetHash,
+					restoreHash: false,
+					fromRoute: this._currentRoute,
+					fromHash: this._currentHash ?? "",
+					signal: attempt.controller.signal,
+					generation: attempt.generation,
+				});
 				break;
 			}
 			case "error":
@@ -667,9 +708,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 			case "block":
 				this._blockNavigation(hash);
 				break;
-			case "redirect":
-				this._redirect(decision.target, hash);
+			case "redirect": {
+				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
+				const { attempt } = this._phase as PhaseEvaluating;
+				const visited = new Set<string>();
+				visited.add(hash);
+				this._redirect(decision.target, {
+					visited,
+					attemptedHash: hash,
+					restoreHash: true,
+					fromRoute: this._currentRoute,
+					fromHash: this._currentHash ?? "",
+					signal: attempt.controller.signal,
+					generation: attempt.generation,
+				});
 				break;
+			}
 			case "error":
 				this._errorNavigation(decision.error, hash);
 				break;
@@ -702,9 +756,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 		super.parse(hash);
 	}
 
-	/** Perform a guard redirect (string route name or GuardRedirect object). */
-	private _redirect(target: string | GuardRedirect, attemptedHash?: string, restoreHash = true): void {
-		const settlementBefore = this._lastSettlement;
+	/**
+	 * Evaluate guards on a redirect target and apply the resulting decision.
+	 *
+	 * Handles loop detection (visited-hash set + depth cap), unknown-route
+	 * fallback, sync/async guard evaluation, and recursive chaining when
+	 * the target's guard itself returns a redirect. All hops in a chain
+	 * share the same AbortSignal and generation counter from the original
+	 * navigation so that a superseding navigation correctly discards
+	 * in-flight redirect work.
+	 *
+	 * @param target - Redirect target: a route name string or {@link GuardRedirect} with parameters.
+	 * @param chain - Mutable context threaded through the redirect chain (visited set, signals, etc.).
+	 */
+	private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
 		const targetName = typeof target === "string" ? target : target.route;
 		let targetHash: string | null = null;
 		const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
@@ -716,47 +781,158 @@ export default class Router extends MobileRouter implements GuardRouter {
 				targetHash = null;
 			}
 		}
-		const redirectsToCurrentHash = targetHash !== null && targetHash === (this._currentHash ?? "");
-		this._phase = { kind: "committing", hash: targetHash ?? "", route: targetName, origin: "redirect" };
-		try {
-			if (typeof target === "string") {
-				this.navTo(target, {}, {}, true);
-			} else {
-				this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
-			}
-		} finally {
-			// Exception recovery: if navTo() threw before parse() could call
-			// _commitNavigation, reset phase so it doesn't remain stuck at
-			// committing. On success _commitNavigation already set phase to idle,
-			// so this is a no-op. The safety net below may re-enter committing
-			// if the hash didn't change but no error occurred.
-			if (this._phase.kind === "committing") {
-				this._phase = IDLE;
-			}
-		}
 
-		// Safety net: if navTo did not trigger a re-entrant parse() (e.g. the
-		// target route does not exist and the hash did not change), no
-		// _commitNavigation ran and _lastSettlement was not updated. Treat as
-		// blocked because the observable outcome is that the user stays on the
-		// current route. Log a warning so the developer sees the bad target.
-		if (this._lastSettlement === settlementBefore) {
-			if (redirectsToCurrentHash) {
-				this._phase = {
-					kind: "committing",
-					hash: this._currentHash ?? "",
-					route: this._currentRoute,
-					origin: "redirect",
-				};
-				this._commitNavigation(this._currentHash ?? "", this._currentRoute);
-				return;
-			}
-			Log.warning(
-				`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+		// Loop detection: visited set (exact hash match) + depth cap.
+		if (targetHash !== null && chain.visited.has(targetHash)) {
+			Log.error(
+				`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`,
 				undefined,
 				LOG_COMPONENT,
 			);
-			this._blockNavigation(attemptedHash, restoreHash);
+			this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			return;
+		}
+		if (chain.visited.size > MAX_REDIRECT_DEPTH) {
+			Log.error(
+				`Guard redirect chain exceeded maximum depth (${MAX_REDIRECT_DEPTH}): ${[...chain.visited].join(" -> ")}`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			return;
+		}
+		if (targetHash !== null) {
+			chain.visited.add(targetHash);
+		}
+
+		// If the target route doesn't exist or the hash couldn't be resolved,
+		// attempt navTo (parent may fire bypassed) and fall back to blocked.
+		if (targetHash === null) {
+			const settlementBefore = this._lastSettlement;
+			this._phase = { kind: "committing", hash: "", route: targetName, origin: "redirect" };
+			try {
+				if (typeof target === "string") {
+					this.navTo(target, {}, {}, true);
+				} else {
+					this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+				}
+			} finally {
+				if (this._phase.kind === "committing") {
+					this._phase = IDLE;
+				}
+			}
+			if (this._lastSettlement === settlementBefore) {
+				Log.warning(
+					`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+			}
+			return;
+		}
+
+		// Narrowed after the null-branch early return; const carries it into the async closure.
+		const resolvedHash: string = targetHash;
+
+		// Build guard context for the redirect target.
+		const routeInfo = this.getRouteInfoByHash(resolvedHash);
+		const context: GuardContext = {
+			toRoute: routeInfo?.name ?? "",
+			toHash: resolvedHash,
+			toArguments: routeInfo?.arguments ?? {},
+			fromRoute: chain.fromRoute,
+			fromHash: chain.fromHash,
+			signal: chain.signal,
+		};
+
+		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
+
+		if (isPromiseLike(decision)) {
+			decision
+				.then((d: GuardDecision) => {
+					if (chain.generation !== this._parseGeneration) return;
+					this._applyRedirectDecision(d, target, resolvedHash, chain);
+				})
+				.catch((error: unknown) => {
+					if (chain.generation !== this._parseGeneration) return;
+					Log.error(
+						`Guard pipeline failed during redirect chain for "${targetName}", blocking navigation`,
+						String(error),
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				});
+			return;
+		}
+
+		this._applyRedirectDecision(decision, target, resolvedHash, chain);
+	}
+
+	/**
+	 * Apply a guard decision within a redirect chain. For "allow", enter
+	 * committing phase and delegate to navTo (which hits the existing bypass).
+	 * For "block", block the entire chain. For "redirect", recurse.
+	 *
+	 * @param decision - Normalized guard pipeline result for this hop.
+	 * @param target - The redirect target (route name or {@link GuardRedirect}).
+	 * @param targetHash - Resolved hash for the redirect target (guaranteed non-null).
+	 * @param chain - Shared redirect chain context with visited set, signals, etc.
+	 */
+	private _applyRedirectDecision(
+		decision: GuardDecision,
+		target: string | GuardRedirect,
+		targetHash: string,
+		chain: RedirectChainContext,
+	): void {
+		switch (decision.action) {
+			case "allow": {
+				const targetName = typeof target === "string" ? target : target.route;
+				const settlementBefore = this._lastSettlement;
+				this._phase = { kind: "committing", hash: targetHash, route: targetName, origin: "redirect" };
+				try {
+					if (typeof target === "string") {
+						this.navTo(target, {}, {}, true);
+					} else {
+						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+					}
+				} finally {
+					if (this._phase.kind === "committing") {
+						this._phase = IDLE;
+					}
+				}
+				// Safety net: if navTo didn't produce a settlement (e.g. unknown route
+				// or redirect to current hash where HashChanger doesn't fire), handle it.
+				if (this._lastSettlement === settlementBefore) {
+					const redirectsToCurrentHash = targetHash === (this._currentHash ?? "");
+					if (redirectsToCurrentHash) {
+						this._phase = {
+							kind: "committing",
+							hash: this._currentHash ?? "",
+							route: this._currentRoute,
+							origin: "redirect",
+						};
+						this._commitNavigation(this._currentHash ?? "", this._currentRoute);
+						return;
+					}
+					Log.warning(
+						`Guard redirect target "${targetName}" did not produce a navigation, treating as blocked`,
+						undefined,
+						LOG_COMPONENT,
+					);
+					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				}
+				break;
+			}
+			case "block":
+				this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+				break;
+			case "redirect":
+				this._redirect(decision.target, chain);
+				break;
+			case "error":
+				this._errorNavigation(decision.error, chain.attemptedHash, chain.restoreHash);
+				break;
 		}
 	}
 

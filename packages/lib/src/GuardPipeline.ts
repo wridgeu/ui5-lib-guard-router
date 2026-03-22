@@ -50,10 +50,12 @@ export default class GuardPipeline {
 	private _enterGuards = new Map<string, GuardFn[]>();
 	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
 
+	/** Register a guard that runs for every navigation. */
 	addGlobalGuard(guard: GuardFn): void {
 		this._globalGuards.push(guard);
 	}
 
+	/** Remove a previously registered global guard by reference. */
 	removeGlobalGuard(guard: GuardFn): void {
 		const index = this._globalGuards.indexOf(guard);
 		if (index !== -1) {
@@ -61,18 +63,42 @@ export default class GuardPipeline {
 		}
 	}
 
+	/**
+	 * Register an enter guard for a specific route.
+	 *
+	 * @param route - Route name as defined in `manifest.json`.
+	 * @param guard - Guard function to register.
+	 */
 	addEnterGuard(route: string, guard: GuardFn): void {
 		this._addToGuardMap(this._enterGuards, route, guard);
 	}
 
+	/**
+	 * Remove a previously registered enter guard by reference.
+	 *
+	 * @param route - Route name.
+	 * @param guard - Guard function to remove.
+	 */
 	removeEnterGuard(route: string, guard: GuardFn): void {
 		this._removeFromGuardMap(this._enterGuards, route, guard);
 	}
 
+	/**
+	 * Register a leave guard for a specific route.
+	 *
+	 * @param route - Route name as defined in `manifest.json`.
+	 * @param guard - Leave guard function to register.
+	 */
 	addLeaveGuard(route: string, guard: LeaveGuardFn): void {
 		this._addToGuardMap(this._leaveGuards, route, guard);
 	}
 
+	/**
+	 * Remove a previously registered leave guard by reference.
+	 *
+	 * @param route - Route name.
+	 * @param guard - Leave guard function to remove.
+	 */
 	removeLeaveGuard(route: string, guard: LeaveGuardFn): void {
 		this._removeFromGuardMap(this._leaveGuards, route, guard);
 	}
@@ -93,9 +119,16 @@ export default class GuardPipeline {
 	 *
 	 * @param context - Complete guard context including AbortSignal.
 	 *   `context.fromRoute` controls leave-guard lookup: empty string skips leave guards.
+	 * @param options - Optional evaluation options.
+	 * @param options.skipLeaveGuards - When true, leave guards are skipped even if
+	 *   `context.fromRoute` is set. Used by redirect chain hops to avoid re-running
+	 *   leave guards while still preserving `fromRoute` in the context.
+	 * @returns A synchronous {@link GuardDecision} when all guards return plain values,
+	 *   or a `Promise<GuardDecision>` when at least one guard returns a thenable.
 	 */
-	evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision> {
-		const hasLeaveGuards = context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
+	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
+		const hasLeaveGuards =
+			!options?.skipLeaveGuards && context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
 		const hasEnterGuards =
 			this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
 
