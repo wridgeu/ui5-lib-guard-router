@@ -4536,10 +4536,9 @@ QUnit.test("Redirect to unknown route is treated as blocked", async function (as
 
 	const warnings = await captureWarningsAsync(async () => {
 		router.navTo("protected");
-		await router.navigationSettled();
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Unknown redirect target blocked");
 	});
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Unknown redirect target blocked");
 	assert.ok(
 		warnings.some((w) => w.message.includes("did not produce a navigation")),
 		"Warning logged about failed redirect",
