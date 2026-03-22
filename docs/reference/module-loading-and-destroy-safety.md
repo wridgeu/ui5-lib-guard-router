@@ -159,6 +159,16 @@ JavaScript closures keep the enclosing scope alive:
 
 Once the Promise resolves, the closure releases `this`, and the router becomes eligible for garbage collection.
 
+## Lazy mode and destroy safety
+
+In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` is synchronous -- there is no async module load before `super.initialize()`, so the destroy-during-init race window does not exist. The `_destroyed` sentinel check is only needed for block mode, where `initialize()` defers `super.initialize()` until modules have loaded.
+
+Mid-navigation destroy is handled in all modes by the generation counter and `AbortController`. When `destroy()` is called during a navigation:
+
+1. The generation counter increments, causing the in-flight pipeline to discard its result.
+2. The `AbortController` fires, signalling guards to cancel async work (e.g. `fetch`).
+3. Guard arrays are cleared, preventing any further guard execution.
+
 ## Summary
 
 | Concern              | UI5 TargetCache                              | Guard Router                                |

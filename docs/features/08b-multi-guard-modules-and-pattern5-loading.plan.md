@@ -1,6 +1,6 @@
 # Multi-Guard Modules, Named Guards & Pattern 5 Loading — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Evolve declarative manifest guards to support multi-guard modules (function/array/object exports), cherry-pick syntax (`#`), named guards for logging, and Pattern 5 (preload + lazy) as the default loading strategy.
 
@@ -47,7 +47,7 @@ Create the guard modules that tests will import. No test code yet — just the f
 - Create: `packages/lib/test/qunit/fixtures/guards/emptyArrayGuard.ts`
 - Create: `packages/lib/test/qunit/fixtures/guards/mixedObjectGuard.ts`
 
-- [ ] **Step 1: Create objectGuard.ts**
+- [x] **Step 1: Create objectGuard.ts**
 
 ```typescript
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
@@ -62,7 +62,7 @@ export default {
 };
 ```
 
-- [ ] **Step 2: Create arrayGuard.ts**
+- [x] **Step 2: Create arrayGuard.ts**
 
 ```typescript
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
@@ -77,19 +77,19 @@ export default [
 ];
 ```
 
-- [ ] **Step 3: Create emptyObjectGuard.ts**
+- [x] **Step 3: Create emptyObjectGuard.ts**
 
 ```typescript
 export default {};
 ```
 
-- [ ] **Step 4: Create emptyArrayGuard.ts**
+- [x] **Step 4: Create emptyArrayGuard.ts**
 
 ```typescript
 export default [];
 ```
 
-- [ ] **Step 5: Create mixedObjectGuard.ts**
+- [x] **Step 5: Create mixedObjectGuard.ts**
 
 ```typescript
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
@@ -103,7 +103,7 @@ export default {
 };
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/lib/test/qunit/fixtures/guards/objectGuard.ts \
@@ -126,7 +126,7 @@ Enhance the `GuardDescriptor` type and update `parseGuardDescriptors()` to split
 - Modify: `packages/lib/src/Router.ts:166-261` (parseGuardDescriptors)
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write failing tests for cherry-pick parsing and name derivation**
+- [x] **Step 1: Write failing tests for cherry-pick parsing and name derivation**
 
 Add a new QUnit module at the end of `RouterOptions.qunit.ts`. These tests use block mode with the actual module paths to verify descriptors are parsed correctly. The observable behavior is: cherry-picked guard registers and functions, bare path registers all.
 
@@ -298,12 +298,12 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm wdio:qunit`
 Expected: new tests FAIL — cherry-pick `#` is not parsed, `objectGuard` is treated as function export (fails type check).
 
-- [ ] **Step 3: Enhance GuardDescriptor type**
+- [x] **Step 3: Enhance GuardDescriptor type**
 
 In `Router.ts:132-136`, update:
 
@@ -318,7 +318,7 @@ interface GuardDescriptor {
 }
 ```
 
-- [ ] **Step 4: Update parseGuardDescriptors to split on `#` and derive names**
+- [x] **Step 4: Update parseGuardDescriptors to split on `#` and derive names**
 
 In `Router.ts:166-261`, update the entry parsing logic. Every place that creates a descriptor now splits on `#` and derives a name. Extract a helper:
 
@@ -368,14 +368,14 @@ descriptors.push({
 
 Apply this pattern to all 4 push sites (shorthand enter, object enter, object leave, and the same for `"*"`).
 
-- [ ] **Step 5: Run tests to verify cherry-pick parsing works**
+- [x] **Step 5: Run tests to verify cherry-pick parsing works**
 
 At this point, parsing works but module loading still expects a single function. The cherry-pick tests will still fail because `_loadAndRegisterGuards` doesn't handle export keys yet. That's expected — we need Task 3 first.
 
 Run: `pnpm wdio:qunit`
 Expected: existing tests PASS (they don't use `#`), new cherry-pick tests still FAIL.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -392,7 +392,7 @@ A pure function that takes a loaded module export, an optional export key, and t
 
 - Modify: `packages/lib/src/Router.ts` (add `resolveModuleExports()` near line 146)
 
-- [ ] **Step 1: Implement resolveModuleExports()**
+- [x] **Step 1: Implement resolveModuleExports()**
 
 Add after `resolveGuardModulePath()` (~line 152):
 
@@ -549,7 +549,7 @@ function resolveModuleExports(
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts
@@ -567,7 +567,7 @@ Update `_loadAndRegisterGuards()` to use `resolveModuleExports()` for multi-guar
 - Modify: `packages/lib/src/Router.ts:1404-1447` (\_loadAndRegisterGuards)
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write failing tests for multi-guard block loading**
+- [x] **Step 1: Write failing tests for multi-guard block loading**
 
 Add a new QUnit module:
 
@@ -719,12 +719,12 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm wdio:qunit`
 Expected: new multi-guard tests FAIL — `_loadAndRegisterGuards` still expects single function.
 
-- [ ] **Step 3: Update \_loadAndRegisterGuards to use resolveModuleExports**
+- [x] **Step 3: Update \_loadAndRegisterGuards to use resolveModuleExports**
 
 Replace the body of `_loadAndRegisterGuards()` at `Router.ts:1404-1447`:
 
@@ -773,12 +773,12 @@ private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm wdio:qunit`
 Expected: ALL tests pass — existing single-function tests + new multi-guard + cherry-pick tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -797,7 +797,7 @@ Add the preload in the constructor and flip the default.
 - Modify: `packages/lib/src/Router.ts:363-380` (constructor)
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write failing test for new default and preload**
+- [x] **Step 1: Write failing test for new default and preload**
 
 ```typescript
 // ============================================================
@@ -857,12 +857,12 @@ QUnit.test("lazy mode guard works on first navigation (preload or async fallback
 });
 ```
 
-- [ ] **Step 2: Run tests to verify the default test fails**
+- [x] **Step 2: Run tests to verify the default test fails**
 
 Run: `pnpm wdio:qunit`
 Expected: "default guardLoading is lazy" FAILS because current default is `"block"`. Lazy navigation test may already pass since lazy mode exists.
 
-- [ ] **Step 3: Flip the default**
+- [x] **Step 3: Flip the default**
 
 In `Router.ts:269-273`:
 
@@ -874,7 +874,7 @@ const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
 };
 ```
 
-- [ ] **Step 4: Add preload hint in constructor**
+- [x] **Step 4: Add preload hint in constructor**
 
 In `Router.ts:363-380`, after `parseGuardDescriptors()`:
 
@@ -898,16 +898,16 @@ if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
 }
 ```
 
-- [ ] **Step 5: Update existing tests that hardcode guardLoading: "block"**
+- [x] **Step 5: Update existing tests that hardcode guardLoading: "block"**
 
 Existing block-mode tests already specify `guardLoading: "block"` explicitly, so they're unaffected by the default change. But the constructor test at ~line 55 that checks defaults needs updating if it asserts the default value. Check and update any assertion that expects `"block"` as default.
 
-- [ ] **Step 6: Run all tests**
+- [x] **Step 6: Run all tests**
 
 Run: `pnpm wdio:qunit`
 Expected: ALL tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -925,7 +925,7 @@ Update `_registerLazyGuards()` to handle multi-guard modules. Cherry-picked entr
 - Modify: `packages/lib/src/Router.ts:1467-1504` (\_registerLazyGuards)
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write failing tests for lazy multi-guard**
+- [x] **Step 1: Write failing tests for lazy multi-guard**
 
 ```typescript
 // ============================================================
@@ -1005,12 +1005,12 @@ QUnit.test("lazy mode: cherry-pick from object module", async function (assert: 
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm wdio:qunit`
 Expected: lazy multi-guard tests FAIL — `_registerLazyGuards` still treats each descriptor as single-function.
 
-- [ ] **Step 3: Rewrite \_registerLazyGuards for multi-guard support**
+- [x] **Step 3: Rewrite \_registerLazyGuards for multi-guard support**
 
 The key design: split descriptors into two groups:
 
@@ -1094,12 +1094,12 @@ private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 
 **Note for the implementer:** After the first navigation, the expander wrapper stays at position 0 but now hits the cache (sync path via `resolveModuleExports`). The `expanded` flag ensures guards 1..N are only registered once, preventing accumulation on repeated navigations.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm wdio:qunit`
 Expected: ALL tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/lib/src/Router.ts packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -1117,7 +1117,7 @@ Update log messages to include guard names where available.
 - Modify: `packages/lib/src/Router.ts` (log messages in `_loadAndRegisterGuards`, `_registerLazyGuards`, `resolveModuleExports`)
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write test verifying guard name appears in warning**
+- [x] **Step 1: Write test verifying guard name appears in warning**
 
 ```typescript
 // ============================================================
@@ -1167,14 +1167,14 @@ QUnit.test("warning for non-function object entry includes property name", async
 });
 ```
 
-- [ ] **Step 2: Run test — should already pass**
+- [x] **Step 2: Run test — should already pass**
 
 The `resolveModuleExports()` from Task 3 already includes property names in warnings. Run to verify.
 
 Run: `pnpm wdio:qunit`
 Expected: PASS (logging was built into `resolveModuleExports` from the start).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -1191,7 +1191,7 @@ Cover the remaining spec edge cases.
 
 - Test: `packages/lib/test/qunit/RouterOptions.qunit.ts`
 
-- [ ] **Step 1: Write edge case tests**
+- [x] **Step 1: Write edge case tests**
 
 ```typescript
 // ============================================================
@@ -1295,12 +1295,12 @@ QUnit.test("module: prefix with cherry-pick composes correctly", async function 
 });
 ```
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run: `pnpm wdio:qunit`
 Expected: ALL pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/lib/test/qunit/RouterOptions.qunit.ts
@@ -1317,7 +1317,7 @@ Update the main feature doc to reflect all changes.
 
 - Modify: `docs/features/08-declarative-manifest-guards.md`
 
-- [ ] **Step 1: Update the Guard Module Format section**
+- [x] **Step 1: Update the Guard Module Format section**
 
 Replace the single-function-only documentation with the three export shapes (function, array, object), cherry-pick syntax, and named guards. Update the `guardLoading` default from `"block"` to `"lazy"`. Add Pattern 5 explanation to the Guard Loading Strategies section. Reference the spec doc `08b-multi-guard-modules-and-pattern5-loading.md` for full design rationale.
 
@@ -1329,7 +1329,7 @@ Key sections to update:
 - Guard Loading Strategies → add Pattern 5 description under `"lazy"`
 - Testing Scope → add new test categories
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/features/08-declarative-manifest-guards.md

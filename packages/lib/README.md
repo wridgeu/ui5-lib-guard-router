@@ -363,7 +363,7 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 				"guardRouter": {
 					"unknownRouteGuardRegistration": "warn",
 					"navToPreflight": "guard",
-					"guardLoading": "block",
+					"guardLoading": "lazy",
 					"guards": {
 						"*": ["guards.authGuard"],
 						"admin": {
@@ -380,11 +380,11 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 ### Router options
 
-| Option                          | Values                              | Default   | Description                                                                                                                                   |
-| ------------------------------- | ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                       |
-| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`) |
-| `guardLoading`                  | `"block"` \| `"lazy"`               | `"block"` | Whether navigation waits for guards to finish loading before proceeding (`"block"`) or continues immediately (`"lazy"`)                       |
+| Option                          | Values                              | Default   | Description                                                                                                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
+| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
+| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
 
 ### Declarative guards
 
@@ -427,18 +427,76 @@ To use an absolute module path, prefix it with `"module:"`:
 
 ### Guard module format
 
-Each entry in the guard array must be a module that exports a guard function as its default export:
+Each entry in the guard array is a module whose default export is one of three shapes:
+
+**Shape 1: Function (single guard)**
 
 ```typescript
+// guards/auth.ts
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export default function authGuard(context: GuardContext): GuardResult {
-	// standalone guard function
-	return true;
+	return isAuthenticated() ? true : "login";
 }
 ```
 
-The module is loaded once and the default export is called directly for each navigation. The function receives the same `GuardContext` as programmatically registered guards and returns the same `GuardResult` union.
+**Shape 2: Array (ordered guards)**
+
+```typescript
+// guards/checks.ts — registered as "checks#0", "checks#1"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default [
+	function checkAuth(context: GuardContext): GuardResult {
+		return true;
+	},
+	function checkRole(context: GuardContext): GuardResult {
+		return false;
+	},
+];
+```
+
+**Shape 3: Plain Object (named guards)**
+
+```typescript
+// guards/security.ts — registered as "checkAuth", "checkRole"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default {
+	checkAuth(context: GuardContext): GuardResult {
+		/* ... */ return true;
+	},
+	checkRole(context: GuardContext): GuardResult {
+		/* ... */ return false;
+	},
+};
+```
+
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+
+### Cherry-pick syntax
+
+When a module exports multiple guards, you can register a subset using `#` to select by name or index:
+
+```json
+{
+	"guards": {
+		"admin": ["guards.security#checkAuth", "guards.security#checkRole"],
+		"dashboard": ["guards.security"],
+		"settings": ["guards.checks#1"],
+		"*": ["guards.logging"]
+	}
+}
+```
+
+| Syntax                               | Behavior                                      |
+| ------------------------------------ | --------------------------------------------- |
+| `"guards.security"`                  | Register all exports (key/array order)        |
+| `"guards.security#checkAuth"`        | Register only that named export               |
+| `"guards.security#1"`                | Register by index (array or object key order) |
+| `"module:some.lib.guards#checkAuth"` | `module:` prefix composes with `#`            |
+
+When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
 
 ### Guard context `meta`
 
