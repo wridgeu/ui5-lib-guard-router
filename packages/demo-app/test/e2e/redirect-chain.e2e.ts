@@ -1,6 +1,11 @@
-import { waitForPage } from "./helpers";
-
-const COMPONENT_ID = "container-demo.app";
+import {
+	expectHashToBe,
+	fireEvent,
+	getRuntimeSettlementRevision,
+	resetAuth,
+	waitForPage,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Redirect chain: admin -> protected -> home", () => {
 	beforeEach(async () => {
@@ -9,62 +14,31 @@ describe("Redirect chain: admin -> protected -> home", () => {
 	});
 
 	it("should follow the full chain when logged out (admin -> protected -> home)", async () => {
-		// Install a temporary guard on "protected" that tracks calls
-		// and always redirects to "home" (simulating logged-out behavior)
-		const result = await browser.executeAsync((componentId: string, done: (r: unknown) => void) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			const component = Component?.getComponentById(componentId);
-			const router = component?.getRouter();
+		await resetAuth();
 
-			let chainGuardCalled = false;
-			const chainGuard = () => {
-				chainGuardCalled = true;
-				return "home";
-			};
+		const rev = await getRuntimeSettlementRevision();
+		await fireEvent("container-demo.app---homeView--navAdminBtn", "press");
 
-			// Add a second guard on "protected" that will also run
-			router.addRouteGuard("protected", chainGuard);
-
-			router.navTo("admin");
-			router.navigationSettled().then(
-				(r: unknown) => {
-					router.removeRouteGuard("protected", chainGuard);
-					done({ settlement: r, chainGuardCalled });
-				},
-				(e: unknown) => {
-					router.removeRouteGuard("protected", chainGuard);
-					done({ error: String(e), chainGuardCalled });
-				},
-			);
-		}, COMPONENT_ID);
-
-		console.log("CHAIN GUARD TEST:", JSON.stringify(result));
-		const data = result as {
-			settlement?: { status: string; route: string };
-			chainGuardCalled?: boolean;
-		};
-		// Verify the guard on the redirect target was actually called
-		expect(data.chainGuardCalled).toBe(true);
-		expect(data.settlement?.status).toBe("redirected");
-		expect(data.settlement?.route).toBe("home");
+		// Admin guard redirects to protected, protected's async auth guard
+		// checks login state (logged out) and redirects to home.
+		// The entire chain settles as Redirected on home.
+		await waitForRuntimeSettlement({ status: "Redirected", route: "home" }, { afterRevision: rev, timeout: 5000 });
+		await expectHashToBe("");
 	});
 
 	it("should stop at protected when logged in (admin -> protected)", async () => {
-		const result = await browser.executeAsync((componentId: string, done: (r: unknown) => void) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			const component = Component?.getComponentById(componentId);
-			const router = component?.getRouter();
-			component?.getModel("auth")?.setProperty("/isLoggedIn", true);
+		// Log in first
+		await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
 
-			router.navTo("admin");
-			router.navigationSettled().then(
-				(r: unknown) => done({ settlement: r }),
-				(e: unknown) => done({ error: String(e) }),
-			);
-		}, COMPONENT_ID);
+		const rev = await getRuntimeSettlementRevision();
+		await fireEvent("container-demo.app---homeView--navAdminBtn", "press");
 
-		const data = result as { settlement?: { status: string; route: string } };
-		expect(data.settlement?.status).toBe("redirected");
-		expect(data.settlement?.route).toBe("protected");
+		// Admin guard redirects to protected, protected's auth guard allows
+		// because user is logged in. Chain stops at protected.
+		await waitForRuntimeSettlement(
+			{ status: "Redirected", route: "protected" },
+			{ afterRevision: rev, timeout: 5000 },
+		);
+		await expectHashToBe("#/protected");
 	});
 });
