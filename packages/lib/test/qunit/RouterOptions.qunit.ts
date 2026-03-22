@@ -1131,3 +1131,150 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 		"lazy array module: blockSecond (false) blocks after expansion",
 	);
 });
+
+// ============================================================
+// Module: Named guard logging
+// ============================================================
+QUnit.module("Router - Named guard logging", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("warning for non-function object entry includes property name", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("notAFunction")),
+		"warning includes the property name 'notAFunction'",
+	);
+	assert.ok(
+		warnings.some((w) => w.message.includes("alsoNotAFunction")),
+		"warning includes the property name 'alsoNotAFunction'",
+	);
+});
+
+// ============================================================
+// Module: Multi-guard edge cases
+// ============================================================
+QUnit.module("Router - Multi-guard edge cases", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("empty array module warns and registers no guards", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyArrayGuard"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("empty array")),
+		"warning about empty array export",
+	);
+});
+
+QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "other", pattern: "other" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					"*": ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+				},
+			},
+		} as object,
+	);
+
+	// lazy mode: initialize() registers lazy wrappers synchronously.
+	// Navigate directly to "other" -- the lazy wrapper will load the module
+	// and execute checkRole (returns false), blocking navigation.
+	router.initialize();
+	router.navTo("other");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"global cherry-picked guard (checkRole=false) blocks all routes",
+	);
+});
+
+QUnit.test("module: prefix with cherry-pick composes correctly", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["module:ui5.guard.router.qunit.fixtures.guards.objectGuard#checkAuth"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "module: prefix + #checkAuth works together");
+});
