@@ -92,9 +92,14 @@ export default class GuardPipeline {
 	 *
 	 * @param context - Complete guard context including AbortSignal.
 	 *   `context.fromRoute` controls leave-guard lookup: empty string skips leave guards.
+	 * @param options - Optional evaluation options.
+	 * @param options.skipLeaveGuards - When true, leave guards are skipped even if
+	 *   `context.fromRoute` is set. Used by redirect chain hops to avoid re-running
+	 *   leave guards while still preserving `fromRoute` in the context.
 	 */
-	evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision> {
-		const hasLeaveGuards = context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
+	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
+		const hasLeaveGuards =
+			!options?.skipLeaveGuards && context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
 		const hasEnterGuards =
 			this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
 

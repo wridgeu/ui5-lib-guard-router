@@ -506,3 +506,41 @@ QUnit.test("guard can remove itself during iteration", function (assert: Assert)
 	const result2 = pipeline.evaluate(createContext());
 	assert.deepEqual(result2, { action: "allow" }, "Second call: one-shot removed, still allow");
 });
+
+// ============================================================
+// Module: skipLeaveGuards option
+// ============================================================
+QUnit.module("GuardPipeline - skipLeaveGuards option");
+
+QUnit.test("skipLeaveGuards skips leave guards even when fromRoute is set", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const called: string[] = [];
+	pipeline.addLeaveGuard("current", () => {
+		called.push("leave");
+		return false; // would block
+	});
+	pipeline.addGlobalGuard(() => {
+		called.push("global");
+		return true;
+	});
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }), { skipLeaveGuards: true });
+	assert.deepEqual(result, { action: "allow" }, "Navigation allowed despite blocking leave guard");
+	assert.deepEqual(called, ["global"], "Leave guard was skipped, global guard ran");
+});
+
+QUnit.test("skipLeaveGuards false still runs leave guards", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addLeaveGuard("current", () => false);
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }), { skipLeaveGuards: false });
+	assert.deepEqual(result, { action: "block" }, "Leave guard blocks when skipLeaveGuards is false");
+});
+
+QUnit.test("skipLeaveGuards omitted still runs leave guards (backward compat)", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addLeaveGuard("current", () => false);
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(result, { action: "block" }, "Leave guard blocks when options omitted");
+});
