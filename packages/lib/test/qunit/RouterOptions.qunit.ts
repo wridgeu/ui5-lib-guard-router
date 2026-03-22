@@ -815,3 +815,144 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 		"warning logged for nonexistent export key",
 	);
 });
+
+// ============================================================
+// Module: Multi-guard module exports (block loading)
+// ============================================================
+QUnit.module("Router - Multi-guard module exports (block loading)", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("object module: bare path registers all guards in key order", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"second guard (checkRole=false) blocks when all object guards registered",
+	);
+});
+
+QUnit.test("array module: bare path registers all guards in index order", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"second guard (blockSecond=false) blocks when all array guards registered",
+	);
+});
+
+QUnit.test("empty object module warns and registers no guards", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyObjectGuard"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("empty object")),
+		"warning about empty object export",
+	);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "no guards → navigation allowed");
+});
+
+QUnit.test("mixed object module: non-function values warned and skipped", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("notAFunction")),
+		"warning for non-function entry",
+	);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "valid guard allows, invalid entries skipped");
+});
