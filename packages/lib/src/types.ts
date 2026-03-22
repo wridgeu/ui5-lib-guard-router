@@ -124,8 +124,8 @@ export type NavToPreflightMode = "guard" | "bypass" | "off";
 /**
  * Strategy for loading manifest-declared guard modules.
  *
- * - `"block"` -- delay `initialize()` until all modules are loaded (default).
- * - `"lazy"` -- register lazy wrappers that load modules on first use.
+ * - `"block"` -- delay `initialize()` until all modules are loaded.
+ * - `"lazy"` -- register lazy wrappers that load modules on first use (default).
  */
 export type GuardLoading = "block" | "lazy";
 
@@ -152,14 +152,14 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  * Router-level options for the guard router.
  *
  * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
- * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "block"`.
+ * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`.
  */
 export interface GuardRouterOptions {
 	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */
 	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
 	/** Strategy for evaluating guards on programmatic `navTo()` calls. Defaults to `"guard"`. */
 	navToPreflight?: NavToPreflightMode;
-	/** Strategy for loading manifest-declared guard modules. Defaults to `"block"`. */
+	/** Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`. */
 	guardLoading?: GuardLoading;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
