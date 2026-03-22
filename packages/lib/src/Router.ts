@@ -1648,45 +1648,80 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Register lazy wrapper functions that load guard modules on first use.
-	 * The wrapper calls `sap.ui.require(path)` synchronously first (returns
-	 * the cached module if already loaded), then falls back to async loading.
+	 *
+	 * Cherry-picked descriptors (with exportKey) get one lazy wrapper each.
+	 * Bare-path descriptors try a sync cache probe first; if the module is
+	 * cached (preload likely finished), all guards are expanded immediately.
+	 * On cache miss, a single "expander" wrapper loads the module on first
+	 * navigation, registers remaining guards, and executes the first.
 	 */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
-			const { modulePath } = descriptor;
-			const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
-				const cached = sap.ui.require(modulePath) as GuardFn | undefined;
-				if (cached) {
-					if (typeof cached !== "function") {
-						Log.warning(
-							`guardRouter.guards: module "${modulePath}" did not export a function, skipping`,
-							undefined,
-							LOG_COMPONENT,
-						);
-						return true;
+			const { modulePath, exportKey, name } = descriptor;
+
+			if (exportKey !== undefined) {
+				// Cherry-picked: one lazy wrapper, resolves to exactly one guard
+				const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+					const cached = sap.ui.require(modulePath) as unknown;
+					if (cached !== undefined) {
+						const exports = resolveModuleExports(cached, modulePath, name, exportKey);
+						if (exports.length === 0) return true;
+						return exports[0].fn(context);
 					}
-					return cached(context);
+					return new Promise<GuardResult>((resolve, reject) => {
+						sap.ui.require(
+							[modulePath],
+							(mod: unknown) => {
+								const exports = resolveModuleExports(mod, modulePath, name, exportKey);
+								if (exports.length === 0) {
+									resolve(true);
+									return;
+								}
+								resolve(exports[0].fn(context));
+							},
+							reject,
+						);
+					});
+				};
+				this._registerGuardFromDescriptor(descriptor, lazyGuard);
+				continue;
+			}
+
+			// Bare-path: try sync expansion from cache (preload likely finished)
+			const cached = sap.ui.require(modulePath) as unknown;
+			if (cached !== undefined) {
+				const exports = resolveModuleExports(cached, modulePath, name);
+				for (const exp of exports) {
+					this._registerGuardFromDescriptor(descriptor, exp.fn);
 				}
+				continue;
+			}
+
+			// Cache miss: register an expander that loads, expands once, and runs guard[0]
+			let expanded = false;
+			const lazyExpander = (context: GuardContext): PromiseLike<GuardResult> => {
 				return new Promise<GuardResult>((resolve, reject) => {
 					sap.ui.require(
 						[modulePath],
-						(fn: GuardFn) => {
-							if (typeof fn !== "function") {
-								Log.warning(
-									`guardRouter.guards: module "${modulePath}" did not export a function, skipping`,
-									undefined,
-									LOG_COMPONENT,
-								);
+						(mod: unknown) => {
+							const exports = resolveModuleExports(mod, modulePath, name);
+							if (exports.length === 0) {
 								resolve(true);
 								return;
 							}
-							resolve(fn(context));
+							if (!expanded) {
+								expanded = true;
+								for (let i = 1; i < exports.length; i++) {
+									this._registerGuardFromDescriptor(descriptor, exports[i].fn);
+								}
+							}
+							resolve(exports[0].fn(context));
 						},
 						reject,
 					);
 				});
 			};
-			this._registerGuardFromDescriptor(descriptor, lazyGuard);
+			this._registerGuardFromDescriptor(descriptor, lazyExpander);
 		}
 	}
 
