@@ -209,11 +209,14 @@ a newer navigation started, the stale result is discarded.
    hash would be cleared before `parse()` can check it, causing a double navigation.
    A QUnit test validates this assumption.
 
-3. **Redirect targets bypass guards.** When a guard redirects from route A to route B,
-   the router enters the committing/redirect phase before calling `navTo`. The
-   re-entrant `parse()` sees the committing phase and skips all guard evaluation.
-   This prevents infinite loops but means route B's guards are **not** evaluated
-   during a redirect. Design guard chains accordingly.
+3. **Redirect targets are evaluated by the guard pipeline with loop detection.**
+   When a guard redirects from route A to route B, the router evaluates route B's
+   guards (skipping leave guards via `skipLeaveGuards`) before committing. If route B
+   also redirects, the chain continues recursively. A visited-set tracks hashes
+   already evaluated in the current chain: revisiting a hash triggers loop detection
+   and blocks the navigation. A `MAX_REDIRECT_DEPTH` cap of 10 hops guards against
+   unbounded chains with unique hashes. Both safeguards log an error and settle the
+   navigation as `Blocked`.
 
 ## Two-Entry-Point Model: navTo() Preflight + parse() Fallback
 
@@ -309,8 +312,9 @@ After guards complete, the result is applied inline:
 | `false`                     | `_blockNavigation()` → restore previous hash                |
 | `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true`               |
 
-Redirects enter the committing/redirect phase before calling `navTo()`, causing the
-re-entrant `parse()` to bypass all guards and commit immediately.
+Redirects evaluate the full guard pipeline on the target route (with `skipLeaveGuards`)
+before committing. Loop detection (visited-set + `MAX_REDIRECT_DEPTH` cap) prevents
+infinite chains.
 
 ## Async Concurrency Control
 

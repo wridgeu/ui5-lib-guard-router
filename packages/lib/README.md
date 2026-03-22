@@ -539,30 +539,22 @@ See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a
 
 ## Limitations
 
-### Redirect targets bypass guards
+### Redirect chains evaluate guards with loop detection
 
-When a guard redirects navigation from route A to route B, route B's guards are **not** evaluated. The redirect commits immediately.
+When a guard redirects navigation from route A to route B, the router evaluates route B's guards before committing. If route B also redirects, the chain continues. Leave guards are skipped on redirect hops (they only run on the first navigation), but global and route-specific enter guards run on every hop.
 
-This matters when the redirect target has its own guards. For example:
+Two safeguards prevent infinite loops:
+
+- **Visited-set detection**: The router tracks every hash evaluated in the current chain. Revisiting a hash is treated as a loop and blocks the navigation.
+- **Depth cap (`MAX_REDIRECT_DEPTH = 10`)**: Chains that exceed 10 hops are blocked, even if every hash is unique. This guards against unbounded chains with parameterized routes.
+
+Both safeguards log an error and settle the navigation as `Blocked`.
 
 ```
 User navigates to "dashboard"
   → dashboard guard checks permissions, returns "profile"
-  → profile guard checks onboarding status ← this guard is SKIPPED
-  → profile view renders
-```
-
-This is intentional. Evaluating guards on redirect targets introduces the risk of infinite loops (`A → B → A → B → ...`). While solvable with a visited-set that detects cycles, the implementation adds significant complexity. This is particularly true when redirect targets have **async** guards, since the redirect chain can no longer be bracketed in a single synchronous call stack. The chain state must then persist across async boundaries and be cleared only by terminal events (commit, block, or loop detection).
-
-In practice, redirect targets are typically "safe" routes like `home` or `login` that don't have guards of their own. If you need guard logic on a redirect target, run the check inline before returning the redirect:
-
-```typescript
-router.addRouteGuard("dashboard", (context) => {
-	if (!hasPermission()) {
-		return isOnboarded() ? "profile" : "onboarding";
-	}
-	return true;
-});
+  → profile guard checks onboarding status ← this guard RUNS
+  → onboarding guard allows → onboarding view renders
 ```
 
 ### History guarantees differ by navigation source
@@ -657,6 +649,9 @@ Or set the global log level via URL parameter (per-component filtering is only a
 | warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
 | warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
 | warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
+| error   | `Guard redirect loop detected: {visited hashes}`                                    | A redirect chain revisited a hash already evaluated in the current chain                            |
+| error   | `Guard redirect chain exceeded maximum depth ({N}): {visited hashes}`               | A redirect chain exceeded the `MAX_REDIRECT_DEPTH` cap (10 hops)                                   |
+| error   | `Guard pipeline failed during redirect chain for "{route}", blocking navigation`    | Async guard pipeline rejected while evaluating a redirect target                                    |
 | error   | `Guard pipeline failed for "{hash}", blocking navigation`                           | Async guard pipeline rejected in `parse()` fallback path                                            |
 | error   | `Async preflight guard failed for route "{route}", blocking navigation`             | Async guard pipeline rejected in `navTo()` preflight path                                           |
 | error   | `Enter guard [{n}] on route "{route}" threw, blocking navigation`                   | Sync or async enter guard threw an exception                                                        |
@@ -666,7 +661,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Common issues
 
-**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. If the guard is on a redirect target, it does not run -- see [Redirect targets bypass guards](#redirect-targets-bypass-guards).
+**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains evaluate guards with loop detection](#redirect-chains-evaluate-guards-with-loop-detection).
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
 
