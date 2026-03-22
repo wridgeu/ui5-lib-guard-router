@@ -174,6 +174,156 @@ function parseGuardEntry(
 	return { modulePath, name, exportKey };
 }
 
+interface ResolvedGuardExport {
+	readonly name: string;
+	readonly fn: GuardFn;
+}
+
+/**
+ * Detect the export shape of a loaded guard module and extract guard functions.
+ *
+ * Shapes:
+ * - function        → single guard
+ * - Array           → ordered guards (non-functions warned and skipped)
+ * - plain object    → named guards in key order (non-functions warned and skipped)
+ *
+ * When `exportKey` is set, only the matching export is returned.
+ * When `exportKey` is set on a function export, the key is ignored with a debug warning.
+ */
+function resolveModuleExports(
+	moduleExport: unknown,
+	modulePath: string,
+	descriptorName: string,
+	exportKey?: string,
+): ResolvedGuardExport[] {
+	const moduleName = modulePath.split("/").pop() ?? modulePath;
+
+	// Shape 1: function
+	if (typeof moduleExport === "function") {
+		if (exportKey !== undefined) {
+			Log.debug(
+				`guardRouter.guards: "${modulePath}#${exportKey}" exports a single function, ignoring export key`,
+				undefined,
+				LOG_COMPONENT,
+			);
+		}
+		return [{ name: descriptorName, fn: moduleExport as GuardFn }];
+	}
+
+	// Shape 2: array
+	if (Array.isArray(moduleExport)) {
+		if (moduleExport.length === 0) {
+			Log.warning(
+				`guardRouter.guards: module "${modulePath}" exported an empty array, skipping`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			return [];
+		}
+
+		if (exportKey !== undefined) {
+			const index = parseInt(exportKey, 10);
+			if (Number.isNaN(index) || index < 0 || index >= moduleExport.length) {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" - index out of range or invalid, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			const entry = moduleExport[index] as unknown;
+			if (typeof entry !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
+		}
+
+		const results: ResolvedGuardExport[] = [];
+		for (let i = 0; i < moduleExport.length; i++) {
+			const entry = moduleExport[i] as unknown;
+			if (typeof entry !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}"[${i}] is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
+		}
+		return results;
+	}
+
+	// Shape 3: plain object
+	if (isRecord(moduleExport)) {
+		const entries = Object.entries(moduleExport);
+		if (entries.length === 0) {
+			Log.warning(
+				`guardRouter.guards: module "${modulePath}" exported an empty object, skipping`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			return [];
+		}
+
+		if (exportKey !== undefined) {
+			let value: unknown = moduleExport[exportKey];
+			let resolvedName = exportKey;
+			if (value === undefined) {
+				const index = parseInt(exportKey, 10);
+				if (!Number.isNaN(index) && index >= 0 && index < entries.length) {
+					const [key, val] = entries[index];
+					value = val;
+					resolvedName = key;
+				}
+			}
+			if (value === undefined) {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" - key not found, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			if (typeof value !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			return [{ name: resolvedName, fn: value as GuardFn }];
+		}
+
+		const results: ResolvedGuardExport[] = [];
+		for (const [key, value] of entries) {
+			if (typeof value !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}".${key} is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			results.push({ name: key, fn: value as GuardFn });
+		}
+		return results;
+	}
+
+	Log.warning(
+		`guardRouter.guards: module "${modulePath}" did not export a function, array, or plain object, skipping`,
+		undefined,
+		LOG_COMPONENT,
+	);
+	return [];
+}
+
 /**
  * Parse the `guards` block from the guardRouter config into an array of
  * {@link GuardDescriptor} objects.
@@ -1435,20 +1585,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
 		const promises = descriptors.map((descriptor) => {
-			return new Promise<GuardFn | null>((resolve) => {
+			return new Promise<{ descriptor: GuardDescriptor; moduleExport: unknown }>((resolve) => {
 				sap.ui.require(
 					[descriptor.modulePath],
-					(guardFn: unknown) => {
-						if (typeof guardFn !== "function") {
-							Log.warning(
-								`guardRouter.guards: module "${descriptor.modulePath}" did not export a function, skipping`,
-								undefined,
-								LOG_COMPONENT,
-							);
-							resolve(null);
-							return;
-						}
-						resolve(guardFn as GuardFn);
+					(moduleExport: unknown) => {
+						resolve({ descriptor, moduleExport });
 					},
 					(err: Error) => {
 						Log.warning(
@@ -1456,23 +1597,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 							String(err),
 							LOG_COMPONENT,
 						);
-						resolve(null);
+						resolve({ descriptor, moduleExport: null });
 					},
 				);
 			});
 		});
-		return Promise.all(promises).then((modules) => {
-			for (let i = 0; i < descriptors.length; i++) {
-				const guardFn = modules[i];
-				if (guardFn === null) continue;
-				try {
-					this._registerGuardFromDescriptor(descriptors[i], guardFn);
-				} catch (err: unknown) {
-					Log.error(
-						`guardRouter.guards: failed to register "${descriptors[i].modulePath}"`,
-						String(err),
-						LOG_COMPONENT,
-					);
+		return Promise.all(promises).then((results) => {
+			for (const { descriptor, moduleExport } of results) {
+				if (moduleExport === null) continue;
+				const exports = resolveModuleExports(
+					moduleExport,
+					descriptor.modulePath,
+					descriptor.name,
+					descriptor.exportKey,
+				);
+				for (const { fn } of exports) {
+					try {
+						this._registerGuardFromDescriptor(descriptor, fn);
+					} catch (err: unknown) {
+						Log.error(
+							`guardRouter.guards: failed to register "${descriptor.modulePath}"`,
+							String(err),
+							LOG_COMPONENT,
+						);
+					}
 				}
 			}
 		});
