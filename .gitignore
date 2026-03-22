@@ -30,3 +30,6 @@ NUL
 
 # wdio
 allure-results/
+
+# Git worktrees
+.worktrees/
