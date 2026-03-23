@@ -77,6 +77,10 @@ export interface GuardContext {
 	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
+	/** Resolved metadata for the target route (manifest defaults merged with runtime overrides, frozen). */
+	toMeta: Readonly<Record<string, unknown>>;
+	/** Resolved metadata for the current route (manifest defaults merged with runtime overrides, frozen). */
+	fromMeta: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -198,6 +202,12 @@ export interface GuardRouterOptions {
 	guardLoading?: GuardLoading;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
+	/**
+	 * Per-route metadata declarations indexed by route name.
+	 * Values are arbitrary key-value objects that the router stores but never interprets.
+	 * Surfaced on `GuardContext` as `toMeta` and `fromMeta`.
+	 */
+	routeMeta?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -346,6 +356,23 @@ export interface GuardRouter extends MobileRouter {
 	 * @since 1.0.1
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	/**
+	 * Get resolved metadata for a route.
+	 * Returns manifest defaults shallow-merged with runtime overrides.
+	 * Returns an empty frozen object for unknown or unconfigured routes.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 */
+	getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
+	/**
+	 * Set runtime metadata for a route, replacing any previous runtime metadata.
+	 * Does not affect manifest defaults -- runtime values take precedence on read.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param meta - Metadata object. The router stores but never interprets it.
+	 * @returns `this` for chaining.
+	 */
+	setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 	/**
 	 * Resolve when the current guard pipeline settles.
 	 *
