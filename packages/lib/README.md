@@ -27,6 +27,9 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
+> [!NOTE]
+> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~25 KB).
+
 ### TypeScript
 
 Add the library to `compilerOptions.types` so TypeScript can resolve the type declarations. If your app does not already depend on UI5 typings, install them too (`@sapui5/types` works as well):
