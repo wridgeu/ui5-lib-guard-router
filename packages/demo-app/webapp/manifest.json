@@ -76,9 +76,7 @@
 						"*": ["guards.navigationLogger"],
 						"blocked": ["guards.blockedGuard"],
 						"forbidden": ["guards.forbiddenGuard"],
-						"admin": ["guards.adminGuard"],
 						"protected": {
-							"enter": ["guards.protectedGuard"],
 							"leave": ["guards.dirtyFormGuard"]
 						}
 					}
