@@ -27,6 +27,9 @@ This library solves all three by intercepting at the router level, before any ro
 npm install ui5-lib-guard-router
 ```
 
+> [!NOTE]
+> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~25 KB).
+
 ### TypeScript
 
 Add the library to `compilerOptions.types` so TypeScript can resolve the type declarations. If your app does not already depend on UI5 typings, install them too (`@sapui5/types` works as well):
@@ -215,14 +218,15 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                                       |
-| ------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)                             |
-| `toHash`      | `string`                                           | Raw hash being navigated to                                       |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                           |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                    |
-| `fromHash`    | `string`                                           | Current hash                                                      |
-| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()` |
+| Property      | Type                                               | Description                                                               |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `toRoute`     | `string`                                           | Target route name (empty if no match)                                     |
+| `toHash`      | `string`                                           | Raw hash being navigated to                                               |
+| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                   |
+| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                            |
+| `fromHash`    | `string`                                           | Current hash                                                              |
+| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`         |
+| `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one pipeline run |
 
 ### Return values (`GuardResult`)
 
@@ -347,12 +351,242 @@ router.attachNavigationSettled((event) => {
 
 Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works.
 
+### Error handling
+
+When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. This is distinct from `Blocked` (intentional denial) — `Error` indicates an unexpected failure.
+
 ### Execution order
 
 1. **Leave guards** for the current route (registration order)
 2. **Global enter guards** (registration order)
 3. **Route-specific enter guards** for the target (registration order)
 4. Pipeline **short-circuits** at the first non-`true` result
+
+Each phase short-circuits on the first non-`true` result. If a leave guard blocks, no enter guards run. If a global guard redirects, route-specific guards are skipped.
+
+## Manifest Configuration
+
+Guards can be declared directly in `manifest.json` using the `guardRouter` block inside `sap.ui5.routing.config`. This eliminates boilerplate in `Component.ts` for common guard patterns.
+
+```json
+{
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"guardRouter": {
+					"unknownRouteGuardRegistration": "warn",
+					"navToPreflight": "guard",
+					"guardLoading": "lazy",
+					"guards": {
+						"*": ["guards.authGuard"],
+						"admin": {
+							"enter": ["guards.adminGuard"],
+							"leave": ["guards.unsavedChangesGuard"]
+						}
+					}
+				}
+			}
+		}
+	}
+}
+```
+
+### Router options
+
+| Option                          | Values                              | Default   | Description                                                                                                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
+| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
+| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
+
+### Declarative guards
+
+The `guards` map wires guard modules to routes without writing code in `Component.ts`.
+
+**Global guards** run on every navigation and are declared under the `"*"` key:
+
+```json
+"guards": {
+	"*": ["guards.authGuard"]
+}
+```
+
+**Per-route guards** use the route name as the key. The shorthand array form registers enter guards only:
+
+```json
+"guards": {
+	"admin": ["guards.adminGuard"]
+}
+```
+
+The full object form with `enter` and `leave` keys registers both enter and leave guards:
+
+```json
+"guards": {
+	"admin": {
+		"enter": ["guards.adminGuard"],
+		"leave": ["guards.unsavedChangesGuard"]
+	}
+}
+```
+
+**Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
+
+To use an absolute module path, prefix it with `"module:"`:
+
+```json
+"*": ["module:com/shared/guards/authGuard"]
+```
+
+### Complete example
+
+manifest.json:
+
+```json
+{
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"guardRouter": {
+					"guards": {
+						"*": ["guards.authGuard"],
+						"admin": { "enter": ["guards.roleGuard"], "leave": ["guards.unsavedGuard"] }
+					}
+				}
+			}
+		}
+	}
+}
+```
+
+guards/authGuard.ts:
+
+```typescript
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default function authGuard(context: GuardContext): GuardResult {
+	if (!isAuthenticated()) return "login";
+	return true;
+}
+```
+
+The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
+
+### Guard module format
+
+Each entry in the guard array is a module whose default export is one of three shapes:
+
+**Shape 1: Function (single guard)**
+
+```typescript
+// guards/auth.ts
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default function authGuard(context: GuardContext): GuardResult {
+	return isAuthenticated() ? true : "login";
+}
+```
+
+**Shape 2: Array (ordered guards)**
+
+```typescript
+// guards/checks.ts — registered as "checks#0", "checks#1"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default [
+	function checkAuth(context: GuardContext): GuardResult {
+		return true;
+	},
+	function checkRole(context: GuardContext): GuardResult {
+		return false;
+	},
+];
+```
+
+**Shape 3: Plain Object (named guards)**
+
+```typescript
+// guards/security.ts — registered as "checkAuth", "checkRole"
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export default {
+	checkAuth(context: GuardContext): GuardResult {
+		/* ... */ return true;
+	},
+	checkRole(context: GuardContext): GuardResult {
+		/* ... */ return false;
+	},
+};
+```
+
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+
+### Cherry-pick syntax
+
+When a module exports multiple guards, you can register a subset using `#` to select by name or index:
+
+```json
+{
+	"guards": {
+		"admin": ["guards.security#checkAuth", "guards.security#checkRole"],
+		"dashboard": ["guards.security"],
+		"settings": ["guards.checks#1"],
+		"*": ["guards.logging"]
+	}
+}
+```
+
+| Syntax                               | Behavior                                      |
+| ------------------------------------ | --------------------------------------------- |
+| `"guards.security"`                  | Register all exports (key/array order)        |
+| `"guards.security#checkAuth"`        | Register only that named export               |
+| `"guards.security#1"`                | Register by index (array or object key order) |
+| `"module:some.lib.guards#checkAuth"` | `module:` prefix composes with `#`            |
+
+When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
+
+### Guard context `bag`
+
+Guards in the same pipeline can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
+
+```typescript
+export default function firstGuard(context: GuardContext): GuardResult {
+	context.bag.set("userId", getCurrentUserId());
+	return true;
+}
+
+export default function secondGuard(context: GuardContext): GuardResult {
+	const userId = context.bag.get("userId") as string | undefined;
+	if (!userId) return "login";
+	return true;
+}
+```
+
+The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This matches how UI5 handles untyped model data (`getProperty()` returns `any`) and avoids generic complexity that can't flow through UI5's class system.
+
+This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
+
+### `skipGuards` option
+
+Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
+
+```typescript
+router.navTo("settings", {}, false, { skipGuards: true });
+```
+
+### Mixing declarative and programmatic guards
+
+Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
+
+**Execution order:** manifest guards run first (in declaration order), then programmatic guards (in registration order). For the same route, both sets execute — they are additive, not exclusive.
+
+A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
+
+- **Manifest:** guards that don't need component state (simple blocks, redirects, logging)
+- **Programmatic:** guards that close over models, services, or runtime state
+- **Controller-level:** guards tied to a specific view's lifecycle (registered in `onInit`, removed in `onExit`)
 
 ## Examples
 
@@ -412,7 +646,7 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 
 ### Object form with RouteGuardConfig
 
-The runnable demo uses the same object form in `packages/demo-app/webapp/Component.ts`, pairing an async permission check with a leave guard on the `protected` route.
+The object form is useful when registering both enter and leave guards for the same route in a single call:
 
 ```typescript
 import type { RouteGuardConfig } from "ui5/guard/router/types";
@@ -638,31 +872,6 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 > **Note**: UI5 1.120+ uses kebab-case URL parameters (`sap-ui-log-level`). Older versions use camelCase (`sap-ui-logLevel`).
 
-### Log reference
-
-| Level   | Message                                                                             | Trigger                                                                                             |
-| ------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| warning | `addGuard called with invalid guard, ignoring`                                      | Non-function passed to `addGuard()`                                                                 |
-| warning | `addRouteGuard called with invalid guard, ignoring`                                 | Non-function `beforeEnter`, `beforeLeave`, or direct guard                                          |
-| info    | `addRouteGuard called with config missing both beforeEnter and beforeLeave`         | Empty `RouteGuardConfig` object (no handlers)                                                       |
-| warning | `addLeaveGuard called with invalid guard, ignoring`                                 | Non-function passed to `addLeaveGuard()`                                                            |
-| warning | `removeGuard called with invalid guard, ignoring`                                   | Non-function passed to `removeGuard()`                                                              |
-| warning | `removeRouteGuard called with invalid guard, ignoring`                              | Non-function passed to `removeRouteGuard()`                                                         |
-| warning | `removeLeaveGuard called with invalid guard, ignoring`                              | Non-function passed to `removeLeaveGuard()`                                                         |
-| warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time                                                           |
-| warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
-| warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
-| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
-| error   | `Guard redirect loop detected: {visited hashes}`                                    | A redirect chain revisited a hash already evaluated in the current chain                            |
-| error   | `Guard redirect chain exceeded maximum depth ({N}): {visited hashes}`               | A redirect chain exceeded the depth cap (10 hops)                                                   |
-| error   | `Guard pipeline failed during redirect chain for "{route}", blocking navigation`    | Async guard pipeline rejected while evaluating a redirect target                                    |
-| error   | `Guard pipeline failed for "{hash}", navigation failed`                             | Async guard pipeline rejected in `parse()` fallback path                                            |
-| error   | `Async preflight guard failed for route "{route}", navigation failed`               | Async guard pipeline rejected in `navTo()` preflight path                                           |
-| error   | `Enter guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async enter guard threw an exception                                                        |
-| error   | `Leave guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async leave guard threw an exception                                                        |
-| debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
-| debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |
-
 ### Common issues
 
 **Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains](#redirect-chains).
@@ -670,6 +879,8 @@ Or set the global log level via URL parameter (per-component filtering is only a
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
 
 **Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong, but a same-hash no-op can look similar. The router logs the target name so you can verify the route and parameters.
+
+**Async guard hangs indefinitely**: `context.signal` only aborts on supersede or router stop/destroy, not on "too slow." If a guard's `fetch` targets a dead endpoint, the navigation stays in the evaluating phase forever. Combine `context.signal` with `AbortSignal.timeout()` to enforce a hard deadline: `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`. See the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout) for the full example and a compatibility fallback for older browsers.
 
 **Async guard result discarded**: A newer navigation started before the async guard resolved. The router uses a generation counter to discard stale results. This is expected behavior during rapid sequential navigations. The debug log confirms when this occurs.
 

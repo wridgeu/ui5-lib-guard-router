@@ -2,18 +2,26 @@ import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
 import RuntimeCoordinator from "./demo/RuntimeCoordinator";
-import {
-	blockedGuard,
-	createNavigationLogger,
-	createAsyncPermissionGuard,
-	createDirtyFormGuard,
-	forbiddenGuard,
-	adminGuard,
-} from "./guards";
+import { adminGuard, createAsyncPermissionGuard } from "./guards";
 import { createRuntimeModel } from "./model/runtime";
 
 /**
- * Demo application component showcasing guard registration patterns.
+ * Demo application component showcasing both declarative and programmatic
+ * guard patterns side by side.
+ *
+ * **Declarative** (manifest.json `guardRouter.guards`):
+ * - Global navigation logger (`"*"`)
+ * - `blocked` and `forbidden` enter guards (shorthand array syntax)
+ * - `protected` leave guard (object form with `leave`)
+ *
+ * **Programmatic** (registered here in `init()`):
+ * - `admin` redirect guard -- demonstrates `addRouteGuard()` with a sync function
+ * - `protected` enter guard -- demonstrates `addRouteGuard()` with an async
+ *   permission check that closes over the auth model (not possible declaratively)
+ *
+ * **Controller-level** (Home.controller.ts):
+ * - Home leave logger -- demonstrates dynamic registration/removal via
+ *   `addLeaveGuard()` / `removeLeaveGuard()` tied to controller lifecycle
  *
  * @namespace demo.app
  */
@@ -23,33 +31,26 @@ export default class Component extends UIComponent {
 		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 
-	private _navigationLogger: GuardFn | null = null;
-
 	private _runtimeCoordinator: RuntimeCoordinator | null = null;
+	private _permissionGuard: GuardFn | null = null;
 
 	override init(): void {
 		super.init();
 
 		const router = this.getRouter() as GuardRouter;
-		const authModel = this.getModel("auth") as JSONModel;
 		const runtimeModel = createRuntimeModel();
 		const formModel = new JSONModel({ isDirty: false });
 
 		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
-		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);
-
-		this._navigationLogger = createNavigationLogger();
-		router.addGuard(this._navigationLogger);
-
-		router.addRouteGuard("blocked", blockedGuard);
-		router.addRouteGuard("forbidden", forbiddenGuard);
+		// Programmatic guards: these need component context (model access)
+		// that declarative manifest guards don't have via closure.
 		router.addRouteGuard("admin", adminGuard);
-		router.addRouteGuard("protected", {
-			beforeEnter: createAsyncPermissionGuard(authModel),
-			beforeLeave: createDirtyFormGuard(formModel),
-		});
+		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
+		router.addRouteGuard("protected", this._permissionGuard);
+
+		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);
 
 		router.initialize();
 		this._runtimeCoordinator.start(router);
@@ -58,11 +59,7 @@ export default class Component extends UIComponent {
 	override destroy(): void {
 		this._runtimeCoordinator?.destroy();
 		this._runtimeCoordinator = null;
-
-		if (this._navigationLogger) {
-			(this.getRouter() as GuardRouter).removeGuard(this._navigationLogger);
-			this._navigationLogger = null;
-		}
+		this._permissionGuard = null;
 
 		super.destroy();
 	}

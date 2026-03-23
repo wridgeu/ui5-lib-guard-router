@@ -69,6 +69,17 @@
 				"controlAggregation": "pages",
 				"bypassed": {
 					"target": "notFound"
+				},
+				"guardRouter": {
+					"unknownRouteGuardRegistration": "warn",
+					"guards": {
+						"*": ["guards.navigationLogger"],
+						"blocked": ["guards.blockedGuard"],
+						"forbidden": ["guards.forbiddenGuard"],
+						"protected": {
+							"leave": ["guards.dirtyFormGuard"]
+						}
+					}
 				}
 			},
 			"routes": [

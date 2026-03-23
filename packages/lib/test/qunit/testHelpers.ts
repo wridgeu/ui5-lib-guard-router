@@ -14,6 +14,35 @@ export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
+export function createRouter(): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+			{ name: "detail", pattern: "detail/{id}" },
+		],
+		{
+			async: true,
+		},
+	);
+}
+
+export function createRouterWithOptions(guardRouter: Record<string, unknown>): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+			{ name: "detail", pattern: "detail/{id}" },
+		],
+		{
+			async: true,
+			guardRouter,
+		} as object,
+	);
+}
+
 function getRouterMethod(router: GuardRouter, methodName: string): (...args: unknown[]) => unknown {
 	const method = Reflect.get(router, methodName);
 	if (typeof method !== "function") {
@@ -130,21 +159,20 @@ export function getHash(): string {
 }
 
 /**
- * Capture `Log.warning` calls during `fn`, restoring the original in a
- * `finally` block so the stub never leaks to subsequent tests.
+ * Capture `Log.warning` calls during `fn` using a Sinon stub.
+ * The stub is restored automatically via `finally` to prevent leaks.
  */
 export function captureWarnings(fn: () => void): CapturedWarning[] {
-	const warnings: CapturedWarning[] = [];
-	const original = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
+	const stub = sinon.stub(Log, "warning");
 	try {
 		fn();
 	} finally {
-		Log.warning = original;
+		stub.restore();
 	}
-	return warnings;
+	return stub.getCalls().map((call) => ({
+		message: call.args[0] as string,
+		details: call.args[1] as string | undefined,
+	}));
 }
 
 /**
@@ -152,17 +180,16 @@ export function captureWarnings(fn: () => void): CapturedWarning[] {
  * the capture window.
  */
 export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedWarning[]> {
-	const warnings: CapturedWarning[] = [];
-	const original = Log.warning;
-	Log.warning = (message: string, details?: string) => {
-		warnings.push({ message, details });
-	};
+	const stub = sinon.stub(Log, "warning");
 	try {
 		await fn();
 	} finally {
-		Log.warning = original;
+		stub.restore();
 	}
-	return warnings;
+	return stub.getCalls().map((call) => ({
+		message: call.args[0] as string,
+		details: call.args[1] as string | undefined,
+	}));
 }
 
 /**

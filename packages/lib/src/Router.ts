@@ -5,12 +5,18 @@ import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
 	GuardContext,
+	GuardNavToOptions,
+	GuardResult,
 	GuardRedirect,
 	GuardRouter,
+	GuardLoading,
 	LeaveGuardFn,
+	ManifestRouteGuardConfig,
+	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
+	UnknownRouteGuardRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision } from "./GuardPipeline";
@@ -65,6 +71,339 @@ type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
 
 const IDLE: PhaseIdle = { kind: "idle" };
 
+/** Type guard for plain objects. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
+}
+
+function isUnknownRouteGuardRegistrationPolicy(v: unknown): v is UnknownRouteGuardRegistrationPolicy {
+	return v === "ignore" || v === "warn" || v === "throw";
+}
+
+function isNavToPreflightMode(v: unknown): v is NavToPreflightMode {
+	return v === "guard" || v === "bypass" || v === "off";
+}
+
+function isGuardLoading(v: unknown): v is GuardLoading {
+	return v === "block" || v === "lazy";
+}
+
+/** Parsed guard declaration from the manifest `guards` block. */
+interface GuardDescriptor {
+	readonly route: string; // "*" for global, route name for per-route
+	readonly type: "enter" | "leave";
+	readonly modulePath: string;
+	readonly name: string;
+	readonly exportKey?: string;
+}
+
+/**
+ * Resolve a dot-notation module path following UI5 routing conventions.
+ * Mirrors `sap.ui.core.routing.Target._getEffectiveObjectName()`.
+ *
+ * - Paths prefixed with `"module:"` are treated as absolute (the prefix is
+ *   stripped and dots become slashes).
+ * - All other paths are prefixed with the component namespace.
+ */
+function resolveGuardModulePath(dotPath: string, componentNamespace: string): string {
+	if (dotPath.startsWith("module:")) {
+		return dotPath.slice("module:".length).replace(/\./g, "/");
+	}
+	const fullDotPath = componentNamespace ? componentNamespace + "." + dotPath : dotPath;
+	return fullDotPath.replace(/\./g, "/");
+}
+
+/**
+ * Split a manifest guard entry on the first `#` to separate the module path
+ * from an optional export key, then derive a human-readable guard name.
+ */
+function parseGuardEntry(
+	entry: string,
+	componentNamespace: string,
+): { modulePath: string; name: string; exportKey?: string } {
+	const hashIndex = entry.indexOf("#");
+	const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex);
+	const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1);
+
+	const modulePath = resolveGuardModulePath(rawPath, componentNamespace);
+
+	// Name: export key if present, otherwise last segment of the dot path
+	const lastSegment = rawPath.split(".").pop() ?? rawPath;
+	const name = exportKey ?? lastSegment;
+
+	return { modulePath, name, exportKey };
+}
+
+interface ResolvedGuardExport {
+	readonly name: string;
+	readonly fn: GuardFn;
+}
+
+/**
+ * Detect the export shape of a loaded guard module and extract guard functions.
+ *
+ * Shapes:
+ * - function        → single guard
+ * - Array           → ordered guards (non-functions warned and skipped)
+ * - plain object    → named guards in key order (non-functions warned and skipped)
+ *
+ * When `exportKey` is set, only the matching export is returned.
+ * When `exportKey` is set on a function export, the key is ignored with a debug warning.
+ */
+function resolveModuleExports(
+	moduleExport: unknown,
+	modulePath: string,
+	descriptorName: string,
+	exportKey?: string,
+): ResolvedGuardExport[] {
+	const moduleName = modulePath.split("/").pop() ?? modulePath;
+
+	// Shape 1: function
+	if (typeof moduleExport === "function") {
+		if (exportKey !== undefined) {
+			Log.debug(
+				`guardRouter.guards: "${modulePath}#${exportKey}" exports a single function, ignoring export key`,
+				undefined,
+				LOG_COMPONENT,
+			);
+		}
+		return [{ name: descriptorName, fn: moduleExport as GuardFn }];
+	}
+
+	// Shape 2: array
+	if (Array.isArray(moduleExport)) {
+		if (moduleExport.length === 0) {
+			Log.warning(
+				`guardRouter.guards: module "${modulePath}" exported an empty array, skipping`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			return [];
+		}
+
+		if (exportKey !== undefined) {
+			const index = parseInt(exportKey, 10);
+			if (Number.isNaN(index) || index < 0 || index >= moduleExport.length) {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" - index out of range or invalid, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			const entry = moduleExport[index] as unknown;
+			if (typeof entry !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
+		}
+
+		const results: ResolvedGuardExport[] = [];
+		for (let i = 0; i < moduleExport.length; i++) {
+			const entry = moduleExport[i] as unknown;
+			if (typeof entry !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}"[${i}] is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
+		}
+		return results;
+	}
+
+	// Shape 3: plain object
+	if (isRecord(moduleExport)) {
+		const entries = Object.entries(moduleExport);
+		if (entries.length === 0) {
+			Log.warning(
+				`guardRouter.guards: module "${modulePath}" exported an empty object, skipping`,
+				undefined,
+				LOG_COMPONENT,
+			);
+			return [];
+		}
+
+		if (exportKey !== undefined) {
+			let value: unknown = moduleExport[exportKey];
+			let resolvedName = exportKey;
+			if (value === undefined) {
+				const index = parseInt(exportKey, 10);
+				if (!Number.isNaN(index) && index >= 0 && index < entries.length) {
+					const [key, val] = entries[index];
+					value = val;
+					resolvedName = key;
+				}
+			}
+			if (value === undefined) {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" - key not found, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			if (typeof value !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				return [];
+			}
+			return [{ name: resolvedName, fn: value as GuardFn }];
+		}
+
+		const results: ResolvedGuardExport[] = [];
+		for (const [key, value] of entries) {
+			if (typeof value !== "function") {
+				Log.warning(
+					`guardRouter.guards: "${modulePath}".${key} is not a function, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			results.push({ name: key, fn: value as GuardFn });
+		}
+		return results;
+	}
+
+	Log.warning(
+		`guardRouter.guards: module "${modulePath}" did not export a function, array, or plain object, skipping`,
+		undefined,
+		LOG_COMPONENT,
+	);
+	return [];
+}
+
+/**
+ * Parse the `guards` block from the guardRouter config into an array of
+ * {@link GuardDescriptor} objects.
+ *
+ * Handles:
+ * - `"*"` key with `string[]` -> global enter guards
+ * - Route name with `string[]` (shorthand) -> enter guards
+ * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
+ * - `"*"` with object form -> warn, treat enter as global
+ * - `"*"` leave -> warn, skip (global leave guards not supported)
+ * - Invalid entries -> warn, skip
+ */
+function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
+	if (!isRecord(guards)) {
+		Log.warning("guardRouter.guards is not a plain object, skipping", JSON.stringify(guards), LOG_COMPONENT);
+		return [];
+	}
+
+	const descriptors: GuardDescriptor[] = [];
+
+	function pushEntries(entries: unknown[], route: string, type: "enter" | "leave", label: string): void {
+		for (const entry of entries) {
+			if (typeof entry !== "string" || entry.length === 0) {
+				Log.warning(
+					`guardRouter.guards${label}: invalid entry, skipping`,
+					JSON.stringify(entry),
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			const parsed = parseGuardEntry(entry, componentNamespace);
+			descriptors.push({ route, type, ...parsed });
+		}
+	}
+
+	for (const [key, value] of Object.entries(guards)) {
+		if (Array.isArray(value)) {
+			pushEntries(value, key, "enter", `["${key}"]`);
+		} else if (isRecord(value)) {
+			const config = value as ManifestRouteGuardConfig;
+
+			if (key === "*" && config.leave !== undefined) {
+				Log.warning(
+					'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
+					undefined,
+					LOG_COMPONENT,
+				);
+			}
+
+			if (key === "*" && config.enter === undefined && config.leave !== undefined) {
+				continue;
+			}
+
+			if (key === "*" && config.enter !== undefined) {
+				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
+			}
+
+			if (Array.isArray(config.enter)) {
+				pushEntries(config.enter, key, "enter", `["${key}"].enter`);
+			}
+
+			if (key !== "*" && Array.isArray(config.leave)) {
+				pushEntries(config.leave, key, "leave", `["${key}"].leave`);
+			}
+		} else {
+			Log.warning(
+				`guardRouter.guards["${key}"]: expected string[] or { enter?, leave? }, skipping`,
+				JSON.stringify(value),
+				LOG_COMPONENT,
+			);
+		}
+	}
+
+	return descriptors;
+}
+
+interface ResolvedGuardRouterOptions {
+	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
+	readonly navToPreflight: NavToPreflightMode;
+	readonly guardLoading: GuardLoading;
+}
+
+const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
+	unknownRouteGuardRegistration: "warn",
+	navToPreflight: "guard",
+	guardLoading: "lazy",
+};
+
+function applyOption<K extends keyof ResolvedGuardRouterOptions>(
+	raw: Record<string, unknown>,
+	key: K,
+	guard: (v: unknown) => v is ResolvedGuardRouterOptions[K],
+	target: { -readonly [P in keyof ResolvedGuardRouterOptions]: ResolvedGuardRouterOptions[P] },
+): void {
+	if (raw[key] !== undefined) {
+		if (guard(raw[key])) {
+			target[key] = raw[key] as ResolvedGuardRouterOptions[K];
+		} else {
+			Log.warning(`guardRouter.${key} has invalid value, using default`, JSON.stringify(raw[key]), LOG_COMPONENT);
+		}
+	}
+}
+
+function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
+	if (!isRecord(raw)) {
+		if (raw !== undefined) {
+			Log.warning("guardRouter config is not a plain object, using defaults", JSON.stringify(raw), LOG_COMPONENT);
+		}
+		return DEFAULT_OPTIONS;
+	}
+
+	const result = { ...DEFAULT_OPTIONS };
+	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
+	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
+	applyOption(raw, "guardLoading", isGuardLoading, result);
+	return result;
+}
+
 /** Maximum number of hops in a redirect chain before it is treated as a loop. */
 const MAX_REDIRECT_DEPTH = 10;
 
@@ -84,6 +423,8 @@ interface RedirectChainContext {
 	readonly signal: AbortSignal;
 	/** Shared generation counter from the original navigation. */
 	readonly generation: number;
+	/** Shared bag from the original navigation's guard context. */
+	readonly bag: Map<string, unknown>;
 }
 
 /**
@@ -111,6 +452,7 @@ interface RedirectChainContext {
  * @extends sap.m.routing.Router
  */
 export default class Router extends MobileRouter implements GuardRouter {
+	private _options: ResolvedGuardRouterOptions = DEFAULT_OPTIONS;
 	private _pipeline = new GuardPipeline();
 	private _currentRoute = "";
 	private _currentHash: string | null = null;
@@ -119,6 +461,75 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _suppressedHash: string | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
+	private _pendingGuardDescriptors: GuardDescriptor[] = [];
+	private _destroyed = false;
+
+	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
+		const [routes, config, owner, ...rest] = args;
+		const rawConfig = config as Record<string, unknown> | undefined;
+		const isRecordConfig = isRecord(rawConfig);
+		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
+		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
+		this._options = normalizeGuardRouterOptions(guardRouter);
+
+		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
+			let componentNamespace = "";
+			if (owner) {
+				const appConfig = owner.getManifestEntry("sap.app") as Record<string, unknown> | undefined;
+				if (isRecord(appConfig) && typeof appConfig.id === "string") {
+					componentNamespace = appConfig.id;
+				}
+			}
+			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
+
+			// Pattern 5: fire-and-forget preload hint (lazy mode only --
+			// block mode loads modules itself in initialize())
+			if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
+				const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
+				sap.ui.require(uniquePaths);
+			}
+		}
+	}
+
+	/**
+	 * Initialize the router. When manifest guards are declared and
+	 * `guardLoading` is `"block"`, module loading starts and
+	 * `super.initialize()` is deferred until all modules are loaded.
+	 * In `"lazy"` mode, lazy wrappers are registered synchronously
+	 * and `super.initialize()` is called immediately.
+	 *
+	 * @override sap.ui.core.routing.Router#initialize
+	 */
+	override initialize(): this {
+		if (this._pendingGuardDescriptors.length === 0) {
+			return super.initialize();
+		}
+
+		const descriptors = this._pendingGuardDescriptors;
+		this._pendingGuardDescriptors = [];
+
+		if (this._options.guardLoading === "lazy") {
+			this._registerLazyGuards(descriptors);
+			return super.initialize();
+		}
+
+		// "block" mode: load all modules, then initialize.
+		// Guard against destroy() being called while modules are still loading.
+		this._loadAndRegisterGuards(descriptors)
+			.then(() => {
+				if (!this._destroyed) super.initialize();
+			})
+			.catch((err: unknown) => {
+				if (this._destroyed) return;
+				Log.error(
+					"guardRouter.guards: module loading failed, initializing without manifest guards",
+					String(err),
+					LOG_COMPONENT,
+				);
+				super.initialize();
+			});
+		return this;
+	}
 
 	/**
 	 * Register a global guard that runs for every navigation.
@@ -156,14 +567,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
+			if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
+				return this;
+			}
 			let hasHandler = false;
-			this._warnIfRouteUnknown(routeName, "addRouteGuard");
 
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
@@ -196,7 +609,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addRouteGuard");
+		if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
+			return this;
+		}
 		this._pipeline.addEnterGuard(routeName, guard);
 		return this;
 	}
@@ -237,7 +652,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. A warning is logged if the route does not exist yet.
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 */
@@ -246,20 +661,38 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		this._warnIfRouteUnknown(routeName, "addLeaveGuard");
+		if (!this._handleUnknownRouteRegistration(routeName, "addLeaveGuard")) {
+			return this;
+		}
 		this._pipeline.addLeaveGuard(routeName, guard);
 		return this;
 	}
 
-	private _warnIfRouteUnknown(routeName: string, methodName: "addRouteGuard" | "addLeaveGuard"): void {
-		if (this.getRoute(routeName)) {
-			return;
+	/**
+	 * Handle guard registration for a potentially unknown route.
+	 * Returns `true` if registration should proceed, `false` if not.
+	 */
+	private _handleUnknownRouteRegistration(routeName: string, methodName: string): boolean {
+		if (this.getRoute(routeName)) return true;
+
+		switch (this._options.unknownRouteGuardRegistration) {
+			case "ignore":
+				return true;
+			case "throw":
+				throw new Error(
+					`${methodName} called for unknown route "${routeName}". ` +
+						`Set guardRouter.unknownRouteGuardRegistration to "warn" or "ignore" to allow this.`,
+				);
+			case "warn":
+			default:
+				Log.warning(
+					`${methodName} called for unknown route; guard will still register. ` +
+						`If the route is added later via addRoute(), this warning can be ignored.`,
+					routeName,
+					LOG_COMPONENT,
+				);
+				return true;
 		}
-		Log.warning(
-			`${methodName} called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.`,
-			routeName,
-			LOG_COMPONENT,
-		);
 	}
 
 	/**
@@ -387,20 +820,37 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bReplace?: boolean,
 	): this;
 	override navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+	override navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
+	override navTo(
+		routeName: string,
+		parameters?: object,
+		componentTargetInfo?: Record<string, ComponentTargetParameters>,
+		bReplace?: boolean,
+		options?: GuardNavToOptions,
+	): this;
 	override navTo(
 		routeName: string,
 		parameters?: object,
 		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
-		bReplace?: boolean,
+		replaceOrOptions?: boolean | GuardNavToOptions,
+		options?: GuardNavToOptions,
 	): this {
-		// Normalize the two overload shapes into a single set of arguments.
+		// Normalize the overload shapes into a single set of arguments.
 		let componentTargetInfo: Record<string, ComponentTargetParameters> | undefined;
 		let replace: boolean | undefined;
+		let guardOptions: GuardNavToOptions | undefined;
 		if (typeof componentTargetInfoOrReplace === "boolean") {
+			// Short form: navTo(name, params, replace, options?)
 			replace = componentTargetInfoOrReplace;
+			guardOptions =
+				typeof replaceOrOptions === "object" && replaceOrOptions !== null
+					? (replaceOrOptions as GuardNavToOptions)
+					: undefined;
 		} else {
+			// Long form: navTo(name, params, componentTargetInfo, replace, options?)
 			componentTargetInfo = componentTargetInfoOrReplace;
-			replace = bReplace;
+			replace = typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined;
+			guardOptions = options;
 		}
 
 		// Redirect path: _redirect() calls this.navTo() while in committing/redirect phase.
@@ -441,6 +891,27 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Cancel any pending navigation (including previous async preflight).
 		this._cancelPendingNavigation();
 
+		const skipGuards = guardOptions?.skipGuards === true;
+
+		// Bypass mode: skip guards for programmatic navTo() -- commit directly.
+		if (skipGuards || this._options.navToPreflight === "bypass") {
+			this._phase = { kind: "committing", hash: targetHash, route: toRoute, origin: "preflight" };
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			// Safety: if super.navTo didn't trigger parse (e.g. hash didn't change),
+			// clear the marker to avoid stale state.
+			if (this._phase.kind === "committing" && this._phase.hash === targetHash) {
+				this._commitNavigation(targetHash, toRoute);
+			}
+			return this;
+		}
+
+		// Off mode: defer guard evaluation to parse() fallback.
+		if (this._options.navToPreflight === "off") {
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
+		// Default "guard" mode: evaluate guards before hash change.
 		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
@@ -456,6 +927,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal: controller.signal,
+			bag: new Map(),
 		};
 
 		const decision = this._pipeline.evaluate(context);
@@ -479,6 +951,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						replace,
 						targetHash,
 						toRoute,
+						context.bag,
 					);
 				})
 				.catch((error: unknown) => {
@@ -505,6 +978,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			replace,
 			targetHash,
 			toRoute,
+			context.bag,
 		);
 		return this;
 	}
@@ -531,6 +1005,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bReplace: boolean | undefined,
 		targetHash: string,
 		toRoute: string,
+		bag: Map<string, unknown>,
 	): void {
 		switch (decision.action) {
 			case "allow":
@@ -559,6 +1034,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					fromHash: this._currentHash ?? "",
 					signal: attempt.controller.signal,
 					generation: attempt.generation,
+					bag,
 				});
 				break;
 			}
@@ -622,6 +1098,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal: controller.signal,
+			bag: new Map(),
 		};
 
 		const decision = this._pipeline.evaluate(context);
@@ -637,7 +1114,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						);
 						return;
 					}
-					this._applyDecision(d, newHash, toRoute);
+					this._applyDecision(d, newHash, toRoute, context.bag);
 				})
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
@@ -654,7 +1131,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		this._applyDecision(decision, newHash, toRoute);
+		this._applyDecision(decision, newHash, toRoute, context.bag);
 	}
 
 	/**
@@ -699,7 +1176,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Apply a guard decision for the parse() fallback path.
 	 */
-	private _applyDecision(decision: GuardDecision, hash: string, route: string): void {
+	private _applyDecision(decision: GuardDecision, hash: string, route: string, bag: Map<string, unknown>): void {
 		switch (decision.action) {
 			case "allow":
 				this._phase = { kind: "committing", hash, route, origin: "parse" };
@@ -721,6 +1198,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					fromHash: this._currentHash ?? "",
 					signal: attempt.controller.signal,
 					generation: attempt.generation,
+					bag,
 				});
 				break;
 			}
@@ -844,6 +1322,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: chain.fromRoute,
 			fromHash: chain.fromHash,
 			signal: chain.signal,
+			bag: chain.bag,
 		};
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
@@ -857,11 +1336,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					if (chain.generation !== this._parseGeneration) return;
 					Log.error(
-						`Guard pipeline failed during redirect chain for "${targetName}", blocking navigation`,
+						`Guard pipeline failed during redirect chain for "${targetName}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+					this._errorNavigation(error, chain.attemptedHash, chain.restoreHash);
 				});
 			return;
 		}
@@ -949,12 +1428,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash: this._currentHash ?? "",
 		});
-		if (!restoreHash) return;
-		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
-			this._restoreHash("", false);
-			return;
-		}
-		this._restoreHash(this._currentHash ?? "");
+		this._restoreHashIfNeeded(attemptedHash, restoreHash);
 	}
 
 	/**
@@ -970,6 +1444,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 			hash: this._currentHash ?? "",
 			error,
 		});
+		this._restoreHashIfNeeded(attemptedHash, restoreHash);
+	}
+
+	/** Conditionally restore the browser hash after a blocked or errored navigation. */
+	private _restoreHashIfNeeded(attemptedHash: string | undefined, restoreHash: boolean): void {
 		if (!restoreHash) return;
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
@@ -995,9 +1474,176 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
+	/**
+	 * Load guard modules individually via `sap.ui.require` and register
+	 * each resolved function with the appropriate guard API.
+	 *
+	 * Each module is loaded in its own `sap.ui.require` call so that a
+	 * single invalid path only skips that guard (with a warning) rather
+	 * than failing the entire batch. Once all loads settle, guards
+	 * register in declaration order. Registration errors (e.g. from
+	 * `unknownRouteGuardRegistration: "throw"`) are caught per-module.
+	 */
+	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
+		const promises = descriptors.map((descriptor) => {
+			return new Promise<{ descriptor: GuardDescriptor; moduleExport: unknown }>((resolve) => {
+				sap.ui.require(
+					[descriptor.modulePath],
+					(moduleExport: unknown) => {
+						resolve({ descriptor, moduleExport });
+					},
+					(err: Error) => {
+						Log.warning(
+							`guardRouter.guards: failed to load module "${descriptor.modulePath}", skipping`,
+							String(err),
+							LOG_COMPONENT,
+						);
+						resolve({ descriptor, moduleExport: null });
+					},
+				);
+			});
+		});
+		return Promise.all(promises).then((results) => {
+			for (const { descriptor, moduleExport } of results) {
+				if (moduleExport === null) continue;
+				const exports = resolveModuleExports(
+					moduleExport,
+					descriptor.modulePath,
+					descriptor.name,
+					descriptor.exportKey,
+				);
+				for (const { fn } of exports) {
+					try {
+						this._registerGuardFromDescriptor(descriptor, fn);
+					} catch (err: unknown) {
+						Log.error(
+							`guardRouter.guards: failed to register "${descriptor.modulePath}"`,
+							String(err),
+							LOG_COMPONENT,
+						);
+					}
+				}
+			}
+		});
+	}
+
+	/**
+	 * Route a parsed guard descriptor to the correct registration method.
+	 */
+	private _registerGuardFromDescriptor(descriptor: GuardDescriptor, guardFn: GuardFn): void {
+		if (descriptor.route === "*") {
+			this.addGuard(guardFn);
+		} else if (descriptor.type === "leave") {
+			this.addLeaveGuard(descriptor.route, guardFn as LeaveGuardFn);
+		} else {
+			this.addRouteGuard(descriptor.route, guardFn);
+		}
+	}
+
+	/**
+	 * Register lazy wrapper functions that load guard modules on first use.
+	 *
+	 * Cherry-picked descriptors (with exportKey) get one lazy wrapper each.
+	 * Bare-path descriptors try a sync cache probe first; if the module is
+	 * cached (preload likely finished), all guards are expanded immediately.
+	 * On cache miss, a single "expander" wrapper loads the module on first
+	 * navigation, registers remaining guards, and executes the first.
+	 */
+	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
+		for (const descriptor of descriptors) {
+			const { modulePath, exportKey, name } = descriptor;
+
+			if (exportKey !== undefined) {
+				// Cherry-picked: one lazy wrapper, resolves to exactly one guard
+				const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+					const cached = sap.ui.require(modulePath) as unknown;
+					if (cached !== undefined) {
+						const exports = resolveModuleExports(cached, modulePath, name, exportKey);
+						if (exports.length === 0) return true;
+						return exports[0].fn(context);
+					}
+					return new Promise<GuardResult>((resolve, reject) => {
+						sap.ui.require(
+							[modulePath],
+							(mod: unknown) => {
+								const exports = resolveModuleExports(mod, modulePath, name, exportKey);
+								if (exports.length === 0) {
+									resolve(true);
+									return;
+								}
+								resolve(exports[0].fn(context));
+							},
+							(err: Error) => {
+								Log.warning(
+									`guardRouter.guards: lazy load of "${modulePath}" failed`,
+									String(err),
+									LOG_COMPONENT,
+								);
+								reject(err);
+							},
+						);
+					});
+				};
+				this._registerGuardFromDescriptor(descriptor, lazyGuard);
+				continue;
+			}
+
+			// Bare-path: try sync expansion from cache (preload likely finished)
+			const cached = sap.ui.require(modulePath) as unknown;
+			if (cached !== undefined) {
+				const exports = resolveModuleExports(cached, modulePath, name);
+				for (const exp of exports) {
+					this._registerGuardFromDescriptor(descriptor, exp.fn);
+				}
+				continue;
+			}
+
+			// Cache miss: register an expander that loads, expands once, and runs guard[0].
+			// NOTE: Guards 1..N are appended to the guard array on first invocation,
+			// which means they execute AFTER any imperative guards registered between
+			// initialize() and first navigation. This differs from block mode where
+			// all guards occupy contiguous positions. In practice this is rare because
+			// the preload hint fires in the constructor and modules are typically cached
+			// by the time initialize() runs.
+			let expanded = false;
+			const lazyExpander = (context: GuardContext): PromiseLike<GuardResult> => {
+				return new Promise<GuardResult>((resolve, reject) => {
+					sap.ui.require(
+						[modulePath],
+						(mod: unknown) => {
+							const exports = resolveModuleExports(mod, modulePath, name);
+							if (exports.length === 0) {
+								resolve(true);
+								return;
+							}
+							if (!expanded) {
+								expanded = true;
+								for (let i = 1; i < exports.length; i++) {
+									this._registerGuardFromDescriptor(descriptor, exports[i].fn);
+								}
+							}
+							resolve(exports[0].fn(context));
+						},
+						(err: Error) => {
+							Log.warning(
+								`guardRouter.guards: lazy load of "${modulePath}" failed`,
+								String(err),
+								LOG_COMPONENT,
+							);
+							reject(err);
+						},
+					);
+				});
+			};
+			this._registerGuardFromDescriptor(descriptor, lazyExpander);
+		}
+	}
+
 	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
 	override destroy(): this {
+		this._destroyed = true;
 		this._pipeline.clear();
+		this._pendingGuardDescriptors = [];
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;

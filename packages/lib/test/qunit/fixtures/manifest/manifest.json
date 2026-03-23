@@ -1,0 +1,30 @@
+{
+	"sap.app": {
+		"id": "ui5.guard.router.qunit.fixtures.manifest",
+		"type": "application",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.ui5": {
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"async": true,
+				"guardRouter": {
+					"unknownRouteGuardRegistration": "ignore",
+					"navToPreflight": "guard",
+					"guardLoading": "block",
+					"guards": {
+						"protected": ["guards.blockGuard"]
+					}
+				}
+			},
+			"routes": [
+				{ "name": "home", "pattern": "" },
+				{ "name": "protected", "pattern": "protected" }
+			],
+			"targets": {}
+		}
+	}
+}
