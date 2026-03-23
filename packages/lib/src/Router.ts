@@ -717,7 +717,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	): this;
 	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
 	attachNavigationSettled(oData: unknown, fnFunction?: unknown, oListener?: unknown): this {
-		this.attachEvent("navigationSettled", oData as object, fnFunction as Function, oListener as object);
+		this.attachEvent(
+			"navigationSettled",
+			oData as object,
+			fnFunction as (...args: unknown[]) => void,
+			oListener as object,
+		);
 		return this;
 	}
 
@@ -731,7 +736,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param oListener - Context object on which the given function had to be called.
 	 */
 	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this {
-		this.detachEvent("navigationSettled", fnFunction as Function, oListener);
+		this.detachEvent("navigationSettled", fnFunction as (...args: unknown[]) => void, oListener);
 		return this;
 	}
 
