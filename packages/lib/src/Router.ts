@@ -5,6 +5,7 @@ import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
 	GuardContext,
+	GuardInheritance,
 	GuardNavToOptions,
 	GuardResult,
 	GuardRedirect,
@@ -12,6 +13,7 @@ import type {
 	GuardLoading,
 	LeaveGuardFn,
 	ManifestRouteGuardConfig,
+	MetaInheritance,
 	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
@@ -88,6 +90,14 @@ function isNavToPreflightMode(v: unknown): v is NavToPreflightMode {
 
 function isGuardLoading(v: unknown): v is GuardLoading {
 	return v === "block" || v === "lazy";
+}
+
+function isGuardInheritance(v: unknown): v is GuardInheritance {
+	return v === "none" || v === "pattern-tree";
+}
+
+function isMetaInheritance(v: unknown): v is MetaInheritance {
+	return v === "none" || v === "pattern-tree";
 }
 
 /** Parsed guard declaration from the manifest `guards` block. */
@@ -335,12 +345,16 @@ interface ResolvedGuardRouterOptions {
 	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
 	readonly navToPreflight: NavToPreflightMode;
 	readonly guardLoading: GuardLoading;
+	readonly guardInheritance: GuardInheritance;
+	readonly metaInheritance: MetaInheritance;
 }
 
 const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
 	unknownRouteGuardRegistration: "warn",
 	navToPreflight: "guard",
 	guardLoading: "lazy",
+	guardInheritance: "none",
+	metaInheritance: "none",
 };
 
 function applyOption<K extends keyof ResolvedGuardRouterOptions>(
@@ -370,6 +384,8 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
 	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
 	applyOption(raw, "guardLoading", isGuardLoading, result);
+	applyOption(raw, "guardInheritance", isGuardInheritance, result);
+	applyOption(raw, "metaInheritance", isMetaInheritance, result);
 	return result;
 }
 
