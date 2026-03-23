@@ -4,20 +4,23 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 
 ## Pattern overview
 
-| Pattern                                                               | Guard type           | Sync / Async | Reference                                                            |
-| --------------------------------------------------------------------- | -------------------- | ------------ | -------------------------------------------------------------------- |
-| [Authentication guard](#authentication-guard)                         | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
-| [Async permission check](#async-permission-check-with-abortsignal)    | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
-| [Always block](#always-block)                                         | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
-| [Always redirect](#always-redirect)                                   | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
-| [Dirty form leave guard](#dirty-form-leave-guard)                     | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
-| [Redirect with parameters](#redirect-with-parameters)                 | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
-| [Error handling](#error-handling-in-guards)                           | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
-| [Guard factories](#guard-factories)                                   | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
-| [Controller-level lifecycle](#controller-level-guard-lifecycle)       | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
-| [Object form (enter + leave)](#object-form-enter--leave)              | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
-| [Chained authorization](#chained-authorization-redirect-chain-guards) | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
-| [Settlement for UI feedback](#settlement-for-ui-feedback)             | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
+| Pattern                                                                     | Guard type           | Sync / Async | Reference                                                            |
+| --------------------------------------------------------------------------- | -------------------- | ------------ | -------------------------------------------------------------------- |
+| [Authentication guard](#authentication-guard)                               | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
+| [Async permission check](#async-permission-check-with-abortsignal)          | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
+| [Always block](#always-block)                                               | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
+| [Always redirect](#always-redirect)                                         | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
+| [Dirty form leave guard](#dirty-form-leave-guard)                           | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
+| [Redirect with parameters](#redirect-with-parameters)                       | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
+| [Error handling](#error-handling-in-guards)                                 | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
+| [Guard factories](#guard-factories)                                         | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
+| [Controller-level lifecycle](#controller-level-guard-lifecycle)             | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
+| [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
+| [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
+| [Async guard timeout](#async-guard-timeout)                                 | Route enter          | Async        | inline example                                                       |
+| [Factory pattern for manifest guards](#factory-pattern-for-manifest-guards) | Any                  | Any          | inline example                                                       |
+| [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | inline example                                                       |
+| [Settlement for UI feedback](#settlement-for-ui-feedback)                   | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
 Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). Controller lifecycle and object-form examples also reference `Component.ts` and `Home.controller.ts` where noted in the table above.
 
@@ -50,6 +53,43 @@ router.addRouteGuard("dashboard", async (context) => {
 Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. The router blocks navigation and logs an error when a guard Promise rejects.
 
 Reference: `createAsyncPermissionGuard` in `guards.ts`. See the [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) for the full pattern with a busy indicator.
+
+## Async guard timeout
+
+If an async guard's fetch hangs (dead endpoint, no timeout), the navigation stays in the evaluating phase indefinitely. The `AbortSignal` on `context.signal` only fires on supersede or router stop/destroy, not on "too slow."
+
+Combine `context.signal` with `AbortSignal.timeout()` using `AbortSignal.any()` to enforce a hard deadline:
+
+```typescript
+router.addRouteGuard("dashboard", async (context) => {
+	const res = await fetch("/api/check", {
+		signal: AbortSignal.any([
+			context.signal, // cancelled on supersede
+			AbortSignal.timeout(10_000), // 10s hard timeout
+		]),
+	});
+	return (await res.json()).allowed ? true : "home";
+});
+```
+
+When the timeout fires, `fetch` rejects with a `TimeoutError`. Since the guard's Promise rejects, the navigation settles as `NavigationOutcome.Error`. Wrap the `await` in a `try/catch` if you need to distinguish timeout from supersede or return a redirect instead of an error.
+
+> [!NOTE]
+> `AbortSignal.any()` requires Node 20+ / modern browsers (Safari 17.4+, Chrome 116+, Firefox 124+). For broader compatibility, use a manual `AbortController` with `setTimeout`:
+>
+> ```typescript
+> router.addRouteGuard("dashboard", async (context) => {
+> 	const controller = new AbortController();
+> 	const timer = setTimeout(() => controller.abort(), 10_000);
+> 	context.signal.addEventListener("abort", () => controller.abort());
+> 	try {
+> 		const res = await fetch("/api/check", { signal: controller.signal });
+> 		return (await res.json()).allowed ? true : "home";
+> 	} finally {
+> 		clearTimeout(timer);
+> 	}
+> });
+> ```
 
 ## Always block
 
@@ -161,6 +201,47 @@ router.addRouteGuard("reports", createRoleGuard(userModel, "analyst"));
 
 All `create*` functions in `guards.ts` follow this pattern.
 
+## Factory pattern for manifest guards
+
+When multiple routes need the same guard logic with different parameters (e.g., different required roles), use a factory function that returns the guard and create thin wrappers for each manifest registration:
+
+```typescript
+// guards/requireRole.ts — shared factory (not a guard module itself)
+import type { GuardFn } from "ui5/guard/router/types";
+
+export function createRoleGuard(role: string): GuardFn {
+	return () => {
+		const roles = getUserRoles(); // app-level helper
+		return roles.includes(role) ? true : "forbidden";
+	};
+}
+```
+
+```typescript
+// guards/adminGuard.ts — thin wrapper for manifest registration
+import { createRoleGuard } from "./requireRole";
+export default createRoleGuard("admin");
+```
+
+```typescript
+// guards/analystGuard.ts
+import { createRoleGuard } from "./requireRole";
+export default createRoleGuard("analyst");
+```
+
+Wire the guard modules in the manifest:
+
+```json
+"guardRouter": {
+	"guards": {
+		"admin": ["guards.adminGuard"],
+		"reports": ["guards.analystGuard"]
+	}
+}
+```
+
+This keeps guard logic in a single place while letting each route configure its own parameters through the manifest.
+
 ## Controller-level guard lifecycle
 
 Register a leave guard in `onInit` and remove it in `onExit`. UI5 caches XMLViews by default, so `onInit` runs once but `onExit` runs on `destroy()`.
@@ -227,6 +308,41 @@ On redirect hops, `context.fromRoute` and `context.fromHash` always refer to the
 Leave guards run only on the first hop (the initial navigation). Redirect chain hops skip leave guards to avoid re-prompting the user after they already confirmed leaving.
 
 The router detects redirect loops (e.g., A → B → A) via a visited-hash set, and caps chain depth at 10 hops. Both safeguards block the navigation and log an error. See the [library README redirect chain section](../../packages/lib/README.md#redirect-chains) for details.
+
+## Nested route guard patterns
+
+UI5 supports nested routing through component targets. Guards are scoped to their router instance, so nested protection requires one of two patterns.
+
+### Flat routes with naming convention
+
+Use a global guard with prefix matching when all routes live on a single router:
+
+```typescript
+router.addGuard((context) => {
+	if (context.toRoute.startsWith("admin") && !isAdmin()) {
+		return "home";
+	}
+	return true;
+});
+```
+
+This works well when admin routes follow a consistent naming convention (e.g., `admin`, `adminUsers`, `adminSettings`).
+
+### Component-based nesting
+
+When using nested components, each component registers its own guards on its own router. The parent component's guards protect the parent route (which loads the child component). The child component's guards protect its internal routes. This matches UI5's component isolation model:
+
+```typescript
+// Parent Component.ts
+const router = this.getRouter() as GuardRouter;
+router.addRouteGuard("orders", authGuard); // protects loading the Orders component
+
+// Orders Component.ts (child)
+const router = this.getRouter() as GuardRouter;
+router.addRouteGuard("orderDetail", orderAccessGuard); // protects individual order routes
+```
+
+The parent guard runs first (protecting access to the child component), and the child's guards run within the child's own routing scope. Guards are cleaned up automatically when each component's router is destroyed.
 
 ## Settlement for UI feedback
 
