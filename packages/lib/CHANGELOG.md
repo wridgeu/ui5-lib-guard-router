@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.4.0...v1.5.0) (2026-03-23)
+
+
+### Features
+
+* **router:** declarative manifest-based guard configuration ([#49](https://github.com/wridgeu/ui5-lib-guard-router/issues/49)) ([1930456](https://github.com/wridgeu/ui5-lib-guard-router/commit/1930456ea1160742e48b71c207a390c9cf852841))
+
 ## [1.4.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.3.2...v1.4.0) (2026-03-22)
 
 
