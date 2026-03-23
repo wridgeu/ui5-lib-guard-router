@@ -423,6 +423,8 @@ interface RedirectChainContext {
 	readonly signal: AbortSignal;
 	/** Shared generation counter from the original navigation. */
 	readonly generation: number;
+	/** Shared bag from the original navigation's guard context. */
+	readonly bag: Map<string, unknown>;
 }
 
 /**
@@ -949,6 +951,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						replace,
 						targetHash,
 						toRoute,
+						context.bag,
 					);
 				})
 				.catch((error: unknown) => {
@@ -975,6 +978,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			replace,
 			targetHash,
 			toRoute,
+			context.bag,
 		);
 		return this;
 	}
@@ -1001,6 +1005,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bReplace: boolean | undefined,
 		targetHash: string,
 		toRoute: string,
+		bag: Map<string, unknown>,
 	): void {
 		switch (decision.action) {
 			case "allow":
@@ -1029,6 +1034,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					fromHash: this._currentHash ?? "",
 					signal: attempt.controller.signal,
 					generation: attempt.generation,
+					bag,
 				});
 				break;
 			}
@@ -1108,7 +1114,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						);
 						return;
 					}
-					this._applyDecision(d, newHash, toRoute);
+					this._applyDecision(d, newHash, toRoute, context.bag);
 				})
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
@@ -1125,7 +1131,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		this._applyDecision(decision, newHash, toRoute);
+		this._applyDecision(decision, newHash, toRoute, context.bag);
 	}
 
 	/**
@@ -1170,7 +1176,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Apply a guard decision for the parse() fallback path.
 	 */
-	private _applyDecision(decision: GuardDecision, hash: string, route: string): void {
+	private _applyDecision(decision: GuardDecision, hash: string, route: string, bag: Map<string, unknown>): void {
 		switch (decision.action) {
 			case "allow":
 				this._phase = { kind: "committing", hash, route, origin: "parse" };
@@ -1192,6 +1198,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					fromHash: this._currentHash ?? "",
 					signal: attempt.controller.signal,
 					generation: attempt.generation,
+					bag,
 				});
 				break;
 			}
@@ -1315,7 +1322,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute: chain.fromRoute,
 			fromHash: chain.fromHash,
 			signal: chain.signal,
-			bag: new Map(),
+			bag: chain.bag,
 		};
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
@@ -1329,11 +1336,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 				.catch((error: unknown) => {
 					if (chain.generation !== this._parseGeneration) return;
 					Log.error(
-						`Guard pipeline failed during redirect chain for "${targetName}", blocking navigation`,
+						`Guard pipeline failed during redirect chain for "${targetName}", navigation failed`,
 						String(error),
 						LOG_COMPONENT,
 					);
-					this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+					this._errorNavigation(error, chain.attemptedHash, chain.restoreHash);
 				});
 			return;
 		}

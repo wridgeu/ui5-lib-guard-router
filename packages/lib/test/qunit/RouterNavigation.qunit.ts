@@ -933,6 +933,25 @@ QUnit.test("Guard on redirect target that throws settles as Error", async functi
 	assert.strictEqual(result.status, NavigationOutcome.Error, "Chain settles as Error when guard throws");
 });
 
+QUnit.test("Async guard rejecting during redirect chain settles as Error", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", async () => {
+		await nextTick(10);
+		throw new Error("async guard explosion in redirect chain");
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Error,
+		"Async rejection in redirect chain settles as Error, not Blocked",
+	);
+	assert.ok(result.error instanceof Error, "error is captured on result");
+});
+
 QUnit.test("Max redirect depth exceeded blocks with error", async function (assert: Assert) {
 	// Create a chain that exceeds MAX_REDIRECT_DEPTH (10) using parameterized redirects
 	// to the same route with different params (different hashes, avoids visited-set detection).

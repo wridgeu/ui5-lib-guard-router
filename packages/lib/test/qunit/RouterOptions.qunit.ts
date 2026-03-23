@@ -232,6 +232,58 @@ QUnit.test("bag is fresh for each navigation (not carried across)", async functi
 	assert.notOk(bagInitialStates[1], "second navigation bag starts without data from first");
 });
 
+QUnit.test("bag is shared across redirect chain hops", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addRouteGuard("protected", (context: GuardContext) => {
+		context.bag.set("writtenBy", "protected-guard");
+		return "forbidden";
+	});
+
+	let redirectTargetBag: Map<string, unknown> | undefined;
+	router.addRouteGuard("forbidden", (context: GuardContext) => {
+		redirectTargetBag = context.bag;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+
+	assert.ok(redirectTargetBag instanceof Map, "redirect target guard received bag");
+	assert.strictEqual(
+		redirectTargetBag!.get("writtenBy"),
+		"protected-guard",
+		"redirect target guard reads data written by the original guard",
+	);
+});
+
+QUnit.test("bag is shared across multiple redirect hops", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addRouteGuard("protected", (context: GuardContext) => {
+		context.bag.set("hop1", true);
+		return "forbidden";
+	});
+
+	router.addRouteGuard("forbidden", (context: GuardContext) => {
+		context.bag.set("hop2", true);
+		return { route: "detail", parameters: { id: "42" } };
+	});
+
+	let finalBag: Map<string, unknown> | undefined;
+	router.addRouteGuard("detail", (context: GuardContext) => {
+		finalBag = context.bag;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "detail");
+
+	assert.ok(finalBag instanceof Map, "final hop guard received bag");
+	assert.strictEqual(finalBag!.get("hop1"), true, "data from first hop survives to third");
+	assert.strictEqual(finalBag!.get("hop2"), true, "data from second hop survives to third");
+});
+
 // ============================================================
 // Module: Router options -- navToPreflight
 // ============================================================

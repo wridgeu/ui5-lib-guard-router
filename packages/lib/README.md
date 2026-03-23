@@ -869,31 +869,6 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 > **Note**: UI5 1.120+ uses kebab-case URL parameters (`sap-ui-log-level`). Older versions use camelCase (`sap-ui-logLevel`).
 
-### Log reference
-
-| Level   | Message                                                                             | Trigger                                                                                             |
-| ------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| warning | `addGuard called with invalid guard, ignoring`                                      | Non-function passed to `addGuard()`                                                                 |
-| warning | `addRouteGuard called with invalid guard, ignoring`                                 | Non-function `beforeEnter`, `beforeLeave`, or direct guard                                          |
-| info    | `addRouteGuard called with config missing both beforeEnter and beforeLeave`         | Empty `RouteGuardConfig` object (no handlers)                                                       |
-| warning | `addLeaveGuard called with invalid guard, ignoring`                                 | Non-function passed to `addLeaveGuard()`                                                            |
-| warning | `removeGuard called with invalid guard, ignoring`                                   | Non-function passed to `removeGuard()`                                                              |
-| warning | `removeRouteGuard called with invalid guard, ignoring`                              | Non-function passed to `removeRouteGuard()`                                                         |
-| warning | `removeLeaveGuard called with invalid guard, ignoring`                              | Non-function passed to `removeLeaveGuard()`                                                         |
-| warning | `{method} called for unknown route; guard will still register...`                   | Route name not found at registration time                                                           |
-| warning | `Guard returned invalid value, treating as block`                                   | Enter guard returned something other than `true`, `false`, a non-empty string, or a `GuardRedirect` |
-| warning | `Leave guard returned non-boolean value, treating as block`                         | Leave guard returned something other than `true` or `false`                                         |
-| warning | `Guard redirect target "{route}" did not produce a navigation, treating as blocked` | Redirect target did not trigger a follow-up navigation (most commonly an unknown route name)        |
-| error   | `Guard redirect loop detected: {visited hashes}`                                    | A redirect chain revisited a hash already evaluated in the current chain                            |
-| error   | `Guard redirect chain exceeded maximum depth ({N}): {visited hashes}`               | A redirect chain exceeded the depth cap (10 hops)                                                   |
-| error   | `Guard pipeline failed during redirect chain for "{route}", blocking navigation`    | Async guard pipeline rejected while evaluating a redirect target                                    |
-| error   | `Guard pipeline failed for "{hash}", navigation failed`                             | Async guard pipeline rejected in `parse()` fallback path                                            |
-| error   | `Async preflight guard failed for route "{route}", navigation failed`               | Async guard pipeline rejected in `navTo()` preflight path                                           |
-| error   | `Enter guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async enter guard threw an exception                                                        |
-| error   | `Leave guard [{n}] on route "{route}" threw, navigation failed`                     | Sync or async leave guard threw an exception                                                        |
-| debug   | `Async guard result discarded (superseded by newer navigation)`                     | A newer navigation invalidated the pending async result (`parse()` path)                            |
-| debug   | `Async preflight result discarded (superseded by newer navigation)`                 | A newer navigation invalidated the pending async result (`navTo()` path)                            |
-
 ### Common issues
 
 **Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains](#redirect-chains).
