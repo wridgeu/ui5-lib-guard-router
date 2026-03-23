@@ -21,6 +21,8 @@ function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 		fromHash: "",
 		signal: new AbortController().signal,
 		bag: new Map(),
+		toMeta: Object.freeze({}),
+		fromMeta: Object.freeze({}),
 		...overrides,
 	};
 }
