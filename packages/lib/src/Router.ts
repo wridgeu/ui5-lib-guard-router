@@ -727,7 +727,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @returns `this` for chaining.
 	 */
 	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
-		this._runtimeMeta.set(routeName, meta);
+		this._runtimeMeta.set(routeName, { ...meta });
 		return this;
 	}
 
@@ -1680,6 +1680,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;
+		this._manifestMeta.clear();
+		this._runtimeMeta.clear();
 		super.destroy();
 		return this;
 	}

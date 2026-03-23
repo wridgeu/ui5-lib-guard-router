@@ -1850,3 +1850,50 @@ QUnit.test("non-object routeMeta produces warning", function (assert: Assert) {
 		"warning for non-object routeMeta",
 	);
 });
+
+QUnit.test("fromMeta is empty frozen object on initial navigation", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: { home: { public: true } },
+	});
+
+	let receivedFromMeta: Record<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		receivedFromMeta = context.fromMeta;
+		return true;
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	assert.deepEqual(receivedFromMeta, {}, "fromMeta is empty on initial navigation (no previous route)");
+	assert.ok(Object.isFrozen(receivedFromMeta), "fromMeta is frozen");
+});
+
+QUnit.test("toMeta updates to redirect target while fromMeta stays pinned to source", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			home: { public: true },
+			protected: { requiresAuth: true },
+			forbidden: { restricted: true },
+		},
+	});
+
+	router.addRouteGuard("protected", () => "forbidden");
+
+	let redirectTargetToMeta: Record<string, unknown> | undefined;
+	let redirectTargetFromMeta: Record<string, unknown> | undefined;
+	router.addRouteGuard("forbidden", (context: GuardContext) => {
+		redirectTargetToMeta = context.toMeta;
+		redirectTargetFromMeta = context.fromMeta;
+		return true;
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "forbidden");
+
+	assert.deepEqual(redirectTargetToMeta, { restricted: true }, "toMeta is for the redirect target (forbidden)");
+	assert.deepEqual(redirectTargetFromMeta, { public: true }, "fromMeta stays pinned to the original source (home)");
+});
