@@ -418,6 +418,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
+	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _runtimeMeta = new Map<string, Record<string, unknown>>();
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -426,6 +428,28 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
 		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
+
+		if (isRecord(guardRouter) && guardRouter.routeMeta !== undefined) {
+			if (isRecord(guardRouter.routeMeta)) {
+				for (const [routeName, meta] of Object.entries(guardRouter.routeMeta)) {
+					if (isRecord(meta)) {
+						this._manifestMeta.set(routeName, Object.freeze({ ...meta }));
+					} else {
+						Log.warning(
+							`guardRouter.routeMeta["${routeName}"]: expected object, skipping`,
+							JSON.stringify(meta),
+							LOG_COMPONENT,
+						);
+					}
+				}
+			} else {
+				Log.warning(
+					"guardRouter.routeMeta: expected object, skipping",
+					JSON.stringify(guardRouter.routeMeta),
+					LOG_COMPONENT,
+				);
+			}
+		}
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
 			let componentNamespace = "";
