@@ -695,6 +695,42 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return this;
 	}
 
+	private static readonly _EMPTY_META: Readonly<Record<string, unknown>> = Object.freeze({});
+
+	/**
+	 * Return the merged metadata for a route.
+	 *
+	 * The result is a frozen object that combines manifest-declared metadata
+	 * with any runtime overrides set via {@link setRouteMeta}. Runtime keys
+	 * take precedence over manifest keys.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @returns Frozen record of metadata key-value pairs, or an empty frozen object if the route has no metadata.
+	 */
+	getRouteMeta(routeName: string): Readonly<Record<string, unknown>> {
+		const manifest = this._manifestMeta.get(routeName);
+		const runtime = this._runtimeMeta.get(routeName);
+		if (!manifest && !runtime) return Router._EMPTY_META;
+		if (!runtime) return manifest!;
+		if (!manifest) return Object.freeze({ ...runtime });
+		return Object.freeze({ ...manifest, ...runtime });
+	}
+
+	/**
+	 * Set runtime metadata for a route.
+	 *
+	 * Runtime metadata is merged on top of any manifest-declared metadata
+	 * when retrieved via {@link getRouteMeta}.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param meta - Record of metadata key-value pairs.
+	 * @returns `this` for chaining.
+	 */
+	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
+		this._runtimeMeta.set(routeName, meta);
+		return this;
+	}
+
 	/**
 	 * Return a Promise that settles when the current guard pipeline finishes.
 	 *
