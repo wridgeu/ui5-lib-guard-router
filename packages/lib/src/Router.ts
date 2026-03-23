@@ -306,27 +306,24 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 
 	const descriptors: GuardDescriptor[] = [];
 
+	function pushEntries(entries: unknown[], route: string, type: "enter" | "leave", label: string): void {
+		for (const entry of entries) {
+			if (typeof entry !== "string" || entry.length === 0) {
+				Log.warning(
+					`guardRouter.guards${label}: invalid entry, skipping`,
+					JSON.stringify(entry),
+					LOG_COMPONENT,
+				);
+				continue;
+			}
+			const parsed = parseGuardEntry(entry, componentNamespace);
+			descriptors.push({ route, type, ...parsed });
+		}
+	}
+
 	for (const [key, value] of Object.entries(guards)) {
 		if (Array.isArray(value)) {
-			// Shorthand: string[] -> enter guards
-			for (const entry of value) {
-				if (typeof entry !== "string" || entry.length === 0) {
-					Log.warning(
-						`guardRouter.guards["${key}"]: invalid entry, skipping`,
-						JSON.stringify(entry),
-						LOG_COMPONENT,
-					);
-					continue;
-				}
-				const parsed = parseGuardEntry(entry, componentNamespace);
-				descriptors.push({
-					route: key,
-					type: "enter",
-					modulePath: parsed.modulePath,
-					name: parsed.name,
-					exportKey: parsed.exportKey,
-				});
-			}
+			pushEntries(value, key, "enter", `["${key}"]`);
 		} else if (isRecord(value)) {
 			const config = value as ManifestRouteGuardConfig;
 
@@ -339,50 +336,19 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 			}
 
 			if (key === "*" && config.enter === undefined && config.leave !== undefined) {
-				// Only leave on global -> already warned, nothing to add
 				continue;
 			}
 
+			if (key === "*" && config.enter !== undefined) {
+				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
+			}
+
 			if (Array.isArray(config.enter)) {
-				for (const entry of config.enter) {
-					if (typeof entry !== "string" || entry.length === 0) {
-						Log.warning(
-							`guardRouter.guards["${key}"].enter: invalid entry, skipping`,
-							JSON.stringify(entry),
-							LOG_COMPONENT,
-						);
-						continue;
-					}
-					const parsed = parseGuardEntry(entry, componentNamespace);
-					descriptors.push({
-						route: key,
-						type: "enter",
-						modulePath: parsed.modulePath,
-						name: parsed.name,
-						exportKey: parsed.exportKey,
-					});
-				}
+				pushEntries(config.enter, key, "enter", `["${key}"].enter`);
 			}
 
 			if (key !== "*" && Array.isArray(config.leave)) {
-				for (const entry of config.leave) {
-					if (typeof entry !== "string" || entry.length === 0) {
-						Log.warning(
-							`guardRouter.guards["${key}"].leave: invalid entry, skipping`,
-							JSON.stringify(entry),
-							LOG_COMPONENT,
-						);
-						continue;
-					}
-					const parsed = parseGuardEntry(entry, componentNamespace);
-					descriptors.push({
-						route: key,
-						type: "leave",
-						modulePath: parsed.modulePath,
-						name: parsed.name,
-						exportKey: parsed.exportKey,
-					});
-				}
+				pushEntries(config.leave, key, "leave", `["${key}"].leave`);
 			}
 		} else {
 			Log.warning(
@@ -408,6 +374,21 @@ const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
 	guardLoading: "lazy",
 };
 
+function applyOption<K extends keyof ResolvedGuardRouterOptions>(
+	raw: Record<string, unknown>,
+	key: K,
+	guard: (v: unknown) => v is ResolvedGuardRouterOptions[K],
+	target: { -readonly [P in keyof ResolvedGuardRouterOptions]: ResolvedGuardRouterOptions[P] },
+): void {
+	if (raw[key] !== undefined) {
+		if (guard(raw[key])) {
+			target[key] = raw[key] as ResolvedGuardRouterOptions[K];
+		} else {
+			Log.warning(`guardRouter.${key} has invalid value, using default`, JSON.stringify(raw[key]), LOG_COMPONENT);
+		}
+	}
+}
+
 function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	if (!isRecord(raw)) {
 		if (raw !== undefined) {
@@ -417,43 +398,9 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	}
 
 	const result = { ...DEFAULT_OPTIONS };
-
-	if (raw.unknownRouteGuardRegistration !== undefined) {
-		if (isUnknownRouteGuardRegistrationPolicy(raw.unknownRouteGuardRegistration)) {
-			result.unknownRouteGuardRegistration = raw.unknownRouteGuardRegistration;
-		} else {
-			Log.warning(
-				"guardRouter.unknownRouteGuardRegistration has invalid value, using default",
-				JSON.stringify(raw.unknownRouteGuardRegistration),
-				LOG_COMPONENT,
-			);
-		}
-	}
-
-	if (raw.navToPreflight !== undefined) {
-		if (isNavToPreflightMode(raw.navToPreflight)) {
-			result.navToPreflight = raw.navToPreflight;
-		} else {
-			Log.warning(
-				"guardRouter.navToPreflight has invalid value, using default",
-				JSON.stringify(raw.navToPreflight),
-				LOG_COMPONENT,
-			);
-		}
-	}
-
-	if (raw.guardLoading !== undefined) {
-		if (isGuardLoading(raw.guardLoading)) {
-			result.guardLoading = raw.guardLoading;
-		} else {
-			Log.warning(
-				"guardRouter.guardLoading has invalid value, using default",
-				JSON.stringify(raw.guardLoading),
-				LOG_COMPONENT,
-			);
-		}
-	}
-
+	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
+	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
+	applyOption(raw, "guardLoading", isGuardLoading, result);
 	return result;
 }
 
@@ -518,8 +465,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
 		const rawConfig = config as Record<string, unknown> | undefined;
-		const { guardRouter, ...cleanConfig } = isRecord(rawConfig) ? rawConfig : ({} as Record<string, unknown>);
-		super(routes, isRecord(rawConfig) ? (cleanConfig as typeof config) : config, owner, ...rest);
+		const isRecordConfig = isRecord(rawConfig);
+		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
+		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
@@ -1473,12 +1421,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash: this._currentHash ?? "",
 		});
-		if (!restoreHash) return;
-		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
-			this._restoreHash("", false);
-			return;
-		}
-		this._restoreHash(this._currentHash ?? "");
+		this._restoreHashIfNeeded(attemptedHash, restoreHash);
 	}
 
 	/**
@@ -1494,6 +1437,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 			hash: this._currentHash ?? "",
 			error,
 		});
+		this._restoreHashIfNeeded(attemptedHash, restoreHash);
+	}
+
+	/** Conditionally restore the browser hash after a blocked or errored navigation. */
+	private _restoreHashIfNeeded(attemptedHash: string | undefined, restoreHash: boolean): void {
 		if (!restoreHash) return;
 		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
