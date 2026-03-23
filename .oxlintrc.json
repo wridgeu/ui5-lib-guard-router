@@ -39,7 +39,8 @@
 		"comment-quality/no-narrator-comment": "warn",
 		"comment-quality/no-section-divider": "warn",
 		"comment-quality/no-placeholder-comment": "warn",
-		"comment-quality/no-hedging-comment": "warn"
+		"comment-quality/no-hedging-comment": "warn",
+		"typescript/no-unsafe-function-type": "error"
 	},
 	"overrides": [
 		{
