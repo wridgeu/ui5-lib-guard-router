@@ -86,6 +86,20 @@ function isMetaInheritance(v: unknown): v is MetaInheritance {
 	return v === "none" || v === "pattern-tree";
 }
 
+/**
+ * Check if `ancestorPattern` is a URL-tree ancestor of `candidatePattern`.
+ * Both patterns are split on `/` and compared segment by segment.
+ * Query parameters (`:?...:`) are stripped before comparison.
+ */
+function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
+	if (ancestorPattern === "") return true;
+	const stripQuery = (p: string): string => p.replace(/:?\?[^/]*:?/g, "").replace(/\/+$/, "");
+	const ancestorSegments = stripQuery(ancestorPattern).split("/");
+	const candidateSegments = stripQuery(candidatePattern).split("/");
+	if (candidateSegments.length <= ancestorSegments.length) return false;
+	return ancestorSegments.every((seg, i) => seg === candidateSegments[i]);
+}
+
 /** Parsed guard declaration from the manifest `guards` block. */
 interface GuardDescriptor {
 	readonly route: string; // "*" for global, route name for per-route
@@ -436,6 +450,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _destroyed = false;
 	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _routeNames: readonly string[] = [];
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -444,6 +459,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
 		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
+
+		// Collect route names from the constructor's routes parameter for pattern-tree traversal.
+		if (Array.isArray(routes)) {
+			this._routeNames = routes
+				.filter((r): r is { name: string } => isRecord(r) && typeof r.name === "string")
+				.map((r) => r.name);
+		} else if (isRecord(routes)) {
+			this._routeNames = Object.keys(routes);
+		}
 
 		if (isRecord(guardRouter) && guardRouter.routeMeta !== undefined) {
 			if (isRecord(guardRouter.routeMeta)) {
@@ -465,6 +489,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 					LOG_COMPONENT,
 				);
 			}
+		}
+
+		if (this._options.metaInheritance === "pattern-tree" && this._manifestMeta.size > 0) {
+			this._expandManifestMeta();
 		}
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
@@ -504,14 +532,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const descriptors = this._pendingGuardDescriptors;
 		this._pendingGuardDescriptors = [];
 
+		const expandedDescriptors =
+			this._options.guardInheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
+
 		if (this._options.guardLoading === "lazy") {
-			this._registerLazyGuards(descriptors);
+			this._registerLazyGuards(expandedDescriptors);
 			return super.initialize();
 		}
 
 		// "block" mode: load all modules, then initialize.
 		// Guard against destroy() being called while modules are still loading.
-		this._loadAndRegisterGuards(descriptors)
+		this._loadAndRegisterGuards(expandedDescriptors)
 			.then(() => {
 				if (!this._destroyed) super.initialize();
 			})
@@ -1524,6 +1555,108 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (this._suppressedHash === hash) {
 				this._suppressedHash = null;
 			}
+		}
+	}
+
+	/**
+	 * Collect all route names and their patterns from the router.
+	 * Skips routes whose pattern is undefined (no pattern configured).
+	 */
+	private _collectRoutePatterns(): { name: string; pattern: string }[] {
+		const result: { name: string; pattern: string }[] = [];
+		for (const name of this._routeNames) {
+			const route = this.getRoute(name);
+			if (route) {
+				const pattern = route.getPattern();
+				if (pattern !== undefined) {
+					result.push({ name, pattern });
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Expand guard descriptors to descendant routes when guard inheritance
+	 * is set to `"pattern-tree"`. Global (`"*"`) descriptors are kept as-is.
+	 * Descriptors are sorted by pattern depth (ancestor guards run before
+	 * descendant guards).
+	 */
+	private _expandGuardDescriptors(descriptors: GuardDescriptor[]): GuardDescriptor[] {
+		const allRoutes = this._collectRoutePatterns();
+		if (allRoutes.length === 0) return descriptors;
+
+		// Build a name -> pattern map for quick lookup
+		const patternByName = new Map(allRoutes.map((r) => [r.name, r.pattern]));
+
+		const expanded: GuardDescriptor[] = [];
+
+		for (const descriptor of descriptors) {
+			expanded.push(descriptor);
+
+			// Global guards and routes without a known pattern are not expanded
+			if (descriptor.route === "*") continue;
+			const ancestorPattern = patternByName.get(descriptor.route);
+			if (ancestorPattern === undefined) continue;
+
+			// Find descendant routes whose pattern extends the ancestor's pattern
+			for (const { name, pattern } of allRoutes) {
+				if (name === descriptor.route) continue;
+				if (isPatternAncestor(ancestorPattern, pattern)) {
+					expanded.push({ ...descriptor, route: name });
+				}
+			}
+		}
+
+		// Sort by pattern depth (segment count) so ancestor guards run first.
+		// Descriptors for routes without a pattern keep their original position.
+		// oxlint-disable-next-line unicorn/no-array-sort -- expanded is a local array, mutation is intentional
+		return expanded.sort((a, b) => {
+			if (a.route === "*" || b.route === "*") return 0;
+			const pa = patternByName.get(a.route) ?? "";
+			const pb = patternByName.get(b.route) ?? "";
+			return pa.split("/").length - pb.split("/").length;
+		});
+	}
+
+	/**
+	 * Expand manifest metadata to descendant routes when meta inheritance
+	 * is set to `"pattern-tree"`. Ancestor metadata is shallow-merged under
+	 * descendant metadata (descendant values win on conflict).
+	 */
+	private _expandManifestMeta(): void {
+		const allRoutes = this._collectRoutePatterns();
+		if (allRoutes.length === 0) return;
+
+		// Collect ancestor entries (routes that have manifest meta declared).
+		// Sort by pattern depth (shallowest first) so merging proceeds root-to-leaf.
+		const ancestors = allRoutes.filter((r) => this._manifestMeta.has(r.name));
+		// oxlint-disable-next-line unicorn/no-array-sort -- ancestors is a fresh array from filter()
+		ancestors.sort((a, b) => a.pattern.split("/").length - b.pattern.split("/").length);
+
+		if (ancestors.length === 0) return;
+
+		for (const { name: routeName, pattern: routePattern } of allRoutes) {
+			// Collect all ancestor metadata that applies to this route, shallowest first
+			const applicableAncestors = ancestors.filter(
+				(a) => a.name !== routeName && isPatternAncestor(a.pattern, routePattern),
+			);
+
+			if (applicableAncestors.length === 0) continue;
+
+			// Merge: start with shallowest ancestor, overlay deeper ancestors, then own
+			const merged: Record<string, unknown> = {};
+			for (const ancestor of applicableAncestors) {
+				Object.assign(merged, this._manifestMeta.get(ancestor.name));
+			}
+
+			// Overlay the route's own declared metadata last (own wins over all ancestors)
+			const own = this._manifestMeta.get(routeName);
+			if (own) {
+				Object.assign(merged, own);
+			}
+
+			this._manifestMeta.set(routeName, Object.freeze(merged));
 		}
 	}
 
