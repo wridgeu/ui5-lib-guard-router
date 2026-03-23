@@ -1609,7 +1609,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 
 		// Sort by pattern depth (segment count) so ancestor guards run first.
-		// Descriptors for routes without a pattern keep their original position.
+		// Global ("*") descriptors return 0 here -- their relative position is irrelevant
+		// because GuardPipeline evaluates globals separately from route-specific guards.
 		// oxlint-disable-next-line unicorn/no-array-sort -- expanded is a local array, mutation is intentional
 		return expanded.sort((a, b) => {
 			if (a.route === "*" || b.route === "*") return 0;
