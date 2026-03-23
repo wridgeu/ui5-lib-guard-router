@@ -218,15 +218,15 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                                               |
-| ------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)                                     |
-| `toHash`      | `string`                                           | Raw hash being navigated to                                               |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                   |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                            |
-| `fromHash`    | `string`                                           | Current hash                                                              |
-| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`         |
-| `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one pipeline run |
+| Property      | Type                                               | Description                                                             |
+| ------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `toRoute`     | `string`                                           | Target route name (empty if no match)                                   |
+| `toHash`      | `string`                                           | Raw hash being navigated to                                             |
+| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                 |
+| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                          |
+| `fromHash`    | `string`                                           | Current hash                                                            |
+| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
+| `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
 
 ### Return values (`GuardResult`)
 
@@ -549,7 +549,7 @@ When `#` is used on a single-function module, the export key is ignored with a d
 
 ### Guard context `bag`
 
-Guards in the same pipeline can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that pipeline:
+Guards can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that navigation, including across redirect chain hops:
 
 ```typescript
 export default function firstGuard(context: GuardContext): GuardResult {

@@ -60,9 +60,9 @@ export interface GuardContext {
 	signal: AbortSignal;
 	/**
 	 * Shared mutable bag for passing data between guards within a single
-	 * pipeline run. Created fresh per navigation attempt. The router never
-	 * reads from or writes to it -- it is purely a carrier for inter-guard
-	 * communication.
+	 * navigation, including across redirect chain hops. Created fresh per
+	 * navigation attempt. The router never reads from or writes to it --
+	 * it is purely a carrier for inter-guard communication.
 	 */
 	bag: Map<string, unknown>;
 }
