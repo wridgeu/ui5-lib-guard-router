@@ -156,6 +156,24 @@ export type NavToPreflightMode = "guard" | "bypass" | "off";
 export type GuardLoading = "block" | "lazy";
 
 /**
+ * Strategy for inheriting guards down the URL pattern tree.
+ *
+ * - `"none"` -- guards apply only to their declared route (default).
+ * - `"pattern-tree"` -- guards propagate to all routes whose URL pattern
+ *   extends the declared route's pattern.
+ */
+export type GuardInheritance = "none" | "pattern-tree";
+
+/**
+ * Strategy for inheriting route metadata down the URL pattern tree.
+ *
+ * - `"none"` -- metadata applies only to the declared route (default).
+ * - `"pattern-tree"` -- metadata propagates to descendant routes via
+ *   shallow merge (child values override ancestor values on conflict).
+ */
+export type MetaInheritance = "none" | "pattern-tree";
+
+/**
  * Per-route guard declaration in the manifest.
  *
  * @since 1.5.0
@@ -200,6 +218,10 @@ export interface GuardRouterOptions {
 	 * guarantees.
 	 */
 	guardLoading?: GuardLoading;
+	/** Strategy for inheriting manifest guards down the URL pattern tree. Defaults to `"none"`. */
+	guardInheritance?: GuardInheritance;
+	/** Strategy for inheriting route metadata down the URL pattern tree. Defaults to `"none"`. */
+	metaInheritance?: MetaInheritance;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
 	/**
