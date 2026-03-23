@@ -7,6 +7,7 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | Pattern                                                                     | Guard type           | Sync / Async | Reference                                                            |
 | --------------------------------------------------------------------------- | -------------------- | ------------ | -------------------------------------------------------------------- |
 | [Authentication guard](#authentication-guard)                               | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
+| [Redirect and resume](#redirect-and-resume)                                 | Global enter         | Sync         | inline example                                                       |
 | [Async permission check](#async-permission-check-with-abortsignal)          | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
 | [Always block](#always-block)                                               | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
 | [Always redirect](#always-redirect)                                         | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
@@ -35,6 +36,99 @@ router.addRouteGuard("protected", (context) => {
 ```
 
 Reference: `createAuthGuard` in `guards.ts`.
+
+## Redirect and resume
+
+When a guard redirects (e.g., unauthenticated user sent to login), the original destination is lost. Store the target route and its arguments as plain data, then resume with `router.navTo()` after the blocking condition is resolved.
+
+```typescript
+router.addGuard((context) => {
+	if (!isLoggedIn() && context.toRoute !== "login") {
+		authModel.setProperty("/pendingNavigation", {
+			route: context.toRoute,
+			arguments: context.toArguments,
+		});
+		return "login";
+	}
+	return true;
+});
+```
+
+In the login controller, resume the original navigation after a successful login:
+
+```typescript
+onLoginSuccess(): void {
+	authModel.setProperty("/isLoggedIn", true);
+	const pending = authModel.getProperty("/pendingNavigation") as
+		| { route: string; arguments: Record<string, string | Record<string, string>> }
+		| null;
+	authModel.setProperty("/pendingNavigation", null);
+	const router = this.getRouter() as GuardRouter;
+	if (pending) {
+		router.navTo(pending.route, pending.arguments);
+	} else {
+		router.navTo("home");
+	}
+}
+```
+
+`router.navTo()` is the standard UI5 router API for navigation. Guards re-run on the resumed navigation, which is the safe default — the auth guard passes because the user just logged in.
+
+For cross-session flows (IdP redirect with page reload), in-memory model data does not survive. Store the destination in `sessionStorage` instead. There are two variants:
+
+**Variant A: store route name and arguments, resume with `navTo()`**
+
+```typescript
+// In the guard, before redirecting to the IdP
+sessionStorage.setItem(
+	"returnTo",
+	JSON.stringify({
+		route: context.toRoute,
+		arguments: context.toArguments,
+	}),
+);
+```
+
+```typescript
+// After IdP callback — in Component.init(), after router.initialize()
+const raw = sessionStorage.getItem("returnTo");
+if (raw) {
+	sessionStorage.removeItem("returnTo");
+	const pending = JSON.parse(raw) as {
+		route: string;
+		arguments: Record<string, string | Record<string, string>>;
+	};
+	router.navTo(pending.route, pending.arguments);
+}
+```
+
+This uses the standard router API and guards run on the resumed navigation. Because `router.initialize()` already processes the current hash, this causes two navigations: one for the initial hash (typically the default route) and one for the pending destination. For most apps with synchronous guards this is not noticeable, but apps with async guards may see a brief flicker.
+
+**Variant B: store the hash, restore with `HashChanger` before the router starts**
+
+```typescript
+// In the guard, before redirecting to the IdP
+sessionStorage.setItem("returnTo", context.toHash);
+```
+
+Import `HashChanger` at the top of the component file:
+
+```typescript
+import HashChanger from "sap/ui/core/routing/HashChanger";
+```
+
+Then in `Component.init()`, before `router.initialize()`:
+
+```typescript
+const returnTo = sessionStorage.getItem("returnTo");
+if (returnTo) {
+	sessionStorage.removeItem("returnTo");
+	HashChanger.getInstance().setHash(returnTo);
+}
+router.initialize(); // picks up the restored hash on first parse
+```
+
+`HashChanger` is not commonly used in application code, but it avoids the double-navigation of Variant A. The hash is set before `router.initialize()`, so the router processes the restored hash on its first parse. `setHash()` writes a browser history entry; for the initial app load after an IdP callback this is typically acceptable.
 
 ## Async permission check with AbortSignal
 
