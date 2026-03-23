@@ -1721,3 +1721,57 @@ QUnit.test(
 		assert.strictEqual(getHash(), "protected", "navigation works after load failure");
 	},
 );
+
+// ============================================================
+// Module: Router - Route metadata
+// ============================================================
+QUnit.module("Router - Route metadata", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+	},
+});
+
+QUnit.test("getRouteMeta returns manifest-defined metadata", function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true, roles: ["admin"] },
+		},
+	});
+
+	const meta = router.getRouteMeta("protected");
+	assert.strictEqual(meta.requiresAuth, true, "requiresAuth is true");
+	assert.deepEqual(meta.roles, ["admin"], "roles array is present");
+});
+
+QUnit.test("getRouteMeta returns empty object for unknown routes", function (assert: Assert) {
+	router = createRouterWithOptions({});
+
+	const meta = router.getRouteMeta("nonexistent");
+	assert.deepEqual(meta, {}, "empty object for unknown route");
+	assert.ok(Object.isFrozen(meta), "returned object is frozen");
+});
+
+QUnit.test("setRouteMeta overrides manifest metadata", function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true, level: 1 },
+		},
+	});
+
+	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
+	const meta = router.getRouteMeta("protected");
+	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
+	assert.strictEqual(meta.custom, "value", "runtime adds new keys");
+	assert.strictEqual(meta.level, 1, "manifest keys not in runtime are preserved");
+});
+
+QUnit.test("setRouteMeta works for routes without manifest metadata", function (assert: Assert) {
+	router = createRouterWithOptions({});
+
+	router.setRouteMeta("home", { public: true });
+	const meta = router.getRouteMeta("home");
+	assert.strictEqual(meta.public, true, "runtime metadata for unconfigured route");
+});
