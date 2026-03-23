@@ -572,6 +572,18 @@ Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all gu
 router.navTo("settings", {}, false, { skipGuards: true });
 ```
 
+### Mixing declarative and programmatic guards
+
+Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
+
+**Execution order:** manifest guards run first (in declaration order), then programmatic guards (in registration order). For the same route, both sets execute — they are additive, not exclusive.
+
+A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
+
+- **Manifest:** guards that don't need component state (simple blocks, redirects, logging)
+- **Programmatic:** guards that close over models, services, or runtime state
+- **Controller-level:** guards tied to a specific view's lifecycle (registered in `onInit`, removed in `onExit`)
+
 ## Examples
 
 ### Async guard with AbortSignal
