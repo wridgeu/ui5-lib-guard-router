@@ -1889,3 +1889,33 @@ QUnit.test("global auth guard using toMeta blocks unauthenticated access", async
 	await waitForRoute(router, "protected");
 	assert.ok(true, "authenticated user reaches protected route");
 });
+
+QUnit.test("invalid routeMeta entries produce warnings", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions({
+			routeMeta: {
+				home: "not an object",
+				protected: { valid: true },
+			},
+		});
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes('routeMeta["home"]')),
+		"warning for non-object metadata entry",
+	);
+	assert.deepEqual(router.getRouteMeta("protected"), { valid: true }, "valid entries still parsed");
+});
+
+QUnit.test("non-object routeMeta produces warning", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions({
+			routeMeta: "invalid",
+		});
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("routeMeta")),
+		"warning for non-object routeMeta",
+	);
+});
