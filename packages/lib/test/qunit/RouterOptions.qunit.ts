@@ -424,7 +424,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 });
 
 QUnit.test("manifest guards run before imperatively registered guards", async function (assert: Assert) {
-	// Arrange: router with metaWriterGuard as manifest guard -- it writes to context.bag
+	// Arrange: router with bagWriterGuard as manifest guard -- it writes to context.bag
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -436,7 +436,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 				guardLoading: "block",
 				unknownRouteGuardRegistration: "ignore",
 				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/metaWriterGuard"],
+					"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
 				},
 			},
 		} as object,
@@ -462,7 +462,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	assert.ok(manifestRanFirst, "manifest guard wrote to context.bag before imperative guard ran");
 });
 
-QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReader)", async function (assert: Assert) {
+QUnit.test("manifest guards share bag across pipeline (bagWriter → bagReader)", async function (assert: Assert) {
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -475,8 +475,8 @@ QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReade
 				unknownRouteGuardRegistration: "ignore",
 				guards: {
 					"*": [
-						"ui5/guard/router/qunit/fixtures/guards/metaWriterGuard",
-						"ui5/guard/router/qunit/fixtures/guards/metaReaderGuard",
+						"ui5/guard/router/qunit/fixtures/guards/bagWriterGuard",
+						"ui5/guard/router/qunit/fixtures/guards/bagReaderGuard",
 					],
 				},
 			},
@@ -489,7 +489,7 @@ QUnit.test("manifest guards share meta across pipeline (metaWriter → metaReade
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
-	assert.strictEqual(result.status, NavigationOutcome.Committed, "metaReader allowed because metaWriter set data");
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "bagReader allowed because bagWriter set data");
 });
 
 QUnit.test("destroy() during block-mode loading prevents re-initialization", async function (assert: Assert) {
@@ -1328,3 +1328,275 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "cherry-picked leave guard from object module blocks");
 });
+
+// ============================================================
+// Module: parseGuardDescriptors edge cases
+// ============================================================
+QUnit.module("Router - parseGuardDescriptors edge cases", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("guards value is not a plain object (array) warns and registers no guards", async function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					guards: [1, 2, 3],
+				},
+			} as object,
+		);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("not a plain object")),
+		"warning logged for non-object guards value",
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// No manifest guards registered, so navigation should be allowed
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "no guards block navigation");
+});
+
+QUnit.test("invalid entries in shorthand array warn and are skipped", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = new GuardRouterClass([{ name: "home", pattern: "" }], {
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				guards: { home: [42, null, ""] },
+			},
+		} as object);
+	});
+
+	const invalidEntryWarnings = warnings.filter((w) => w.message.includes("invalid entry"));
+	assert.strictEqual(invalidEntryWarnings.length, 3, "one warning per invalid entry (42, null, empty string)");
+});
+
+QUnit.test("'*' with object form warns about leave and still registers enter guard", async function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						"*": {
+							enter: ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
+							leave: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+						},
+					},
+				},
+			} as object,
+		);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("global leave guards are not supported")),
+		"warning logged about global leave guards",
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// The enter guard (allowGuard) should run and allow navigation
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "enter guard from '*' still registered and allows");
+});
+
+// ============================================================
+// Module: resolveModuleExports edge cases
+// ============================================================
+QUnit.module("Router - resolveModuleExports edge cases", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("module exporting a primitive warns and is skipped", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/primitiveExportGuard"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("did not export a function, array, or plain object")),
+		"warning logged for primitive module export",
+	);
+
+	// No valid guard registered, so navigation should succeed
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "primitive export skipped, navigation allowed");
+});
+
+QUnit.test(
+	"array module with non-function entries warns and registers only functions",
+	async function (assert: Assert) {
+		const warnings = await captureWarningsAsync(async () => {
+			router = new GuardRouterClass(
+				[
+					{ name: "home", pattern: "" },
+					{ name: "protected", pattern: "protected" },
+				],
+				{
+					async: true,
+					guardRouter: {
+						guardLoading: "block",
+						unknownRouteGuardRegistration: "ignore",
+						guards: {
+							protected: ["ui5/guard/router/qunit/fixtures/guards/mixedArrayGuard"],
+						},
+					},
+				} as object,
+			);
+
+			router.initialize();
+			await waitForRoute(router, "home", 5000);
+		});
+
+		assert.ok(
+			warnings.some((w) => w.message.includes("[1] is not a function")),
+			"warning logged for non-function entry at index 1",
+		);
+
+		// The two valid function guards (index 0 and 2) both return true
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Committed,
+			"valid function guards registered and allow navigation",
+		);
+	},
+);
+
+QUnit.test("cherry-pick with out-of-range index warns and skips", async function (assert: Assert) {
+	const warnings = await captureWarningsAsync(async () => {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#99"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("#99") && w.message.includes("out of range")),
+		"warning logged for out-of-range index",
+	);
+
+	// No guard registered, navigation should succeed
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "out-of-range index skipped, navigation allowed");
+});
+
+// ============================================================
+// Module: Block mode catastrophic load failure
+// ============================================================
+QUnit.module("Router - Block mode catastrophic load failure", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test(
+	"block mode with invalid module path still initializes router after load failure",
+	async function (assert: Assert) {
+		const warnings = await captureWarningsAsync(async () => {
+			router = new GuardRouterClass(
+				[
+					{ name: "home", pattern: "" },
+					{ name: "protected", pattern: "protected" },
+				],
+				{
+					async: true,
+					guardRouter: {
+						guardLoading: "block",
+						unknownRouteGuardRegistration: "ignore",
+						guards: {
+							protected: ["completely/nonexistent/guard/module/that/does/not/exist"],
+						},
+					},
+				} as object,
+			);
+
+			router.initialize();
+
+			// Wait for the async module loading to fail and the .then() handler to call super.initialize()
+			await nextTick(500);
+		});
+
+		assert.ok(
+			warnings.some((w) => w.message.includes("failed to load module")),
+			"warning logged about module load failure",
+		);
+
+		assert.ok(router.isInitialized(), "router initialized despite load failure");
+
+		// Navigation should still work (no guards registered -- the failed module was skipped)
+		router.navTo("protected");
+		await waitForRoute(router, "protected", 5000);
+		assert.strictEqual(getHash(), "protected", "navigation works after load failure");
+	},
+);

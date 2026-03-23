@@ -159,7 +159,14 @@ export interface GuardRouterOptions {
 	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
 	/** Strategy for evaluating guards on programmatic `navTo()` calls. Defaults to `"guard"`. */
 	navToPreflight?: NavToPreflightMode;
-	/** Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`. */
+	/**
+	 * Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`.
+	 *
+	 * In `"lazy"` mode, if the preload hint has not completed before the first
+	 * navigation, multi-export module guards beyond the first are appended after
+	 * any imperatively registered guards. Use `"block"` for strict declaration-order
+	 * guarantees.
+	 */
 	guardLoading?: GuardLoading;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;

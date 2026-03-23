@@ -215,14 +215,15 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                                       |
-| ------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)                             |
-| `toHash`      | `string`                                           | Raw hash being navigated to                                       |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                           |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                    |
-| `fromHash`    | `string`                                           | Current hash                                                      |
-| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()` |
+| Property      | Type                                               | Description                                                               |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `toRoute`     | `string`                                           | Target route name (empty if no match)                                     |
+| `toHash`      | `string`                                           | Raw hash being navigated to                                               |
+| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                   |
+| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                            |
+| `fromHash`    | `string`                                           | Current hash                                                              |
+| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`         |
+| `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one pipeline run |
 
 ### Return values (`GuardResult`)
 
@@ -642,7 +643,7 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 
 ### Object form with RouteGuardConfig
 
-The runnable demo uses the same object form in `packages/demo-app/webapp/Component.ts`, pairing an async permission check with a leave guard on the `protected` route.
+The object form is useful when registering both enter and leave guards for the same route in a single call:
 
 ```typescript
 import type { RouteGuardConfig } from "ui5/guard/router/types";

@@ -38,18 +38,16 @@ export default class Component extends UIComponent {
 		super.init();
 
 		const router = this.getRouter() as GuardRouter;
-		const authModel = new JSONModel({ isLoggedIn: false });
 		const runtimeModel = createRuntimeModel();
 		const formModel = new JSONModel({ isDirty: false });
 
-		this.setModel(authModel, "auth");
 		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
 		// Programmatic guards: these need component context (model access)
 		// that declarative manifest guards don't have via closure.
 		router.addRouteGuard("admin", adminGuard);
-		this._permissionGuard = createAsyncPermissionGuard(authModel);
+		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
 		router.addRouteGuard("protected", this._permissionGuard);
 
 		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);

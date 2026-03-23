@@ -16,21 +16,21 @@
 
 ## File Map
 
-| File                                                         | Action | Responsibility                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/lib/src/types.ts`                                  | Modify | Add new types: `UnknownRouteGuardRegistrationPolicy`, `NavToPreflightMode`, `GuardLoading`, `GuardRouterOptions`, `GuardNavToOptions`, `ManifestGuardConfig`, `ManifestRouteGuardConfig`. Add `bag` to `GuardContext`. Add `navTo` overloads to `GuardRouter`.                       |
-| `packages/lib/src/Router.ts`                                 | Modify | Add constructor config parsing, `_options` field, `normalizeGuardRouterOptions()`, `_handleUnknownRouteRegistration()`, `initialize()` override for guard module loading, `navTo()` overload expansion with preflight modes and `skipGuards`, `bag` creation in `_evaluateGuards()`. |
-| `packages/lib/test/qunit/testHelpers.ts`                     | Modify | Add `createRouterWithOptions()` helper for creating routers with `guardRouter` config.                                                                                                                                                                                               |
-| `packages/lib/test/qunit/Router.qunit.ts`                    | Modify | Add test modules for: router options, unknown route policies, navTo preflight modes, skipGuards, guard context bag, manifest guard loading (block + lazy).                                                                                                                           |
-| `packages/lib/test/qunit/fixtures/manifest/Component.ts`     | Create | Minimal UIComponent for manifest-driven router instantiation tests.                                                                                                                                                                                                                  |
-| `packages/lib/test/qunit/fixtures/manifest/manifest.json`    | Create | Test manifest with `guardRouter` config block.                                                                                                                                                                                                                                       |
-| `packages/lib/test/qunit/fixtures/guards/allowGuard.ts`      | Create | Stub guard module exporting `() => true`.                                                                                                                                                                                                                                            |
-| `packages/lib/test/qunit/fixtures/guards/blockGuard.ts`      | Create | Stub guard module exporting `() => false`.                                                                                                                                                                                                                                           |
-| `packages/lib/test/qunit/fixtures/guards/redirectGuard.ts`   | Create | Stub guard module exporting `() => "home"`.                                                                                                                                                                                                                                          |
-| `packages/lib/test/qunit/fixtures/guards/leaveGuard.ts`      | Create | Stub leave guard module exporting `() => true`.                                                                                                                                                                                                                                      |
-| `packages/lib/test/qunit/fixtures/guards/metaWriterGuard.ts` | Create | Stub guard that writes to `context.bag`.                                                                                                                                                                                                                                             |
-| `packages/lib/test/qunit/fixtures/guards/metaReaderGuard.ts` | Create | Stub guard that reads from `context.bag` and blocks if missing.                                                                                                                                                                                                                      |
-| `packages/lib/README.md`                                     | Modify | Add manifest configuration documentation.                                                                                                                                                                                                                                            |
+| File                                                        | Action | Responsibility                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/lib/src/types.ts`                                 | Modify | Add new types: `UnknownRouteGuardRegistrationPolicy`, `NavToPreflightMode`, `GuardLoading`, `GuardRouterOptions`, `GuardNavToOptions`, `ManifestGuardConfig`, `ManifestRouteGuardConfig`. Add `bag` to `GuardContext`. Add `navTo` overloads to `GuardRouter`.                       |
+| `packages/lib/src/Router.ts`                                | Modify | Add constructor config parsing, `_options` field, `normalizeGuardRouterOptions()`, `_handleUnknownRouteRegistration()`, `initialize()` override for guard module loading, `navTo()` overload expansion with preflight modes and `skipGuards`, `bag` creation in `_evaluateGuards()`. |
+| `packages/lib/test/qunit/testHelpers.ts`                    | Modify | Add `createRouterWithOptions()` helper for creating routers with `guardRouter` config.                                                                                                                                                                                               |
+| `packages/lib/test/qunit/Router.qunit.ts`                   | Modify | Add test modules for: router options, unknown route policies, navTo preflight modes, skipGuards, guard context bag, manifest guard loading (block + lazy).                                                                                                                           |
+| `packages/lib/test/qunit/fixtures/manifest/Component.ts`    | Create | Minimal UIComponent for manifest-driven router instantiation tests.                                                                                                                                                                                                                  |
+| `packages/lib/test/qunit/fixtures/manifest/manifest.json`   | Create | Test manifest with `guardRouter` config block.                                                                                                                                                                                                                                       |
+| `packages/lib/test/qunit/fixtures/guards/allowGuard.ts`     | Create | Stub guard module exporting `() => true`.                                                                                                                                                                                                                                            |
+| `packages/lib/test/qunit/fixtures/guards/blockGuard.ts`     | Create | Stub guard module exporting `() => false`.                                                                                                                                                                                                                                           |
+| `packages/lib/test/qunit/fixtures/guards/redirectGuard.ts`  | Create | Stub guard module exporting `() => "home"`.                                                                                                                                                                                                                                          |
+| `packages/lib/test/qunit/fixtures/guards/leaveGuard.ts`     | Create | Stub leave guard module exporting `() => true`.                                                                                                                                                                                                                                      |
+| `packages/lib/test/qunit/fixtures/guards/bagWriterGuard.ts` | Create | Stub guard that writes to `context.bag`.                                                                                                                                                                                                                                             |
+| `packages/lib/test/qunit/fixtures/guards/bagReaderGuard.ts` | Create | Stub guard that reads from `context.bag` and blocks if missing.                                                                                                                                                                                                                      |
+| `packages/lib/README.md`                                    | Modify | Add manifest configuration documentation.                                                                                                                                                                                                                                            |
 
 ---
 
@@ -899,8 +899,8 @@ git commit -m "feat(router): add navToPreflight modes (guard/bypass/off) and ski
 - Create: `packages/lib/test/qunit/fixtures/guards/blockGuard.ts`
 - Create: `packages/lib/test/qunit/fixtures/guards/redirectGuard.ts`
 - Create: `packages/lib/test/qunit/fixtures/guards/leaveGuard.ts`
-- Create: `packages/lib/test/qunit/fixtures/guards/metaWriterGuard.ts`
-- Create: `packages/lib/test/qunit/fixtures/guards/metaReaderGuard.ts`
+- Create: `packages/lib/test/qunit/fixtures/guards/bagWriterGuard.ts`
+- Create: `packages/lib/test/qunit/fixtures/guards/bagReaderGuard.ts`
 
 - [ ] **Step 1: Create stub guard modules**
 
@@ -942,21 +942,21 @@ export default function leaveGuard(_context: GuardContext): boolean {
 }
 ```
 
-`metaWriterGuard.ts`:
+`bagWriterGuard.ts`:
 
 ```typescript
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-export default function metaWriterGuard(context: GuardContext): GuardResult {
+export default function bagWriterGuard(context: GuardContext): GuardResult {
 	context.bag.set("writer", "was-here");
 	return true;
 }
 ```
 
-`metaReaderGuard.ts`:
+`bagReaderGuard.ts`:
 
 ```typescript
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-export default function metaReaderGuard(context: GuardContext): GuardResult {
+export default function bagReaderGuard(context: GuardContext): GuardResult {
 	return context.bag.has("writer") ? true : false;
 }
 ```
@@ -1509,8 +1509,8 @@ QUnit.test("manifest guards share bag across pipeline (metaWriter → metaReader
 				unknownRouteGuardRegistration: "ignore",
 				guards: {
 					"*": [
-						"ui5/guard/router/qunit/fixtures/guards/metaWriterGuard",
-						"ui5/guard/router/qunit/fixtures/guards/metaReaderGuard",
+						"ui5/guard/router/qunit/fixtures/guards/bagWriterGuard",
+						"ui5/guard/router/qunit/fixtures/guards/bagReaderGuard",
 					],
 				},
 			},

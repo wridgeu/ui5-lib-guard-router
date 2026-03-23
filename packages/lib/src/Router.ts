@@ -343,14 +343,6 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				continue;
 			}
 
-			if (key === "*" && (config.enter !== undefined || config.leave !== undefined)) {
-				Log.warning(
-					'guardRouter.guards["*"]: object form for global guards; treating enter as global',
-					undefined,
-					LOG_COMPONENT,
-				);
-			}
-
 			if (Array.isArray(config.enter)) {
 				for (const entry of config.enter) {
 					if (typeof entry !== "string" || entry.length === 0) {
@@ -1626,7 +1618,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 								}
 								resolve(exports[0].fn(context));
 							},
-							reject,
+							(err: Error) => {
+								Log.warning(
+									`guardRouter.guards: lazy load of "${modulePath}" failed`,
+									String(err),
+									LOG_COMPONENT,
+								);
+								reject(err);
+							},
 						);
 					});
 				};
@@ -1670,7 +1669,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 							}
 							resolve(exports[0].fn(context));
 						},
-						reject,
+						(err: Error) => {
+							Log.warning(
+								`guardRouter.guards: lazy load of "${modulePath}" failed`,
+								String(err),
+								LOG_COMPONENT,
+							);
+							reject(err);
+						},
 					);
 				});
 			};
