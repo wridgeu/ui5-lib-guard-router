@@ -419,7 +419,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pendingGuardDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
 	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
-	private _runtimeMeta = new Map<string, Record<string, unknown>>();
+	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -722,7 +722,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const runtime = this._runtimeMeta.get(routeName);
 		if (!manifest && !runtime) return Router._EMPTY_META;
 		if (!runtime) return manifest!;
-		if (!manifest) return Object.freeze({ ...runtime });
+		if (!manifest) return runtime!;
 		return Object.freeze({ ...manifest, ...runtime });
 	}
 
@@ -737,7 +737,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @returns `this` for chaining.
 	 */
 	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
-		this._runtimeMeta.set(routeName, { ...meta });
+		this._runtimeMeta.set(routeName, Object.freeze({ ...meta }));
 		return this;
 	}
 

@@ -393,6 +393,10 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 							"enter": ["guards.adminGuard"],
 							"leave": ["guards.unsavedChangesGuard"]
 						}
+					},
+					"routeMeta": {
+						"admin": { "requiresAuth": true, "roles": ["admin"] },
+						"profile": { "requiresAuth": true }
 					}
 				}
 			}
