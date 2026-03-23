@@ -174,7 +174,8 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  * Router-level options for the guard router.
  *
  * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
- * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`.
+ * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`,
+ * `guardInheritance: "none"`, `metaInheritance: "none"`.
  */
 export interface GuardRouterOptions {
 	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */

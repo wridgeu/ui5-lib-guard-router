@@ -656,7 +656,7 @@ When `metaInheritance` is set to `"pattern-tree"`, route metadata propagates the
 
 Both toggles are independent — you can inherit guards without inheriting metadata, or vice versa. Both default to `"none"` for backward compatibility.
 
-Inheritance is resolved once at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
+Metadata inheritance is resolved at construction time; guard inheritance at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
 
 ### Mixing declarative and programmatic guards
 

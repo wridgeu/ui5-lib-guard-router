@@ -2152,3 +2152,16 @@ QUnit.test("inherited metadata is visible on context.toMeta in guards", async fu
 	assert.strictEqual(receivedToMeta!.section, "hr", "toMeta includes inherited section");
 	assert.strictEqual(receivedToMeta!.requiresAuth, true, "toMeta includes inherited requiresAuth");
 });
+
+QUnit.test("runtime setRouteMeta does not participate in inheritance", function (assert: Assert) {
+	router = createHierarchicalRouter({
+		metaInheritance: "pattern-tree",
+	});
+
+	router.setRouteMeta("employees", { runtimeKey: true });
+	const childMeta = router.getRouteMeta("employee");
+	assert.strictEqual(childMeta.runtimeKey, undefined, "runtime metadata does not propagate to descendants");
+
+	const ownMeta = router.getRouteMeta("employees");
+	assert.strictEqual(ownMeta.runtimeKey, true, "runtime metadata is available on the declared route");
+});
