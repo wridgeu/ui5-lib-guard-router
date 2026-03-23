@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.0...v1.5.1) (2026-03-23)
+
+
+### Code Refactoring
+
+* **router:** extract guard context and redirect chain helpers, tighten log messages ([e939d4b](https://github.com/wridgeu/ui5-lib-guard-router/commit/e939d4bfe5598cd702102dbd68eb64e82123072d))
+
 ## [1.5.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.4.0...v1.5.0) (2026-03-23)
 
 
