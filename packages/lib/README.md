@@ -210,6 +210,13 @@ All guard registration and removal methods return `this` for chaining. `navigati
 | `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form |
 | `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                             |
 
+### Route metadata
+
+| Method                          | Description                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `getRouteMeta(routeName)`       | Get resolved metadata (manifest defaults merged with runtime)         |
+| `setRouteMeta(routeName, meta)` | Set runtime metadata for a route (replaces previous runtime metadata) |
+
 ### Unknown routes during registration
 
 `addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
@@ -227,6 +234,8 @@ Every guard receives a `GuardContext` object:
 | `fromHash`    | `string`                                           | Current hash                                                            |
 | `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
 | `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
+| `toMeta`      | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
+| `fromMeta`    | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
 
 ### Return values (`GuardResult`)
 
@@ -567,6 +576,38 @@ export default function secondGuard(context: GuardContext): GuardResult {
 The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This matches how UI5 handles untyped model data (`getProperty()` returns `any`) and avoids generic complexity that can't flow through UI5's class system.
 
 This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
+
+### Route metadata
+
+Per-route metadata can be declared in the manifest under `guardRouter.routeMeta`. Keys are route names, values are arbitrary objects. The router stores but never interprets the metadata — guards read it from `context.toMeta` and `context.fromMeta`.
+
+```json
+"guardRouter": {
+	"routeMeta": {
+		"admin": { "requiresAuth": true, "roles": ["admin"] },
+		"profile": { "requiresAuth": true },
+		"home": { "public": true }
+	}
+}
+```
+
+A single global guard can then implement policy-driven access control:
+
+```typescript
+router.addGuard((context) => {
+	if (context.toMeta.requiresAuth && !isLoggedIn()) return "login";
+	if (context.toMeta.roles && !hasAnyRole(context.toMeta.roles as string[])) return "forbidden";
+	return true;
+});
+```
+
+Runtime metadata can be set programmatically via `setRouteMeta()`. Runtime values take precedence over manifest defaults (shallow merge):
+
+```typescript
+router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
+```
+
+`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. For unconfigured routes, it returns an empty frozen object.
 
 ### `skipGuards` option
 
