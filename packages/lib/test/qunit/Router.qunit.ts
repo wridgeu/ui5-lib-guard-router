@@ -200,7 +200,7 @@ QUnit.test(
 		assert.strictEqual(warnings.length, 1, "One warning was logged");
 		assert.strictEqual(
 			warnings[0]?.message,
-			"addRouteGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+			"addRouteGuard: unknown route, guard registered anyway",
 			"Warning message explains the non-blocking behavior",
 		);
 		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
@@ -260,7 +260,7 @@ QUnit.test(
 		assert.strictEqual(warnings.length, 1, "One warning was logged");
 		assert.strictEqual(
 			warnings[0]?.message,
-			"addLeaveGuard called for unknown route; guard will still register. If the route is added later via addRoute(), this warning can be ignored.",
+			"addLeaveGuard: unknown route, guard registered anyway",
 			"Warning message explains the non-blocking behavior",
 		);
 		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
@@ -303,7 +303,7 @@ QUnit.test("addRouteGuard object form ignores invalid leave guard input", async 
 	assert.strictEqual(warnings.length, 1, "One warning was logged");
 	assert.strictEqual(
 		warnings[0]?.message,
-		"addRouteGuard called with invalid guard, ignoring",
+		"addRouteGuard: not a function, ignoring",
 		"Warning names the addRouteGuard object-form entrypoint",
 	);
 	assert.strictEqual(warnings[0]?.details, "protected", "Warning includes the route name");

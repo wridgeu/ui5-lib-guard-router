@@ -141,6 +141,11 @@ interface ResolvedGuardExport {
 	readonly fn: GuardFn;
 }
 
+/** Log a warning about a guard module entry in the manifest. */
+function guardWarning(modulePath: string, detail: string): void {
+	Log.warning(`guardRouter.guards: "${modulePath}" ${detail}`, undefined, LOG_COMPONENT);
+}
+
 /**
  * Detect the export shape of a loaded guard module and extract guard functions.
  *
@@ -164,7 +169,7 @@ function resolveModuleExports(
 	if (typeof moduleExport === "function") {
 		if (exportKey !== undefined) {
 			Log.debug(
-				`guardRouter.guards: "${modulePath}#${exportKey}" exports a single function, ignoring export key`,
+				`guardRouter.guards: "${modulePath}#${exportKey}" is a single function, ignoring export key`,
 				undefined,
 				LOG_COMPONENT,
 			);
@@ -175,31 +180,19 @@ function resolveModuleExports(
 	// Shape 2: array
 	if (Array.isArray(moduleExport)) {
 		if (moduleExport.length === 0) {
-			Log.warning(
-				`guardRouter.guards: module "${modulePath}" exported an empty array, skipping`,
-				undefined,
-				LOG_COMPONENT,
-			);
+			guardWarning(modulePath, "exported an empty array, skipping");
 			return [];
 		}
 
 		if (exportKey !== undefined) {
 			const index = parseInt(exportKey, 10);
 			if (Number.isNaN(index) || index < 0 || index >= moduleExport.length) {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}#${exportKey}" - index out of range or invalid, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `#${exportKey} - index out of range, skipping`);
 				return [];
 			}
 			const entry = moduleExport[index] as unknown;
 			if (typeof entry !== "function") {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
 			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
@@ -209,11 +202,7 @@ function resolveModuleExports(
 		for (let i = 0; i < moduleExport.length; i++) {
 			const entry = moduleExport[i] as unknown;
 			if (typeof entry !== "function") {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}"[${i}] is not a function, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `[${i}] is not a function, skipping`);
 				continue;
 			}
 			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
@@ -225,11 +214,7 @@ function resolveModuleExports(
 	if (isRecord(moduleExport)) {
 		const entries = Object.entries(moduleExport);
 		if (entries.length === 0) {
-			Log.warning(
-				`guardRouter.guards: module "${modulePath}" exported an empty object, skipping`,
-				undefined,
-				LOG_COMPONENT,
-			);
+			guardWarning(modulePath, "exported an empty object, skipping");
 			return [];
 		}
 
@@ -245,19 +230,11 @@ function resolveModuleExports(
 				}
 			}
 			if (value === undefined) {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}#${exportKey}" - key not found, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
 				return [];
 			}
 			if (typeof value !== "function") {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}#${exportKey}" is not a function, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
 			return [{ name: resolvedName, fn: value as GuardFn }];
@@ -266,11 +243,7 @@ function resolveModuleExports(
 		const results: ResolvedGuardExport[] = [];
 		for (const [key, value] of entries) {
 			if (typeof value !== "function") {
-				Log.warning(
-					`guardRouter.guards: "${modulePath}".${key} is not a function, skipping`,
-					undefined,
-					LOG_COMPONENT,
-				);
+				guardWarning(modulePath, `.${key} is not a function, skipping`);
 				continue;
 			}
 			results.push({ name: key, fn: value as GuardFn });
@@ -278,11 +251,7 @@ function resolveModuleExports(
 		return results;
 	}
 
-	Log.warning(
-		`guardRouter.guards: module "${modulePath}" did not export a function, array, or plain object, skipping`,
-		undefined,
-		LOG_COMPONENT,
-	);
+	guardWarning(modulePath, "did not export a function, array, or plain object, skipping");
 	return [];
 }
 
@@ -539,7 +508,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	addGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
-			Log.warning("addGuard called with invalid guard, ignoring", undefined, LOG_COMPONENT);
+			Log.warning("addGuard: not a function, ignoring", undefined, LOG_COMPONENT);
 			return this;
 		}
 		this._pipeline.addGlobalGuard(guard);
@@ -554,7 +523,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	removeGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
-			Log.warning("removeGuard called with invalid guard, ignoring", undefined, LOG_COMPONENT);
+			Log.warning("removeGuard: not a function, ignoring", undefined, LOG_COMPONENT);
 			return this;
 		}
 		this._pipeline.removeGlobalGuard(guard);
@@ -581,7 +550,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
 				if (typeof guard.beforeEnter !== "function") {
-					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+					Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 				} else {
 					this._pipeline.addEnterGuard(routeName, guard.beforeEnter);
 				}
@@ -589,24 +558,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (guard.beforeLeave !== undefined) {
 				hasHandler = true;
 				if (typeof guard.beforeLeave !== "function") {
-					Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+					Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 				} else {
 					this._pipeline.addLeaveGuard(routeName, guard.beforeLeave);
 				}
 			}
 
 			if (!hasHandler) {
-				Log.info(
-					"addRouteGuard called with config missing both beforeEnter and beforeLeave",
-					routeName,
-					LOG_COMPONENT,
-				);
+				Log.info("addRouteGuard: config has no beforeEnter or beforeLeave", routeName, LOG_COMPONENT);
 				return this;
 			}
 			return this;
 		}
 		if (typeof guard !== "function") {
-			Log.warning("addRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
@@ -638,7 +603,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 		if (typeof guard !== "function") {
-			Log.warning("removeRouteGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			Log.warning("removeRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		this._pipeline.removeEnterGuard(routeName, guard);
@@ -658,7 +623,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
-			Log.warning("addLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			Log.warning("addLeaveGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		if (!this._handleUnknownRouteRegistration(routeName, "addLeaveGuard")) {
@@ -685,12 +650,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				);
 			case "warn":
 			default:
-				Log.warning(
-					`${methodName} called for unknown route; guard will still register. ` +
-						`If the route is added later via addRoute(), this warning can be ignored.`,
-					routeName,
-					LOG_COMPONENT,
-				);
+				Log.warning(`${methodName}: unknown route, guard registered anyway`, routeName, LOG_COMPONENT);
 				return true;
 		}
 	}
@@ -704,7 +664,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
-			Log.warning("removeLeaveGuard called with invalid guard, ignoring", routeName, LOG_COMPONENT);
+			Log.warning("removeLeaveGuard: not a function, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
 		this._pipeline.removeLeaveGuard(routeName, guard);
@@ -920,15 +880,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			attempt: { hash: targetHash, route: toRoute, controller, generation },
 		};
 
-		const context: GuardContext = {
-			toRoute,
-			toHash: targetHash,
-			toArguments: routeInfo?.arguments ?? {},
-			fromRoute: this._currentRoute,
-			fromHash: this._currentHash ?? "",
-			signal: controller.signal,
-			bag: new Map(),
-		};
+		const context = this._createGuardContext(toRoute, targetHash, routeInfo, controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
@@ -1021,23 +973,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			case "block":
 				this._blockNavigation(targetHash, false);
 				break;
-			case "redirect": {
-				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
-				const { attempt } = this._phase as PhaseEvaluating;
-				const visited = new Set<string>();
-				visited.add(targetHash);
-				this._redirect(decision.target, {
-					visited,
-					attemptedHash: targetHash,
-					restoreHash: false,
-					fromRoute: this._currentRoute,
-					fromHash: this._currentHash ?? "",
-					signal: attempt.controller.signal,
-					generation: attempt.generation,
-					bag,
-				});
+			case "redirect":
+				this._startRedirectChain(decision.target, targetHash, false, bag);
 				break;
-			}
 			case "error":
 				this._errorNavigation(decision.error, targetHash, false);
 				break;
@@ -1091,15 +1029,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			attempt: { hash: newHash, route: toRoute, controller, generation },
 		};
 
-		const context: GuardContext = {
-			toRoute,
-			toHash: newHash,
-			toArguments: routeInfo?.arguments ?? {},
-			fromRoute: this._currentRoute,
-			fromHash: this._currentHash ?? "",
-			signal: controller.signal,
-			bag: new Map(),
-		};
+		const context = this._createGuardContext(toRoute, newHash, routeInfo, controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
@@ -1185,23 +1115,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			case "block":
 				this._blockNavigation(hash);
 				break;
-			case "redirect": {
-				// Safe: sync path sets phase to evaluating; async .then() checks kind before calling here.
-				const { attempt } = this._phase as PhaseEvaluating;
-				const visited = new Set<string>();
-				visited.add(hash);
-				this._redirect(decision.target, {
-					visited,
-					attemptedHash: hash,
-					restoreHash: true,
-					fromRoute: this._currentRoute,
-					fromHash: this._currentHash ?? "",
-					signal: attempt.controller.signal,
-					generation: attempt.generation,
-					bag,
-				});
+			case "redirect":
+				this._startRedirectChain(decision.target, hash, true, bag);
 				break;
-			}
 			case "error":
 				this._errorNavigation(decision.error, hash);
 				break;
@@ -1416,6 +1332,54 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Build a guard context for a new navigation.
+	 * Called by {@link navTo} (preflight path) and {@link parse} (browser-initiated path).
+	 */
+	private _createGuardContext(
+		toRoute: string,
+		toHash: string,
+		routeInfo: { arguments: Record<string, string | Record<string, string>> } | undefined,
+		signal: AbortSignal,
+	): GuardContext {
+		return {
+			toRoute,
+			toHash,
+			toArguments: routeInfo?.arguments ?? {},
+			fromRoute: this._currentRoute,
+			fromHash: this._currentHash ?? "",
+			signal,
+			bag: new Map(),
+		};
+	}
+
+	/**
+	 * Start a new redirect chain from the current evaluating phase.
+	 * Called by {@link _applyPreflightDecision} and {@link _applyDecision}
+	 * when a guard returns a redirect. Delegates to {@link _redirect} with
+	 * a fresh {@link RedirectChainContext}.
+	 */
+	private _startRedirectChain(
+		target: string | GuardRedirect,
+		hash: string,
+		restoreHash: boolean,
+		bag: Map<string, unknown>,
+	): void {
+		const { attempt } = this._phase as PhaseEvaluating;
+		const visited = new Set<string>();
+		visited.add(hash);
+		this._redirect(target, {
+			visited,
+			attemptedHash: hash,
+			restoreHash,
+			fromRoute: this._currentRoute,
+			fromHash: this._currentHash ?? "",
+			signal: attempt.controller.signal,
+			generation: attempt.generation,
+			bag,
+		});
+	}
+
+	/**
 	 * Clear pending state and flush a Blocked settlement.
 	 * When `restoreHash` is true (default), also restores the browser hash
 	 * to `_currentHash`. Preflight callers pass false because the hash was
@@ -1433,7 +1397,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Clear pending state and flush an Error settlement.
-	 * Same structure as `_blockNavigation` but with `NavigationOutcome.Error`
+	 * Same structure as {@link _blockNavigation} but with `NavigationOutcome.Error`
 	 * and the error that caused the failure.
 	 */
 	private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void {
