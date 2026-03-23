@@ -387,6 +387,8 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 					"unknownRouteGuardRegistration": "warn",
 					"navToPreflight": "guard",
 					"guardLoading": "lazy",
+					"guardInheritance": "none",
+					"metaInheritance": "none",
 					"guards": {
 						"*": ["guards.authGuard"],
 						"admin": {
@@ -412,6 +414,8 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 | `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
 | `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
 | `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
+| `guardInheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern.                                                                                                 |
+| `metaInheritance`               | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: metadata applies only to the declared route. `"pattern-tree"`: metadata propagates to descendant routes via shallow merge (child values override ancestor values on conflict).                                                                      |
 
 ### Declarative guards
 
@@ -620,6 +624,39 @@ Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all gu
 ```typescript
 router.navTo("settings", {}, false, { skipGuards: true });
 ```
+
+### Guard and metadata inheritance
+
+When `guardInheritance` is set to `"pattern-tree"`, guards declared on a route automatically apply to all routes whose URL pattern extends that route's pattern:
+
+```json
+"guardRouter": {
+	"guardInheritance": "pattern-tree",
+	"guards": {
+		"employees": ["guards.authGuard"]
+	}
+}
+```
+
+With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards.
+
+When `metaInheritance` is set to `"pattern-tree"`, route metadata propagates the same way. Child values override ancestor values on conflict:
+
+```json
+"guardRouter": {
+	"metaInheritance": "pattern-tree",
+	"routeMeta": {
+		"employees": { "section": "hr", "requiresAuth": true },
+		"employee": { "clearance": "manager" }
+	}
+}
+```
+
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true }` (inherited). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
+
+Both toggles are independent — you can inherit guards without inheriting metadata, or vice versa. Both default to `"none"` for backward compatibility.
+
+Inheritance is resolved once at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
 
 ### Mixing declarative and programmatic guards
 
