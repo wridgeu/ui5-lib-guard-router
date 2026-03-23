@@ -1775,3 +1775,117 @@ QUnit.test("setRouteMeta works for routes without manifest metadata", function (
 	const meta = router.getRouteMeta("home");
 	assert.strictEqual(meta.public, true, "runtime metadata for unconfigured route");
 });
+
+QUnit.test("guard receives toMeta from manifest metadata", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true },
+			home: { public: true },
+		},
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let receivedToMeta: Record<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		receivedToMeta = context.toMeta;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.deepEqual(receivedToMeta, { requiresAuth: true }, "toMeta reflects target route metadata");
+	assert.ok(Object.isFrozen(receivedToMeta), "toMeta is frozen");
+});
+
+QUnit.test("guard receives fromMeta for the current route", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			home: { public: true },
+			protected: { requiresAuth: true },
+		},
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let receivedFromMeta: Record<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		receivedFromMeta = context.fromMeta;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.deepEqual(receivedFromMeta, { public: true }, "fromMeta reflects source route metadata");
+});
+
+QUnit.test("runtime metadata changes reflected in subsequent navigations", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: { protected: { requiresAuth: true } },
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const snapshots: Record<string, unknown>[] = [];
+	router.addGuard((context: GuardContext) => {
+		snapshots.push(context.toMeta);
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	router.setRouteMeta("home", { updated: true });
+	router.navTo("home");
+	await waitForRoute(router, "home");
+
+	assert.deepEqual(snapshots[0], { requiresAuth: true }, "first navigation uses manifest meta");
+	assert.deepEqual(snapshots[1], { updated: true }, "second navigation sees runtime meta");
+});
+
+QUnit.test("toMeta is empty frozen object for routes without metadata", async function (assert: Assert) {
+	router = createRouterWithOptions({});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let receivedToMeta: Record<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		receivedToMeta = context.toMeta;
+		return true;
+	});
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.deepEqual(receivedToMeta, {}, "empty object for unconfigured route");
+	assert.ok(Object.isFrozen(receivedToMeta), "empty meta is frozen");
+});
+
+QUnit.test("global auth guard using toMeta blocks unauthenticated access", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true },
+			home: { public: true },
+		},
+	});
+
+	let isLoggedIn = false;
+	router.addGuard((context: GuardContext) => {
+		if (context.toMeta.requiresAuth && !isLoggedIn) return "home";
+		return true;
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	const blocked = await router.navigationSettled();
+	assert.strictEqual(blocked.status, NavigationOutcome.Redirected, "unauthenticated user redirected");
+
+	isLoggedIn = true;
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.ok(true, "authenticated user reaches protected route");
+});
