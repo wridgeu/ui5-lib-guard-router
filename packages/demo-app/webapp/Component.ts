@@ -56,11 +56,9 @@ export default class Component extends UIComponent {
 		this._runtimeCoordinator.start(router);
 	}
 
-	override destroy(): void {
+	override exit(): void {
 		this._runtimeCoordinator?.destroy();
 		this._runtimeCoordinator = null;
 		this._permissionGuard = null;
-
-		super.destroy();
 	}
 }
