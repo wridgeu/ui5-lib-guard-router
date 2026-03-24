@@ -468,6 +468,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * and `super.initialize()` is called immediately.
 	 *
 	 * @override sap.ui.core.routing.Router#initialize
+	 * @since 1.0.1
 	 */
 	override initialize(): this {
 		if (this._pendingGuardDescriptors.length === 0) {
@@ -505,6 +506,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
@@ -520,6 +522,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param guard - Guard function to remove by reference. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeGuard(guard: GuardFn): this {
 		if (typeof guard !== "function") {
@@ -539,6 +542,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
@@ -591,6 +595,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @param guard - Guard function or {@link RouteGuardConfig} object to remove by reference.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
@@ -620,6 +625,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
@@ -661,6 +667,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @param guard - Leave guard function to remove by reference. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (typeof guard !== "function") {
@@ -682,6 +689,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * until a new navigation settles.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
+	 * @since 1.2.0
 	 */
 	navigationSettled(): Promise<NavigationResult> {
 		if (this._phase.kind !== "evaluating") {
@@ -709,6 +717,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param oData - Application-specific payload passed to the handler as second argument.
 	 * @param fnFunction - The function to be called when the event occurs.
 	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
+	 * @since 1.3.0
 	 */
 	attachNavigationSettled(
 		oData: object,
@@ -734,6 +743,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param fnFunction - The handler function to detach.
 	 * @param oListener - Context object on which the given function had to be called.
+	 * @since 1.3.0
 	 */
 	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this {
 		this.detachEvent("navigationSettled", fnFunction as (...args: unknown[]) => void, oListener);
@@ -777,6 +787,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * same call stack (validated by test).
 	 *
 	 * @override sap.ui.core.routing.Router#navTo
+	 * @since 1.0.1
 	 */
 	override navTo(
 		routeName: string,
@@ -998,6 +1009,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param newHash - The new hash fragment from the URL.
 	 * @override sap.ui.core.routing.Router#parse
+	 * @since 1.0.1
 	 */
 	override parse(newHash: string): void {
 		if (this._suppressedHash !== null) {
@@ -1077,6 +1089,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * matching the native `sap.m.routing.Router` behavior.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
+	 * @since 1.0.1
 	 */
 	override stop(): this {
 		// Cancel first so in-flight navigationSettled() resolvers receive the
@@ -1608,7 +1621,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
-	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
+	/**
+	 * Clean up guards on destroy. Bumps generation to discard pending async results.
+	 *
+	 * @since 1.0.1
+	 */
 	override destroy(): this {
 		this._destroyed = true;
 		this._pipeline.clear();
