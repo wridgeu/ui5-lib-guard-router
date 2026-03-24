@@ -223,9 +223,9 @@ export interface GuardRouterOptions {
 	 * guarantees.
 	 */
 	guardLoading?: GuardLoading;
-	/** Strategy for inheriting manifest guards down the URL pattern tree. Defaults to `"none"`. */
+	/** Strategy for inheriting manifest guards down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
 	guardInheritance?: GuardInheritance;
-	/** Strategy for inheriting route metadata down the URL pattern tree. Defaults to `"none"`. */
+	/** Strategy for inheriting route metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
 	metaInheritance?: MetaInheritance;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
@@ -233,6 +233,8 @@ export interface GuardRouterOptions {
 	 * Per-route metadata declarations indexed by route name.
 	 * Values are arbitrary key-value objects that the router stores but never interprets.
 	 * Surfaced on `GuardContext` as `toMeta` and `fromMeta`.
+	 *
+	 * @since 1.6.0
 	 */
 	routeMeta?: Record<string, Record<string, unknown>>;
 }

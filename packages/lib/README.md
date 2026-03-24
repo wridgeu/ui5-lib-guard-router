@@ -609,7 +609,7 @@ router.addGuard((context) => {
 });
 ```
 
-Runtime metadata can be set programmatically via `setRouteMeta()`. Runtime values take precedence over manifest defaults (shallow merge):
+Runtime metadata can be set programmatically via `setRouteMeta()`. When read via `getRouteMeta()`, runtime values take precedence over manifest defaults:
 
 ```typescript
 router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
