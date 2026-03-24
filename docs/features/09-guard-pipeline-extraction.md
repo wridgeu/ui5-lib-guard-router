@@ -34,8 +34,8 @@ class GuardPipeline {
 	removeGlobalGuard(guard: GuardFn): void;
 	addEnterGuard(route: string, guard: GuardFn): void;
 	removeEnterGuard(route: string, guard: GuardFn): void;
-	addLeaveGuard(route: string, guard: LeaveGuardFn): void;
-	removeLeaveGuard(route: string, guard: LeaveGuardFn): void;
+	addLeaveGuard(route: string, guard: GuardFn): void;
+	removeLeaveGuard(route: string, guard: GuardFn): void;
 
 	evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision>;
 
@@ -60,7 +60,7 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 
 - `_globalGuards: GuardFn[]`
 - `_enterGuards: Map<string, GuardFn[]>`
-- `_leaveGuards: Map<string, LeaveGuardFn[]>`
+- `_leaveGuards: Map<string, GuardFn[]>`
 
 **Private methods (moved from Router):**
 
@@ -77,7 +77,7 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 **Module-level utilities:**
 
 - `isGuardRedirect` — private to module
-- `isPromiseLike` — private to module (Router has its own copy to check whether `evaluate()`'s return is a Promise)
+- `isPromiseLike` — exported from module (Router imports it instead of maintaining a duplicate)
 
 ### Exported types
 
