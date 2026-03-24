@@ -5,6 +5,8 @@ import type NavigationOutcome from "./NavigationOutcome";
 
 /**
  * Redirect target with route name and optional parameters.
+ *
+ * @since 1.0.1
  */
 export interface GuardRedirect {
 	/** Route name to redirect to */
@@ -31,31 +33,39 @@ export interface GuardRedirect {
  *   For browser-initiated navigation, the redirect replaces the current entry.
  * - `GuardRedirect` -- Redirect with route name, parameters, and optional
  *   component target info. Same history semantics as string redirect.
+ *
+ * @since 1.0.1
  */
 export type GuardResult = boolean | string | GuardRedirect;
 
 /**
  * Context passed to guard functions.
+ *
+ * @since 1.0.1
  */
 export interface GuardContext {
-	/** Target route name (empty string if no route matched / bypassed) */
+	/** Target route name (empty string if no route matched / bypassed) @since 1.0.1 */
 	toRoute: string;
-	/** Raw hash being navigated to */
+	/** Raw hash being navigated to @since 1.0.1 */
 	toHash: string;
 	/**
 	 * Parsed route arguments for the target route.
 	 * Values are strings (simple parameters) or `Record<string, string>` (nested parameters).
 	 * Empty object when the target route has no parameters or no route matched.
+	 *
+	 * @since 1.0.1
 	 */
 	toArguments: RouteInfo["arguments"];
-	/** Current route name (empty string on initial navigation) */
+	/** Current route name (empty string on initial navigation) @since 1.0.1 */
 	fromRoute: string;
-	/** Current hash */
+	/** Current hash @since 1.0.1 */
 	fromHash: string;
 	/**
 	 * Abort signal for this navigation. Aborted when a newer navigation
 	 * supersedes this one, or when the router is stopped or destroyed.
 	 * Pass to `fetch()` or other cancellable APIs to avoid wasted work.
+	 *
+	 * @since 1.0.1
 	 */
 	signal: AbortSignal;
 	/**
@@ -63,6 +73,8 @@ export interface GuardContext {
 	 * navigation, including across redirect chain hops. Created fresh per
 	 * navigation attempt. The router never reads from or writes to it --
 	 * it is purely a carrier for inter-guard communication.
+	 *
+	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
 }
@@ -74,6 +86,7 @@ export interface GuardContext {
  * @returns `true` to allow, `false` to block, a route name string to redirect,
  * or a {@link GuardRedirect} object for redirect with parameters or nested component targets.
  * Promise-like return values are awaited.
+ * @since 1.0.1
  */
 export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>;
 
@@ -86,6 +99,7 @@ export type GuardFn = (context: GuardContext) => GuardResult | PromiseLike<Guard
  * @param context - Navigation context with current/target route info and an `AbortSignal`.
  * @returns `true` to allow leaving the current route. Any non-`true` boolean result blocks.
  * Promise-like return values are awaited. Non-boolean runtime values are treated as blocked.
+ * @since 1.0.1
  */
 export type LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>;
 
@@ -95,6 +109,8 @@ export type LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<bool
  * When passed to `addRouteGuard`, the object form allows registering both
  * guard types in a single call. If neither `beforeEnter` nor `beforeLeave`
  * is provided, an info message is logged and no guards are registered.
+ *
+ * @since 1.0.1
  */
 export interface RouteGuardConfig {
 	/** Guard that runs before entering this route */
@@ -109,6 +125,8 @@ export interface RouteGuardConfig {
  * - `"ignore"` -- register silently.
  * - `"warn"` -- log a warning and still register (default).
  * - `"throw"` -- throw synchronously; guard is not registered.
+ *
+ * @since 1.5.0
  */
 export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
 
@@ -118,6 +136,8 @@ export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
  * - `"guard"` -- run guards before the hash changes (default).
  * - `"bypass"` -- skip guards for programmatic `navTo()` only.
  * - `"off"` -- disable preflight; `parse()` guards the hash change afterward.
+ *
+ * @since 1.5.0
  */
 export type NavToPreflightMode = "guard" | "bypass" | "off";
 
@@ -126,11 +146,15 @@ export type NavToPreflightMode = "guard" | "bypass" | "off";
  *
  * - `"block"` -- delay `initialize()` until all modules are loaded.
  * - `"lazy"` -- register lazy wrappers that load modules on first use (default).
+ *
+ * @since 1.5.0
  */
 export type GuardLoading = "block" | "lazy";
 
 /**
  * Per-route guard declaration in the manifest.
+ *
+ * @since 1.5.0
  */
 export interface ManifestRouteGuardConfig {
 	/** Enter guard module paths (dot notation, relative to component namespace). */
@@ -145,6 +169,8 @@ export interface ManifestRouteGuardConfig {
  * Keys are route names or `"*"` for global guards.
  * Values are either a `string[]` shorthand (enter guards only)
  * or a {@link ManifestRouteGuardConfig} object with `enter` and/or `leave` arrays.
+ *
+ * @since 1.5.0
  */
 export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardConfig>;
 
@@ -153,6 +179,8 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  *
  * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
  * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`.
+ *
+ * @since 1.5.0
  */
 export interface GuardRouterOptions {
 	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */
@@ -174,6 +202,8 @@ export interface GuardRouterOptions {
 
 /**
  * Per-navigation overrides for programmatic `navTo()` calls.
+ *
+ * @since 1.5.0
  */
 export interface GuardNavToOptions {
 	/**
@@ -185,6 +215,8 @@ export interface GuardNavToOptions {
 
 /**
  * Result of a settled navigation, returned by `navigationSettled()`.
+ *
+ * @since 1.2.0
  */
 export interface NavigationResult {
 	/** How the navigation resolved. */
@@ -204,6 +236,8 @@ export interface NavigationResult {
 	/**
 	 * The error that caused the navigation to fail.
 	 * Present only when `status` is `NavigationOutcome.Error`.
+	 *
+	 * @since 1.4.0
 	 */
 	error?: unknown;
 }
@@ -215,6 +249,8 @@ export interface NavigationResult {
  * The source type uses {@link GuardRouter} (the public interface) rather
  * than the concrete Router class to avoid a circular import between
  * `types.ts` and `Router.ts`.
+ *
+ * @since 1.3.0
  */
 export type Router$NavigationSettledEvent = Event<NavigationResult, GuardRouter>;
 
@@ -223,10 +259,14 @@ export type Router$NavigationSettledEvent = Event<NavigationResult, GuardRouter>
  *
  * Extends `sap.m.routing.Router` with guard management methods.
  * Use this type when casting `getRouter()` in application code.
+ *
+ * @since 1.0.1
  */
 export interface GuardRouter extends MobileRouter {
 	/**
 	 * Navigate with optional guard-router-specific per-call options.
+	 *
+	 * @since 1.5.0
 	 */
 	navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
 	navTo(
@@ -249,6 +289,7 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * @param guard - Guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addGuard(guard: GuardFn): GuardRouter;
 	/**
@@ -256,6 +297,7 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * @param guard - Guard function to remove by reference. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeGuard(guard: GuardFn): GuardRouter;
 	/**
@@ -267,6 +309,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	/**
@@ -279,6 +322,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @param guard - Guard function or {@link RouteGuardConfig} object to remove by reference.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
 	/**
@@ -290,6 +334,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	/**
@@ -298,6 +343,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @param guard - Leave guard function to remove by reference. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
+	 * @since 1.0.1
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	/**
@@ -310,6 +356,7 @@ export interface GuardRouter extends MobileRouter {
 	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
+	 * @since 1.2.0
 	 */
 	navigationSettled(): Promise<NavigationResult>;
 	/**
@@ -323,6 +370,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param oData - Application-specific payload passed to the handler as second argument.
 	 * @param fnFunction - The function to be called when the event occurs.
 	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
+	 * @since 1.3.0
 	 */
 	attachNavigationSettled(
 		oData: object,
@@ -334,6 +382,7 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * @param fnFunction - The function to be called when the event occurs.
 	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
+	 * @since 1.3.0
 	 */
 	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
 	/**
@@ -344,6 +393,7 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * @param fnFunction - The handler function to detach.
 	 * @param oListener - Context object on which the given function had to be called.
+	 * @since 1.3.0
 	 */
 	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
 }
