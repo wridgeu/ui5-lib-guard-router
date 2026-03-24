@@ -2080,6 +2080,36 @@ QUnit.test("ancestor guards run before descendant guards (depth ordering)", asyn
 	);
 });
 
+QUnit.test("global guards run before inherited route guards (pipeline separation)", async function (assert: Assert) {
+	// Arrange: global bagWriterGuard + inherited bagReaderGuard on child route.
+	// The global guard writes to context.bag, the route guard reads it.
+	// If global runs first → navigation succeeds. If route runs first → blocks.
+	// This proves globals and route guards are in separate pipeline stages,
+	// and the depth sort does not displace globals.
+	router = createHierarchicalRouter({
+		guardLoading: "block",
+		guardInheritance: "pattern-tree",
+		guards: {
+			"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
+			employees: ["ui5/guard/router/qunit/fixtures/guards/bagReaderGuard"],
+		},
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Act: navigate to a child route that inherits the bagReaderGuard
+	router.navTo("employee", { id: "42" });
+	const result = await router.navigationSettled();
+
+	// Assert: global guard wrote to bag before inherited route guard read it
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Committed,
+		"global guard ran before inherited route guard (pipeline stages are separate)",
+	);
+});
+
 QUnit.test("guard on child does NOT propagate upward to parent", async function (assert: Assert) {
 	// Arrange: blocking guard only on the child route, inheritance enabled
 	router = createHierarchicalRouter({
@@ -2233,4 +2263,186 @@ QUnit.test("runtime setRouteMeta does not participate in inheritance", function 
 
 	const ownMeta = router.getRouteMeta("employees");
 	assert.strictEqual(ownMeta.runtimeKey, true, "runtime metadata is available on the declared route");
+});
+
+// ============================================================
+// Module: Pattern ancestry -- UI5 pattern syntax edge cases
+// ============================================================
+
+QUnit.module("Router - Pattern ancestry edge cases", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("metadata inherits when parent and child use different parameter names", function (assert: Assert) {
+	// Arrange: parent uses {empId}, child uses {id} -- should still be recognized as ancestor
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees/{empId}" },
+			{ name: "employeeResume", pattern: "employees/{id}/resume" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { employees: { section: "hr" } },
+			},
+		} as object,
+	);
+
+	const meta = router.getRouteMeta("employeeResume");
+	assert.strictEqual(meta.section, "hr", "child inherits despite different parameter name");
+});
+
+QUnit.test("optional parameter segments do not break ancestry detection", function (assert: Assert) {
+	// Arrange: parent has an optional segment, child extends the mandatory path
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "products", pattern: "products/:sort:" },
+			{ name: "product", pattern: "products/{id}" },
+			{ name: "productDetail", pattern: "products/{id}/detail" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { products: { category: "catalog" } },
+			},
+		} as object,
+	);
+
+	const detailMeta = router.getRouteMeta("productDetail");
+	assert.strictEqual(detailMeta.category, "catalog", "grandchild inherits through optional-param parent");
+});
+
+QUnit.test("inline query parameter suffix does not affect ancestry", function (assert: Assert) {
+	// Arrange: parent pattern has {?query} attached directly (canonical UI5 form)
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "search", pattern: "search{?query}" },
+			{ name: "searchResult", pattern: "search/{id}" },
+			{ name: "searchResultDetail", pattern: "search/{id}/detail" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { search: { filterable: true } },
+			},
+		} as object,
+	);
+
+	const detailMeta = router.getRouteMeta("searchResultDetail");
+	assert.strictEqual(detailMeta.filterable, true, "inline query suffix on ancestor does not block inheritance");
+});
+
+QUnit.test("inline optional query suffix does not affect ancestry", function (assert: Assert) {
+	// Arrange: parent pattern has :?query: attached directly
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "catalog", pattern: "catalog:?query:" },
+			{ name: "catalogItem", pattern: "catalog/{id}" },
+			{ name: "catalogItemDetail", pattern: "catalog/{id}/detail" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { catalog: { browsable: true } },
+			},
+		} as object,
+	);
+
+	const detailMeta = router.getRouteMeta("catalogItemDetail");
+	assert.strictEqual(
+		detailMeta.browsable,
+		true,
+		"inline optional query suffix on ancestor does not block inheritance",
+	);
+});
+
+QUnit.test("rest parameter segments do not affect ancestry", function (assert: Assert) {
+	// Arrange: parent has a catch-all rest segment
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "docs", pattern: "docs/:path*:" },
+			{ name: "docsSection", pattern: "docs/{section}" },
+			{ name: "docsPage", pattern: "docs/{section}/{page}" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { docs: { layout: "reader" } },
+			},
+		} as object,
+	);
+
+	const pageMeta = router.getRouteMeta("docsPage");
+	assert.strictEqual(pageMeta.layout, "reader", "rest segment on ancestor does not block inheritance");
+});
+
+QUnit.test("sibling routes do not inherit from each other", function (assert: Assert) {
+	// Arrange: two routes at the same depth under the same parent
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+			{ name: "employeeList", pattern: "employees/list" },
+			{ name: "employeeNew", pattern: "employees/new" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				metaInheritance: "pattern-tree",
+				routeMeta: { employeeList: { view: "list" } },
+			},
+		} as object,
+	);
+
+	const newMeta = router.getRouteMeta("employeeNew");
+	assert.deepEqual(newMeta, {}, "sibling route does not inherit from another sibling");
+});
+
+QUnit.test("guard inheritance works with mixed parameter names", async function (assert: Assert) {
+	// Arrange: parent guard on `orders/{orderId}`, child is `orders/{id}/items`
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "order", pattern: "orders/{orderId}" },
+			{ name: "orderItems", pattern: "orders/{id}/items" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				guardInheritance: "pattern-tree",
+				guards: {
+					order: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("orderItems", { id: "99" });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"ancestor guard propagated despite different param name",
+	);
 });

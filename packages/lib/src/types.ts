@@ -77,9 +77,9 @@ export interface GuardContext {
 	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
-	/** Resolved metadata for the target route (manifest defaults merged with runtime overrides, frozen). */
+	/** Resolved metadata for the target route (manifest defaults merged with runtime overrides, frozen). @since 1.6.0 */
 	toMeta: Readonly<Record<string, unknown>>;
-	/** Resolved metadata for the current route (manifest defaults merged with runtime overrides, frozen). */
+	/** Resolved metadata for the current route (manifest defaults merged with runtime overrides, frozen). @since 1.6.0 */
 	fromMeta: Readonly<Record<string, unknown>>;
 }
 
@@ -161,6 +161,8 @@ export type GuardLoading = "block" | "lazy";
  * - `"none"` -- guards apply only to their declared route (default).
  * - `"pattern-tree"` -- guards propagate to all routes whose URL pattern
  *   extends the declared route's pattern.
+ *
+ * @since 1.6.0
  */
 export type GuardInheritance = "none" | "pattern-tree";
 
@@ -170,6 +172,8 @@ export type GuardInheritance = "none" | "pattern-tree";
  * - `"none"` -- metadata applies only to the declared route (default).
  * - `"pattern-tree"` -- metadata propagates to descendant routes via
  *   shallow merge (child values override ancestor values on conflict).
+ *
+ * @since 1.6.0
  */
 export type MetaInheritance = "none" | "pattern-tree";
 
@@ -385,6 +389,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Returns an empty frozen object for unknown or unconfigured routes.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @since 1.6.0
 	 */
 	getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
 	/**
@@ -394,6 +399,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @param meta - Metadata object. The router stores but never interprets it.
 	 * @returns `this` for chaining.
+	 * @since 1.6.0
 	 */
 	setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 	/**
