@@ -536,6 +536,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * and `super.initialize()` is called immediately.
 	 *
 	 * @override sap.ui.core.routing.Router#initialize
+	 * @since 1.0.1
 	 */
 	override initialize(): this {
 		if (this._pendingGuardDescriptors.length === 0) {
@@ -893,6 +894,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * same call stack (validated by test).
 	 *
 	 * @override sap.ui.core.routing.Router#navTo
+	 * @since 1.0.1
 	 */
 	override navTo(
 		routeName: string,
@@ -1114,6 +1116,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param newHash - The new hash fragment from the URL.
 	 * @override sap.ui.core.routing.Router#parse
+	 * @since 1.0.1
 	 */
 	override parse(newHash: string): void {
 		if (this._suppressedHash !== null) {
@@ -1193,6 +1196,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * matching the native `sap.m.routing.Router` behavior.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
+	 * @since 1.0.1
 	 */
 	override stop(): this {
 		// Cancel first so in-flight navigationSettled() resolvers receive the
@@ -1831,7 +1835,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
-	/** Clean up guards on destroy. Bumps generation to discard pending async results. */
+	/**
+	 * Clean up guards on destroy. Bumps generation to discard pending async results.
+	 *
+	 * @since 1.0.1
+	 */
 	override destroy(): this {
 		this._destroyed = true;
 		this._pipeline.clear();
