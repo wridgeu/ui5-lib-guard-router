@@ -19,25 +19,11 @@ import type {
 	UnknownRouteGuardRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
-import GuardPipeline, { type GuardDecision } from "./GuardPipeline";
+import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
-
-/**
- * Promises/A+ thenable detection via duck typing.
- *
- * We intentionally do not use `instanceof Promise` because that misses
- * cross-realm Promises and PromiseLike/thenable objects.
- */
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
-		return false;
-	}
-
-	return typeof (value as PromiseLike<T>).then === "function";
-}
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
 	return typeof guard === "object" && guard !== null;
@@ -1516,7 +1502,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (descriptor.route === "*") {
 			this.addGuard(guardFn);
 		} else if (descriptor.type === "leave") {
-			this.addLeaveGuard(descriptor.route, guardFn as LeaveGuardFn);
+			if (!this._handleUnknownRouteRegistration(descriptor.route, "addLeaveGuard")) return;
+			this._pipeline.addLeaveGuard(descriptor.route, guardFn);
 		} else {
 			this.addRouteGuard(descriptor.route, guardFn);
 		}

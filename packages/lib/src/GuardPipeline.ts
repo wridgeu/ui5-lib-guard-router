@@ -1,5 +1,5 @@
 import Log from "sap/base/Log";
-import type { GuardFn, GuardContext, GuardResult, GuardRedirect, LeaveGuardFn } from "./types";
+import type { GuardFn, GuardContext, GuardResult, GuardRedirect } from "./types";
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
@@ -18,7 +18,7 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
  * We intentionally do not use `instanceof Promise` because that misses
  * cross-realm Promises and PromiseLike/thenable objects.
  */
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	if ((typeof value !== "object" && typeof value !== "function") || value === null) {
 		return false;
 	}
@@ -48,7 +48,7 @@ export type GuardDecision =
 export default class GuardPipeline {
 	private _globalGuards: GuardFn[] = [];
 	private _enterGuards = new Map<string, GuardFn[]>();
-	private _leaveGuards = new Map<string, LeaveGuardFn[]>();
+	private _leaveGuards = new Map<string, GuardFn[]>();
 
 	/** Register a guard that runs for every navigation. */
 	addGlobalGuard(guard: GuardFn): void {
@@ -86,10 +86,14 @@ export default class GuardPipeline {
 	/**
 	 * Register a leave guard for a specific route.
 	 *
+	 * Accepts `GuardFn` to support manifest-declared guards loaded from
+	 * untyped modules. Non-boolean return values are caught at runtime
+	 * by {@link _validateLeaveGuardResult}.
+	 *
 	 * @param route - Route name as defined in `manifest.json`.
-	 * @param guard - Leave guard function to register.
+	 * @param guard - Guard function to register as a leave guard.
 	 */
-	addLeaveGuard(route: string, guard: LeaveGuardFn): void {
+	addLeaveGuard(route: string, guard: GuardFn): void {
 		this._addToGuardMap(this._leaveGuards, route, guard);
 	}
 
@@ -97,9 +101,9 @@ export default class GuardPipeline {
 	 * Remove a previously registered leave guard by reference.
 	 *
 	 * @param route - Route name.
-	 * @param guard - Leave guard function to remove.
+	 * @param guard - Guard function to remove.
 	 */
-	removeLeaveGuard(route: string, guard: LeaveGuardFn): void {
+	removeLeaveGuard(route: string, guard: GuardFn): void {
 		this._removeFromGuardMap(this._leaveGuards, route, guard);
 	}
 
@@ -305,9 +309,6 @@ export default class GuardPipeline {
 	 * Shared by both enter and leave guard pipelines. The `onBlock` callback
 	 * determines what to return for non-true results: leave guards always
 	 * return `false`, enter guards validate and may return redirects.
-	 *
-	 * `guards` is typed as `GuardFn[]` for reuse. Leave guard callers
-	 * pass `LeaveGuardFn[]` which is assignable (narrower return type).
 	 *
 	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
 	 */
