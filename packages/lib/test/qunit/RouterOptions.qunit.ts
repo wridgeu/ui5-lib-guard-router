@@ -895,7 +895,7 @@ QUnit.test(
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#1"],
 					},
@@ -929,7 +929,7 @@ QUnit.test("cherry-pick by numeric index 0 from object module resolves first ent
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#0"],
 				},
