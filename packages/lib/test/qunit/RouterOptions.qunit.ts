@@ -104,6 +104,27 @@ QUnit.test("invalid option values warn individually and fall back to defaults", 
 	assert.strictEqual(routeWarnings.length, 1, "default warn policy active after invalid config");
 });
 
+QUnit.test("invalid inheritance value warns and falls back to default", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions({
+			inheritance: "invalid",
+		});
+	});
+
+	assert.strictEqual(warnings.length, 1, "one warning for invalid inheritance option");
+
+	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
+	router.destroy();
+	router = createHierarchicalRouter({
+		inheritance: "invalid" as string,
+		routeMeta: {
+			employees: { section: "hr" },
+		},
+	});
+	const meta = router.getRouteMeta("employee");
+	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");
+});
+
 // ============================================================
 // Module: Router options -- unknownRouteRegistration
 // ============================================================
@@ -620,6 +641,35 @@ QUnit.test("lazy guard loads module on first navigation and blocks", async funct
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "lazy-loaded guard blocks navigation");
 });
 
+QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				// No guardLoading specified -- should default to "lazy"
+				unknownRouteRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	// In lazy mode, initialize() is synchronous
+	router.initialize();
+
+	// The guard should still work on first navigation (lazy loads it)
+	await waitForRoute(router, "home", 5000);
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "default lazy mode: guard blocks on first navigation");
+});
+
 // ============================================================
 // Module: Manifest-driven router instantiation
 // ============================================================
@@ -955,6 +1005,65 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 	);
 });
 
+QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "other", pattern: "other" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					"*": ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+				},
+			},
+		} as object,
+	);
+
+	// lazy mode: initialize() registers lazy wrappers synchronously.
+	// Navigate directly to "other" -- the lazy wrapper will load the module
+	// and execute checkRole (returns false), blocking navigation.
+	router.initialize();
+	router.navTo("other");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"global cherry-picked guard (checkRole=false) blocks all routes",
+	);
+});
+
+QUnit.test("module: prefix with cherry-pick composes correctly", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					protected: ["module:ui5.guard.router.qunit.fixtures.guards.objectGuard#checkAuth"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "module: prefix + #checkAuth works together");
+});
+
 // ============================================================
 // Module: Multi-guard module exports (block loading)
 // ============================================================
@@ -1090,79 +1199,14 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 		warnings.some((w) => w.message.includes("notAFunction")),
 		"warning for non-function entry",
 	);
+	assert.ok(
+		warnings.some((w) => w.message.includes("alsoNotAFunction")),
+		"warning includes second non-function property name",
+	);
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "valid guard allows, invalid entries skipped");
-});
-
-// ============================================================
-// Module: Pattern 5 loading (preload + lazy default)
-// ============================================================
-QUnit.module("Router - Pattern 5 loading", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
-
-QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				// No guardLoading specified -- should default to "lazy"
-				unknownRouteRegistration: "ignore",
-				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
-				},
-			},
-		} as object,
-	);
-
-	// In lazy mode, initialize() is synchronous
-	router.initialize();
-
-	// The guard should still work on first navigation (lazy loads it)
-	await waitForRoute(router, "home", 5000);
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "default lazy mode: guard blocks on first navigation");
-});
-
-QUnit.test("lazy mode guard works on first navigation", async function (assert: Assert) {
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				guardLoading: "lazy",
-				unknownRouteRegistration: "ignore",
-				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
-				},
-			},
-		} as object,
-	);
-
-	router.initialize();
-	await waitForRoute(router, "home", 5000);
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "lazy guard blocks on first navigation");
 });
 
 // ============================================================
@@ -1272,52 +1316,6 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 });
 
 // ============================================================
-// Module: Named guard logging
-// ============================================================
-QUnit.module("Router - Named guard logging", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
-
-QUnit.test("warning for non-function object entry includes property name", async function (assert: Assert) {
-	const warnings = await captureWarningsAsync(async () => {
-		router = new GuardRouterClass(
-			[
-				{ name: "home", pattern: "" },
-				{ name: "protected", pattern: "protected" },
-			],
-			{
-				async: true,
-				guardRouter: {
-					guardLoading: "block",
-					unknownRouteRegistration: "ignore",
-					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
-					},
-				},
-			} as object,
-		);
-
-		router.initialize();
-		await waitForRoute(router, "home", 5000);
-	});
-
-	assert.ok(
-		warnings.some((w) => w.message.includes("notAFunction")),
-		"warning includes the property name 'notAFunction'",
-	);
-	assert.ok(
-		warnings.some((w) => w.message.includes("alsoNotAFunction")),
-		"warning includes the property name 'alsoNotAFunction'",
-	);
-});
-
-// ============================================================
 // Module: Multi-guard edge cases
 // ============================================================
 QUnit.module("Router - Multi-guard edge cases", {
@@ -1357,65 +1355,6 @@ QUnit.test("empty array module warns and registers no guards", async function (a
 		warnings.some((w) => w.message.includes("empty array")),
 		"warning about empty array export",
 	);
-});
-
-QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) {
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "other", pattern: "other" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				guardLoading: "lazy",
-				unknownRouteRegistration: "ignore",
-				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
-				},
-			},
-		} as object,
-	);
-
-	// lazy mode: initialize() registers lazy wrappers synchronously.
-	// Navigate directly to "other" -- the lazy wrapper will load the module
-	// and execute checkRole (returns false), blocking navigation.
-	router.initialize();
-	router.navTo("other");
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"global cherry-picked guard (checkRole=false) blocks all routes",
-	);
-});
-
-QUnit.test("module: prefix with cherry-pick composes correctly", async function (assert: Assert) {
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				guardLoading: "block",
-				unknownRouteRegistration: "ignore",
-				guards: {
-					protected: ["module:ui5.guard.router.qunit.fixtures.guards.objectGuard#checkAuth"],
-				},
-			},
-		} as object,
-	);
-
-	router.initialize();
-	await waitForRoute(router, "home", 5000);
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(result.status, NavigationOutcome.Committed, "module: prefix + #checkAuth works together");
 });
 
 QUnit.test("leave guard from multi-guard object module", async function (assert: Assert) {
@@ -1744,14 +1683,6 @@ QUnit.test("getRouteMeta returns manifest-defined metadata", function (assert: A
 	assert.deepEqual(meta.roles, ["admin"], "roles array is present");
 });
 
-QUnit.test("getRouteMeta returns empty object for unknown routes", function (assert: Assert) {
-	router = createRouterWithOptions({});
-
-	const meta = router.getRouteMeta("nonexistent");
-	assert.deepEqual(meta, {}, "empty object for unknown route");
-	assert.ok(Object.isFrozen(meta), "returned object is frozen");
-});
-
 QUnit.test("getRouteMeta for unknown route returns empty and logs warning", function (assert: Assert) {
 	router = createRouterWithOptions({});
 
@@ -2046,6 +1977,21 @@ QUnit.test("toMeta updates to redirect target while fromMeta stays pinned to sou
 	assert.deepEqual(redirectTargetFromMeta, { public: true }, "fromMeta stays pinned to the original source (home)");
 });
 
+QUnit.test("merged manifest+runtime metadata result is frozen", function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true, level: 1 },
+		},
+	});
+
+	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
+	const meta = router.getRouteMeta("protected");
+
+	assert.ok(Object.isFrozen(meta), "merged result is frozen");
+	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
+	assert.strictEqual(meta.level, 1, "manifest keys preserved");
+});
+
 // ============================================================
 // Module: Router - Guard and metadata inheritance
 // ============================================================
@@ -2330,6 +2276,28 @@ QUnit.test("setRouteMeta invalidates cache so getRouteMeta returns fresh result"
 
 	// Second read -- cache was invalidated, fresh walk
 	assert.strictEqual(router.getRouteMeta("employee").section, "engineering", "inherits updated runtime value");
+});
+
+QUnit.test("guard inheritance works in lazy loading mode", async function (assert: Assert) {
+	router = createHierarchicalRouter({
+		guardLoading: "lazy",
+		inheritance: "pattern-tree",
+		guards: {
+			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+		},
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("employee", { id: "42" });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"ancestor guard propagated to child in lazy loading mode",
+	);
 });
 
 // ============================================================
@@ -2801,78 +2769,6 @@ QUnit.test("toMeta and fromMeta are correct across a multi-hop redirect chain", 
 	assert.strictEqual(snapshots.length, 1, "detail guard ran once");
 	assert.deepEqual(snapshots[0].toMeta, { page: "detail" }, "toMeta is for the final redirect target");
 	assert.deepEqual(snapshots[0].fromMeta, { public: true }, "fromMeta stays pinned to original source across hops");
-});
-
-// ============================================================
-// Module: Additional coverage gaps
-// ============================================================
-
-QUnit.module("Router - Additional coverage", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
-
-QUnit.test("guard inheritance works in lazy loading mode", async function (assert: Assert) {
-	router = createHierarchicalRouter({
-		guardLoading: "lazy",
-		inheritance: "pattern-tree",
-		guards: {
-			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
-		},
-	});
-
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("employee", { id: "42" });
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"ancestor guard propagated to child in lazy loading mode",
-	);
-});
-
-QUnit.test("invalid inheritance value warns and falls back to default", function (assert: Assert) {
-	const warnings = captureWarnings(() => {
-		router = createRouterWithOptions({
-			inheritance: "invalid",
-		});
-	});
-
-	assert.strictEqual(warnings.length, 1, "one warning for invalid inheritance option");
-
-	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
-	router.destroy();
-	router = createHierarchicalRouter({
-		inheritance: "invalid" as string,
-		routeMeta: {
-			employees: { section: "hr" },
-		},
-	});
-	const meta = router.getRouteMeta("employee");
-	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");
-});
-
-QUnit.test("merged manifest+runtime metadata result is frozen", function (assert: Assert) {
-	router = createRouterWithOptions({
-		routeMeta: {
-			protected: { requiresAuth: true, level: 1 },
-		},
-	});
-
-	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
-	const meta = router.getRouteMeta("protected");
-
-	assert.ok(Object.isFrozen(meta), "merged result is frozen");
-	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
-	assert.strictEqual(meta.level, 1, "manifest keys preserved");
 });
 
 // ============================================================
