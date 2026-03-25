@@ -2514,6 +2514,130 @@ QUnit.test("guard inheritance works with mixed parameter names", async function 
 	);
 });
 
+QUnit.test("mandatory param combined with inline query does not break ancestry", function (assert: Assert) {
+	// UI5 allows {id}{?query} -- the query portion is stripped, leaving just {id}
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "product", pattern: "products/{id}{?query}" },
+			{ name: "productReviews", pattern: "products/{id}/reviews" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: { product: { tracked: true } },
+			},
+		} as object,
+	);
+
+	const reviewMeta = router.getRouteMeta("productReviews");
+	assert.strictEqual(reviewMeta.tracked, true, "child inherits from parent with {param}{?query} combo");
+});
+
+QUnit.test("optional parameter in mid-path position does not block inheritance", function (assert: Assert) {
+	// :mode: at the start is stripped, so the mandatory prefix is "app"
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "app", pattern: "app/:mode:" },
+			{ name: "appSettings", pattern: "app/{section}" },
+			{ name: "appSettingsDetail", pattern: "app/{section}/detail" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: { app: { layout: "shell" } },
+			},
+		} as object,
+	);
+
+	const detailMeta = router.getRouteMeta("appSettingsDetail");
+	assert.strictEqual(detailMeta.layout, "shell", "grandchild inherits through ancestor with trailing optional param");
+});
+
+QUnit.test("all-optional pattern is not treated as ancestor of other routes", function (assert: Assert) {
+	// Pattern ":mode:" consists entirely of optional segments -- should NOT be ancestor of anything
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "catchMode", pattern: ":mode:" },
+			{ name: "employees", pattern: "employees" },
+			{ name: "employee", pattern: "employees/{id}" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: { catchMode: { fromCatchall: true } },
+			},
+		} as object,
+	);
+
+	const employeesMeta = router.getRouteMeta("employees");
+	assert.strictEqual(
+		employeesMeta.fromCatchall,
+		undefined,
+		"all-optional pattern does not propagate metadata to other routes",
+	);
+	const employeeMeta = router.getRouteMeta("employee");
+	assert.strictEqual(
+		employeeMeta.fromCatchall,
+		undefined,
+		"all-optional pattern does not propagate metadata to deeper routes",
+	);
+});
+
+QUnit.test("multiple consecutive optional params are ignored for ancestry", function (assert: Assert) {
+	// Pattern "reports/:year:/:month:" -- only "reports" is mandatory
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "reports", pattern: "reports/:year:/:month:" },
+			{ name: "report", pattern: "reports/{id}" },
+			{ name: "reportDetail", pattern: "reports/{id}/detail" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: { reports: { section: "analytics" } },
+			},
+		} as object,
+	);
+
+	const detailMeta = router.getRouteMeta("reportDetail");
+	assert.strictEqual(
+		detailMeta.section,
+		"analytics",
+		"grandchild inherits through ancestor with multiple optional params",
+	);
+});
+
+QUnit.test("rest catchall pattern with prefix still acts as ancestor", function (assert: Assert) {
+	// Pattern "files/:path*:" -- "files" is mandatory, :path*: is rest/catchall
+	// "files/{id}" should inherit from "files/:path*:"
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "files", pattern: "files/:path*:" },
+			{ name: "file", pattern: "files/{id}" },
+			{ name: "fileVersion", pattern: "files/{id}/version" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: { files: { storage: "cloud" } },
+			},
+		} as object,
+	);
+
+	const versionMeta = router.getRouteMeta("fileVersion");
+	assert.strictEqual(versionMeta.storage, "cloud", "grandchild inherits through ancestor with rest param");
+});
+
 // ============================================================
 // Module: Root-pattern route ("") as universal ancestor
 // ============================================================
