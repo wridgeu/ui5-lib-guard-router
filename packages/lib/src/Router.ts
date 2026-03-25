@@ -480,11 +480,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[] = [];
+	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
 	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
-	private _routeNames: readonly string[] = [];
+	private _routeNames: string[] = [];
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -561,6 +562,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		const descriptors = this._pendingGuardDescriptors;
 		this._pendingGuardDescriptors = [];
+		this._sourceDescriptors = descriptors;
 
 		const expandedDescriptors =
 			this._options.inheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
@@ -586,6 +588,89 @@ export default class Router extends MobileRouter implements GuardRouter {
 				super.initialize();
 			});
 		return this;
+	}
+
+	/**
+	 * Add a route dynamically and integrate it into pattern-tree inheritance.
+	 *
+	 * Appends the route name to the internal route list so that
+	 * `_collectRoutePatterns()` includes it in subsequent inheritance
+	 * lookups, clears the metadata cache, and registers any inherited
+	 * manifest guards when `inheritance` is `"pattern-tree"`.
+	 *
+	 * @override sap.ui.core.routing.Router#addRoute
+	 * @since 1.6.0
+	 */
+	override addRoute(...args: Parameters<typeof MobileRouter.prototype.addRoute>): void {
+		super.addRoute(...args);
+
+		// Skip when called by the parent constructor before field initializers have run.
+		// Routes from the constructor args are captured in _routeNames by the constructor body.
+		if (!this._routeNames) return;
+
+		const [oConfig] = args;
+		const name = isRecord(oConfig) ? (oConfig as { name?: string }).name : undefined;
+		if (typeof name !== "string") return;
+		if (this._routeNames.includes(name)) return;
+
+		this._routeNames.push(name);
+		this._resolvedMetaCache.clear();
+
+		if (this._options.inheritance !== "pattern-tree") return;
+		if (this._sourceDescriptors.length === 0) return;
+
+		const route = this.getRoute(name);
+		if (!route) return;
+		const newPattern = route.getPattern();
+		if (newPattern === undefined) return;
+
+		const newDescriptors = this._expandGuardDescriptorsForNewRoute(name, newPattern);
+		if (newDescriptors.length === 0) return;
+
+		// Always use lazy registration: if the module was loaded during
+		// initialize() (block mode), the sync cache probe succeeds immediately.
+		// This avoids an async gap between addRoute() and the first navigation.
+		this._registerLazyGuards(newDescriptors);
+	}
+
+	/**
+	 * Expand manifest guard descriptors for a single newly added route.
+	 *
+	 * For each source descriptor whose route is an ancestor of the new
+	 * route's pattern, emits a copy targeting the new route. Also emits
+	 * copies for existing routes that are descendants of the new route
+	 * (in case the new route has declared guards). Sorted by depth.
+	 */
+	private _expandGuardDescriptorsForNewRoute(newName: string, newPattern: string): GuardDescriptor[] {
+		const result: GuardDescriptor[] = [];
+
+		for (const descriptor of this._sourceDescriptors) {
+			if (descriptor.route === "*") continue;
+
+			if (descriptor.route !== newName) {
+				// Check if the source descriptor's route is an ancestor of the new route.
+				const ancestorRoute = this.getRoute(descriptor.route);
+				const ancestorPattern = ancestorRoute?.getPattern();
+				if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
+					result.push({ ...descriptor, route: newName });
+				}
+			} else {
+				// The new route itself has a source descriptor -- expand to existing descendants.
+				for (const { name, pattern } of this._collectRoutePatterns()) {
+					if (name === newName) continue;
+					if (isPatternAncestor(newPattern, pattern)) {
+						result.push({ ...descriptor, route: name });
+					}
+				}
+			}
+		}
+
+		// Sort by pattern depth (ancestor guards run before descendant guards).
+		return result.toSorted((a, b) => {
+			const pa = this.getRoute(a.route)?.getPattern() ?? "";
+			const pb = this.getRoute(b.route)?.getPattern() ?? "";
+			return patternSegments(pa).length - patternSegments(pb).length;
+		});
 	}
 
 	/**
@@ -1913,6 +1998,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._destroyed = true;
 		this._pipeline.clear();
 		this._pendingGuardDescriptors = [];
+		this._sourceDescriptors = [];
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;
