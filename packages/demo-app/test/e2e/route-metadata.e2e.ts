@@ -20,7 +20,7 @@ describe("Route metadata and inheritance", () => {
 		const metaText = await browser.asControl({
 			selector: { id: `${VIEW_PREFIX}employeesView--employeesMeta` },
 		});
-		const text = await metaText.getText();
+		const text = await metaText.getProperty("text");
 		const meta = JSON.parse(text);
 		expect(meta.section).toBe("hr");
 		expect(meta.requiresAuth).toBe(true);
@@ -37,7 +37,7 @@ describe("Route metadata and inheritance", () => {
 		const metaText = await browser.asControl({
 			selector: { id: `${VIEW_PREFIX}employeeView--employeeMeta` },
 		});
-		const text = await metaText.getText();
+		const text = await metaText.getProperty("text");
 		const meta = JSON.parse(text);
 		expect(meta.section).toBe("hr");
 		expect(meta.requiresAuth).toBe(true);
@@ -67,7 +67,7 @@ describe("Route metadata and inheritance", () => {
 		const metaText = await browser.asControl({
 			selector: { id: `${VIEW_PREFIX}employeeView--employeeMeta` },
 		});
-		const text = await metaText.getText();
+		const text = await metaText.getProperty("text");
 		const meta = JSON.parse(text);
 		expect(meta.updatedAt).toBeDefined();
 		expect(meta.section).toBe("hr");
