@@ -17,7 +17,7 @@ import type {
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
-	UnknownRouteGuardRegistrationPolicy,
+	UnknownRouteRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
@@ -65,7 +65,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return proto === Object.prototype || proto === null;
 }
 
-function isUnknownRouteGuardRegistrationPolicy(v: unknown): v is UnknownRouteGuardRegistrationPolicy {
+function isUnknownRouteRegistrationPolicy(v: unknown): v is UnknownRouteRegistrationPolicy {
 	return v === "ignore" || v === "warn" || v === "throw";
 }
 
@@ -382,14 +382,14 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 }
 
 interface ResolvedGuardRouterOptions {
-	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
+	readonly unknownRouteRegistration: UnknownRouteRegistrationPolicy;
 	readonly navToPreflight: NavToPreflightMode;
 	readonly guardLoading: GuardLoading;
 	readonly inheritance: Inheritance;
 }
 
 const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
-	unknownRouteGuardRegistration: "warn",
+	unknownRouteRegistration: "warn",
 	navToPreflight: "guard",
 	guardLoading: "lazy",
 	inheritance: "none",
@@ -419,7 +419,7 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	}
 
 	const result = { ...DEFAULT_OPTIONS };
-	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
+	applyOption(raw, "unknownRouteRegistration", isUnknownRouteRegistrationPolicy, result);
 	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
 	applyOption(raw, "guardLoading", isGuardLoading, result);
 	applyOption(raw, "inheritance", isInheritance, result);
@@ -627,7 +627,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -700,7 +700,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -760,13 +760,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _handleUnknownRouteRegistration(routeName: string, methodName: string): boolean {
 		if (this.getRoute(routeName)) return true;
 
-		switch (this._options.unknownRouteGuardRegistration) {
+		switch (this._options.unknownRouteRegistration) {
 			case "ignore":
 				return true;
 			case "throw":
 				throw new Error(
 					`${methodName} called for unknown route "${routeName}". ` +
-						`Set guardRouter.unknownRouteGuardRegistration to "warn" or "ignore" to allow this.`,
+						`Set guardRouter.unknownRouteRegistration to "warn" or "ignore" to allow this.`,
 				);
 			case "warn":
 			default:
@@ -1708,7 +1708,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * single invalid path only skips that guard (with a warning) rather
 	 * than failing the entire batch. Once all loads settle, guards
 	 * register in declaration order. Registration errors (e.g. from
-	 * `unknownRouteGuardRegistration: "throw"`) are caught per-module.
+	 * `unknownRouteRegistration: "throw"`) are caught per-module.
 	 */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
 		const promises = descriptors.map((descriptor) => {

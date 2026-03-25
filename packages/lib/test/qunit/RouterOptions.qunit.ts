@@ -53,9 +53,9 @@ QUnit.module("Router - Router options - constructor", {
 	},
 });
 
-QUnit.test("constructor reads unknownRouteGuardRegistration from config", function (assert: Assert) {
+QUnit.test("constructor reads unknownRouteRegistration from config", function (assert: Assert) {
 	// Arrange: create router with "ignore" policy
-	router = createRouterWithOptions({ unknownRouteGuardRegistration: "ignore" });
+	router = createRouterWithOptions({ unknownRouteRegistration: "ignore" });
 
 	// Act: register guard for unknown route
 	const warnings = captureWarnings(() => {
@@ -86,7 +86,7 @@ QUnit.test("invalid option values warn individually and fall back to defaults", 
 	// Arrange & Act: create router with all invalid option values
 	const warnings = captureWarnings(() => {
 		router = createRouterWithOptions({
-			unknownRouteGuardRegistration: "invalid",
+			unknownRouteRegistration: "invalid",
 			navToPreflight: 42,
 			guardLoading: null,
 			inheritance: "invalid",
@@ -104,9 +104,9 @@ QUnit.test("invalid option values warn individually and fall back to defaults", 
 });
 
 // ============================================================
-// Module: Router options -- unknownRouteGuardRegistration
+// Module: Router options -- unknownRouteRegistration
 // ============================================================
-QUnit.module("Router - unknownRouteGuardRegistration", {
+QUnit.module("Router - unknownRouteRegistration", {
 	beforeEach: function () {
 		initHashChanger();
 	},
@@ -118,7 +118,7 @@ QUnit.module("Router - unknownRouteGuardRegistration", {
 
 QUnit.test('"ignore" registers silently for unknown routes', function (assert: Assert) {
 	// Arrange
-	router = createRouterWithOptions({ unknownRouteGuardRegistration: "ignore" });
+	router = createRouterWithOptions({ unknownRouteRegistration: "ignore" });
 
 	// Act: register guards for unknown route
 	const warnings = captureWarnings(() => {
@@ -132,7 +132,7 @@ QUnit.test('"ignore" registers silently for unknown routes', function (assert: A
 
 QUnit.test('"throw" prevents registration and throws', function (assert: Assert) {
 	// Arrange
-	router = createRouterWithOptions({ unknownRouteGuardRegistration: "throw" });
+	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
 	// Act & Assert: both registration methods throw
 	assert.throws(
@@ -150,7 +150,7 @@ QUnit.test('"throw" prevents registration and throws', function (assert: Assert)
 
 QUnit.test('"throw" with config object is all-or-nothing', function (assert: Assert) {
 	// Arrange
-	router = createRouterWithOptions({ unknownRouteGuardRegistration: "throw" });
+	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
 	// Act & Assert: config form also throws
 	assert.throws(
@@ -419,7 +419,7 @@ QUnit.test("guards from config are registered and functional (block mode)", asyn
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 				},
@@ -450,7 +450,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					"*": ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
 				},
@@ -487,7 +487,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
 				},
@@ -525,7 +525,7 @@ QUnit.test("manifest guards share bag across pipeline (bagWriter → bagReader)"
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					"*": [
 						"ui5/guard/router/qunit/fixtures/guards/bagWriterGuard",
@@ -555,7 +555,7 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["nonexistent/guard/module"],
 				},
@@ -602,7 +602,7 @@ QUnit.test("lazy guard loads module on first navigation and blocks", async funct
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 				},
@@ -636,11 +636,7 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 			manifestRouter.addRouteGuard("totallyUnknownRoute", () => true);
 		});
 		const unknownRouteWarnings = warnings.filter((w) => w.message.includes("unknown route"));
-		assert.strictEqual(
-			unknownRouteWarnings.length,
-			0,
-			"unknownRouteGuardRegistration='ignore' suppresses warnings",
-		);
+		assert.strictEqual(unknownRouteWarnings.length, 0, "unknownRouteRegistration='ignore' suppresses warnings");
 		// Verify navToPreflight='guard' was loaded from manifest: a blocking guard on the
 		// "protected" route must prevent navTo from changing the hash (preflight blocks).
 		// If navToPreflight were "off" or "bypass", the hash would change despite the guard.
@@ -711,7 +707,7 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["module:ui5.guard.router.qunit.fixtures.guards.blockGuard"],
 				},
@@ -751,7 +747,7 @@ QUnit.test("cherry-pick by name from object module registers only that guard", a
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkAuth"],
 				},
@@ -782,7 +778,7 @@ QUnit.test("cherry-pick by name selects blocking guard", async function (assert:
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
 				},
@@ -813,7 +809,7 @@ QUnit.test("cherry-pick by index from array module", async function (assert: Ass
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#1"],
 				},
@@ -913,7 +909,7 @@ QUnit.test("cherry-pick from single-function module ignores # and still works", 
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard#nonexistent"],
 				},
@@ -940,7 +936,7 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#doesNotExist"],
 					},
@@ -981,7 +977,7 @@ QUnit.test("object module: bare path registers all guards in key order", async f
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard"],
 				},
@@ -1012,7 +1008,7 @@ QUnit.test("array module: bare path registers all guards in index order", async 
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard"],
 				},
@@ -1044,7 +1040,7 @@ QUnit.test("empty object module warns and registers no guards", async function (
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyObjectGuard"],
 					},
@@ -1077,7 +1073,7 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
 					},
@@ -1122,7 +1118,7 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 			async: true,
 			guardRouter: {
 				// No guardLoading specified -- should default to "lazy"
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 				},
@@ -1151,7 +1147,7 @@ QUnit.test("lazy mode guard works on first navigation", async function (assert: 
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 				},
@@ -1191,7 +1187,7 @@ QUnit.test("lazy mode: object module bare path registers all guards", async func
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard"],
 				},
@@ -1222,7 +1218,7 @@ QUnit.test("lazy mode: cherry-pick from object module", async function (assert: 
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkAuth"],
 				},
@@ -1253,7 +1249,7 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard"],
 				},
@@ -1298,7 +1294,7 @@ QUnit.test("warning for non-function object entry includes property name", async
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
 					},
@@ -1344,7 +1340,7 @@ QUnit.test("empty array module warns and registers no guards", async function (a
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyArrayGuard"],
 					},
@@ -1372,7 +1368,7 @@ QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) 
 			async: true,
 			guardRouter: {
 				guardLoading: "lazy",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					"*": ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
 				},
@@ -1404,7 +1400,7 @@ QUnit.test("module: prefix with cherry-pick composes correctly", async function 
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["module:ui5.guard.router.qunit.fixtures.guards.objectGuard#checkAuth"],
 				},
@@ -1431,7 +1427,7 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				unknownRouteGuardRegistration: "ignore",
+				unknownRouteRegistration: "ignore",
 				guards: {
 					home: {
 						leave: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
@@ -1521,7 +1517,7 @@ QUnit.test("'*' with object form warns about leave and still registers enter gua
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						"*": {
 							enter: ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
@@ -1571,7 +1567,7 @@ QUnit.test("module exporting a primitive warns and is skipped", async function (
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/primitiveExportGuard"],
 					},
@@ -1607,7 +1603,7 @@ QUnit.test(
 					async: true,
 					guardRouter: {
 						guardLoading: "block",
-						unknownRouteGuardRegistration: "ignore",
+						unknownRouteRegistration: "ignore",
 						guards: {
 							protected: ["ui5/guard/router/qunit/fixtures/guards/mixedArrayGuard"],
 						},
@@ -1646,7 +1642,7 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 				async: true,
 				guardRouter: {
 					guardLoading: "block",
-					unknownRouteGuardRegistration: "ignore",
+					unknownRouteRegistration: "ignore",
 					guards: {
 						protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#99"],
 					},
@@ -1695,7 +1691,7 @@ QUnit.test(
 					async: true,
 					guardRouter: {
 						guardLoading: "block",
-						unknownRouteGuardRegistration: "ignore",
+						unknownRouteRegistration: "ignore",
 						guards: {
 							protected: ["completely/nonexistent/guard/module/that/does/not/exist"],
 						},
