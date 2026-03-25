@@ -54,6 +54,11 @@ export default class HomeController extends BaseController {
 		this.getRouter().navTo("admin");
 	}
 
+	onNavToEmployees(): void {
+		this.createScenarioRunner().recordAction('Triggered router.navTo("employees")');
+		this.getRouter<GuardRouter>().navTo("employees");
+	}
+
 	onDirectHashToProtected(): void {
 		this.createScenarioRunner().goToProtectedByHash();
 	}
