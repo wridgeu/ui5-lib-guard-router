@@ -1,4 +1,4 @@
-import { waitForPage, expectHashToBe, resetAuth } from "./helpers";
+import { waitForPage, expectHashToBe, resetAuth, fireEvent } from "./helpers";
 
 const VIEW_PREFIX = "container-demo.app---";
 
@@ -15,7 +15,7 @@ describe("Route metadata and inheritance", () => {
 		});
 		await btn.press();
 		await waitForPage(`${VIEW_PREFIX}employeesView--employeesPage`, "Employees");
-		await expectHashToBe("employees");
+		await expectHashToBe("#/employees");
 
 		const metaText = await browser.asControl({
 			selector: { id: `${VIEW_PREFIX}employeesView--employeesMeta` },
@@ -32,7 +32,7 @@ describe("Route metadata and inheritance", () => {
 		});
 		await btn.press();
 		await waitForPage(`${VIEW_PREFIX}employeeView--employeePage`, "Employee Detail");
-		await expectHashToBe("employees/42");
+		await expectHashToBe("#/employees/42");
 
 		const metaText = await browser.asControl({
 			selector: { id: `${VIEW_PREFIX}employeeView--employeeMeta` },
@@ -45,12 +45,9 @@ describe("Route metadata and inheritance", () => {
 	});
 
 	it("should navigate back to employees", async () => {
-		const backBtn = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeeView--employeePage` },
-		});
-		await backBtn.press();
+		await fireEvent(`${VIEW_PREFIX}employeeView--employeePage`, "navButtonPress");
 		await waitForPage(`${VIEW_PREFIX}employeesView--employeesPage`, "Employees");
-		await expectHashToBe("employees");
+		await expectHashToBe("#/employees");
 	});
 
 	it("should reflect runtime metadata updates in inheritance", async () => {
