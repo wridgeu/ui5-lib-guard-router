@@ -1,3 +1,4 @@
+import type UIComponent from "sap/ui/core/UIComponent";
 import {
 	expectAppHashToBe,
 	expectControlText,
