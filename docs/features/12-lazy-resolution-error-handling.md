@@ -40,7 +40,7 @@ When `getRouteMeta` is called with a route name that does not exist (i.e., `this
 - **Warning**: log a warning: `getRouteMeta: unknown route "<routeName>", returning empty metadata`.
 - **Caching**: do **not** cache the empty result. The next call for the same unknown route will re-evaluate and warn again.
 
-**Empty-string carve-out**: `getRouteMeta("")` must return `{}` **without** warning. The router's `_currentRoute` is initialized to `""` before the first navigation, and `_createGuardContext` calls `getRouteMeta(this._currentRoute)` to populate `fromMeta`. Without this carve-out, every initial navigation would produce a spurious warning.
+**Empty string is a valid route name**: `getRouteMeta("")` must return `{}` **without** warning. The empty string represents the root/initial state before any route has matched. It is used as `_currentRoute` before the first navigation and passed to `_createGuardContext` to populate `fromMeta`. The unknown-route warning must only fire for non-empty route names that don't resolve via `this.getRoute()`.
 
 The unknown-route check uses `this.getRoute(routeName)` and is independent of the ancestor-chain metadata walk. A route that exists but has no metadata in its ancestor chain is a separate case (see below).
 
@@ -178,9 +178,9 @@ When a guard descriptor references a route name that never gets added to the rou
 
 1. `getRouteMeta` for unknown route returns `{}` and logs warning
 2. `getRouteMeta` for unknown route re-warns on subsequent calls (not cached)
-3. `getRouteMeta("")` returns `{}` without warning (empty-string carve-out for initial `_currentRoute`)
+3. `getRouteMeta("")` returns `{}` without warning (empty string is a valid root route name)
 4. `getRouteMeta` for known route with no metadata returns `{}` without warning
-5. `getRouteMeta` for known route with no metadata re-walks ancestors on subsequent calls (not cached)
+5. `getRouteMeta` for known route with no metadata returns `{}` on subsequent calls (result is not stale after `setRouteMeta` on an ancestor)
 6. `setRouteMeta` for unknown route with `"warn"` policy: stores metadata, logs warning
 7. `setRouteMeta` for unknown route with `"throw"` policy: throws, does not store
 8. `setRouteMeta` for unknown route with `"ignore"` policy: stores silently
