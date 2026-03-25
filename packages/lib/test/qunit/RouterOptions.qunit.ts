@@ -3,6 +3,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
+	addRouteDynamic,
 	captureWarnings,
 	captureWarningsAsync,
 	createRouterWithOptions,
@@ -2748,4 +2749,145 @@ QUnit.test("merged manifest+runtime metadata result is frozen", function (assert
 	assert.ok(Object.isFrozen(meta), "merged result is frozen");
 	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
 	assert.strictEqual(meta.level, 1, "manifest keys preserved");
+});
+
+// ============================================================
+// Module: Dynamic addRoute() with inheritance
+// ============================================================
+QUnit.module("Router - Dynamic addRoute() with inheritance", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test(
+	"addRoute() after initialize makes new route visible to metadata inheritance",
+	async function (assert: Assert) {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "employees", pattern: "employees" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					inheritance: "pattern-tree",
+					routeMeta: {
+						employees: { requiresAuth: true, section: "hr" },
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+
+		// Dynamically add a child route after initialization
+		addRouteDynamic(router, { name: "employee", pattern: "employees/{id}" });
+
+		const meta = router.getRouteMeta("employee");
+		assert.strictEqual(meta.requiresAuth, true, "child inherits ancestor manifest metadata");
+		assert.strictEqual(meta.section, "hr", "child inherits all ancestor metadata keys");
+	},
+);
+
+QUnit.test("addRoute() registers inherited manifest guards for new descendant route", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				guardLoading: "block",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Dynamically add a child route
+	addRouteDynamic(router, { name: "employee", pattern: "employees/{id}" });
+
+	router.navTo("employee", { id: "42" });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"inherited guard blocks navigation to dynamic child route",
+	);
+});
+
+QUnit.test("addRoute() with inheritance: none does not register inherited guards", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "none",
+				guardLoading: "block",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	addRouteDynamic(router, { name: "employee", pattern: "employees/{id}" });
+
+	router.navTo("employee", { id: "42" });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "no guard inheritance when inheritance is none");
+});
+
+QUnit.test("addRoute() clears metadata cache so inheritance updates", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+			{ name: "employee", pattern: "employees/{id}" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				routeMeta: {
+					employees: { section: "hr" },
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Read metadata for employee before adding a deeper route
+	const metaBefore = router.getRouteMeta("employee");
+	assert.strictEqual(metaBefore.section, "hr", "child inherits before addRoute");
+
+	// Add a deeper child -- cache must be cleared
+	addRouteDynamic(router, { name: "employeeResume", pattern: "employees/{id}/resume" });
+
+	const metaDeep = router.getRouteMeta("employeeResume");
+	assert.strictEqual(metaDeep.section, "hr", "deeply nested dynamic route inherits ancestor metadata");
 });
