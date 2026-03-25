@@ -378,7 +378,7 @@ export interface GuardRouter extends MobileRouter {
 	 *
 	 * When `inheritance` is `"pattern-tree"`, the result includes metadata
 	 * inherited from ancestor routes (shallow merge, child values win).
-	 * Results are cached and invalidated when {@link setRouteMeta} is called.
+	 * Results are cached and invalidated when {@link setRouteMeta} or `addRoute()` is called.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @returns Frozen metadata object, or an empty frozen object for unknown or unconfigured routes.

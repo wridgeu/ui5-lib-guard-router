@@ -2891,3 +2891,93 @@ QUnit.test("addRoute() clears metadata cache so inheritance updates", async func
 	const metaDeep = router.getRouteMeta("employeeResume");
 	assert.strictEqual(metaDeep.section, "hr", "deeply nested dynamic route inherits ancestor metadata");
 });
+
+QUnit.test("addRoute() for already-known route is a no-op", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				guardLoading: "block",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Re-add "employees" which already exists -- should be a no-op
+	addRouteDynamic(router, { name: "employees", pattern: "employees" });
+
+	// Guard should still work normally (not duplicated)
+	router.navTo("employees");
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "re-adding existing route does not break guards");
+});
+
+QUnit.test("setRouteMeta for unknown route becomes visible after addRoute()", async function (assert: Assert) {
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				unknownRouteRegistration: "ignore",
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	// Set metadata for a route that doesn't exist yet
+	router.setRouteMeta("employee", { clearance: "manager" });
+
+	// getRouteMeta returns empty because route doesn't exist
+	const metaBefore = router.getRouteMeta("employee");
+	assert.deepEqual(metaBefore, {}, "unknown route returns empty meta before addRoute");
+
+	// Now add the route
+	addRouteDynamic(router, { name: "employee", pattern: "employees/{id}" });
+
+	// Metadata should now be visible (inherits from employees + own runtime)
+	const metaAfter = router.getRouteMeta("employee");
+	assert.strictEqual(metaAfter.clearance, "manager", "pre-set runtime metadata becomes visible after addRoute");
+});
+
+QUnit.test("setRouteMeta on unknown route with warn policy logs a warning", async function (assert: Assert) {
+	router = new GuardRouterClass([{ name: "home", pattern: "" }], {
+		async: true,
+		guardRouter: {
+			unknownRouteRegistration: "warn",
+		},
+	} as object);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	const warnings = captureWarnings(() => {
+		router.setRouteMeta("nonexistent", { key: "value" });
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("unknown route")),
+		"warning logged for setRouteMeta on unknown route with warn policy",
+	);
+
+	// Despite the warning, the data is stored
+	addRouteDynamic(router, { name: "nonexistent", pattern: "nonexistent" });
+	const meta = router.getRouteMeta("nonexistent");
+	assert.strictEqual(meta.key, "value", "metadata stored despite warning and accessible after addRoute");
+});
