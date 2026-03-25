@@ -833,6 +833,75 @@ QUnit.test("cherry-pick by index from array module", async function (assert: Ass
 	);
 });
 
+QUnit.test(
+	"cherry-pick by numeric index from object module resolves by insertion order",
+	async function (assert: Assert) {
+		// objectGuard exports { checkAuth (returns true), checkRole (returns false) }
+		// #1 by insertion order = checkRole (blocks)
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteGuardRegistration: "ignore",
+					guards: {
+						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#1"],
+					},
+				},
+			} as object,
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Blocked,
+			"numeric index #1 resolves to checkRole (second entry) which blocks",
+		);
+	},
+);
+
+QUnit.test("cherry-pick by numeric index 0 from object module resolves first entry", async function (assert: Assert) {
+	// objectGuard exports { checkAuth (returns true), checkRole (returns false) }
+	// #0 by insertion order = checkAuth (allows)
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteGuardRegistration: "ignore",
+				guards: {
+					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#0"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Committed,
+		"numeric index #0 resolves to checkAuth (first entry) which allows",
+	);
+});
+
 QUnit.test("cherry-pick from single-function module ignores # and still works", async function (assert: Assert) {
 	router = new GuardRouterClass(
 		[
