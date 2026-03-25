@@ -13,11 +13,11 @@ This document specifies the error handling behavior for all cache-miss error pat
 Before defining our approach, here is how popular routing libraries handle metadata access for non-existent routes and empty guard resolution:
 
 | Behavior                                | Vue Router v4                                                    | React Router v6/v7                                                  | TanStack Router                                                                   | Angular Router                                            | Ember Router                                                     |
-| --------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------- |
+| --------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
 | **Get metadata for non-existent route** | Returns `{}`. Named route resolution throws `MATCHER_NOT_FOUND`. | `matchRoutes()` returns `null`. `handle` is `undefined` if not set. | Throws `notFound()` error, renders `notFoundComponent`.                           | Throws `RuntimeError` (`NO_MATCH`), navigation cancelled. | Throws `UnrecognizedURLError`, error bubbles up route hierarchy. |
 | **Set metadata on non-existent route**  | N/A — `meta` is static config only.                              | N/A — `handle` is static config only.                               | N/A — context set at config time only.                                            | N/A — `data` is static config only.                       | N/A — metadata is a Route class hook.                            |
 | **Cache empty/missing metadata**        | No. Recomputed per `resolve()` call.                             | No. `matchRoutes` is a pure function.                               | Not-found results are not cached (loader data has separate `staleTime`/`gcTime`). | No. `ActivatedRoute.data` is not cached separately.       | No. `buildRouteInfoMetadata` is called fresh per transition.     |
-| **Configurable error policy**           | No. Fixed behavior (path: silent empty; named: throw).           | No. `matchRoutes` always returns `null`.                            | **Yes.** `notFoundMode: 'fuzzy'                                                   | 'root'` controls rendering.                               | No. Unmatched routes throw.                                      | No. Unrecognized URLs trigger error events. |
+| **Configurable error policy**           | No. Fixed behavior (path: silent empty; named: throw).           | No. `matchRoutes` always returns `null`.                            | **Yes.** `notFoundMode: 'fuzzy' or 'root'` controls rendering.                    | No. Unmatched routes throw.                               | No. Unrecognized URLs trigger error events.                      |
 | **Guard/middleware with no guards**     | Silently skipped. Only guards that exist run.                    | Silently skipped. Middleware only runs if a `loader` exists.        | Silently skipped. Context inheritance still flows.                                | Silently skipped. Zero guards = pass all checks.          | Silently skipped. Transition continues normally.                 |
 
 **Key takeaways:**
@@ -30,6 +30,8 @@ Before defining our approach, here is how popular routing libraries handle metad
 
 ## Phase 1: Metadata Error Handling
 
+> **Note**: this section describes **proposed changes** to the current `getRouteMeta` and `setRouteMeta` behavior. Currently, `getRouteMeta` does not check whether the route exists — it simply returns `_EMPTY_META` when neither manifest nor runtime metadata is found. `setRouteMeta` stores unconditionally without validation. The changes below add unknown-route detection and policy enforcement.
+
 ### `getRouteMeta(routeName)` — unknown route
 
 When `getRouteMeta` is called with a route name that does not exist (i.e., `this.getRoute(routeName)` returns falsy):
@@ -37,6 +39,8 @@ When `getRouteMeta` is called with a route name that does not exist (i.e., `this
 - **Return value**: empty frozen object (`{}`).
 - **Warning**: log a warning: `getRouteMeta: unknown route "<routeName>", returning empty metadata`.
 - **Caching**: do **not** cache the empty result. The next call for the same unknown route will re-evaluate and warn again.
+
+**Empty-string carve-out**: `getRouteMeta("")` must return `{}` **without** warning. The router's `_currentRoute` is initialized to `""` before the first navigation, and `_createGuardContext` calls `getRouteMeta(this._currentRoute)` to populate `fromMeta`. Without this carve-out, every initial navigation would produce a spurious warning.
 
 The unknown-route check uses `this.getRoute(routeName)` and is independent of the ancestor-chain metadata walk. A route that exists but has no metadata in its ancestor chain is a separate case (see below).
 
@@ -66,9 +70,11 @@ When `setRouteMeta` is called with a route name that does not exist:
 
 **Rationale**: `setRouteMeta` is a write/registration operation, same category as `addRouteGuard` / `addLeaveGuard`. The policy pattern is already established for guard registration (`unknownRouteGuardRegistration`). Metadata registration deserves the same configurability because developers may intentionally set metadata before calling `addRoute()` (dynamic routes) or may have a typo that should be caught early.
 
-**Pre-registered metadata for dynamic routes**: when `setRouteMeta` stores metadata for a not-yet-added route (via `"ignore"` or `"warn"` policy), and that route is later added via `addRoute()`, the stored metadata participates in lazy resolution normally. The `addRoute()` call invalidates the cache (as specified in #62), and the next `getRouteMeta` for that route or its descendants will pick up the pre-registered metadata during the ancestor walk.
+**Pre-registered metadata for dynamic routes**: when `setRouteMeta` stores metadata for a not-yet-added route (via `"ignore"` or `"warn"` policy), and that route is later added via `addRoute()` (inherited from UI5's base `Router`), the stored metadata participates in lazy resolution normally. The `addRoute()` call invalidates the cache (as specified in #62), and the next `getRouteMeta` for that route or its descendants will pick up the pre-registered metadata during the ancestor walk.
 
 ### `mergeRouteMeta(routeName, meta)` — unknown route
+
+> **Prerequisite**: `mergeRouteMeta` is defined in `04-route-metadata.md` but does not yet exist in the `GuardRouter` interface or `Router.ts`. It must be added to the implementation plan and implemented before this error handling applies.
 
 `mergeRouteMeta` is a write operation and follows the same `unknownRouteMetaRegistration` policy as `setRouteMeta`. The behavior is identical: check the policy, then either merge-and-store, warn-and-merge-and-store, or throw.
 
@@ -168,6 +174,8 @@ When a guard descriptor references a route name that never gets added to the rou
 - **`04-route-metadata.plan.md` Task 3**: `getRouteMeta` implementation needs the unknown-route warning added. `setRouteMeta` needs the policy check before storing. The existing test "getRouteMeta returns empty object for unknown routes" (Task 3 Step 5) must be updated to also assert that a warning is logged.
 - **`04-route-metadata.plan.md`** (new task needed): `mergeRouteMeta` is defined in `04-route-metadata.md` but is not yet part of the implementation plan, the `GuardRouter` interface, or `Router.ts`. It must be added to the plan, implemented, and given the same `unknownRouteMetaRegistration` policy check as `setRouteMeta`.
 - **`Router.ts` internals**: `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` must be updated to include `unknownRouteMetaRegistration` with its default value and a corresponding `isUnknownRouteMetaRegistrationPolicy` validator function — mirroring the existing pattern for `unknownRouteGuardRegistration`.
+- **`Router.ts` implementation**: `getRouteMeta` needs a `this.getRoute()` check with an empty-string carve-out. `setRouteMeta` needs a policy check. A new private method (e.g., `_handleUnknownRouteMetaRegistration`) or a generalization of `_handleUnknownRouteRegistration` is needed, since the existing method is hard-coded to `unknownRouteGuardRegistration`.
+- **`packages/lib/README.md`**: add `unknownRouteMetaRegistration` to the router options documentation, parallel to the existing `unknownRouteGuardRegistration` entry.
 - **Issue #62 Phase 1**: the lazy resolver must skip caching on empty results and log the warning for unknown routes.
 - **Issue #62 Phase 2**: the guard lazy resolver must skip caching on empty descriptor lists.
 
@@ -175,12 +183,14 @@ When a guard descriptor references a route name that never gets added to the rou
 
 1. `getRouteMeta` for unknown route returns `{}` and logs warning
 2. `getRouteMeta` for unknown route re-warns on subsequent calls (not cached)
-3. `getRouteMeta` for known route with no metadata returns `{}` without warning
-4. `getRouteMeta` for known route with no metadata re-walks ancestors on subsequent calls (not cached)
-5. `setRouteMeta` for unknown route with `"warn"` policy: stores metadata, logs warning
-6. `setRouteMeta` for unknown route with `"throw"` policy: throws, does not store
-7. `setRouteMeta` for unknown route with `"ignore"` policy: stores silently
-8. `setRouteMeta` with non-object `meta` argument: ignored with warning
-9. `mergeRouteMeta` for unknown route follows same policy as `setRouteMeta`
-10. Pre-registered metadata picked up after `addRoute()` adds the route
-11. Guard pipeline cache miss with no inherited descriptors: navigation allowed
+3. `getRouteMeta("")` returns `{}` without warning (empty-string carve-out for initial `_currentRoute`)
+4. `getRouteMeta` for known route with no metadata returns `{}` without warning
+5. `getRouteMeta` for known route with no metadata re-walks ancestors on subsequent calls (not cached)
+6. `setRouteMeta` for unknown route with `"warn"` policy: stores metadata, logs warning
+7. `setRouteMeta` for unknown route with `"throw"` policy: throws, does not store
+8. `setRouteMeta` for unknown route with `"ignore"` policy: stores silently
+9. `setRouteMeta` with non-object `meta` argument: ignored with warning
+10. `setRouteMeta` for known route invalidates cache (subsequent `getRouteMeta` re-resolves)
+11. `mergeRouteMeta` for unknown route follows same policy as `setRouteMeta`
+12. Pre-registered metadata picked up after `addRoute()` adds the route
+13. Guard pipeline cache miss with no inherited descriptors: navigation allowed
