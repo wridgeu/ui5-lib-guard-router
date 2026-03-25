@@ -715,6 +715,38 @@ export default class HomeController extends BaseController {
 >
 > In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
 
+### Metadata-driven guards via manifest
+
+For common patterns like "this route requires authentication", you can store per-route metadata in a custom manifest section and use a single global guard instead of writing repetitive per-route guards:
+
+```json
+{
+	"ui5.guard.router": {
+		"routeMeta": {
+			"admin": { "requiresAuth": true, "roles": ["admin"] },
+			"profile": { "requiresAuth": true },
+			"home": { "public": true }
+		}
+	}
+}
+```
+
+```typescript
+// Component.ts
+const manifest = this.getManifest() as Record<string, unknown>;
+const metaSection = manifest["ui5.guard.router"] as Record<string, unknown> | undefined;
+const routeMeta = (metaSection?.routeMeta ?? {}) as Record<string, Record<string, unknown>>;
+
+router.addGuard((context) => {
+	const meta = routeMeta[context.toRoute] ?? {};
+	if (meta.requiresAuth && !authModel.getProperty("/isLoggedIn")) return "login";
+	if (meta.roles && !hasAnyRole(meta.roles as string[])) return "forbidden";
+	return true;
+});
+```
+
+This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework -- it's a convention for your application data.
+
 ### Native alternative for leave guards: Fiori Launchpad data loss prevention
 
 If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
