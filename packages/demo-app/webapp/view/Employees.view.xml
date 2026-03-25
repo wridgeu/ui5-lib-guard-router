@@ -1,0 +1,20 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.controller.Employees">
+	<Page
+		id="employeesPage"
+		title="Employees"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<Panel headerText="Route Metadata Demo">
+				<VBox class="sapUiSmallMargin">
+					<Text id="employeesMeta" text="Route metadata will be shown here" />
+					<Button id="navToEmployee" text="Navigate to Employee 42" press=".onNavToEmployee" />
+					<Button id="updateMeta" text="Set runtime metadata" press=".onUpdateMeta" />
+				</VBox>
+			</Panel>
+		</content>
+	</Page>
+</mvc:View>
