@@ -36,7 +36,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~150 KB compressed because it ships both pre-built distributables and TypeScript sources to support multiple consumption models (pre-built, transpile-from-source, static serving). At runtime, the browser loads only the `library-preload.js` bundle (~28 KB). See the [library README](packages/lib/README.md#serving-the-library) for details.
+> The npm package is ~150 KB compressed because it ships both pre-built distributables and TypeScript sources to support multiple consumption models (pre-built, transpile-from-source, static serving). At runtime, the browser loads only the `library-preload.js` bundle (~29 KB). See the [library README](packages/lib/README.md#serving-the-library) for details.
 
 If your app uses TypeScript and does not already depend on the UI5 typings, install them too (`@sapui5/types` works as well):
 

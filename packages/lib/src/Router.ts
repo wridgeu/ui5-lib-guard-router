@@ -537,8 +537,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 
-			// Pattern 5: fire-and-forget preload hint (lazy mode only --
-			// block mode loads modules itself in initialize())
+			// Fire-and-forget preload hint: warm the module cache so lazy
+			// wrappers resolve synchronously on first navigation.
+			// Block mode loads modules itself in initialize().
 			if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
 				const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
 				sap.ui.require(uniquePaths);
