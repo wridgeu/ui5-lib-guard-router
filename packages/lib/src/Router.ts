@@ -65,21 +65,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return proto === Object.prototype || proto === null;
 }
 
-function isUnknownRouteRegistrationPolicy(v: unknown): v is UnknownRouteRegistrationPolicy {
-	return v === "ignore" || v === "warn" || v === "throw";
+/** Create a type-narrowing validator for a finite set of string literal values. */
+function isOneOf<T extends string>(...values: T[]): (v: unknown) => v is T {
+	const set: ReadonlySet<string> = new Set(values);
+	return (v: unknown): v is T => typeof v === "string" && set.has(v);
 }
 
-function isNavToPreflightMode(v: unknown): v is NavToPreflightMode {
-	return v === "guard" || v === "bypass" || v === "off";
-}
-
-function isGuardLoading(v: unknown): v is GuardLoading {
-	return v === "block" || v === "lazy";
-}
-
-function isInheritance(v: unknown): v is Inheritance {
-	return v === "none" || v === "pattern-tree";
-}
+const isUnknownRouteRegistrationPolicy = isOneOf<UnknownRouteRegistrationPolicy>("ignore", "warn", "throw");
+const isNavToPreflightMode = isOneOf<NavToPreflightMode>("guard", "bypass", "off");
+const isGuardLoading = isOneOf<GuardLoading>("block", "lazy");
+const isInheritance = isOneOf<Inheritance>("none", "pattern-tree");
 
 /** Matches a standalone optional (`:param:`) or rest (`:param*:`) segment. */
 const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*\*?:$/;
