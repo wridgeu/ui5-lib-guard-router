@@ -89,11 +89,12 @@ QUnit.test("invalid option values warn individually and fall back to defaults", 
 			unknownRouteGuardRegistration: "invalid",
 			navToPreflight: 42,
 			guardLoading: null,
+			inheritance: "invalid",
 		});
 	});
 
 	// Assert: one warning per invalid option
-	assert.strictEqual(warnings.length, 3, "one warning per invalid option");
+	assert.strictEqual(warnings.length, 4, "one warning per invalid option");
 
 	// Assert: default "warn" policy is active (behavioral proof of fallback)
 	const routeWarnings = captureWarnings(() => {
