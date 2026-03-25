@@ -1,6 +1,6 @@
 # Feature: Route Metadata
 
-> **Status**: Proposed (low priority). See the [feature index](./README.md) for priority and dependencies.
+> **Status**: Implemented (PR #61). `mergeRouteMeta` was dropped -- consumers use `setRouteMeta(name, { ...getRouteMeta(name), ...newMeta })` instead. Metadata inheritance is now lazy with caching (issue #62). See the [feature index](./README.md) for details.
 
 ## Problem
 
