@@ -1,0 +1,18 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.controller.Employee">
+	<Page
+		id="employeePage"
+		title="Employee Detail"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<Panel headerText="Inherited Metadata">
+				<VBox class="sapUiSmallMargin">
+					<Text id="employeeMeta" text="Inherited metadata will be shown here" />
+				</VBox>
+			</Panel>
+		</content>
+	</Page>
+</mvc:View>

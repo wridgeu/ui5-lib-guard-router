@@ -2,6 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
 import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
+import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type {
 	GuardFn,
 	GuardContext,
@@ -10,13 +11,14 @@ import type {
 	GuardRedirect,
 	GuardRouter,
 	GuardLoading,
+	Inheritance,
 	LeaveGuardFn,
 	ManifestRouteGuardConfig,
 	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
-	UnknownRouteGuardRegistrationPolicy,
+	UnknownRouteRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
@@ -64,16 +66,75 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return proto === Object.prototype || proto === null;
 }
 
-function isUnknownRouteGuardRegistrationPolicy(v: unknown): v is UnknownRouteGuardRegistrationPolicy {
-	return v === "ignore" || v === "warn" || v === "throw";
+/** Create a type-narrowing validator for a finite set of string literal values. */
+function isOneOf<T extends string>(...values: T[]): (v: unknown) => v is T {
+	const set: ReadonlySet<string> = new Set(values);
+	return (v: unknown): v is T => typeof v === "string" && set.has(v);
 }
 
-function isNavToPreflightMode(v: unknown): v is NavToPreflightMode {
-	return v === "guard" || v === "bypass" || v === "off";
+const isUnknownRouteRegistrationPolicy = isOneOf<UnknownRouteRegistrationPolicy>("ignore", "warn", "throw");
+const isNavToPreflightMode = isOneOf<NavToPreflightMode>("guard", "bypass", "off");
+const isGuardLoading = isOneOf<GuardLoading>("block", "lazy");
+const isInheritance = isOneOf<Inheritance>("none", "pattern-tree");
+
+/** Matches a standalone optional (`:param:`) or rest (`:param*:`) segment. */
+const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*\*?:$/;
+
+/**
+ * Strips inline query and optional-query suffixes from a segment.
+ *
+ * UI5 (crossroads.js) allows query parameters to attach directly to a
+ * path segment without a `/` separator:
+ * - `product{?query}`  → mandatory query on `product`
+ * - `product:?query:`  → optional query on `product`
+ * - `{id}{?query}`     → mandatory param + mandatory query
+ *
+ * For pattern-tree ancestry we only care about the path portion,
+ * so these suffixes are stripped.
+ */
+function stripInlineQuery(seg: string): string {
+	// Strip mandatory query `{?...}` suffix
+	const mqIdx = seg.indexOf("{?");
+	if (mqIdx !== -1) return seg.slice(0, mqIdx);
+	// Strip optional query `:?...:` suffix
+	const oqIdx = seg.indexOf(":?");
+	if (oqIdx !== -1) return seg.slice(0, oqIdx);
+	return seg;
 }
 
-function isGuardLoading(v: unknown): v is GuardLoading {
-	return v === "block" || v === "lazy";
+/**
+ * Extract mandatory path segments from a UI5 route pattern.
+ *
+ * Splits on `/`, strips inline query suffixes, then drops empty segments,
+ * standalone optional (`:param:`), and rest (`:param*:`) segments.
+ */
+function patternSegments(pattern: string): string[] {
+	return pattern
+		.split("/")
+		.map(stripInlineQuery)
+		.filter((seg) => seg !== "" && !OPTIONAL_OR_REST_SEGMENT.test(seg));
+}
+
+/**
+ * Check if `ancestorPattern` is a URL-tree ancestor of `candidatePattern`.
+ *
+ * Both patterns are reduced to their mandatory path segments and compared
+ * positionally. Mandatory parameter segments (`{paramA}`, `{paramB}`) are
+ * treated as equivalent regardless of name, so `employees/{empId}` is
+ * recognized as an ancestor of `employees/{id}/resume`.
+ */
+function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
+	if (ancestorPattern === "") return true;
+	const ancestorSegments = patternSegments(ancestorPattern);
+	if (ancestorSegments.length === 0) return false;
+	const candidateSegments = patternSegments(candidatePattern);
+	if (candidateSegments.length <= ancestorSegments.length) return false;
+	return ancestorSegments.every((seg, i) => {
+		const candidateSeg = candidateSegments[i];
+		if (seg === candidateSeg) return true;
+		// Treat any two mandatory parameter segments as equivalent
+		return seg.startsWith("{") && candidateSeg.startsWith("{");
+	});
 }
 
 /** Parsed guard declaration from the manifest `guards` block. */
@@ -318,15 +379,17 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 }
 
 interface ResolvedGuardRouterOptions {
-	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
+	readonly unknownRouteRegistration: UnknownRouteRegistrationPolicy;
 	readonly navToPreflight: NavToPreflightMode;
 	readonly guardLoading: GuardLoading;
+	readonly inheritance: Inheritance;
 }
 
 const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
-	unknownRouteGuardRegistration: "warn",
+	unknownRouteRegistration: "warn",
 	navToPreflight: "guard",
 	guardLoading: "lazy",
+	inheritance: "none",
 };
 
 function applyOption<K extends keyof ResolvedGuardRouterOptions>(
@@ -353,9 +416,10 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	}
 
 	const result = { ...DEFAULT_OPTIONS };
-	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
+	applyOption(raw, "unknownRouteRegistration", isUnknownRouteRegistrationPolicy, result);
 	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
 	applyOption(raw, "guardLoading", isGuardLoading, result);
+	applyOption(raw, "inheritance", isInheritance, result);
 	return result;
 }
 
@@ -417,7 +481,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[] = [];
+	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
+	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
+	private _routeNames: string[] = [];
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
 		const [routes, config, owner, ...rest] = args;
@@ -426,6 +495,37 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
 		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
 		this._options = normalizeGuardRouterOptions(guardRouter);
+
+		// Collect route names from the constructor's routes parameter for pattern-tree traversal.
+		if (Array.isArray(routes)) {
+			this._routeNames = routes
+				.filter((r): r is { name: string } => isRecord(r) && typeof r.name === "string")
+				.map((r) => r.name);
+		} else if (isRecord(routes)) {
+			this._routeNames = Object.keys(routes);
+		}
+
+		if (isRecord(guardRouter) && guardRouter.routeMeta !== undefined) {
+			if (isRecord(guardRouter.routeMeta)) {
+				for (const [routeName, meta] of Object.entries(guardRouter.routeMeta)) {
+					if (isRecord(meta)) {
+						this._manifestMeta.set(routeName, Object.freeze({ ...meta }));
+					} else {
+						Log.warning(
+							`guardRouter.routeMeta["${routeName}"]: expected object, skipping`,
+							JSON.stringify(meta),
+							LOG_COMPONENT,
+						);
+					}
+				}
+			} else {
+				Log.warning(
+					"guardRouter.routeMeta: expected object, skipping",
+					JSON.stringify(guardRouter.routeMeta),
+					LOG_COMPONENT,
+				);
+			}
+		}
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
 			let componentNamespace = "";
@@ -437,8 +537,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 
-			// Pattern 5: fire-and-forget preload hint (lazy mode only --
-			// block mode loads modules itself in initialize())
+			// Fire-and-forget preload hint: warm the module cache so lazy
+			// wrappers resolve synchronously on first navigation.
+			// Block mode loads modules itself in initialize().
 			if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
 				const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
 				sap.ui.require(uniquePaths);
@@ -463,15 +564,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		const descriptors = this._pendingGuardDescriptors;
 		this._pendingGuardDescriptors = [];
+		this._sourceDescriptors = descriptors;
+
+		const expandedDescriptors =
+			this._options.inheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
 
 		if (this._options.guardLoading === "lazy") {
-			this._registerLazyGuards(descriptors);
+			this._registerLazyGuards(expandedDescriptors);
 			return super.initialize();
 		}
 
 		// "block" mode: load all modules, then initialize.
 		// Guard against destroy() being called while modules are still loading.
-		this._loadAndRegisterGuards(descriptors)
+		this._loadAndRegisterGuards(expandedDescriptors)
 			.then(() => {
 				if (!this._destroyed) super.initialize();
 			})
@@ -485,6 +590,89 @@ export default class Router extends MobileRouter implements GuardRouter {
 				super.initialize();
 			});
 		return this;
+	}
+
+	/**
+	 * Add a route dynamically and integrate it into pattern-tree inheritance.
+	 *
+	 * Appends the route name to the internal route list so that
+	 * `_collectRoutePatterns()` includes it in subsequent inheritance
+	 * lookups, clears the metadata cache, and registers any inherited
+	 * manifest guards when `inheritance` is `"pattern-tree"`.
+	 *
+	 * @override sap.ui.core.routing.Router#addRoute
+	 * @since 1.6.0
+	 */
+	override addRoute(oConfig: $RouteSettings, ...rest: unknown[]): void {
+		// @ts-expect-error -- oParent is required in the type declaration but optional at runtime
+		super.addRoute(oConfig, ...rest);
+
+		// Skip when called by the parent constructor before field initializers have run.
+		// Routes from the constructor args are captured in _routeNames by the constructor body.
+		if (!this._routeNames) return;
+
+		const name = oConfig.name;
+		if (typeof name !== "string") return;
+		if (this._routeNames.includes(name)) return;
+
+		this._routeNames.push(name);
+		this._resolvedMetaCache.clear();
+
+		if (this._options.inheritance !== "pattern-tree") return;
+		if (this._sourceDescriptors.length === 0) return;
+
+		const route = this.getRoute(name);
+		if (!route) return;
+		const newPattern = route.getPattern();
+		if (newPattern === undefined) return;
+
+		const newDescriptors = this._expandGuardDescriptorsForNewRoute(name, newPattern);
+		if (newDescriptors.length === 0) return;
+
+		// Always use lazy registration: if the module was loaded during
+		// initialize() (block mode), the sync cache probe succeeds immediately.
+		// This avoids an async gap between addRoute() and the first navigation.
+		this._registerLazyGuards(newDescriptors);
+	}
+
+	/**
+	 * Expand manifest guard descriptors for a single newly added route.
+	 *
+	 * For each source descriptor whose route is an ancestor of the new
+	 * route's pattern, emits a copy targeting the new route. Also emits
+	 * copies for existing routes that are descendants of the new route
+	 * (in case the new route has declared guards). Sorted by depth.
+	 */
+	private _expandGuardDescriptorsForNewRoute(newName: string, newPattern: string): GuardDescriptor[] {
+		const result: GuardDescriptor[] = [];
+
+		for (const descriptor of this._sourceDescriptors) {
+			if (descriptor.route === "*") continue;
+
+			if (descriptor.route !== newName) {
+				// Check if the source descriptor's route is an ancestor of the new route.
+				const ancestorRoute = this.getRoute(descriptor.route);
+				const ancestorPattern = ancestorRoute?.getPattern();
+				if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
+					result.push({ ...descriptor, route: newName });
+				}
+			} else {
+				// The new route itself has a source descriptor -- expand to existing descendants.
+				for (const { name, pattern } of this._collectRoutePatterns()) {
+					if (name === newName) continue;
+					if (isPatternAncestor(newPattern, pattern)) {
+						result.push({ ...descriptor, route: name });
+					}
+				}
+			}
+		}
+
+		// Sort by pattern depth (ancestor guards run before descendant guards).
+		return result.toSorted((a, b) => {
+			const pa = this.getRoute(a.route)?.getPattern() ?? "";
+			const pb = this.getRoute(b.route)?.getPattern() ?? "";
+			return patternSegments(pa).length - patternSegments(pb).length;
+		});
 	}
 
 	/**
@@ -519,7 +707,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Accepts either a guard function (registered as an enter guard) or a
 	 * configuration object with `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -592,7 +780,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * enter guards for the target route. They answer the binary question
 	 * "can I leave?" and return only a boolean (no redirects).
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -652,13 +840,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _handleUnknownRouteRegistration(routeName: string, methodName: string): boolean {
 		if (this.getRoute(routeName)) return true;
 
-		switch (this._options.unknownRouteGuardRegistration) {
+		switch (this._options.unknownRouteRegistration) {
 			case "ignore":
 				return true;
 			case "throw":
 				throw new Error(
 					`${methodName} called for unknown route "${routeName}". ` +
-						`Set guardRouter.unknownRouteGuardRegistration to "warn" or "ignore" to allow this.`,
+						`Set guardRouter.unknownRouteRegistration to "warn" or "ignore" to allow this.`,
 				);
 			case "warn":
 			default:
@@ -678,6 +866,78 @@ export default class Router extends MobileRouter implements GuardRouter {
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
 		if (!this._isFn(guard, "removeLeaveGuard", routeName)) return this;
 		this._pipeline.removeLeaveGuard(routeName, guard);
+		return this;
+	}
+
+	private static readonly _EMPTY_META: Readonly<Record<string, unknown>> = Object.freeze({});
+
+	/**
+	 * Return the resolved metadata for a route.
+	 *
+	 * When `inheritance` is `"pattern-tree"`, walks the ancestor chain and
+	 * shallow-merges metadata shallowest-first (child values win on conflict).
+	 * Both manifest and runtime metadata participate in inheritance.
+	 * Results are cached; the cache is invalidated by {@link setRouteMeta} or `addRoute()`.
+	 *
+	 * Logs a warning for unknown non-empty route names and returns an empty
+	 * frozen object. The empty string `""` is treated as a valid root route.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @returns Frozen record of metadata key-value pairs, or an empty frozen object if the route has no metadata.
+	 * @since 1.6.0
+	 */
+	getRouteMeta(routeName: string): Readonly<Record<string, unknown>> {
+		// Empty string is a valid root route name (initial state before first navigation)
+		if (routeName !== "" && !this.getRoute(routeName)) {
+			Log.warning("getRouteMeta: unknown route, returning empty metadata", routeName, LOG_COMPONENT);
+			return Router._EMPTY_META;
+		}
+
+		// Cache hit
+		const cached = this._resolvedMetaCache.get(routeName);
+		if (cached) return cached;
+
+		let result: Readonly<Record<string, unknown>>;
+
+		if (this._options.inheritance === "pattern-tree") {
+			result = this._resolveInheritedMeta(routeName);
+		} else {
+			result = this._resolveFlatMeta(routeName);
+		}
+
+		if (Object.keys(result).length === 0) {
+			this._resolvedMetaCache.set(routeName, Router._EMPTY_META);
+			return Router._EMPTY_META;
+		}
+
+		this._resolvedMetaCache.set(routeName, result);
+		return result;
+	}
+
+	/**
+	 * Set runtime metadata for a route.
+	 *
+	 * Runtime metadata is merged on top of any manifest-declared metadata
+	 * when retrieved via {@link getRouteMeta}. When `inheritance` is
+	 * `"pattern-tree"`, descendant routes also see the updated values.
+	 * Invalidates the resolved-metadata cache. Non-object values are
+	 * ignored with a warning. Subject to the `unknownRouteRegistration` policy.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param meta - Plain object of metadata key-value pairs.
+	 * @returns `this` for chaining.
+	 * @since 1.6.0
+	 */
+	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
+		if (!isRecord(meta)) {
+			Log.warning("setRouteMeta: expected object, ignoring", routeName, LOG_COMPONENT);
+			return this;
+		}
+		if (routeName !== "" && !this._handleUnknownRouteRegistration(routeName, "setRouteMeta")) {
+			return this;
+		}
+		this._runtimeMeta.set(routeName, Object.freeze({ ...meta }));
+		this._resolvedMetaCache.clear();
 		return this;
 	}
 
@@ -1248,6 +1508,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromHash: chain.fromHash,
 			signal: chain.signal,
 			bag: chain.bag,
+			toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
+			fromMeta: this.getRouteMeta(chain.fromRoute),
 		};
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
@@ -1358,6 +1620,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromHash: this._currentHash ?? "",
 			signal,
 			bag: new Map(),
+			toMeta: this.getRouteMeta(toRoute),
+			fromMeta: this.getRouteMeta(this._currentRoute),
 		};
 	}
 
@@ -1448,6 +1712,120 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Collect all route names and their patterns from the router.
+	 * Skips routes whose pattern is undefined (no pattern configured).
+	 */
+	private _collectRoutePatterns(): { name: string; pattern: string }[] {
+		const result: { name: string; pattern: string }[] = [];
+		for (const name of this._routeNames) {
+			const route = this.getRoute(name);
+			if (route) {
+				const pattern = route.getPattern();
+				if (pattern !== undefined) {
+					result.push({ name, pattern });
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Expand guard descriptors to descendant routes when guard inheritance
+	 * is set to `"pattern-tree"`. Global (`"*"`) descriptors are kept as-is.
+	 * Descriptors are sorted by pattern depth (ancestor guards run before
+	 * descendant guards).
+	 */
+	private _expandGuardDescriptors(descriptors: GuardDescriptor[]): GuardDescriptor[] {
+		const allRoutes = this._collectRoutePatterns();
+		if (allRoutes.length === 0) return descriptors;
+
+		// Build a name -> pattern map for quick lookup
+		const patternByName = new Map(allRoutes.map((r) => [r.name, r.pattern]));
+
+		const expanded: GuardDescriptor[] = [];
+
+		for (const descriptor of descriptors) {
+			expanded.push(descriptor);
+
+			// Global guards and routes without a known pattern are not expanded
+			if (descriptor.route === "*") continue;
+			const ancestorPattern = patternByName.get(descriptor.route);
+			if (ancestorPattern === undefined) continue;
+
+			// Find descendant routes whose pattern extends the ancestor's pattern
+			for (const { name, pattern } of allRoutes) {
+				if (name === descriptor.route) continue;
+				if (isPatternAncestor(ancestorPattern, pattern)) {
+					expanded.push({ ...descriptor, route: name });
+				}
+			}
+		}
+
+		// Sort by pattern depth (segment count) so ancestor guards run first.
+		// Global ("*") descriptors return 0 here -- their relative position is irrelevant
+		// because GuardPipeline evaluates globals separately from route-specific guards.
+		// oxlint-disable-next-line unicorn/no-array-sort -- expanded is a local array, mutation is intentional
+		return expanded.sort((a, b) => {
+			if (a.route === "*" || b.route === "*") return 0;
+			const pa = patternByName.get(a.route) ?? "";
+			const pb = patternByName.get(b.route) ?? "";
+			return patternSegments(pa).length - patternSegments(pb).length;
+		});
+	}
+
+	/**
+	 * Resolve metadata for a route without inheritance (flat merge of
+	 * manifest and runtime metadata).
+	 */
+	private _resolveFlatMeta(routeName: string): Readonly<Record<string, unknown>> {
+		const manifest = this._manifestMeta.get(routeName);
+		const runtime = this._runtimeMeta.get(routeName);
+		if (!manifest && !runtime) return Router._EMPTY_META;
+		if (!runtime) return manifest!;
+		if (!manifest) return Object.freeze({ ...runtime });
+		return Object.freeze({ ...manifest, ...runtime });
+	}
+
+	/**
+	 * Resolve metadata for a route with pattern-tree inheritance.
+	 * Walks ancestor patterns shallowest-first, merging manifest and
+	 * runtime metadata at each level, then overlays the route's own.
+	 */
+	private _resolveInheritedMeta(routeName: string): Readonly<Record<string, unknown>> {
+		const allRoutes = this._collectRoutePatterns();
+		const routeEntry = allRoutes.find((r) => r.name === routeName);
+		if (!routeEntry) return this._resolveFlatMeta(routeName);
+
+		// Find ancestors that have declared metadata (manifest or runtime)
+		const ancestors = allRoutes.filter(
+			(r) =>
+				r.name !== routeName &&
+				(this._manifestMeta.has(r.name) || this._runtimeMeta.has(r.name)) &&
+				isPatternAncestor(r.pattern, routeEntry.pattern),
+		);
+		// oxlint-disable-next-line unicorn/no-array-sort -- ancestors is a fresh array from filter()
+		ancestors.sort((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length);
+
+		// Merge shallowest-first: root ancestor -> deeper ancestors -> own manifest -> own runtime
+		const merged: Record<string, unknown> = {};
+
+		for (const ancestor of ancestors) {
+			const ancestorManifest = this._manifestMeta.get(ancestor.name);
+			if (ancestorManifest) Object.assign(merged, ancestorManifest);
+			const ancestorRuntime = this._runtimeMeta.get(ancestor.name);
+			if (ancestorRuntime) Object.assign(merged, ancestorRuntime);
+		}
+
+		const ownManifest = this._manifestMeta.get(routeName);
+		if (ownManifest) Object.assign(merged, ownManifest);
+		const ownRuntime = this._runtimeMeta.get(routeName);
+		if (ownRuntime) Object.assign(merged, ownRuntime);
+
+		if (Object.keys(merged).length === 0) return Router._EMPTY_META;
+		return Object.freeze(merged);
+	}
+
+	/**
 	 * Load guard modules individually via `sap.ui.require` and register
 	 * each resolved function with the appropriate guard API.
 	 *
@@ -1455,7 +1833,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * single invalid path only skips that guard (with a warning) rather
 	 * than failing the entire batch. Once all loads settle, guards
 	 * register in declaration order. Registration errors (e.g. from
-	 * `unknownRouteGuardRegistration: "throw"`) are caught per-module.
+	 * `unknownRouteRegistration: "throw"`) are caught per-module.
 	 */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
 		const promises = descriptors.map((descriptor) => {
@@ -1622,9 +2000,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._destroyed = true;
 		this._pipeline.clear();
 		this._pendingGuardDescriptors = [];
+		this._sourceDescriptors = [];
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;
+		this._manifestMeta.clear();
+		this._runtimeMeta.clear();
+		this._resolvedMetaCache.clear();
 		super.destroy();
 		return this;
 	}

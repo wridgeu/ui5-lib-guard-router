@@ -71,7 +71,8 @@
 					"target": "notFound"
 				},
 				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
+					"unknownRouteRegistration": "warn",
+					"inheritance": "pattern-tree",
 					"guards": {
 						"*": ["guards.navigationLogger"],
 						"blocked": ["guards.blockedGuard"],
@@ -79,6 +80,10 @@
 						"protected": {
 							"leave": ["guards.dirtyFormGuard"]
 						}
+					},
+					"routeMeta": {
+						"employees": { "section": "hr", "requiresAuth": true },
+						"employee": { "detail": true }
 					}
 				}
 			},
@@ -107,6 +112,16 @@
 					"name": "admin",
 					"pattern": "admin",
 					"target": "admin"
+				},
+				{
+					"name": "employees",
+					"pattern": "employees",
+					"target": "employees"
+				},
+				{
+					"name": "employee",
+					"pattern": "employees/{id}",
+					"target": "employee"
 				}
 			],
 			"targets": {
@@ -139,6 +154,18 @@
 					"name": "Admin",
 					"id": "adminView",
 					"level": 2
+				},
+				"employees": {
+					"name": "Employees",
+					"id": "employeesView",
+					"level": 2,
+					"transition": "show"
+				},
+				"employee": {
+					"name": "Employee",
+					"id": "employeeView",
+					"level": 3,
+					"transition": "show"
 				}
 			}
 		}

@@ -77,6 +77,10 @@ export interface GuardContext {
 	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
+	/** Resolved metadata for the target route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
+	toMeta: Readonly<Record<string, unknown>>;
+	/** Resolved metadata for the current route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
+	fromMeta: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -120,7 +124,7 @@ export interface RouteGuardConfig {
 }
 
 /**
- * Policy for guard registration against unknown route names.
+ * Policy for registration against unknown route names.
  *
  * - `"ignore"` -- register silently.
  * - `"warn"` -- log a warning and still register (default).
@@ -128,7 +132,7 @@ export interface RouteGuardConfig {
  *
  * @since 1.5.0
  */
-export type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
+export type UnknownRouteRegistrationPolicy = "ignore" | "warn" | "throw";
 
 /**
  * Strategy for programmatic `navTo()` guard evaluation.
@@ -150,6 +154,18 @@ export type NavToPreflightMode = "guard" | "bypass" | "off";
  * @since 1.5.0
  */
 export type GuardLoading = "block" | "lazy";
+
+/**
+ * Strategy for inheriting guards and metadata down the URL pattern tree.
+ *
+ * - `"none"` -- guards and metadata apply only to their declared route (default).
+ * - `"pattern-tree"` -- guards propagate to all routes whose URL pattern extends
+ *   the declared route's pattern; metadata propagates via shallow merge (child
+ *   values override ancestor values on conflict).
+ *
+ * @since 1.6.0
+ */
+export type Inheritance = "none" | "pattern-tree";
 
 /**
  * Per-route guard declaration in the manifest.
@@ -178,13 +194,14 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  * Router-level options for the guard router.
  *
  * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
- * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`.
+ * Defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`,
+ * `inheritance: "none"`.
  *
  * @since 1.5.0
  */
 export interface GuardRouterOptions {
-	/** Policy for guard registration against unknown route names. Defaults to `"warn"`. */
-	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
+	/** Policy for registration against unknown route names. Defaults to `"warn"`. */
+	unknownRouteRegistration?: UnknownRouteRegistrationPolicy;
 	/** Strategy for evaluating guards on programmatic `navTo()` calls. Defaults to `"guard"`. */
 	navToPreflight?: NavToPreflightMode;
 	/**
@@ -196,8 +213,18 @@ export interface GuardRouterOptions {
 	 * guarantees.
 	 */
 	guardLoading?: GuardLoading;
+	/** Strategy for inheriting guards and metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
+	inheritance?: Inheritance;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
+	/**
+	 * Per-route metadata declarations indexed by route name.
+	 * Values are arbitrary key-value objects that the router stores but never interprets.
+	 * Surfaced on `GuardContext` as `toMeta` and `fromMeta`.
+	 *
+	 * @since 1.6.0
+	 */
+	routeMeta?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -306,7 +333,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Accepts either an enter guard function or a configuration object with
 	 * `beforeEnter` and/or `beforeLeave` guards.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Guard function or {@link RouteGuardConfig} object.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -331,7 +358,7 @@ export interface GuardRouter extends MobileRouter {
 	 * Leave guards run when navigating away from the route. They can allow or
 	 * block the navigation, but they cannot redirect.
 	 *
-	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteGuardRegistration} policy applies (default: warn).
+	 * @param routeName - Route name as defined in `manifest.json`. If the route is unknown, the {@link GuardRouterOptions.unknownRouteRegistration} policy applies (default: warn).
 	 * @param guard - Leave guard function to register. Non-functions are ignored with a warning.
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
@@ -346,6 +373,30 @@ export interface GuardRouter extends MobileRouter {
 	 * @since 1.0.1
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	/**
+	 * Get resolved metadata for a route.
+	 *
+	 * When `inheritance` is `"pattern-tree"`, the result includes metadata
+	 * inherited from ancestor routes (shallow merge, child values win).
+	 * Results are cached and invalidated when {@link setRouteMeta} or `addRoute()` is called.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @returns Frozen metadata object, or an empty frozen object for unknown or unconfigured routes.
+	 * @since 1.6.0
+	 */
+	getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
+	/**
+	 * Set runtime metadata for a route, replacing any previous runtime metadata.
+	 * Does not affect manifest defaults -- runtime values take precedence on read.
+	 * Invalidates the resolved-metadata cache so subsequent reads reflect the change.
+	 * Subject to the {@link GuardRouterOptions.unknownRouteRegistration} policy.
+	 *
+	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @param meta - Metadata object (must be a plain object). The router stores but never interprets it.
+	 * @returns `this` for chaining.
+	 * @since 1.6.0
+	 */
+	setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 	/**
 	 * Resolve when the current guard pipeline settles.
 	 *

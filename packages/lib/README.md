@@ -28,7 +28,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~25 KB).
+> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~29 KB).
 
 ### TypeScript
 
@@ -210,6 +210,13 @@ All guard registration and removal methods return `this` for chaining. `navigati
 | `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form |
 | `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                             |
 
+### Route metadata
+
+| Method                          | Description                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `getRouteMeta(routeName)`       | Get resolved metadata (manifest defaults merged with runtime)         |
+| `setRouteMeta(routeName, meta)` | Set runtime metadata for a route (replaces previous runtime metadata) |
+
 ### Unknown routes during registration
 
 `addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
@@ -227,6 +234,8 @@ Every guard receives a `GuardContext` object:
 | `fromHash`    | `string`                                           | Current hash                                                            |
 | `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
 | `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
+| `toMeta`      | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
+| `fromMeta`    | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
 
 ### Return values (`GuardResult`)
 
@@ -375,15 +384,20 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 			"config": {
 				"routerClass": "ui5.guard.router.Router",
 				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
+					"unknownRouteRegistration": "warn",
 					"navToPreflight": "guard",
 					"guardLoading": "lazy",
+					"inheritance": "none",
 					"guards": {
 						"*": ["guards.authGuard"],
 						"admin": {
 							"enter": ["guards.adminGuard"],
 							"leave": ["guards.unsavedChangesGuard"]
 						}
+					},
+					"routeMeta": {
+						"admin": { "requiresAuth": true, "roles": ["admin"] },
+						"profile": { "requiresAuth": true }
 					}
 				}
 			}
@@ -394,11 +408,12 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 ### Router options
 
-| Option                          | Values                              | Default   | Description                                                                                                                                                                                                                                                   |
-| ------------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
-| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
-| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
+| Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                           |
+| -------------------------- | ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names                                                                                                                                                                                                |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                         |
+| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async.         |
+| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict). |
 
 ### Declarative guards
 
@@ -568,6 +583,38 @@ The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This 
 
 This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
 
+### Route metadata
+
+Per-route metadata can be declared in the manifest under `guardRouter.routeMeta`. Keys are route names, values are arbitrary objects. The router stores but never interprets the metadata — guards read it from `context.toMeta` and `context.fromMeta`.
+
+```json
+"guardRouter": {
+	"routeMeta": {
+		"admin": { "requiresAuth": true, "roles": ["admin"] },
+		"profile": { "requiresAuth": true },
+		"home": { "public": true }
+	}
+}
+```
+
+A single global guard can then implement policy-driven access control:
+
+```typescript
+router.addGuard((context) => {
+	if (context.toMeta.requiresAuth && !isLoggedIn()) return "login";
+	if (context.toMeta.roles && !hasAnyRole(context.toMeta.roles as string[])) return "forbidden";
+	return true;
+});
+```
+
+Runtime metadata can be set programmatically via `setRouteMeta()`. When read via `getRouteMeta()`, runtime values take precedence over manifest defaults:
+
+```typescript
+router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
+```
+
+`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. When `inheritance: "pattern-tree"` is enabled, the result also includes metadata inherited from ancestor routes (see [Guard and metadata inheritance](#guard-and-metadata-inheritance)). For unconfigured routes, it returns an empty frozen object.
+
 ### `skipGuards` option
 
 Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
@@ -575,6 +622,54 @@ Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all gu
 ```typescript
 router.navTo("settings", {}, false, { skipGuards: true });
 ```
+
+### Guard and metadata inheritance
+
+When `inheritance` is set to `"pattern-tree"`, guards declared on a route automatically apply to all routes whose URL pattern extends that route's pattern:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"guards": {
+		"employees": ["guards.authGuard"]
+	}
+}
+```
+
+With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards.
+
+With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Child values override ancestor values on conflict:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"routeMeta": {
+		"employees": { "section": "hr", "requiresAuth": true },
+		"employee": { "clearance": "manager" }
+	}
+}
+```
+
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true }` (inherited). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
+
+Defaults to `"none"` for backward compatibility.
+
+**Root-pattern route (`""`) is a universal ancestor.** A route with an empty pattern (typically "home") is considered an ancestor of every other route in the router. With `pattern-tree` inheritance enabled, metadata or guards declared on the root-pattern route propagate to all routes:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"routeMeta": {
+		"home": { "requiresAuth": true }
+	}
+}
+```
+
+Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care — setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
+
+Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` invalidates the cache. Guard inheritance is resolved at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
+
+Runtime metadata set via `setRouteMeta()` participates in inheritance -- child routes see updated ancestor metadata after cache invalidation.
 
 ### Mixing declarative and programmatic guards
 
