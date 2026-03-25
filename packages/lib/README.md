@@ -827,10 +827,9 @@ For common patterns like "this route requires authentication", you can store per
 ```
 
 ```typescript
-// Component.ts
-const manifest = this.getManifest() as Record<string, unknown>;
-const metaSection = manifest["ui5.guard.router"] as Record<string, unknown> | undefined;
-const routeMeta = (metaSection?.routeMeta ?? {}) as Record<string, Record<string, unknown>>;
+// Component.ts — read the custom section via getManifestEntry (typed path lookup)
+type RouteMeta = Record<string, Record<string, unknown>>;
+const routeMeta = (this.getManifestEntry("/ui5.guard.router/routeMeta") ?? {}) as RouteMeta;
 
 router.addGuard((context) => {
 	const meta = routeMeta[context.toRoute] ?? {};
@@ -839,6 +838,8 @@ router.addGuard((context) => {
 	return true;
 });
 ```
+
+`getManifestEntry()` accepts a path string (starting with `/`) to reach into nested manifest sections. The return type is `any`, so the local `RouteMeta` alias provides type safety at the consumption site.
 
 This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework -- it's a convention for your application data.
 
