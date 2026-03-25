@@ -2003,12 +2003,12 @@ QUnit.module("Router - Guard and metadata inheritance", {
 // -- Guard inheritance -------------------------------------------------------
 
 QUnit.test(
-	"guard on parent route runs for child route when guardInheritance is pattern-tree",
+	"guard on parent route runs for child route when inheritance is pattern-tree",
 	async function (assert: Assert) {
 		// Arrange: blocking guard on "employees", inheritance enabled
 		router = createHierarchicalRouter({
 			guardLoading: "block",
-			guardInheritance: "pattern-tree",
+			inheritance: "pattern-tree",
 			guards: {
 				employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 			},
@@ -2030,11 +2030,11 @@ QUnit.test(
 	},
 );
 
-QUnit.test("guard on parent does NOT run for child when guardInheritance is none", async function (assert: Assert) {
+QUnit.test("guard on parent does NOT run for child when inheritance is none", async function (assert: Assert) {
 	// Arrange: blocking guard on "employees", inheritance disabled (default)
 	router = createHierarchicalRouter({
 		guardLoading: "block",
-		guardInheritance: "none",
+		inheritance: "none",
 		guards: {
 			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 		},
@@ -2058,7 +2058,7 @@ QUnit.test("ancestor guards run before descendant guards (depth ordering)", asyn
 	// navigation succeeds; if child runs first it blocks.
 	router = createHierarchicalRouter({
 		guardLoading: "block",
-		guardInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		guards: {
 			employees: ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
 			employee: ["ui5/guard/router/qunit/fixtures/guards/bagReaderGuard"],
@@ -2088,7 +2088,7 @@ QUnit.test("global guards run before inherited route guards (pipeline separation
 	// and the depth sort does not displace globals.
 	router = createHierarchicalRouter({
 		guardLoading: "block",
-		guardInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		guards: {
 			"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
 			employees: ["ui5/guard/router/qunit/fixtures/guards/bagReaderGuard"],
@@ -2114,7 +2114,7 @@ QUnit.test("guard on child does NOT propagate upward to parent", async function 
 	// Arrange: blocking guard only on the child route, inheritance enabled
 	router = createHierarchicalRouter({
 		guardLoading: "block",
-		guardInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		guards: {
 			employee: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 		},
@@ -2133,10 +2133,10 @@ QUnit.test("guard on child does NOT propagate upward to parent", async function 
 
 // -- Metadata inheritance ----------------------------------------------------
 
-QUnit.test("metadata propagates to child routes when metaInheritance is pattern-tree", function (assert: Assert) {
+QUnit.test("metadata propagates to child routes when inheritance is pattern-tree", function (assert: Assert) {
 	// Arrange: metadata on ancestor, inheritance enabled
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			employees: { requiresAuth: true },
 		},
@@ -2150,7 +2150,7 @@ QUnit.test("metadata propagates to child routes when metaInheritance is pattern-
 QUnit.test("child metadata overrides ancestor metadata on conflict", function (assert: Assert) {
 	// Arrange: both ancestor and child define "level"
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			employees: { level: 1 },
 			employee: { level: 2 },
@@ -2162,10 +2162,10 @@ QUnit.test("child metadata overrides ancestor metadata on conflict", function (a
 	assert.strictEqual(meta.level, 2, "child metadata overrides ancestor on conflict");
 });
 
-QUnit.test("metadata does NOT propagate when metaInheritance is none", function (assert: Assert) {
+QUnit.test("metadata does NOT propagate when inheritance is none", function (assert: Assert) {
 	// Arrange: metadata on ancestor, inheritance disabled (default)
 	router = createHierarchicalRouter({
-		metaInheritance: "none",
+		inheritance: "none",
 		routeMeta: {
 			employees: { requiresAuth: true },
 		},
@@ -2179,7 +2179,7 @@ QUnit.test("metadata does NOT propagate when metaInheritance is none", function 
 QUnit.test("metadata merges across multiple ancestor levels", function (assert: Assert) {
 	// Arrange: metadata at two ancestor levels
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			employees: { section: "hr" },
 			employee: { requiresAuth: true },
@@ -2192,42 +2192,12 @@ QUnit.test("metadata merges across multiple ancestor levels", function (assert: 
 	assert.strictEqual(meta.requiresAuth, true, "grandchild inherited requiresAuth from parent");
 });
 
-// -- Independent toggles ----------------------------------------------------
-
-QUnit.test("guardInheritance and metaInheritance work independently", async function (assert: Assert) {
-	// Arrange: guard inheritance ON, meta inheritance OFF
-	router = createHierarchicalRouter({
-		guardLoading: "block",
-		guardInheritance: "pattern-tree",
-		metaInheritance: "none",
-		guards: {
-			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
-		},
-		routeMeta: {
-			employees: { requiresAuth: true },
-		},
-	});
-
-	// Assert: metadata did NOT propagate
-	const meta = router.getRouteMeta("employee");
-	assert.deepEqual(meta, {}, "metadata not inherited when metaInheritance is none");
-
-	// Assert: guard DID propagate
-	router.initialize();
-	await waitForRoute(router, "home", 5000);
-
-	router.navTo("employee", { id: "42" });
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard inherited despite metaInheritance being none");
-});
-
 // -- Integration with toMeta ------------------------------------------------
 
 QUnit.test("inherited metadata is visible on context.toMeta in guards", async function (assert: Assert) {
 	// Arrange: metadata on ancestor, both inheritance modes enabled
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			employees: { section: "hr", requiresAuth: true },
 		},
@@ -2254,7 +2224,7 @@ QUnit.test("inherited metadata is visible on context.toMeta in guards", async fu
 
 QUnit.test("runtime setRouteMeta does not participate in inheritance", function (assert: Assert) {
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 	});
 
 	router.setRouteMeta("employees", { runtimeKey: true });
@@ -2290,7 +2260,7 @@ QUnit.test("metadata inherits when parent and child use different parameter name
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { employees: { section: "hr" } },
 			},
 		} as object,
@@ -2312,7 +2282,7 @@ QUnit.test("optional parameter segments do not break ancestry detection", functi
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { products: { category: "catalog" } },
 			},
 		} as object,
@@ -2334,7 +2304,7 @@ QUnit.test("inline query parameter suffix does not affect ancestry", function (a
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { search: { filterable: true } },
 			},
 		} as object,
@@ -2356,7 +2326,7 @@ QUnit.test("inline optional query suffix does not affect ancestry", function (as
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { catalog: { browsable: true } },
 			},
 		} as object,
@@ -2382,7 +2352,7 @@ QUnit.test("rest parameter segments do not affect ancestry", function (assert: A
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { docs: { layout: "reader" } },
 			},
 		} as object,
@@ -2404,7 +2374,7 @@ QUnit.test("sibling routes do not inherit from each other", function (assert: As
 		{
 			async: true,
 			guardRouter: {
-				metaInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				routeMeta: { employeeList: { view: "list" } },
 			},
 		} as object,
@@ -2426,7 +2396,7 @@ QUnit.test("guard inheritance works with mixed parameter names", async function 
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
-				guardInheritance: "pattern-tree",
+				inheritance: "pattern-tree",
 				guards: {
 					order: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 				},
@@ -2465,7 +2435,7 @@ QUnit.test(
 	"metadata on root-pattern route propagates to all routes with pattern-tree inheritance",
 	function (assert: Assert) {
 		router = createHierarchicalRouter({
-			metaInheritance: "pattern-tree",
+			inheritance: "pattern-tree",
 			routeMeta: {
 				home: { requiresAuth: true, appName: "demo" },
 			},
@@ -2490,7 +2460,7 @@ QUnit.test(
 
 QUnit.test("child metadata overrides root-pattern metadata on conflict", function (assert: Assert) {
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			home: { requiresAuth: true, theme: "default" },
 			employees: { requiresAuth: false },
@@ -2514,7 +2484,7 @@ QUnit.test(
 		// to verify the inherited guard wrote to the bag before the reader ran.
 		router = createHierarchicalRouter({
 			guardLoading: "block",
-			guardInheritance: "pattern-tree",
+			inheritance: "pattern-tree",
 			guards: {
 				home: ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
 			},
@@ -2541,7 +2511,7 @@ QUnit.test(
 
 QUnit.test("root-pattern route does NOT propagate when inheritance is none", function (assert: Assert) {
 	router = createHierarchicalRouter({
-		metaInheritance: "none",
+		inheritance: "none",
 		routeMeta: {
 			home: { requiresAuth: true },
 		},
@@ -2553,7 +2523,7 @@ QUnit.test("root-pattern route does NOT propagate when inheritance is none", fun
 
 QUnit.test("root-pattern metadata is the shallowest layer in multi-level merge", function (assert: Assert) {
 	router = createHierarchicalRouter({
-		metaInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		routeMeta: {
 			home: { appLevel: "root", section: "none" },
 			employees: { section: "hr" },
@@ -2629,7 +2599,7 @@ QUnit.module("Router - Additional coverage", {
 QUnit.test("guard inheritance works in lazy loading mode", async function (assert: Assert) {
 	router = createHierarchicalRouter({
 		guardLoading: "lazy",
-		guardInheritance: "pattern-tree",
+		inheritance: "pattern-tree",
 		guards: {
 			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
 		},
@@ -2648,30 +2618,26 @@ QUnit.test("guard inheritance works in lazy loading mode", async function (asser
 	);
 });
 
-QUnit.test(
-	"invalid guardInheritance and metaInheritance values warn and fall back to defaults",
-	function (assert: Assert) {
-		const warnings = captureWarnings(() => {
-			router = createRouterWithOptions({
-				guardInheritance: "invalid",
-				metaInheritance: 42,
-			});
+QUnit.test("invalid inheritance value warns and falls back to default", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		router = createRouterWithOptions({
+			inheritance: "invalid",
 		});
+	});
 
-		assert.strictEqual(warnings.length, 2, "one warning per invalid inheritance option");
+	assert.strictEqual(warnings.length, 1, "one warning for invalid inheritance option");
 
-		// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
-		router.destroy();
-		router = createHierarchicalRouter({
-			metaInheritance: "invalid" as string,
-			routeMeta: {
-				employees: { section: "hr" },
-			},
-		});
-		const meta = router.getRouteMeta("employee");
-		assert.deepEqual(meta, {}, "metadata does not propagate with invalid metaInheritance (falls back to none)");
-	},
-);
+	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
+	router.destroy();
+	router = createHierarchicalRouter({
+		inheritance: "invalid" as string,
+		routeMeta: {
+			employees: { section: "hr" },
+		},
+	});
+	const meta = router.getRouteMeta("employee");
+	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");
+});
 
 QUnit.test("merged manifest+runtime metadata result is frozen", function (assert: Assert) {
 	router = createRouterWithOptions({

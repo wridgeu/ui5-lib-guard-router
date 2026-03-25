@@ -156,26 +156,16 @@ export type NavToPreflightMode = "guard" | "bypass" | "off";
 export type GuardLoading = "block" | "lazy";
 
 /**
- * Strategy for inheriting guards down the URL pattern tree.
+ * Strategy for inheriting guards and metadata down the URL pattern tree.
  *
- * - `"none"` -- guards apply only to their declared route (default).
- * - `"pattern-tree"` -- guards propagate to all routes whose URL pattern
- *   extends the declared route's pattern.
- *
- * @since 1.6.0
- */
-export type GuardInheritance = "none" | "pattern-tree";
-
-/**
- * Strategy for inheriting route metadata down the URL pattern tree.
- *
- * - `"none"` -- metadata applies only to the declared route (default).
- * - `"pattern-tree"` -- metadata propagates to descendant routes via
- *   shallow merge (child values override ancestor values on conflict).
+ * - `"none"` -- guards and metadata apply only to their declared route (default).
+ * - `"pattern-tree"` -- guards propagate to all routes whose URL pattern extends
+ *   the declared route's pattern; metadata propagates via shallow merge (child
+ *   values override ancestor values on conflict).
  *
  * @since 1.6.0
  */
-export type MetaInheritance = "none" | "pattern-tree";
+export type Inheritance = "none" | "pattern-tree";
 
 /**
  * Per-route guard declaration in the manifest.
@@ -205,7 +195,7 @@ export type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardCo
  *
  * Configured manifest-first under `sap.ui5.routing.config.guardRouter`.
  * Defaults: `unknownRouteGuardRegistration: "warn"`, `navToPreflight: "guard"`, `guardLoading: "lazy"`,
- * `guardInheritance: "none"`, `metaInheritance: "none"`.
+ * `inheritance: "none"`.
  *
  * @since 1.5.0
  */
@@ -223,10 +213,8 @@ export interface GuardRouterOptions {
 	 * guarantees.
 	 */
 	guardLoading?: GuardLoading;
-	/** Strategy for inheriting manifest guards down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
-	guardInheritance?: GuardInheritance;
-	/** Strategy for inheriting route metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
-	metaInheritance?: MetaInheritance;
+	/** Strategy for inheriting guards and metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
+	inheritance?: Inheritance;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
 	/**

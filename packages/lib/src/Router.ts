@@ -5,15 +5,14 @@ import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
 import type {
 	GuardFn,
 	GuardContext,
-	GuardInheritance,
 	GuardNavToOptions,
 	GuardResult,
 	GuardRedirect,
 	GuardRouter,
 	GuardLoading,
+	Inheritance,
 	LeaveGuardFn,
 	ManifestRouteGuardConfig,
-	MetaInheritance,
 	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
@@ -78,11 +77,7 @@ function isGuardLoading(v: unknown): v is GuardLoading {
 	return v === "block" || v === "lazy";
 }
 
-function isGuardInheritance(v: unknown): v is GuardInheritance {
-	return v === "none" || v === "pattern-tree";
-}
-
-function isMetaInheritance(v: unknown): v is MetaInheritance {
+function isInheritance(v: unknown): v is Inheritance {
 	return v === "none" || v === "pattern-tree";
 }
 
@@ -390,16 +385,14 @@ interface ResolvedGuardRouterOptions {
 	readonly unknownRouteGuardRegistration: UnknownRouteGuardRegistrationPolicy;
 	readonly navToPreflight: NavToPreflightMode;
 	readonly guardLoading: GuardLoading;
-	readonly guardInheritance: GuardInheritance;
-	readonly metaInheritance: MetaInheritance;
+	readonly inheritance: Inheritance;
 }
 
 const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
 	unknownRouteGuardRegistration: "warn",
 	navToPreflight: "guard",
 	guardLoading: "lazy",
-	guardInheritance: "none",
-	metaInheritance: "none",
+	inheritance: "none",
 };
 
 function applyOption<K extends keyof ResolvedGuardRouterOptions>(
@@ -429,8 +422,7 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	applyOption(raw, "unknownRouteGuardRegistration", isUnknownRouteGuardRegistrationPolicy, result);
 	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
 	applyOption(raw, "guardLoading", isGuardLoading, result);
-	applyOption(raw, "guardInheritance", isGuardInheritance, result);
-	applyOption(raw, "metaInheritance", isMetaInheritance, result);
+	applyOption(raw, "inheritance", isInheritance, result);
 	return result;
 }
 
@@ -536,7 +528,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 		}
 
-		if (this._options.metaInheritance === "pattern-tree" && this._manifestMeta.size > 0) {
+		if (this._options.inheritance === "pattern-tree" && this._manifestMeta.size > 0) {
 			this._expandManifestMeta();
 		}
 
@@ -578,7 +570,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._pendingGuardDescriptors = [];
 
 		const expandedDescriptors =
-			this._options.guardInheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
+			this._options.inheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
 
 		if (this._options.guardLoading === "lazy") {
 			this._registerLazyGuards(expandedDescriptors);
