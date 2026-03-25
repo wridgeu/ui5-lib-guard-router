@@ -58,8 +58,8 @@ When the route exists but the ancestor walk finds no metadata (no manifest metad
 
 When `setRouteMeta` is called with a route name that does not exist:
 
-- **Behavior**: follow the `unknownRouteMetaRegistration` policy (new configuration option).
-- **Policy values**: `"ignore"` | `"warn"` | `"throw"` — same semantics as `unknownRouteGuardRegistration`.
+- **Behavior**: follow the `unknownRouteRegistration` policy (new configuration option).
+- **Policy values**: `"ignore"` | `"warn"` | `"throw"` — same semantics as `unknownRouteRegistration`.
 - **Default**: `"warn"`.
 
 | Policy     | Behavior                                                                           |
@@ -68,7 +68,7 @@ When `setRouteMeta` is called with a route name that does not exist:
 | `"warn"`   | Log a warning (`setRouteMeta: unknown route, metadata stored anyway`), then store. |
 | `"throw"`  | Throw an `Error` synchronously. Metadata is not stored.                            |
 
-**Rationale**: `setRouteMeta` is a write/registration operation, same category as `addRouteGuard` / `addLeaveGuard`. The policy pattern is already established for guard registration (`unknownRouteGuardRegistration`). Metadata registration deserves the same configurability because developers may intentionally set metadata before calling `addRoute()` (dynamic routes) or may have a typo that should be caught early.
+**Rationale**: `setRouteMeta` is a write/registration operation, same category as `addRouteGuard` / `addLeaveGuard`. The policy pattern is already established for guard registration (`unknownRouteRegistration`). Metadata registration deserves the same configurability because developers may intentionally set metadata before calling `addRoute()` (dynamic routes) or may have a typo that should be caught early.
 
 **Pre-registered metadata for dynamic routes**: when `setRouteMeta` stores metadata for a not-yet-added route (via `"ignore"` or `"warn"` policy), and that route is later added via `addRoute()` (inherited from UI5's base `Router`), the stored metadata participates in lazy resolution normally. The `addRoute()` call invalidates the cache (as specified in #62), and the next `getRouteMeta` for that route or its descendants will pick up the pre-registered metadata during the ancestor walk.
 
@@ -84,43 +84,9 @@ This is consistent with manifest `routeMeta` parsing (which validates entries wi
 
 > **Note**: `mergeRouteMeta` (proposed in `04-route-metadata.md`) is **not implemented**. Consumers can trivially achieve the same with `router.setRouteMeta(name, { ...router.getRouteMeta(name), ...newMeta })`.
 
-### New configuration option
+### Configuration
 
-```typescript
-/**
- * Policy for `setRouteMeta()` calls against unknown route names.
- *
- * - `"ignore"` — store silently without warning.
- * - `"warn"` — log a warning and still store (default).
- * - `"throw"` — throw synchronously; metadata is not stored.
- *
- * @since TBD
- */
-unknownRouteMetaRegistration?: UnknownRouteMetaRegistrationPolicy;
-```
-
-Type definition:
-
-```typescript
-export type UnknownRouteMetaRegistrationPolicy = "ignore" | "warn" | "throw";
-```
-
-Manifest configuration:
-
-```json
-{
-	"sap.ui5": {
-		"routing": {
-			"config": {
-				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteMetaRegistration": "warn"
-				}
-			}
-		}
-	}
-}
-```
+The existing `unknownRouteRegistration` policy covers both guard and metadata registration against unknown route names. No additional configuration option is needed -- `setRouteMeta()` reuses the same `"ignore" | "warn" | "throw"` policy that `addRouteGuard()` and `addLeaveGuard()` use.
 
 ### Cache invalidation on error paths
 
@@ -145,7 +111,7 @@ When the pipeline resolves inherited guards for a route and the ancestor walk pr
 
 When a guard descriptor references a route name that never gets added to the router:
 
-- **No special handling needed.** The registration-time policy (`unknownRouteGuardRegistration`) is sufficient.
+- **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient.
 - The ancestor walk goes upward from the navigation target. A descriptor pointing at a non-existent route is never reached by any ancestor walk — it sits inert in the descriptor registry.
 - If someone navigates to a non-existent route, UI5's own router fails to match the route pattern before the guard pipeline is ever consulted.
 
@@ -166,13 +132,13 @@ When a guard descriptor references a route name that never gets added to the rou
 
 ## Impact on Existing Plans
 
-- **`04-route-metadata.plan.md` Task 1**: `GuardRouterOptions` needs the `unknownRouteMetaRegistration` field and its type added to `types.ts`.
-- **`04-route-metadata.plan.md` Task 3**: `getRouteMeta` implementation needs the unknown-route warning added. `setRouteMeta` needs the policy check before storing. The existing test "getRouteMeta returns empty object for unknown routes" (Task 3 Step 5) must be updated to also assert that a warning is logged.
-- **`Router.ts` internals**: `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` must be updated to include `unknownRouteMetaRegistration` with its default value and a corresponding `isUnknownRouteMetaRegistrationPolicy` validator function — mirroring the existing pattern for `unknownRouteGuardRegistration`.
-- **`Router.ts` implementation**: `getRouteMeta` needs a `this.getRoute()` check with an empty-string carve-out. `setRouteMeta` needs a policy check. A new private method (e.g., `_handleUnknownRouteMetaRegistration`) or a generalization of `_handleUnknownRouteRegistration` is needed, since the existing method is hard-coded to `unknownRouteGuardRegistration`.
-- **`packages/lib/README.md`**: add `unknownRouteMetaRegistration` to the router options documentation, parallel to the existing `unknownRouteGuardRegistration` entry.
-- **Issue #62 Phase 1**: the lazy resolver must skip caching on empty results and log the warning for unknown routes.
-- **Issue #62 Phase 2**: the guard lazy resolver must skip caching on empty descriptor lists.
+- **`04-route-metadata.plan.md` Task 1**: Done. The unified `unknownRouteRegistration` option (renamed from `unknownRouteGuardRegistration`) covers both guard and metadata registration. No separate option is needed.
+- **`04-route-metadata.plan.md` Task 3**: Done. `getRouteMeta` logs a warning for unknown routes. `setRouteMeta` checks the `unknownRouteRegistration` policy before storing.
+- **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
+- **`Router.ts` implementation**: Done. `getRouteMeta` checks `this.getRoute()` with an empty-string carve-out. `setRouteMeta` delegates to the unified `_handleUnknownRouteRegistration` method.
+- **`packages/lib/README.md`**: Done. The options table documents `unknownRouteRegistration` and the unified `inheritance` option.
+- **Issue #62 Phase 1**: Done. The lazy resolver skips caching on empty results and logs a warning for unknown routes.
+- **Issue #62 Phase 2**: Done. The guard lazy resolver skips caching on empty descriptor lists.
 
 ## Test Cases
 
