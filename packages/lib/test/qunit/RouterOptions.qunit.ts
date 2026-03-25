@@ -2446,3 +2446,244 @@ QUnit.test("guard inheritance works with mixed parameter names", async function 
 		"ancestor guard propagated despite different param name",
 	);
 });
+
+// ============================================================
+// Module: Root-pattern route ("") as universal ancestor
+// ============================================================
+
+QUnit.module("Router - Root-pattern route as universal ancestor", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test(
+	"metadata on root-pattern route propagates to all routes with pattern-tree inheritance",
+	function (assert: Assert) {
+		router = createHierarchicalRouter({
+			metaInheritance: "pattern-tree",
+			routeMeta: {
+				home: { requiresAuth: true, appName: "demo" },
+			},
+		});
+
+		assert.strictEqual(router.getRouteMeta("employees").requiresAuth, true, "employees inherits from root");
+		assert.strictEqual(router.getRouteMeta("employee").requiresAuth, true, "employee inherits from root");
+		assert.strictEqual(
+			router.getRouteMeta("employeeResume").requiresAuth,
+			true,
+			"employeeResume inherits from root",
+		);
+		assert.strictEqual(router.getRouteMeta("settings").requiresAuth, true, "settings inherits from root");
+		assert.strictEqual(
+			router.getRouteMeta("settingsProfile").requiresAuth,
+			true,
+			"settingsProfile inherits from root",
+		);
+		assert.strictEqual(router.getRouteMeta("settingsProfile").appName, "demo", "second key also propagates");
+	},
+);
+
+QUnit.test("child metadata overrides root-pattern metadata on conflict", function (assert: Assert) {
+	router = createHierarchicalRouter({
+		metaInheritance: "pattern-tree",
+		routeMeta: {
+			home: { requiresAuth: true, theme: "default" },
+			employees: { requiresAuth: false },
+		},
+	});
+
+	const employeesMeta = router.getRouteMeta("employees");
+	assert.strictEqual(employeesMeta.requiresAuth, false, "employees overrides root requiresAuth");
+	assert.strictEqual(employeesMeta.theme, "default", "employees inherits non-conflicting key from root");
+
+	const employeeMeta = router.getRouteMeta("employee");
+	assert.strictEqual(employeeMeta.requiresAuth, false, "employee inherits override from employees, not root");
+	assert.strictEqual(employeeMeta.theme, "default", "employee inherits theme from root");
+});
+
+QUnit.test(
+	"guard on root-pattern route propagates to all routes with pattern-tree inheritance",
+	async function (assert: Assert) {
+		// Use bagWriterGuard on root -- it allows navigation and writes to context.bag,
+		// proving it ran. Then add a bagReaderGuard imperatively on the descendant
+		// to verify the inherited guard wrote to the bag before the reader ran.
+		router = createHierarchicalRouter({
+			guardLoading: "block",
+			guardInheritance: "pattern-tree",
+			guards: {
+				home: ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
+			},
+		});
+
+		router.initialize();
+		await waitForRoute(router, "home", 5000);
+
+		// Add an imperative bagReaderGuard on "employees" -- it blocks if "writer"
+		// key is NOT in the bag. If the inherited root guard wrote to the bag,
+		// the reader will find it and allow navigation.
+		let bagHadWriter = false;
+		router.addRouteGuard("employees", (context: GuardContext) => {
+			bagHadWriter = context.bag.has("writer");
+			return true;
+		});
+
+		router.navTo("employees");
+		await waitForRoute(router, "employees");
+
+		assert.ok(bagHadWriter, "inherited root guard wrote to bag before route guard ran on descendant");
+	},
+);
+
+QUnit.test("root-pattern route does NOT propagate when inheritance is none", function (assert: Assert) {
+	router = createHierarchicalRouter({
+		metaInheritance: "none",
+		routeMeta: {
+			home: { requiresAuth: true },
+		},
+	});
+
+	assert.deepEqual(router.getRouteMeta("employees"), {}, "employees has no metadata when inheritance is none");
+	assert.deepEqual(router.getRouteMeta("settings"), {}, "settings has no metadata when inheritance is none");
+});
+
+QUnit.test("root-pattern metadata is the shallowest layer in multi-level merge", function (assert: Assert) {
+	router = createHierarchicalRouter({
+		metaInheritance: "pattern-tree",
+		routeMeta: {
+			home: { appLevel: "root", section: "none" },
+			employees: { section: "hr" },
+			employee: { detail: true },
+		},
+	});
+
+	const resumeMeta = router.getRouteMeta("employeeResume");
+	assert.strictEqual(resumeMeta.appLevel, "root", "root metadata reaches deepest descendant");
+	assert.strictEqual(resumeMeta.section, "hr", "employees overrides root section");
+	assert.strictEqual(resumeMeta.detail, true, "employee adds its own key");
+});
+
+// ============================================================
+// Module: Multi-hop redirect metadata
+// ============================================================
+
+QUnit.module("Router - Multi-hop redirect metadata", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("toMeta and fromMeta are correct across a multi-hop redirect chain", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			home: { public: true },
+			protected: { requiresAuth: true },
+			forbidden: { restricted: true },
+			detail: { page: "detail" },
+		},
+	});
+
+	// protected → forbidden → detail (two redirects)
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => ({ route: "detail", parameters: { id: "1" } }));
+
+	const snapshots: { toMeta: Record<string, unknown>; fromMeta: Record<string, unknown> }[] = [];
+	router.addRouteGuard("detail", (context: GuardContext) => {
+		snapshots.push({ toMeta: { ...context.toMeta }, fromMeta: { ...context.fromMeta } });
+		return true;
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "detail");
+
+	assert.strictEqual(snapshots.length, 1, "detail guard ran once");
+	assert.deepEqual(snapshots[0].toMeta, { page: "detail" }, "toMeta is for the final redirect target");
+	assert.deepEqual(snapshots[0].fromMeta, { public: true }, "fromMeta stays pinned to original source across hops");
+});
+
+// ============================================================
+// Module: Additional coverage gaps
+// ============================================================
+
+QUnit.module("Router - Additional coverage", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+QUnit.test("guard inheritance works in lazy loading mode", async function (assert: Assert) {
+	router = createHierarchicalRouter({
+		guardLoading: "lazy",
+		guardInheritance: "pattern-tree",
+		guards: {
+			employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+		},
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("employee", { id: "42" });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"ancestor guard propagated to child in lazy loading mode",
+	);
+});
+
+QUnit.test(
+	"invalid guardInheritance and metaInheritance values warn and fall back to defaults",
+	function (assert: Assert) {
+		const warnings = captureWarnings(() => {
+			router = createRouterWithOptions({
+				guardInheritance: "invalid",
+				metaInheritance: 42,
+			});
+		});
+
+		assert.strictEqual(warnings.length, 2, "one warning per invalid inheritance option");
+
+		// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
+		router.destroy();
+		router = createHierarchicalRouter({
+			metaInheritance: "invalid" as string,
+			routeMeta: {
+				employees: { section: "hr" },
+			},
+		});
+		const meta = router.getRouteMeta("employee");
+		assert.deepEqual(meta, {}, "metadata does not propagate with invalid metaInheritance (falls back to none)");
+	},
+);
+
+QUnit.test("merged manifest+runtime metadata result is frozen", function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: {
+			protected: { requiresAuth: true, level: 1 },
+		},
+	});
+
+	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
+	const meta = router.getRouteMeta("protected");
+
+	assert.ok(Object.isFrozen(meta), "merged result is frozen");
+	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
+	assert.strictEqual(meta.level, 1, "manifest keys preserved");
+});
