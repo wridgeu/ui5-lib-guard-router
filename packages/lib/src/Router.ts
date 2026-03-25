@@ -125,6 +125,7 @@ function patternSegments(pattern: string): string[] {
 function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
 	if (ancestorPattern === "") return true;
 	const ancestorSegments = patternSegments(ancestorPattern);
+	if (ancestorSegments.length === 0) return false;
 	const candidateSegments = patternSegments(candidatePattern);
 	if (candidateSegments.length <= ancestorSegments.length) return false;
 	return ancestorSegments.every((seg, i) => {
@@ -817,7 +818,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 			result = this._resolveFlatMeta(routeName);
 		}
 
-		if (Object.keys(result).length === 0) return Router._EMPTY_META;
+		if (Object.keys(result).length === 0) {
+			this._resolvedMetaCache.set(routeName, Router._EMPTY_META);
+			return Router._EMPTY_META;
+		}
 
 		this._resolvedMetaCache.set(routeName, result);
 		return result;
