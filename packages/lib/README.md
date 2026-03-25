@@ -656,6 +656,19 @@ When `metaInheritance` is set to `"pattern-tree"`, route metadata propagates the
 
 Both toggles are independent — you can inherit guards without inheriting metadata, or vice versa. Both default to `"none"` for backward compatibility.
 
+**Root-pattern route (`""`) is a universal ancestor.** A route with an empty pattern (typically "home") is considered an ancestor of every other route in the router. With `pattern-tree` inheritance enabled, metadata or guards declared on the root-pattern route propagate to all routes:
+
+```json
+"guardRouter": {
+	"metaInheritance": "pattern-tree",
+	"routeMeta": {
+		"home": { "requiresAuth": true }
+	}
+}
+```
+
+Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care — setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
+
 Metadata inheritance is resolved at construction time; guard inheritance at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
 
 ### Mixing declarative and programmatic guards
