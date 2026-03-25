@@ -595,10 +595,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.0.1
 	 */
 	addGuard(guard: GuardFn): this {
-		if (typeof guard !== "function") {
-			Log.warning("addGuard: not a function, ignoring", undefined, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "addGuard")) return this;
 		this._pipeline.addGlobalGuard(guard);
 		return this;
 	}
@@ -611,10 +608,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.0.1
 	 */
 	removeGuard(guard: GuardFn): this {
-		if (typeof guard !== "function") {
-			Log.warning("removeGuard: not a function, ignoring", undefined, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "removeGuard")) return this;
 		this._pipeline.removeGlobalGuard(guard);
 		return this;
 	}
@@ -639,17 +633,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 			if (guard.beforeEnter !== undefined) {
 				hasHandler = true;
-				if (typeof guard.beforeEnter !== "function") {
-					Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-				} else {
+				if (this._isFn(guard.beforeEnter, "addRouteGuard", routeName)) {
 					this._pipeline.addEnterGuard(routeName, guard.beforeEnter);
 				}
 			}
 			if (guard.beforeLeave !== undefined) {
 				hasHandler = true;
-				if (typeof guard.beforeLeave !== "function") {
-					Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-				} else {
+				if (this._isFn(guard.beforeLeave, "addRouteGuard", routeName)) {
 					this._pipeline.addLeaveGuard(routeName, guard.beforeLeave);
 				}
 			}
@@ -660,10 +650,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 			return this;
 		}
-		if (typeof guard !== "function") {
-			Log.warning("addRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "addRouteGuard", routeName)) return this;
 		if (!this._handleUnknownRouteRegistration(routeName, "addRouteGuard")) {
 			return this;
 		}
@@ -693,10 +680,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 			return this;
 		}
-		if (typeof guard !== "function") {
-			Log.warning("removeRouteGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "removeRouteGuard", routeName)) return this;
 		this._pipeline.removeEnterGuard(routeName, guard);
 		return this;
 	}
@@ -714,15 +698,51 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.0.1
 	 */
 	addLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
-		if (typeof guard !== "function") {
-			Log.warning("addLeaveGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "addLeaveGuard", routeName)) return this;
 		if (!this._handleUnknownRouteRegistration(routeName, "addLeaveGuard")) {
 			return this;
 		}
 		this._pipeline.addLeaveGuard(routeName, guard);
 		return this;
+	}
+
+	/**
+	 * Disambiguate the `navTo()` overload shapes into resolved arguments.
+	 *
+	 * UI5's native `navTo` has two signatures where the third parameter is either
+	 * `componentTargetInfo` (object) or `bReplace` (boolean). This method normalizes
+	 * both forms so the rest of `navTo` can work with a single set of variables.
+	 */
+	private _resolveNavToArgs(
+		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
+		replaceOrOptions?: boolean | GuardNavToOptions,
+		options?: GuardNavToOptions,
+	): {
+		componentTargetInfo?: Record<string, ComponentTargetParameters>;
+		replace?: boolean;
+		guardOptions?: GuardNavToOptions;
+	} {
+		if (typeof componentTargetInfoOrReplace === "boolean") {
+			// Short form: navTo(name, params, replace, options?)
+			return {
+				replace: componentTargetInfoOrReplace,
+				guardOptions:
+					typeof replaceOrOptions === "object" && replaceOrOptions !== null ? replaceOrOptions : undefined,
+			};
+		}
+		// Long form: navTo(name, params, componentTargetInfo, replace, options?)
+		return {
+			componentTargetInfo: componentTargetInfoOrReplace,
+			replace: typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined,
+			guardOptions: options,
+		};
+	}
+
+	/** Return `true` when the value is a function; otherwise log a warning. */
+	private _isFn(value: unknown, method: string, detail?: string): boolean {
+		if (typeof value === "function") return true;
+		Log.warning(`${method}: not a function, ignoring`, detail, LOG_COMPONENT);
+		return false;
 	}
 
 	/**
@@ -756,10 +776,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.0.1
 	 */
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this {
-		if (typeof guard !== "function") {
-			Log.warning("removeLeaveGuard: not a function, ignoring", routeName, LOG_COMPONENT);
-			return this;
-		}
+		if (!this._isFn(guard, "removeLeaveGuard", routeName)) return this;
 		this._pipeline.removeLeaveGuard(routeName, guard);
 		return this;
 	}
@@ -966,23 +983,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		replaceOrOptions?: boolean | GuardNavToOptions,
 		options?: GuardNavToOptions,
 	): this {
-		// Normalize the overload shapes into a single set of arguments.
-		let componentTargetInfo: Record<string, ComponentTargetParameters> | undefined;
-		let replace: boolean | undefined;
-		let guardOptions: GuardNavToOptions | undefined;
-		if (typeof componentTargetInfoOrReplace === "boolean") {
-			// Short form: navTo(name, params, replace, options?)
-			replace = componentTargetInfoOrReplace;
-			guardOptions =
-				typeof replaceOrOptions === "object" && replaceOrOptions !== null
-					? (replaceOrOptions as GuardNavToOptions)
-					: undefined;
-		} else {
-			// Long form: navTo(name, params, componentTargetInfo, replace, options?)
-			componentTargetInfo = componentTargetInfoOrReplace;
-			replace = typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined;
-			guardOptions = options;
-		}
+		const { componentTargetInfo, replace, guardOptions } = this._resolveNavToArgs(
+			componentTargetInfoOrReplace,
+			replaceOrOptions,
+			options,
+		);
 
 		// Redirect path: _redirect() calls this.navTo() while in committing/redirect phase.
 		// Bypass preflight -- parse() will commit directly via the committing phase.
