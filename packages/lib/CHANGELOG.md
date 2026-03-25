@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.2...v1.5.3) (2026-03-25)
+
+
+### Code Refactoring
+
+* **router:** extract _isFn and _resolveNavToArgs helpers ([bc1f7b9](https://github.com/wridgeu/ui5-lib-guard-router/commit/bc1f7b95d4c751dc43678f575d6b45d4b8577fab))
+
 ## [1.5.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.1...v1.5.2) (2026-03-24)
 
 
