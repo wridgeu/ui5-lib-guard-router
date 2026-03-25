@@ -77,9 +77,9 @@ export interface GuardContext {
 	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
-	/** Resolved metadata for the target route (manifest defaults merged with runtime overrides, frozen). @since 1.6.0 */
+	/** Resolved metadata for the target route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
 	toMeta: Readonly<Record<string, unknown>>;
-	/** Resolved metadata for the current route (manifest defaults merged with runtime overrides, frozen). @since 1.6.0 */
+	/** Resolved metadata for the current route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
 	fromMeta: Readonly<Record<string, unknown>>;
 }
 
@@ -375,19 +375,24 @@ export interface GuardRouter extends MobileRouter {
 	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 	/**
 	 * Get resolved metadata for a route.
-	 * Returns manifest defaults shallow-merged with runtime overrides.
-	 * Returns an empty frozen object for unknown or unconfigured routes.
+	 *
+	 * When `inheritance` is `"pattern-tree"`, the result includes metadata
+	 * inherited from ancestor routes (shallow merge, child values win).
+	 * Results are cached and invalidated when {@link setRouteMeta} is called.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
+	 * @returns Frozen metadata object, or an empty frozen object for unknown or unconfigured routes.
 	 * @since 1.6.0
 	 */
 	getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
 	/**
 	 * Set runtime metadata for a route, replacing any previous runtime metadata.
 	 * Does not affect manifest defaults -- runtime values take precedence on read.
+	 * Invalidates the resolved-metadata cache so subsequent reads reflect the change.
+	 * Subject to the {@link GuardRouterOptions.unknownRouteRegistration} policy.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
-	 * @param meta - Metadata object. The router stores but never interprets it.
+	 * @param meta - Metadata object (must be a plain object). The router stores but never interprets it.
 	 * @returns `this` for chaining.
 	 * @since 1.6.0
 	 */
