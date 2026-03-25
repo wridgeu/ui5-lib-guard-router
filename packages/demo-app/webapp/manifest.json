@@ -71,7 +71,7 @@
 					"target": "notFound"
 				},
 				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
+					"unknownRouteRegistration": "warn",
 					"guards": {
 						"*": ["guards.navigationLogger"],
 						"blocked": ["guards.blockedGuard"],
