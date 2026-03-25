@@ -1682,6 +1682,60 @@ QUnit.test("getRouteMeta returns empty object for unknown routes", function (ass
 	assert.ok(Object.isFrozen(meta), "returned object is frozen");
 });
 
+QUnit.test("getRouteMeta for unknown route returns empty and logs warning", function (assert: Assert) {
+	router = createRouterWithOptions({});
+
+	const warnings = captureWarnings(() => {
+		const meta = router.getRouteMeta("nonexistent");
+		assert.deepEqual(meta, {}, "empty object for unknown route");
+		assert.ok(Object.isFrozen(meta), "returned object is frozen");
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("getRouteMeta")),
+		"warning logged for unknown route",
+	);
+});
+
+QUnit.test('getRouteMeta("") returns empty object without warning', function (assert: Assert) {
+	router = createRouterWithOptions({});
+
+	const warnings = captureWarnings(() => {
+		const meta = router.getRouteMeta("");
+		assert.deepEqual(meta, {}, "empty object for empty-string route");
+	});
+
+	assert.strictEqual(warnings.length, 0, "no warning for empty-string route name");
+});
+
+QUnit.test("setRouteMeta with non-object meta logs warning and is a no-op", function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: { home: { original: true } },
+	});
+
+	const warnings = captureWarnings(() => {
+		router.setRouteMeta("home", "not-an-object" as unknown as Record<string, unknown>);
+	});
+
+	assert.ok(
+		warnings.some((w) => w.message.includes("setRouteMeta")),
+		"warning logged for non-object meta",
+	);
+	assert.strictEqual(router.getRouteMeta("home").original, true, "original metadata preserved");
+});
+
+QUnit.test("setRouteMeta for unknown route follows unknownRouteRegistration policy", function (assert: Assert) {
+	router = createRouterWithOptions({
+		unknownRouteRegistration: "throw",
+	});
+
+	assert.throws(
+		() => router.setRouteMeta("nonexistent", { key: true }),
+		/setRouteMeta/,
+		"throws for unknown route with throw policy",
+	);
+});
+
 QUnit.test("setRouteMeta overrides manifest metadata", function (assert: Assert) {
 	router = createRouterWithOptions({
 		routeMeta: {
@@ -1771,6 +1825,33 @@ QUnit.test("runtime metadata changes reflected in subsequent navigations", async
 
 	assert.deepEqual(snapshots[0], { requiresAuth: true }, "first navigation uses manifest meta");
 	assert.deepEqual(snapshots[1], { updated: true }, "second navigation sees runtime meta");
+});
+
+QUnit.test("setRouteMeta during guard does not affect current context toMeta", async function (assert: Assert) {
+	router = createRouterWithOptions({
+		routeMeta: { protected: { version: 1 } },
+	});
+
+	let capturedToMeta: Record<string, unknown> | undefined;
+	router.addGuard((context: GuardContext) => {
+		if (context.toRoute === "protected") {
+			// Mutate metadata mid-pipeline
+			router.setRouteMeta("protected", { version: 2 });
+		}
+		return true;
+	});
+	router.addRouteGuard("protected", (context: GuardContext) => {
+		capturedToMeta = context.toMeta;
+		return true;
+	});
+
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	assert.strictEqual(capturedToMeta!.version, 1, "toMeta is a snapshot -- mid-pipeline mutation does not affect it");
 });
 
 QUnit.test("toMeta is empty frozen object for routes without metadata", async function (assert: Assert) {
@@ -2150,17 +2231,35 @@ QUnit.test("inherited metadata is visible on context.toMeta in guards", async fu
 	assert.strictEqual(receivedToMeta!.requiresAuth, true, "toMeta includes inherited requiresAuth");
 });
 
-QUnit.test("runtime setRouteMeta does not participate in inheritance", function (assert: Assert) {
+QUnit.test("runtime setRouteMeta participates in inheritance", function (assert: Assert) {
 	router = createHierarchicalRouter({
 		inheritance: "pattern-tree",
 	});
 
 	router.setRouteMeta("employees", { runtimeKey: true });
 	const childMeta = router.getRouteMeta("employee");
-	assert.strictEqual(childMeta.runtimeKey, undefined, "runtime metadata does not propagate to descendants");
+	assert.strictEqual(childMeta.runtimeKey, true, "runtime metadata propagates to descendants");
 
 	const ownMeta = router.getRouteMeta("employees");
 	assert.strictEqual(ownMeta.runtimeKey, true, "runtime metadata is available on the declared route");
+});
+
+QUnit.test("setRouteMeta invalidates cache so getRouteMeta returns fresh result", function (assert: Assert) {
+	router = createHierarchicalRouter({
+		inheritance: "pattern-tree",
+		routeMeta: {
+			employees: { section: "hr" },
+		},
+	});
+
+	// First read populates cache
+	assert.strictEqual(router.getRouteMeta("employee").section, "hr", "inherited before mutation");
+
+	// Mutate parent runtime metadata
+	router.setRouteMeta("employees", { section: "engineering" });
+
+	// Second read -- cache was invalidated, fresh walk
+	assert.strictEqual(router.getRouteMeta("employee").section, "engineering", "inherits updated runtime value");
 });
 
 // ============================================================
