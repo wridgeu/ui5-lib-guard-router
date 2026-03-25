@@ -2,6 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
 import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
+import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type {
 	GuardFn,
 	GuardContext,
@@ -601,15 +602,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @override sap.ui.core.routing.Router#addRoute
 	 * @since 1.6.0
 	 */
-	override addRoute(...args: Parameters<typeof MobileRouter.prototype.addRoute>): void {
-		super.addRoute(...args);
+	override addRoute(oConfig: $RouteSettings, ...rest: unknown[]): void {
+		// @ts-expect-error -- oParent is required in the type declaration but optional at runtime
+		super.addRoute(oConfig, ...rest);
 
 		// Skip when called by the parent constructor before field initializers have run.
 		// Routes from the constructor args are captured in _routeNames by the constructor body.
 		if (!this._routeNames) return;
 
-		const [oConfig] = args;
-		const name = isRecord(oConfig) ? (oConfig as { name?: string }).name : undefined;
+		const name = oConfig.name;
 		if (typeof name !== "string") return;
 		if (this._routeNames.includes(name)) return;
 
@@ -875,7 +876,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * When `inheritance` is `"pattern-tree"`, walks the ancestor chain and
 	 * shallow-merges metadata shallowest-first (child values win on conflict).
 	 * Both manifest and runtime metadata participate in inheritance.
-	 * Results are cached; the cache is invalidated by {@link setRouteMeta}.
+	 * Results are cached; the cache is invalidated by {@link setRouteMeta} or `addRoute()`.
 	 *
 	 * Logs a warning for unknown non-empty route names and returns an empty
 	 * frozen object. The empty string `""` is treated as a valid root route.
