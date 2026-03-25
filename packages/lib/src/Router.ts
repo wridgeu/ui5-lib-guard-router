@@ -1671,7 +1671,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			if (a.route === "*" || b.route === "*") return 0;
 			const pa = patternByName.get(a.route) ?? "";
 			const pb = patternByName.get(b.route) ?? "";
-			return pa.split("/").length - pb.split("/").length;
+			return patternSegments(pa).length - patternSegments(pb).length;
 		});
 	}
 
@@ -1706,7 +1706,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				isPatternAncestor(r.pattern, routeEntry.pattern),
 		);
 		// oxlint-disable-next-line unicorn/no-array-sort -- ancestors is a fresh array from filter()
-		ancestors.sort((a, b) => a.pattern.split("/").length - b.pattern.split("/").length);
+		ancestors.sort((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length);
 
 		// Merge shallowest-first: root ancestor -> deeper ancestors -> own manifest -> own runtime
 		const merged: Record<string, unknown> = {};
