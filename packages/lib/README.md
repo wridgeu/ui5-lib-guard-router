@@ -613,7 +613,7 @@ Runtime metadata can be set programmatically via `setRouteMeta()`. When read via
 router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
 ```
 
-`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. For unconfigured routes, it returns an empty frozen object.
+`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. When `inheritance: "pattern-tree"` is enabled, the result also includes metadata inherited from ancestor routes (see [Guard and metadata inheritance](#guard-and-metadata-inheritance)). For unconfigured routes, it returns an empty frozen object.
 
 ### `skipGuards` option
 

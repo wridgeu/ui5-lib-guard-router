@@ -784,11 +784,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private static readonly _EMPTY_META: Readonly<Record<string, unknown>> = Object.freeze({});
 
 	/**
-	 * Return the merged metadata for a route.
+	 * Return the resolved metadata for a route.
 	 *
-	 * The result is a frozen object that combines manifest-declared metadata
-	 * with any runtime overrides set via {@link setRouteMeta}. Runtime keys
-	 * take precedence over manifest keys.
+	 * When `inheritance` is `"pattern-tree"`, walks the ancestor chain and
+	 * shallow-merges metadata shallowest-first (child values win on conflict).
+	 * Both manifest and runtime metadata participate in inheritance.
+	 * Results are cached; the cache is invalidated by {@link setRouteMeta}.
+	 *
+	 * Logs a warning for unknown non-empty route names and returns an empty
+	 * frozen object. The empty string `""` is treated as a valid root route.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
 	 * @returns Frozen record of metadata key-value pairs, or an empty frozen object if the route has no metadata.
@@ -823,10 +827,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Set runtime metadata for a route.
 	 *
 	 * Runtime metadata is merged on top of any manifest-declared metadata
-	 * when retrieved via {@link getRouteMeta}.
+	 * when retrieved via {@link getRouteMeta}. When `inheritance` is
+	 * `"pattern-tree"`, descendant routes also see the updated values.
+	 * Invalidates the resolved-metadata cache. Non-object values are
+	 * ignored with a warning. Subject to the `unknownRouteRegistration` policy.
 	 *
 	 * @param routeName - Route name as defined in `manifest.json`.
-	 * @param meta - Record of metadata key-value pairs.
+	 * @param meta - Plain object of metadata key-value pairs.
 	 * @returns `this` for chaining.
 	 * @since 1.6.0
 	 */
