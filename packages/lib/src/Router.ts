@@ -487,6 +487,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _destroyed = false;
 	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
 	private _routeNames: readonly string[] = [];
 
 	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
@@ -526,10 +527,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 					LOG_COMPONENT,
 				);
 			}
-		}
-
-		if (this._options.inheritance === "pattern-tree" && this._manifestMeta.size > 0) {
-			this._expandManifestMeta();
 		}
 
 		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
@@ -786,12 +783,28 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.6.0
 	 */
 	getRouteMeta(routeName: string): Readonly<Record<string, unknown>> {
-		const manifest = this._manifestMeta.get(routeName);
-		const runtime = this._runtimeMeta.get(routeName);
-		if (!manifest && !runtime) return Router._EMPTY_META;
-		if (!runtime) return manifest!;
-		if (!manifest) return runtime!;
-		return Object.freeze({ ...manifest, ...runtime });
+		// Empty string is a valid root route name (initial state before first navigation)
+		if (routeName !== "" && !this.getRoute(routeName)) {
+			Log.warning("getRouteMeta: unknown route, returning empty metadata", routeName, LOG_COMPONENT);
+			return Router._EMPTY_META;
+		}
+
+		// Cache hit
+		const cached = this._resolvedMetaCache.get(routeName);
+		if (cached) return cached;
+
+		let result: Readonly<Record<string, unknown>>;
+
+		if (this._options.inheritance === "pattern-tree") {
+			result = this._resolveInheritedMeta(routeName);
+		} else {
+			result = this._resolveFlatMeta(routeName);
+		}
+
+		if (Object.keys(result).length === 0) return Router._EMPTY_META;
+
+		this._resolvedMetaCache.set(routeName, result);
+		return result;
 	}
 
 	/**
@@ -806,7 +819,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.6.0
 	 */
 	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
+		if (!isRecord(meta)) {
+			Log.warning("setRouteMeta: expected object, ignoring", routeName, LOG_COMPONENT);
+			return this;
+		}
+		if (routeName !== "" && !this._handleUnknownRouteRegistration(routeName, "setRouteMeta")) {
+			return this;
+		}
 		this._runtimeMeta.set(routeName, Object.freeze({ ...meta }));
+		this._resolvedMetaCache.clear();
 		return this;
 	}
 
@@ -1655,44 +1676,55 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Expand manifest metadata to descendant routes when meta inheritance
-	 * is set to `"pattern-tree"`. Ancestor metadata is shallow-merged under
-	 * descendant metadata (descendant values win on conflict).
+	 * Resolve metadata for a route without inheritance (flat merge of
+	 * manifest and runtime metadata).
 	 */
-	private _expandManifestMeta(): void {
-		const allRoutes = this._collectRoutePatterns();
-		if (allRoutes.length === 0) return;
+	private _resolveFlatMeta(routeName: string): Readonly<Record<string, unknown>> {
+		const manifest = this._manifestMeta.get(routeName);
+		const runtime = this._runtimeMeta.get(routeName);
+		if (!manifest && !runtime) return Router._EMPTY_META;
+		if (!runtime) return manifest!;
+		if (!manifest) return Object.freeze({ ...runtime });
+		return Object.freeze({ ...manifest, ...runtime });
+	}
 
-		// Collect ancestor entries (routes that have manifest meta declared).
-		// Sort by pattern depth (shallowest first) so merging proceeds root-to-leaf.
-		const ancestors = allRoutes.filter((r) => this._manifestMeta.has(r.name));
+	/**
+	 * Resolve metadata for a route with pattern-tree inheritance.
+	 * Walks ancestor patterns shallowest-first, merging manifest and
+	 * runtime metadata at each level, then overlays the route's own.
+	 */
+	private _resolveInheritedMeta(routeName: string): Readonly<Record<string, unknown>> {
+		const allRoutes = this._collectRoutePatterns();
+		const routeEntry = allRoutes.find((r) => r.name === routeName);
+		if (!routeEntry) return this._resolveFlatMeta(routeName);
+
+		// Find ancestors that have declared metadata (manifest or runtime)
+		const ancestors = allRoutes.filter(
+			(r) =>
+				r.name !== routeName &&
+				(this._manifestMeta.has(r.name) || this._runtimeMeta.has(r.name)) &&
+				isPatternAncestor(r.pattern, routeEntry.pattern),
+		);
 		// oxlint-disable-next-line unicorn/no-array-sort -- ancestors is a fresh array from filter()
 		ancestors.sort((a, b) => a.pattern.split("/").length - b.pattern.split("/").length);
 
-		if (ancestors.length === 0) return;
+		// Merge shallowest-first: root ancestor -> deeper ancestors -> own manifest -> own runtime
+		const merged: Record<string, unknown> = {};
 
-		for (const { name: routeName, pattern: routePattern } of allRoutes) {
-			// Collect all ancestor metadata that applies to this route, shallowest first
-			const applicableAncestors = ancestors.filter(
-				(a) => a.name !== routeName && isPatternAncestor(a.pattern, routePattern),
-			);
-
-			if (applicableAncestors.length === 0) continue;
-
-			// Merge: start with shallowest ancestor, overlay deeper ancestors, then own
-			const merged: Record<string, unknown> = {};
-			for (const ancestor of applicableAncestors) {
-				Object.assign(merged, this._manifestMeta.get(ancestor.name));
-			}
-
-			// Overlay the route's own declared metadata last (own wins over all ancestors)
-			const own = this._manifestMeta.get(routeName);
-			if (own) {
-				Object.assign(merged, own);
-			}
-
-			this._manifestMeta.set(routeName, Object.freeze(merged));
+		for (const ancestor of ancestors) {
+			const ancestorManifest = this._manifestMeta.get(ancestor.name);
+			if (ancestorManifest) Object.assign(merged, ancestorManifest);
+			const ancestorRuntime = this._runtimeMeta.get(ancestor.name);
+			if (ancestorRuntime) Object.assign(merged, ancestorRuntime);
 		}
+
+		const ownManifest = this._manifestMeta.get(routeName);
+		if (ownManifest) Object.assign(merged, ownManifest);
+		const ownRuntime = this._runtimeMeta.get(routeName);
+		if (ownRuntime) Object.assign(merged, ownRuntime);
+
+		if (Object.keys(merged).length === 0) return Router._EMPTY_META;
+		return Object.freeze(merged);
 	}
 
 	/**
@@ -1875,6 +1907,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._lastSettlement = null;
 		this._manifestMeta.clear();
 		this._runtimeMeta.clear();
+		this._resolvedMetaCache.clear();
 		super.destroy();
 		return this;
 	}
