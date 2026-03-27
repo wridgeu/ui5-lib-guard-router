@@ -71,7 +71,7 @@
 		"oxlint": "^1.56.0",
 		"release-please": "^17.3.0",
 		"rimraf": "^6.0.0",
-		"typescript": "~5.7.0",
+		"typescript": "~6.0.0",
 		"wdio-qunit-service": "^2.0.0",
 		"wdio-ui5-service": "^3.0.0"
 	}
