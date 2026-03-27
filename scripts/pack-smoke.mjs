@@ -57,7 +57,7 @@ async function main() {
 					compilerOptions: {
 						target: "ES2022",
 						module: "ES2022",
-						moduleResolution: "Node",
+						moduleResolution: "Bundler",
 						strict: true,
 						// Required: @openui5/types references JQuery and QUnit
 						// globals that are not installed in a minimal consumer project.
