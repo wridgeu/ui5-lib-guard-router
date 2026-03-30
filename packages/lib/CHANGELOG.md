@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.3...v1.6.0) (2026-03-30)
+
+
+### Features
+
+* **router:** declarative route metadata and pattern-tree guard/metadata inheritance ([5621740](https://github.com/wridgeu/ui5-lib-guard-router/commit/562174063cdc1af156a3a067ece7fb2419895257))
+
 ## [1.5.3](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.2...v1.5.3) (2026-03-25)
 
 
