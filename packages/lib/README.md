@@ -415,6 +415,8 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 | `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async.         |
 | `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict). |
 
+The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
+
 ### Declarative guards
 
 The `guards` map wires guard modules to routes without writing code in `Component.ts`.
@@ -538,6 +540,9 @@ export default {
 
 Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
+> [!NOTE]
+> When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported -- use enter guards for redirection.
+
 ### Cherry-pick syntax
 
 When a module exports multiple guards, you can register a subset using `#` to select by name or index:
@@ -638,7 +643,7 @@ When `inheritance` is set to `"pattern-tree"`, guards declared on a route automa
 
 With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards.
 
-With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Child values override ancestor values on conflict:
+With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Inheritance is determined by URL patterns -- assuming the route-to-pattern mapping `"employees"` -> `employees`, `"employee"` -> `employees/{id}`, `"employeeResume"` -> `employees/{id}/resume`:
 
 ```json
 "guardRouter": {
