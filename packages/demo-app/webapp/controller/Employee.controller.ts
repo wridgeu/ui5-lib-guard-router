@@ -1,5 +1,5 @@
 import type { GuardRouter } from "ui5/guard/router/types";
-import Text from "sap/m/Text";
+import type Text from "sap/m/Text";
 import BaseController from "./BaseController";
 
 /**
@@ -20,6 +20,7 @@ export default class EmployeeController extends BaseController {
 		});
 	}
 
+	/** Navigate back to the Employees list. */
 	onNavBack(): void {
 		this.getRouter<GuardRouter>().navTo("employees");
 	}

@@ -77,9 +77,21 @@ export interface GuardContext {
 	 * @since 1.5.0
 	 */
 	bag: Map<string, unknown>;
-	/** Resolved metadata for the target route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
+	/**
+	 * Resolved metadata for the target route (manifest + runtime, frozen).
+	 * When `inheritance` is `"pattern-tree"`, includes metadata inherited
+	 * from ancestor routes via shallow merge (child values win on conflict).
+	 *
+	 * @since 1.6.0
+	 */
 	toMeta: Readonly<Record<string, unknown>>;
-	/** Resolved metadata for the current route (manifest + runtime + inherited ancestor metadata when `inheritance: "pattern-tree"`, frozen). @since 1.6.0 */
+	/**
+	 * Resolved metadata for the current route (manifest + runtime, frozen).
+	 * When `inheritance` is `"pattern-tree"`, includes metadata inherited
+	 * from ancestor routes via shallow merge (child values win on conflict).
+	 *
+	 * @since 1.6.0
+	 */
 	fromMeta: Readonly<Record<string, unknown>>;
 }
 

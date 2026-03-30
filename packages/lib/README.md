@@ -650,7 +650,7 @@ With the same `inheritance: "pattern-tree"` setting, route metadata also propaga
 }
 ```
 
-`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true }` (inherited). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
 
 Defaults to `"none"` for backward compatibility.
 
@@ -667,7 +667,7 @@ Defaults to `"none"` for backward compatibility.
 
 Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care — setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
 
-Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` invalidates the cache. Guard inheritance is resolved at `initialize()` time. Routes added dynamically after initialization do not participate in pattern-tree inheritance.
+Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
 
 Runtime metadata set via `setRouteMeta()` participates in inheritance -- child routes see updated ancestor metadata after cache invalidation.
 
@@ -719,7 +719,7 @@ The demo app keeps `createRedirectWithParamsGuard()` as a reference implementati
 
 ### Guard factories
 
-The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` is actively registered as a leave guard on the `"protected"` route; `createAuthGuard()` is a reference-only synchronous alternative to the async `createAsyncPermissionGuard()` used by the demo.
+The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` and `createAuthGuard()` are reference-only implementations showing the factory pattern; the runnable demo uses the manifest-declared `guards/dirtyFormGuard.ts` module for the `"protected"` leave guard and the async `createAsyncPermissionGuard()` for the `"protected"` enter guard.
 
 ```typescript
 // guards.ts
@@ -810,7 +810,10 @@ export default class HomeController extends BaseController {
 >
 > In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
 
-### Metadata-driven guards via manifest
+### Metadata-driven guards via manifest (legacy alternative)
+
+> [!NOTE]
+> Since 1.6.0, the native `guardRouter.routeMeta` configuration (see [Route metadata](#route-metadata)) is the recommended way to declare per-route metadata. The custom-namespace approach below predates native support and is shown for historical reference only.
 
 For common patterns like "this route requires authentication", you can store per-route metadata in a custom manifest section and use a single global guard instead of writing repetitive per-route guards:
 

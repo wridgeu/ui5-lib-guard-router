@@ -600,6 +600,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * lookups, clears the metadata cache, and registers any inherited
 	 * manifest guards when `inheritance` is `"pattern-tree"`.
 	 *
+	 * @param oConfig - Route configuration object as defined by `sap.ui.core.routing.Route`.
+	 * @param rest - Additional arguments forwarded to the parent `addRoute`.
 	 * @override sap.ui.core.routing.Router#addRoute
 	 * @since 1.6.0
 	 */
@@ -1781,7 +1783,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const manifest = this._manifestMeta.get(routeName);
 		const runtime = this._runtimeMeta.get(routeName);
 		if (!manifest && !runtime) return Router._EMPTY_META;
-		if (!runtime) return manifest!;
+		if (!runtime) return manifest ?? Router._EMPTY_META;
 		if (!manifest) return Object.freeze({ ...runtime });
 		return Object.freeze({ ...manifest, ...runtime });
 	}

@@ -116,7 +116,7 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
 	router.destroy();
 	router = createHierarchicalRouter({
-		inheritance: "invalid" as string,
+		inheritance: "invalid",
 		routeMeta: {
 			employees: { section: "hr" },
 		},
@@ -1668,6 +1668,7 @@ QUnit.module("Router - Route metadata", {
 	},
 	afterEach: function () {
 		router.destroy();
+		HashChanger.getInstance().setHash("");
 	},
 });
 
