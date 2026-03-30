@@ -431,7 +431,7 @@ interface RedirectChainContext {
 	/** Hashes whose guards have been evaluated in this chain (mutated via .add()). */
 	visited: Set<string>;
 	/** Hash of the originally attempted navigation (for settlement / hash restore). */
-	readonly attemptedHash: string;
+	readonly attemptedHash: string | undefined;
 	/** Whether to restore the hash on block (true for parse path, false for preflight). */
 	readonly restoreHash: boolean;
 	/** Original source route (the route the user occupies). */
@@ -475,10 +475,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pipeline = new GuardPipeline();
 	private _currentRoute = "";
 	private _currentHash: string | null = null;
-	/** The committed hash as a string, defaulting to `""` before the first navigation. */
-	private get _effectiveHash(): string {
-		return this._currentHash ?? "";
-	}
 	private _phase: RouterPhase = IDLE;
 	private _parseGeneration = 0;
 	private _suppressedHash: string | null = null;
@@ -966,7 +962,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._lastSettlement ?? {
 					status: NavigationOutcome.Committed,
 					route: this._currentRoute,
-					hash: this._effectiveHash,
+					hash: this._currentHash ?? "",
 				},
 			);
 		}
@@ -1372,7 +1368,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._flushSettlement({
 				status: NavigationOutcome.Cancelled,
 				route: this._currentRoute,
-				hash: this._effectiveHash,
+				hash: this._currentHash ?? "",
 			});
 		}
 		this._phase = IDLE;
@@ -1576,15 +1572,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 				// Safety net: if navTo didn't produce a settlement (e.g. unknown route
 				// or redirect to current hash where HashChanger doesn't fire), handle it.
 				if (this._lastSettlement === settlementBefore) {
-					const redirectsToCurrentHash = targetHash === this._effectiveHash;
+					const redirectsToCurrentHash = targetHash === (this._currentHash ?? "");
 					if (redirectsToCurrentHash) {
 						this._phase = {
 							kind: "committing",
-							hash: this._effectiveHash,
+							hash: this._currentHash ?? "",
 							route: this._currentRoute,
 							origin: "redirect",
 						};
-						this._commitNavigation(this._effectiveHash, this._currentRoute);
+						this._commitNavigation(this._currentHash ?? "", this._currentRoute);
 						return;
 					}
 					Log.warning(
@@ -1623,7 +1619,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			toHash,
 			toArguments: routeInfo?.arguments ?? {},
 			fromRoute: this._currentRoute,
-			fromHash: this._effectiveHash,
+			fromHash: this._currentHash ?? "",
 			signal,
 			bag: new Map(),
 			toMeta: this.getRouteMeta(toRoute),
@@ -1651,7 +1647,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			attemptedHash: hash,
 			restoreHash,
 			fromRoute: this._currentRoute,
-			fromHash: this._effectiveHash,
+			fromHash: this._currentHash ?? "",
 			signal: attempt.controller.signal,
 			generation: attempt.generation,
 			bag,
@@ -1664,12 +1660,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * to `_currentHash`. Preflight callers pass false because the hash was
 	 * never changed.
 	 */
-	private _blockNavigation(attemptedHash: string, restoreHash = true): void {
+	private _blockNavigation(attemptedHash?: string, restoreHash = true): void {
 		this._phase = IDLE;
 		this._flushSettlement({
 			status: NavigationOutcome.Blocked,
 			route: this._currentRoute,
-			hash: this._effectiveHash,
+			hash: this._currentHash ?? "",
 		});
 		this._restoreHashIfNeeded(attemptedHash, restoreHash);
 	}
@@ -1679,25 +1675,25 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Same structure as {@link _blockNavigation} but with `NavigationOutcome.Error`
 	 * and the error that caused the failure.
 	 */
-	private _errorNavigation(error: unknown, attemptedHash: string, restoreHash = true): void {
+	private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void {
 		this._phase = IDLE;
 		this._flushSettlement({
 			status: NavigationOutcome.Error,
 			route: this._currentRoute,
-			hash: this._effectiveHash,
+			hash: this._currentHash ?? "",
 			error,
 		});
 		this._restoreHashIfNeeded(attemptedHash, restoreHash);
 	}
 
 	/** Conditionally restore the browser hash after a blocked or errored navigation. */
-	private _restoreHashIfNeeded(attemptedHash: string, restoreHash: boolean): void {
+	private _restoreHashIfNeeded(attemptedHash: string | undefined, restoreHash: boolean): void {
 		if (!restoreHash) return;
-		if (this._currentHash === null && attemptedHash !== "") {
+		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
 			this._restoreHash("", false);
 			return;
 		}
-		this._restoreHash(this._effectiveHash);
+		this._restoreHash(this._currentHash ?? "");
 	}
 
 	/**
