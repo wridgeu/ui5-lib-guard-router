@@ -660,7 +660,7 @@ QUnit.test("redirect to nonexistent via navTo leaves hash unchanged", async func
 });
 
 QUnit.test("async redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {
-	router.addRouteGuard("protected", () => Promise.resolve("nonExistentRoute" as const));
+	router.addRouteGuard("protected", () => Promise.resolve("nonExistentRoute"));
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -740,7 +740,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	await nextTick();
 	await router.navigationSettled();
 
-	assert.strictEqual(getHash(), "", "Hash stayed on home -- guard blocked the nested navTo('protected')");
+	assert.strictEqual(getHash(), "", "Hash stayed on home; guard blocked the nested navTo('protected')");
 });
 
 // ============================================================

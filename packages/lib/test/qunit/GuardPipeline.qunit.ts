@@ -21,6 +21,8 @@ function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
 		fromHash: "",
 		signal: new AbortController().signal,
 		bag: new Map(),
+		toMeta: Object.freeze({}),
+		fromMeta: Object.freeze({}),
 		...overrides,
 	};
 }
@@ -94,7 +96,7 @@ QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) 
 
 	pipeline.removeGlobalGuard(guard);
 	pipeline.removeEnterGuard("target", guard);
-	pipeline.removeLeaveGuard("current", guard as unknown as LeaveGuardFn);
+	pipeline.removeLeaveGuard("current", guard);
 
 	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Pipeline unaffected by removing non-existent guards");

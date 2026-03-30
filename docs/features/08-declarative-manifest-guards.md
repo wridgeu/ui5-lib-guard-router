@@ -1,7 +1,7 @@
 # Declarative Manifest-Based Guard Configuration
 
 **Date**: 2026-03-21 (updated 2026-03-22)
-**Status**: Proposed
+**Status**: Implemented
 **Closes**: #41, #31
 **Supersedes**: PR #46 (`feat/router-options-manifest-config`)
 
@@ -9,7 +9,7 @@
 
 Combine two related features into one cohesive manifest-first configuration system for the guard router:
 
-1. **Router options** (from PR #46): `unknownRouteGuardRegistration`, `navToPreflight`, `skipGuards`
+1. **Router options** (from PR #46): `unknownRouteRegistration`, `navToPreflight`, `skipGuards`
 2. **Declarative guard registration** (issue #41): declaring guard module paths in the manifest
 
 Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json` and are implemented fresh against the state machine architecture (merged to main via `refactor/state-machine-v2`).
@@ -23,7 +23,7 @@ Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json`
 			"config": {
 				"routerClass": "ui5.guard.router.Router",
 				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
+					"unknownRouteRegistration": "warn",
 					"navToPreflight": "guard",
 					"guardLoading": "lazy",
 					"guards": {
@@ -46,11 +46,11 @@ Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json`
 
 ### Router Options
 
-| Option                          | Values                              | Default   | Description                                                      |
-| ------------------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------- |
-| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Behavior when registering guards for unknown route names         |
-| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How programmatic `navTo()` interacts with the guard pipeline     |
-| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest-declared guard modules are loaded at initialization |
+| Option                     | Values                              | Default   | Description                                                      |
+| -------------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Behavior when registering guards for unknown route names         |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How programmatic `navTo()` interacts with the guard pipeline     |
+| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest-declared guard modules are loaded at initialization |
 
 ### Guards Block
 
@@ -179,7 +179,7 @@ Constructor(routes, config, owner, ...)
   ├── Destructure guardRouter from config inline
   ├── Call super(routes, cleanedConfig, owner, ...) with guardRouter removed
   ├── Validate & normalize options via normalizeGuardRouterOptions()
-  │   (unknownRouteGuardRegistration, navToPreflight, guardLoading)
+  │   (unknownRouteRegistration, navToPreflight, guardLoading)
   ├── Parse guards block → store as _pendingGuardDescriptors
   ├── If guardLoading === "lazy" and pending guards exist:
   │     Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
@@ -264,12 +264,12 @@ navTo(routeName, parameters?, componentTargetInfoOrReplace?, replaceOrOptions?, 
 ```typescript
 // --- New types ---
 
-type UnknownRouteGuardRegistrationPolicy = "ignore" | "warn" | "throw";
+type UnknownRouteRegistrationPolicy = "ignore" | "warn" | "throw";
 type NavToPreflightMode = "guard" | "bypass" | "off";
 type GuardLoading = "block" | "lazy";
 
 interface GuardRouterOptions {
-	unknownRouteGuardRegistration?: UnknownRouteGuardRegistrationPolicy;
+	unknownRouteRegistration?: UnknownRouteRegistrationPolicy;
 	navToPreflight?: NavToPreflightMode;
 	guardLoading?: GuardLoading;
 	guards?: ManifestGuardConfig;
@@ -382,7 +382,7 @@ Key properties:
 - Constructor reads `guardRouter` from config, strips before parent
 - Manifest-driven instantiation via UIComponent
 - Malformed/invalid config warns and falls back to defaults
-- `unknownRouteGuardRegistration`: all three policies
+- `unknownRouteRegistration`: all three policies
 - `navToPreflight`: all three modes with correct settlement outcomes
 - `skipGuards` per-call override in both navTo overload positions
 - `"off"` mode defers to parse fallback, including async guard behavior

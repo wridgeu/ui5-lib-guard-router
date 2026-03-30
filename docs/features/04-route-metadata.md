@@ -1,6 +1,6 @@
 # Feature: Route Metadata
 
-> **Status**: Proposed (low priority). See the [feature index](./README.md) for priority and dependencies.
+> **Status**: Implemented (PR #61). `mergeRouteMeta` was dropped. Consumers use `setRouteMeta(name, { ...getRouteMeta(name), ...newMeta })` instead. Metadata inheritance uses lazy resolution with caching (issue #62). See the [feature index](./README.md) for details.
 
 ## Problem
 
@@ -57,13 +57,13 @@ Store default metadata in `manifest.json` under a custom section:
 
 ```typescript
 // Set metadata for a route (overwrites manifest defaults)
-router.setRouteMeta(routeName: string, meta: Record<string, unknown>): RouterInstance;
+router.setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 
 // Get metadata for a route (merged: manifest defaults + runtime overrides)
-router.getRouteMeta(routeName: string): Record<string, unknown>;
+router.getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
 
-// Merge additional metadata into existing (shallow merge)
-router.mergeRouteMeta(routeName: string, meta: Record<string, unknown>): RouterInstance;
+// mergeRouteMeta was dropped -- use spread instead:
+// router.setRouteMeta(name, { ...router.getRouteMeta(name), ...newMeta });
 ```
 
 ### GuardContext Integration

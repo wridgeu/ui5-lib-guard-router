@@ -92,6 +92,13 @@
 								id="navAdminBtn"
 								text="Go to Admin Page (chain: admin → protected)"
 								press=".onNavToAdmin"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="navToEmployees"
+								text="Employees (metadata)"
+								press=".onNavToEmployees"
+								type="Emphasized"
 								width="100%" />
 						</content>
 					</Panel>

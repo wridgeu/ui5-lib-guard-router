@@ -28,7 +28,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~25 KB).
+> The npm package is ~150 KB compressed (~670 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~29 KB).
 
 ### TypeScript
 
@@ -210,6 +210,13 @@ All guard registration and removal methods return `this` for chaining. `navigati
 | `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form |
 | `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                             |
 
+### Route metadata
+
+| Method                          | Description                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `getRouteMeta(routeName)`       | Get resolved metadata (manifest defaults merged with runtime)         |
+| `setRouteMeta(routeName, meta)` | Set runtime metadata for a route (replaces previous runtime metadata) |
+
 ### Unknown routes during registration
 
 `addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
@@ -227,10 +234,12 @@ Every guard receives a `GuardContext` object:
 | `fromHash`    | `string`                                           | Current hash                                                            |
 | `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
 | `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
+| `toMeta`      | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
+| `fromMeta`    | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
 
 ### Return values (`GuardResult`)
 
-Enter guards return `GuardResult`, a union of four outcomes:
+Enter guards return `GuardResult`, covering four behaviors:
 
 ```
 GuardResult = boolean | string | GuardRedirect
@@ -278,7 +287,7 @@ const result: NavigationResult = await router.navigationSettled();
 
 | `result.status`                | Meaning                                                                                                 |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is now active                                               |
+| `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is active                                                   |
 | `NavigationOutcome.Bypassed`   | Guards allowed the navigation, but no route matched; UI5 continued with `bypassed` / not-found handling |
 | `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                                                 |
 | `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
@@ -353,7 +362,7 @@ Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The
 
 ### Error handling
 
-When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. This is distinct from `Blocked` (intentional denial) — `Error` indicates an unexpected failure.
+When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. `Error` indicates an unexpected failure, as opposed to `Blocked` which signals intentional denial.
 
 ### Execution order
 
@@ -375,15 +384,20 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 			"config": {
 				"routerClass": "ui5.guard.router.Router",
 				"guardRouter": {
-					"unknownRouteGuardRegistration": "warn",
+					"unknownRouteRegistration": "warn",
 					"navToPreflight": "guard",
 					"guardLoading": "lazy",
+					"inheritance": "none",
 					"guards": {
 						"*": ["guards.authGuard"],
 						"admin": {
 							"enter": ["guards.adminGuard"],
 							"leave": ["guards.unsavedChangesGuard"]
 						}
+					},
+					"routeMeta": {
+						"admin": { "requiresAuth": true, "roles": ["admin"] },
+						"profile": { "requiresAuth": true }
 					}
 				}
 			}
@@ -394,11 +408,14 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 ### Router options
 
-| Option                          | Values                              | Default   | Description                                                                                                                                                                                                                                                   |
-| ------------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteGuardRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | What to do when a guard is declared for a route name that doesn't exist in the manifest                                                                                                                                                                       |
-| `navToPreflight`                | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                 |
-| `guardLoading`                  | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async. |
+| Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                           |
+| -------------------------- | ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names                                                                                                                                                                                                |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                         |
+| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async.         |
+| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict). |
+
+The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
 ### Declarative guards
 
@@ -492,7 +509,7 @@ export default function authGuard(context: GuardContext): GuardResult {
 **Shape 2: Array (ordered guards)**
 
 ```typescript
-// guards/checks.ts — registered as "checks#0", "checks#1"
+// guards/checks.ts (registered as "checks#0", "checks#1")
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export default [
@@ -508,7 +525,7 @@ export default [
 **Shape 3: Plain Object (named guards)**
 
 ```typescript
-// guards/security.ts — registered as "checkAuth", "checkRole"
+// guards/security.ts (registered as "checkAuth", "checkRole")
 import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export default {
@@ -522,6 +539,9 @@ export default {
 ```
 
 Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+
+> [!NOTE]
+> When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
 
 ### Cherry-pick syntax
 
@@ -568,6 +588,38 @@ The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This 
 
 This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
 
+### Route metadata
+
+Per-route metadata can be declared in the manifest under `guardRouter.routeMeta`. Keys are route names, values are arbitrary objects. The router stores but never interprets the metadata. Guards read it from `context.toMeta` and `context.fromMeta`.
+
+```json
+"guardRouter": {
+	"routeMeta": {
+		"admin": { "requiresAuth": true, "roles": ["admin"] },
+		"profile": { "requiresAuth": true },
+		"home": { "public": true }
+	}
+}
+```
+
+A single global guard can then implement policy-driven access control:
+
+```typescript
+router.addGuard((context) => {
+	if (context.toMeta.requiresAuth && !isLoggedIn()) return "login";
+	if (context.toMeta.roles && !hasAnyRole(context.toMeta.roles as string[])) return "forbidden";
+	return true;
+});
+```
+
+Runtime metadata can be set programmatically via `setRouteMeta()`. When read via `getRouteMeta()`, runtime values take precedence over manifest defaults:
+
+```typescript
+router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
+```
+
+`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. When `inheritance: "pattern-tree"` is enabled, the result also includes metadata inherited from ancestor routes (see [Guard and metadata inheritance](#guard-and-metadata-inheritance)). For unconfigured routes, it returns an empty frozen object.
+
 ### `skipGuards` option
 
 Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
@@ -576,11 +628,59 @@ Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all gu
 router.navTo("settings", {}, false, { skipGuards: true });
 ```
 
+### Guard and metadata inheritance
+
+When `inheritance` is set to `"pattern-tree"`, guards declared on a route automatically apply to all routes whose URL pattern extends that route's pattern:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"guards": {
+		"employees": ["guards.authGuard"]
+	}
+}
+```
+
+With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards.
+
+With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Inheritance is determined by URL patterns. Assuming the route-to-pattern mapping `"employees"` -> `employees`, `"employee"` -> `employees/{id}`, `"employeeResume"` -> `employees/{id}/resume`:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"routeMeta": {
+		"employees": { "section": "hr", "requiresAuth": true },
+		"employee": { "clearance": "manager" }
+	}
+}
+```
+
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
+
+Defaults to `"none"` for backward compatibility.
+
+**Root-pattern route (`""`) is a universal ancestor.** A route with an empty pattern (typically "home") is considered an ancestor of every other route in the router. With `pattern-tree` inheritance enabled, metadata or guards declared on the root-pattern route propagate to all routes:
+
+```json
+"guardRouter": {
+	"inheritance": "pattern-tree",
+	"routeMeta": {
+		"home": { "requiresAuth": true }
+	}
+}
+```
+
+Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care. Setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
+
+Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
+
+Runtime metadata set via `setRouteMeta()` participates in inheritance. Child routes see updated ancestor metadata after cache invalidation.
+
 ### Mixing declarative and programmatic guards
 
 Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
 
-**Execution order:** manifest guards run first (in declaration order), then programmatic guards (in registration order). For the same route, both sets execute — they are additive, not exclusive.
+**Execution order:** manifest guards run first (in declaration order), then programmatic guards (in registration order). For the same route, both sets execute. They are additive, not exclusive.
 
 A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
 
@@ -624,7 +724,7 @@ The demo app keeps `createRedirectWithParamsGuard()` as a reference implementati
 
 ### Guard factories
 
-The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` is actively registered as a leave guard on the `"protected"` route; `createAuthGuard()` is a reference-only synchronous alternative to the async `createAsyncPermissionGuard()` used by the demo.
+The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` and `createAuthGuard()` are reference-only implementations showing the factory pattern; the runnable demo uses the manifest-declared `guards/dirtyFormGuard.ts` module for the `"protected"` leave guard and the async `createAsyncPermissionGuard()` for the `"protected"` enter guard.
 
 ```typescript
 // guards.ts
@@ -715,7 +815,10 @@ export default class HomeController extends BaseController {
 >
 > In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
 
-### Metadata-driven guards via manifest
+### Metadata-driven guards via manifest (legacy alternative)
+
+> [!NOTE]
+> The native `guardRouter.routeMeta` configuration (see [Route metadata](#route-metadata)) is the recommended way to declare per-route metadata. The custom-namespace approach below predates native support and is shown for historical reference only.
 
 For common patterns like "this route requires authentication", you can store per-route metadata in a custom manifest section and use a single global guard instead of writing repetitive per-route guards:
 
@@ -732,7 +835,7 @@ For common patterns like "this route requires authentication", you can store per
 ```
 
 ```typescript
-// Component.ts — read the custom section via getManifestEntry (typed path lookup)
+// Component.ts: read the custom section via getManifestEntry (typed path lookup)
 type RouteMeta = Record<string, Record<string, unknown>>;
 const routeMeta = (this.getManifestEntry("/ui5.guard.router/routeMeta") ?? {}) as RouteMeta;
 
@@ -746,7 +849,7 @@ router.addGuard((context) => {
 
 `getManifestEntry()` accepts a path string (starting with `/`) to reach into nested manifest sections. The return type is `any`, so the local `RouteMeta` alias provides type safety at the consumption site.
 
-This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework -- it's a convention for your application data.
+This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework. It is a convention for application data.
 
 ### Native alternative for leave guards: Fiori Launchpad data loss prevention
 
@@ -907,7 +1010,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Common issues
 
-**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details -- see [Redirect chains](#redirect-chains).
+**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details. See [Redirect chains](#redirect-chains).
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
 

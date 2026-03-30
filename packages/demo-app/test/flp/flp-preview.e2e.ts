@@ -1,3 +1,4 @@
+import type UIComponent from "sap/ui/core/UIComponent";
 import {
 	expectAppHashToBe,
 	expectControlText,
@@ -80,6 +81,50 @@ describe("FLP preview integration", () => {
 
 		// PART 2: Same dirty state, cross-app navigation. FLP confirm fires.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+	});
+});
+
+describe("FLP route metadata and inheritance", () => {
+	beforeEach(async () => {
+		await resetFlpDemo();
+	});
+
+	it("getRouteMeta returns inherited metadata under FLP", async () => {
+		await navigateToRouteInFlp("employees");
+
+		const meta = (await browser.execute((routeName: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const all = Component.registry.all() as Record<string, UIComponent>;
+			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+			if (!component) return null;
+			type MetaRouter = { getRouteMeta(n: string): Record<string, unknown> };
+			return (component.getRouter() as unknown as MetaRouter).getRouteMeta(routeName);
+		}, "employee")) as Record<string, unknown> | null;
+
+		expect(meta).not.toBeNull();
+		expect(meta!.section).toBe("hr");
+		expect(meta!.requiresAuth).toBe(true);
+		expect(meta!.detail).toBe(true);
+	});
+
+	it("setRouteMeta invalidates cache and propagates under FLP", async () => {
+		const childMeta = (await browser.execute(() => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const all = Component.registry.all() as Record<string, UIComponent>;
+			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
+			if (!component) return null;
+			type MetaRouter = {
+				setRouteMeta(n: string, m: Record<string, unknown>): unknown;
+				getRouteMeta(n: string): Record<string, unknown>;
+			};
+			const router = component.getRouter() as unknown as MetaRouter;
+			router.setRouteMeta("employees", { section: "engineering", requiresAuth: true });
+			return router.getRouteMeta("employee");
+		})) as Record<string, unknown> | null;
+
+		expect(childMeta).not.toBeNull();
+		expect(childMeta!.section).toBe("engineering");
+		expect(childMeta!.detail).toBe(true);
 	});
 });
 
