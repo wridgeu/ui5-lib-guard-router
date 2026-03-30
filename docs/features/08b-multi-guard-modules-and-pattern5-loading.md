@@ -1,7 +1,7 @@
 # Multi-Guard Modules, Named Guards & Pattern 5 Loading
 
 **Date**: 2026-03-22
-**Status**: Proposed
+**Status**: Implemented
 **Branch**: `feat/declarative-manifest-guards`
 **Evolves**: `docs/features/08-declarative-manifest-guards.md`
 

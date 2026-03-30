@@ -20,25 +20,25 @@ The router provides:
 
 ## Documents
 
-| #   | Feature                                                                                                            | Priority | Depends On | Status          |
-| --- | ------------------------------------------------------------------------------------------------------------------ | -------- | ---------- | --------------- |
-| 01  | [Leave Guards](./01-leave-guards.implemented.md)                                                                   | High     | None       | **Implemented** |
-| 02  | [Guard Bypass](./02-guard-bypass.md)                                                                               | Low      | None       | Deprioritized   |
-| 03  | [Transition Object](./03-transition-object.md)                                                                     | Medium   | None       | Proposed        |
-| 04  | [Route Metadata](./04-route-metadata.md) ([plan](./04-route-metadata.plan.md))                                     | Low      | None       | **Implemented** |
-| 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md)                                           | Medium   | None       | Implemented     |
-| 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)                                                 | High     | None       | **Implemented** |
-| 08b | [Multi-Guard Modules, Cherry-Pick Syntax, Pattern 5 Loading](./08b-multi-guard-modules-and-pattern5-loading.md)    | High     | 08         | **Implemented** |
-| 12  | [Lazy Resolution Error Handling](./12-lazy-resolution-error-handling.md)                                           | High     | 04         | **Implemented** |
-| 13  | [Lazy Resolution + Option Merge](./13-lazy-resolution-and-option-merge.plan.md)                                    | High     | 12         | **Implemented** |
-| 11  | [Guards on Redirect Targets](./11-guards-on-redirect-targets.md) ([plan](./11-guards-on-redirect-targets-plan.md)) | High     | #38, #39   | **Implemented** |
+| #   | Feature                                                                                                         | Priority | Depends On | Status          |
+| --- | --------------------------------------------------------------------------------------------------------------- | -------- | ---------- | --------------- |
+| 01  | [Leave Guards](./01-leave-guards.implemented.md)                                                                | High     | None       | **Implemented** |
+| 02  | [Guard Bypass](./02-guard-bypass.md)                                                                            | Low      | None       | Deprioritized   |
+| 03  | [Transition Object](./03-transition-object.md)                                                                  | Medium   | None       | Proposed        |
+| 04  | [Route Metadata](./04-route-metadata.md)                                                                        | Low      | None       | **Implemented** |
+| 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md)                                        | Medium   | None       | Implemented     |
+| 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)                                              | High     | None       | **Implemented** |
+| 08b | [Multi-Guard Modules, Cherry-Pick Syntax, Pattern 5 Loading](./08b-multi-guard-modules-and-pattern5-loading.md) | High     | 08         | **Implemented** |
+| 12  | [Lazy Resolution Error Handling](./12-lazy-resolution-error-handling.md)                                        | High     | 04         | **Implemented** |
+| 13  | [Lazy Resolution + Option Merge](./12-lazy-resolution-error-handling.md)                                        | High     | 12         | **Implemented** |
+| 11  | [Guards on Redirect Targets](./11-guards-on-redirect-targets.md)                                                | High     | #38, #39   | **Implemented** |
 
 ## Refactoring
 
-| #   | Feature                                                                                                         | Priority | Depends On | Status          |
-| --- | --------------------------------------------------------------------------------------------------------------- | -------- | ---------- | --------------- |
-| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md) ([plan](./09-guard-pipeline-extraction-plan.md)) | Medium   | #38, #39   | **Implemented** |
-| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md) ([plan](./10-navigation-outcome-error-plan.md))     | Medium   | #09        | **Implemented** |
+| #   | Feature                                                        | Priority | Depends On | Status          |
+| --- | -------------------------------------------------------------- | -------- | ---------- | --------------- |
+| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md) | Medium   | #38, #39   | **Implemented** |
+| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md)    | Medium   | #09        | **Implemented** |
 
 ## Architecture Analysis
 

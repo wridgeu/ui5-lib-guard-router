@@ -1,7 +1,7 @@
 # Declarative Manifest-Based Guard Configuration
 
 **Date**: 2026-03-21 (updated 2026-03-22)
-**Status**: Proposed
+**Status**: Implemented
 **Closes**: #41, #31
 **Supersedes**: PR #46 (`feat/router-options-manifest-config`)
 

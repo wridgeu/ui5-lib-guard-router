@@ -4,9 +4,13 @@ import BaseController from "./BaseController";
 /**
  * Controller for the Protected view.
  *
- * The enter and leave guards for this route are registered in Component.ts
- * using the object form of addRouteGuard({ beforeEnter, beforeLeave }).
- * The form model is also created and owned by the Component, showing how
+ * This route is guarded by two independent registrations:
+ * - **Enter guard** (programmatic): `createAsyncPermissionGuard()` registered
+ *   in `Component.ts` via `addRouteGuard("protected", guard)`.
+ * - **Leave guard** (declarative): `guards/dirtyFormGuard.ts` declared in
+ *   `manifest.json` under `guardRouter.guards.protected.leave`.
+ *
+ * The form model is created and owned by the Component, showing how
  * guards can be centralized at the component level while controllers
  * focus on view logic.
  *

@@ -1,6 +1,6 @@
 # Feature: Error Handling for Lazy Resolution
 
-> **Status**: Proposed. Companion to [#62](https://github.com/wridgeu/ui5-lib-guard-router/issues/62) (lazy metadata/guard inheritance resolution with cache invalidation).
+> **Status**: Implemented. Companion to [#62](https://github.com/wridgeu/ui5-lib-guard-router/issues/62) (lazy metadata/guard inheritance resolution with cache invalidation).
 
 ## Problem
 
