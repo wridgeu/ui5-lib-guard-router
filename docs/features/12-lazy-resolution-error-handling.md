@@ -30,7 +30,7 @@ For context, here is how popular routing libraries handle metadata access for no
 
 ## Phase 1: Metadata Error Handling
 
-> **Note**: this section describes **proposed changes** to the current `getRouteMeta` and `setRouteMeta` behavior. Currently, `getRouteMeta` does not check whether the route exists. It simply returns `_EMPTY_META` when neither manifest nor runtime metadata is found. `setRouteMeta` stores unconditionally without validation. The changes below add unknown-route detection and policy enforcement.
+> **Note**: the behaviors described below are implemented. `getRouteMeta` checks whether the route exists and logs a warning for unknown non-empty route names. `setRouteMeta` validates the meta argument and enforces the `unknownRouteRegistration` policy. One divergence from the original spec: empty metadata results ARE cached (cleared on `setRouteMeta` and `addRoute`), which is functionally equivalent but avoids redundant ancestor walks.
 
 ### `getRouteMeta(routeName)`:unknown route
 
