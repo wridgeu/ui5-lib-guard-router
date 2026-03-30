@@ -434,9 +434,9 @@ interface RedirectChainContext {
 	readonly attemptedHash: string;
 	/** Whether to restore the hash on block (true for parse path, false for preflight). */
 	readonly restoreHash: boolean;
-	/** Original source route -- the route the user is currently on. */
+	/** Original source route (the route the user occupies). */
 	readonly fromRoute: string;
-	/** Original source hash -- the hash the user is currently on. */
+	/** Original source hash (the hash the user occupies). */
 	readonly fromHash: string;
 	/** Shared AbortSignal from the original navigation. */
 	readonly signal: AbortSignal;
@@ -663,7 +663,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					result.push({ ...descriptor, route: newName });
 				}
 			} else {
-				// The new route itself has a source descriptor -- expand to existing descendants.
+				// The new route itself has a source descriptor: expand to existing descendants.
 				for (const { name, pattern } of this._collectRoutePatterns()) {
 					if (name === newName) continue;
 					if (isPatternAncestor(newPattern, pattern)) {
@@ -883,7 +883,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * When `inheritance` is `"pattern-tree"`, walks the ancestor chain and
 	 * shallow-merges metadata shallowest-first (child values win on conflict).
 	 * Both manifest and runtime metadata participate in inheritance.
-	 * Results are cached; the cache is invalidated by {@link setRouteMeta} or `addRoute()`.
+	 * The router caches results; {@link setRouteMeta} and `addRoute()` clear the cache.
 	 *
 	 * Logs a warning for unknown non-empty route names and returns an empty
 	 * frozen object. The empty string `""` is treated as a valid root route.

@@ -1853,7 +1853,7 @@ QUnit.test("setRouteMeta during guard does not affect current context toMeta", a
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	assert.strictEqual(capturedToMeta!.version, 1, "toMeta is a snapshot -- mid-pipeline mutation does not affect it");
+	assert.strictEqual(capturedToMeta!.version, 1, "toMeta is a snapshot; mid-pipeline mutation does not affect it");
 });
 
 QUnit.test("toMeta is empty frozen object for routes without metadata", async function (assert: Assert) {
@@ -2275,7 +2275,7 @@ QUnit.test("setRouteMeta invalidates cache so getRouteMeta returns fresh result"
 	// Mutate parent runtime metadata
 	router.setRouteMeta("employees", { section: "engineering" });
 
-	// Second read -- cache was invalidated, fresh walk
+	// Second read: cache was invalidated, fresh walk
 	assert.strictEqual(router.getRouteMeta("employee").section, "engineering", "inherits updated runtime value");
 });
 
