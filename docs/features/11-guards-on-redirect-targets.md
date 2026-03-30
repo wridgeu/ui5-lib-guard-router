@@ -146,8 +146,8 @@ evaluate(
 When `skipLeaveGuards: true`, the pipeline skips leave guard lookup and goes straight
 to global-enter -> route-enter, regardless of whether `context.fromRoute` is non-empty.
 `context.fromRoute` still contains the original source route so guard functions can read
-it -- the option decouples "which route is the user on" (informational, for guard logic)
-from "should we run leave guards" (pipeline control). Do NOT solve this by passing an
+it. The option decouples "which route is the user on" (informational, for guard logic)
+from "should the pipeline run leave guards" (pipeline control). Do NOT solve this by passing an
 empty `fromRoute`; that would hide context from guard functions.
 
 ### Guard Context on Redirect Hops

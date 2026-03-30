@@ -332,9 +332,9 @@ parse(this: RouterInstance, newHash: string): void {
 }
 ```
 
-**What we'd gain**: Simpler code (~25 lines vs ~36), single code path, easier to reason about
+**What this gains**: Simpler code (~25 lines vs ~36), single code path, easier to reason about
 
-**What we'd lose**:
+**What this loses**:
 
 - **Zero-overhead fast path**: Every navigation pays a microtask delay, even with no guards
 - **Test tool compatibility**: `waitForUI5()` breaks for _all_ navigations, not just async-guarded ones

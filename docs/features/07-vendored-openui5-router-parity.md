@@ -18,11 +18,11 @@
 
 ## Problem Statement
 
-The library extends `sap.m.routing.Router` and advertises itself as a drop-in replacement, but most compatibility guarantees are currently enforced by tests written from this repository's point of view. That is valuable, but it does not answer a stricter question:
+The library extends `sap.m.routing.Router` and advertises itself as a drop-in replacement, but compatibility guarantees are enforced by tests written from this repository's point of view. That is valuable, but it does not answer a stricter question:
 
-> Do we still behave like the native router when measured against the framework's own public-router expectations?
+> Does `ui5.guard.router.Router` still behave like the native router when measured against the framework's own public-router expectations?
 
-Today, the answer is only partially covered.
+Without vendored upstream tests, the answer is only partially covered.
 
 - The local compatibility suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts` already compares the native router and the guard router across several core behaviors.
 - That suite works as a fast smoke layer, but it is still curated entirely by this project.
@@ -69,7 +69,7 @@ This is a **conformance-style test layer**, not a replacement for existing tests
 
 ### 1. Single Contract, Not Conflicting Contracts
 
-The vendored suite must verify only the native contract we actually inherit and claim:
+The vendored suite must verify only the native contract the library inherits and claims:
 
 - public router API
 - route matching

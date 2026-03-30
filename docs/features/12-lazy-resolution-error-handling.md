@@ -4,35 +4,35 @@
 
 ## Problem
 
-Issue #62 defines the lazy-resolution-with-cache pattern for metadata and guard inheritance but does not specify what happens in error scenarios — specifically when a cache miss occurs and the requested entry still does not exist after resolution.
+Issue #62 defines the lazy-resolution-with-cache pattern for metadata and guard inheritance but does not specify what happens in error scenarios, specifically when a cache miss occurs and the requested entry still does not exist after resolution.
 
 This document specifies the error handling behavior for all cache-miss error paths in both phases of the lazy resolution design.
 
 ## How Other Routing Libraries Handle This
 
-Before defining our approach, here is how popular routing libraries handle metadata access for non-existent routes and empty guard resolution:
+For context, here is how popular routing libraries handle metadata access for non-existent routes and empty guard resolution:
 
 | Behavior                                | Vue Router v4                                                    | React Router v6/v7                                                  | TanStack Router                                                                   | Angular Router                                            | Ember Router                                                     |
 | --------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
 | **Get metadata for non-existent route** | Returns `{}`. Named route resolution throws `MATCHER_NOT_FOUND`. | `matchRoutes()` returns `null`. `handle` is `undefined` if not set. | Throws `notFound()` error, renders `notFoundComponent`.                           | Throws `RuntimeError` (`NO_MATCH`), navigation cancelled. | Throws `UnrecognizedURLError`, error bubbles up route hierarchy. |
-| **Set metadata on non-existent route**  | N/A — `meta` is static config only.                              | N/A — `handle` is static config only.                               | N/A — context set at config time only.                                            | N/A — `data` is static config only.                       | N/A — metadata is a Route class hook.                            |
+| **Set metadata on non-existent route**  | N/A.`meta` is static config only.                                | N/A.`handle` is static config only.                                 | N/A.context set at config time only.                                              | N/A.`data` is static config only.                         | N/A.metadata is a Route class hook.                              |
 | **Cache empty/missing metadata**        | No. Recomputed per `resolve()` call.                             | No. `matchRoutes` is a pure function.                               | Not-found results are not cached (loader data has separate `staleTime`/`gcTime`). | No. `ActivatedRoute.data` is not cached separately.       | No. `buildRouteInfoMetadata` is called fresh per transition.     |
 | **Configurable error policy**           | No. Fixed behavior (path: silent empty; named: throw).           | No. `matchRoutes` always returns `null`.                            | **Yes.** `notFoundMode: 'fuzzy' or 'root'` controls rendering.                    | No. Unmatched routes throw.                               | No. Unrecognized URLs trigger error events.                      |
 | **Guard/middleware with no guards**     | Silently skipped. Only guards that exist run.                    | Silently skipped. Middleware only runs if a `loader` exists.        | Silently skipped. Context inheritance still flows.                                | Silently skipped. Zero guards = pass all checks.          | Silently skipped. Transition continues normally.                 |
 
 **Key takeaways:**
 
-1. **No library caches empty metadata results.** Our "never cache empty" principle aligns with industry practice.
-2. **No library offers a runtime API to set metadata on non-existent routes.** Our `setRouteMeta` for unknown routes is a unique capability (driven by dynamic `addRoute()` support), so the configurable policy is a reasonable safety net without precedent to copy from.
-3. **Only TanStack Router has a configurable error policy** for unknown routes. Our policy pattern (`ignore`/`warn`/`throw`) is more granular than TanStack's rendering-only config.
-4. **Default metadata values:** Vue Router and Angular return `{}`, Ember returns `null`, React Router gives `undefined`. Our `{}` return aligns with the Vue/Angular approach — the safest for guard destructuring.
-5. **Guard skip behavior is universal.** All libraries silently skip guards that aren't defined. Our silent-allow for empty descriptor lists matches this consensus.
+1. **No library caches empty metadata results.** The "never cache empty" principle aligns with industry practice.
+2. **No library offers a runtime API to set metadata on non-existent routes.** The `setRouteMeta` API for unknown routes is a unique capability (driven by dynamic `addRoute()` support), so the configurable policy is a reasonable safety net without precedent to copy from.
+3. **Only TanStack Router has a configurable error policy** for unknown routes. The `ignore`/`warn`/`throw` policy pattern is more granular than TanStack's rendering-only config.
+4. **Default metadata values:** Vue Router and Angular return `{}`, Ember returns `null`, React Router gives `undefined`. Returning `{}` aligns with the Vue/Angular approach, the safest for guard destructuring.
+5. **Guard skip behavior is universal.** All libraries silently skip guards that are not defined. The silent-allow for empty descriptor lists matches this consensus.
 
 ## Phase 1: Metadata Error Handling
 
-> **Note**: this section describes **proposed changes** to the current `getRouteMeta` and `setRouteMeta` behavior. Currently, `getRouteMeta` does not check whether the route exists — it simply returns `_EMPTY_META` when neither manifest nor runtime metadata is found. `setRouteMeta` stores unconditionally without validation. The changes below add unknown-route detection and policy enforcement.
+> **Note**: this section describes **proposed changes** to the current `getRouteMeta` and `setRouteMeta` behavior. Currently, `getRouteMeta` does not check whether the route exists. It simply returns `_EMPTY_META` when neither manifest nor runtime metadata is found. `setRouteMeta` stores unconditionally without validation. The changes below add unknown-route detection and policy enforcement.
 
-### `getRouteMeta(routeName)` — unknown route
+### `getRouteMeta(routeName)`:unknown route
 
 When `getRouteMeta` is called with a route name that does not exist (i.e., `this.getRoute(routeName)` returns falsy):
 
@@ -46,7 +46,7 @@ The unknown-route check uses `this.getRoute(routeName)` and is independent of th
 
 **Rationale**: `getRouteMeta` is a read operation that feeds `context.toMeta` and `context.fromMeta` during navigation. Guards must be able to safely destructure the result without try/catch. Throwing or returning `undefined` would force defensive code in every guard. The warning gives developers a signal for typos or premature calls without breaking the navigation flow. This matches Vue Router and Angular's approach of returning `{}` for routes without metadata.
 
-### `getRouteMeta(routeName)` — route exists, no metadata in ancestor chain
+### `getRouteMeta(routeName)`:route exists, no metadata in ancestor chain
 
 When the route exists but the ancestor walk finds no metadata (no manifest metadata, no runtime metadata, no inherited metadata from ancestors):
 
@@ -54,12 +54,12 @@ When the route exists but the ancestor walk finds no metadata (no manifest metad
 - **Warning**: none. A route with no metadata is a normal, expected case.
 - **Caching**: do **not** cache the empty result. For apps with deep route hierarchies, this means the ancestor walk re-executes on every call. This is acceptable because apps typically have 10-30 routes and 2-4 levels of depth (as noted in #62), making the walk trivial. Subtree caching is an optimization for later if profiling shows a need.
 
-### `setRouteMeta(routeName, meta)` — unknown route
+### `setRouteMeta(routeName, meta)`: Unknown route
 
 When `setRouteMeta` is called with a route name that does not exist:
 
 - **Behavior**: follow the `unknownRouteRegistration` policy (new configuration option).
-- **Policy values**: `"ignore"` | `"warn"` | `"throw"` — same semantics as `unknownRouteRegistration`.
+- **Policy values**: `"ignore"` | `"warn"` | `"throw"`: Same semantics as `unknownRouteRegistration`.
 - **Default**: `"warn"`.
 
 | Policy     | Behavior                                                                           |
@@ -97,7 +97,7 @@ The existing `unknownRouteRegistration` policy covers both guard and metadata re
 
 ## Phase 2: Guard Error Handling
 
-### Pipeline cache miss — ancestor walk finds zero descriptors
+### Pipeline cache miss: Ancestor walk finds zero descriptors
 
 When the pipeline resolves inherited guards for a route and the ancestor walk produces an empty descriptor list:
 
@@ -105,26 +105,26 @@ When the pipeline resolves inherited guards for a route and the ancestor walk pr
 - **Warning**: none. A route with no inherited guards is a normal, expected case.
 - **Caching**: do **not** cache the empty result.
 
-**Rationale**: the pipeline is an internal mechanism — developers never directly request "give me the guard descriptors for route X." The pipeline silently finding nothing and allowing navigation is the correct behavior. This is consistent with the current behavior where `_runRouteGuards` returns `true` when no guards are registered, and matches every other routing library surveyed (all silently skip when no guards exist).
+**Rationale**: the pipeline is an internal mechanism. Developers never directly request "give me the guard descriptors for route X." The pipeline silently finding nothing and allowing navigation is the correct behavior. This is consistent with the current behavior where `_runRouteGuards` returns `true` when no guards are registered, and matches every other routing library surveyed (all silently skip when no guards exist).
 
 ### Stale guard descriptors (route never added)
 
 When a guard descriptor references a route name that never gets added to the router:
 
 - **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient.
-- The ancestor walk goes upward from the navigation target. A descriptor pointing at a non-existent route is never reached by any ancestor walk — it sits inert in the descriptor registry.
+- The ancestor walk goes upward from the navigation target. A descriptor pointing at a non-existent route is never reached by any ancestor walk. It sits inert in the descriptor registry.
 - If someone navigates to a non-existent route, UI5's own router fails to match the route pattern before the guard pipeline is ever consulted.
 
 ## Summary
 
-| Scenario                                   | Return             | Warning                  | Cache            |
-| ------------------------------------------ | ------------------ | ------------------------ | ---------------- |
-| `getRouteMeta` — unknown route             | `{}`               | Yes (always)             | No               |
-| `getRouteMeta` — route exists, no metadata | `{}`               | No                       | No               |
-| `setRouteMeta` — unknown route             | Policy-dependent   | Policy-dependent         | Policy-dependent |
-| `setRouteMeta` — invalid `meta` arg        | No-op              | Yes (always)             | No               |
-| Guard pipeline — no inherited descriptors  | Empty list (allow) | No                       | No               |
-| Guard descriptor — route never added       | N/A (inert)        | Registration-time policy | N/A              |
+| Scenario                                  | Return             | Warning                  | Cache            |
+| ----------------------------------------- | ------------------ | ------------------------ | ---------------- |
+| `getRouteMeta`: Unknown route             | `{}`               | Yes (always)             | No               |
+| `getRouteMeta`: Route exists, no metadata | `{}`               | No                       | No               |
+| `setRouteMeta`: Unknown route             | Policy-dependent   | Policy-dependent         | Policy-dependent |
+| `setRouteMeta`: Invalid `meta` arg        | No-op              | Yes (always)             | No               |
+| Guard pipeline: No inherited descriptors  | Empty list (allow) | No                       | No               |
+| Guard descriptor: Route never added       | N/A (inert)        | Registration-time policy | N/A              |
 
 ## Shared Design Principle
 

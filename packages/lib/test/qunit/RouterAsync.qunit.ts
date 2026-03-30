@@ -872,7 +872,7 @@ QUnit.test(
 
 		// Start navigation (guard waits 200ms)
 		router.navTo("protected");
-		// Supersede after 10ms -- aborts signal, guard rejects
+		// Supersede after 10ms. Aborts signal, guard rejects
 		await nextTick(10);
 		router.navTo("forbidden");
 		await waitForRoute(router, "forbidden");
@@ -908,7 +908,7 @@ QUnit.test(
 
 		// Navigate to protected (triggers leave guard on home, waits 200ms)
 		router.navTo("protected");
-		// Supersede after 10ms -- aborts signal, leave guard rejects
+		// Supersede after 10ms. Aborts signal, leave guard rejects
 		await nextTick(10);
 		router.navTo("forbidden");
 
@@ -952,7 +952,7 @@ QUnit.test(
 			return true;
 		});
 
-		// Start navigating to "protected" -- triggers async leave guard (leaveResolvers[0])
+		// Start navigating to "protected". Triggers async leave guard (leaveResolvers[0])
 		router.navTo("protected");
 
 		// Supersede: navigate via setHash to trigger the parse() path (browser-initiated

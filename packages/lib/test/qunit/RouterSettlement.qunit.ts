@@ -361,7 +361,7 @@ QUnit.test("Idle call after Blocked replays Blocked status", async function (ass
 	const first = await router.navigationSettled();
 	assert.strictEqual(first.status, NavigationOutcome.Blocked, "First call returns Blocked");
 
-	// Router is now idle -- second call should replay the last settlement
+	// Router is idle; second call should replay the last settlement
 	const second = await router.navigationSettled();
 	assert.strictEqual(second.status, NavigationOutcome.Blocked, "Idle replay returns Blocked");
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
@@ -379,7 +379,7 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	router.navTo("protected");
 	const settledPromise = router.navigationSettled();
 
-	// Navigate back to current hash -- cancels without starting a new pipeline.
+	// Navigate back to current hash. Cancels without starting a new pipeline.
 	// With navTo preflight, the hash never changed, so use navTo("home") for
 	// same-hash dedup cancellation.
 	router.navTo("home");
@@ -765,7 +765,7 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		assert.strictEqual(events.length, 1, "Handler received initial settlement");
 
-		// Detach without oListener -- this should compile and work at runtime
+		// Detach without oListener. This should compile and work at runtime
 		(router as GuardRouter).detachNavigationSettled(handler);
 
 		router.navTo("forbidden");

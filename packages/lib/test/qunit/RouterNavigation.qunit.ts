@@ -740,7 +740,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	await nextTick();
 	await router.navigationSettled();
 
-	assert.strictEqual(getHash(), "", "Hash stayed on home -- guard blocked the nested navTo('protected')");
+	assert.strictEqual(getHash(), "", "Hash stayed on home; guard blocked the nested navTo('protected')");
 });
 
 // ============================================================

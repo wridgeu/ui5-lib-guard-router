@@ -42,7 +42,7 @@ const standardHooks = {
 };
 
 // ============================================================
-// Module: Router options -- constructor
+// Module: Router options: constructor
 // ============================================================
 QUnit.module("Router - Router options - constructor", {
 	beforeEach: function () {
@@ -126,7 +126,7 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 });
 
 // ============================================================
-// Module: Router options -- unknownRouteRegistration
+// Module: Router options: unknownRouteRegistration
 // ============================================================
 QUnit.module("Router - unknownRouteRegistration", {
 	beforeEach: function () {
@@ -308,7 +308,7 @@ QUnit.test("bag is shared across multiple redirect hops", async function (assert
 });
 
 // ============================================================
-// Module: Router options -- navToPreflight
+// Module: Router options: navToPreflight
 // ============================================================
 QUnit.module("Router - navToPreflight", {
 	beforeEach: function () {
@@ -363,7 +363,7 @@ QUnit.test('"off" defers guard evaluation to parse() fallback', async function (
 });
 
 // ============================================================
-// Module: Router options -- skipGuards
+// Module: Router options: skipGuards
 // ============================================================
 QUnit.module("Router - skipGuards", {
 	beforeEach: function () {
@@ -410,7 +410,7 @@ QUnit.test("skipGuards does not affect subsequent navTo calls", async function (
 });
 
 // ============================================================
-// Module: Declarative manifest guards -- block loading
+// Module: Declarative manifest guards: block loading
 // ============================================================
 
 // Register a loader path so sap.ui.require can find test fixture guard modules.
@@ -499,7 +499,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 });
 
 QUnit.test("manifest guards run before imperatively registered guards", async function (assert: Assert) {
-	// Arrange: router with bagWriterGuard as manifest guard -- it writes to context.bag
+	// Arrange: router with bagWriterGuard as manifest guard. It writes to context.bag
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -602,7 +602,7 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 });
 
 // ============================================================
-// Module: Declarative manifest guards -- lazy loading
+// Module: Declarative manifest guards: lazy loading
 // ============================================================
 QUnit.module("Router - Declarative manifest guards (lazy loading)", {
 	beforeEach: function () {
@@ -650,7 +650,7 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 		{
 			async: true,
 			guardRouter: {
-				// No guardLoading specified -- should default to "lazy"
+				// No guardLoading specified; should default to "lazy"
 				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
@@ -1024,7 +1024,7 @@ QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) 
 	);
 
 	// lazy mode: initialize() registers lazy wrappers synchronously.
-	// Navigate directly to "other" -- the lazy wrapper will load the module
+	// Navigate directly to "other". The lazy wrapper will load the module
 	// and execute checkRole (returns false), blocking navigation.
 	router.initialize();
 	router.navTo("other");
@@ -1380,7 +1380,7 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 	router.initialize();
 	await waitForRoute(router, "home", 5000);
 
-	// Try to leave "home" -- checkRole returns false, should block
+	// Try to leave "home". checkRole returns false, should block
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
@@ -1652,7 +1652,7 @@ QUnit.test(
 
 		assert.ok(router.isInitialized(), "router initialized despite load failure");
 
-		// Navigation should still work (no guards registered -- the failed module was skipped)
+		// Navigation should still work (no guards registered; the failed module was skipped)
 		router.navTo("protected");
 		await waitForRoute(router, "protected", 5000);
 		assert.strictEqual(getHash(), "protected", "navigation works after load failure");
@@ -2026,7 +2026,7 @@ QUnit.module("Router - Guard and metadata inheritance", {
 	},
 });
 
-// -- Guard inheritance -------------------------------------------------------
+// === Guard inheritance ======================================================
 
 QUnit.test(
 	"guard on parent route runs for child route when inheritance is pattern-tree",
@@ -2153,11 +2153,11 @@ QUnit.test("guard on child does NOT propagate upward to parent", async function 
 	router.navTo("employees");
 	await waitForRoute(router, "employees");
 
-	// Assert: parent route is reachable -- child guard did not propagate up
+	// Assert: parent route is reachable; child guard did not propagate up
 	assert.strictEqual(getHash(), "employees", "parent route reached; child guard did not propagate upward");
 });
 
-// -- Metadata inheritance ----------------------------------------------------
+// === Metadata inheritance ===================================================
 
 QUnit.test("metadata propagates to child routes when inheritance is pattern-tree", function (assert: Assert) {
 	// Arrange: metadata on ancestor, inheritance enabled
@@ -2218,7 +2218,7 @@ QUnit.test("metadata merges across multiple ancestor levels", function (assert: 
 	assert.strictEqual(meta.requiresAuth, true, "grandchild inherited requiresAuth from parent");
 });
 
-// -- Integration with toMeta ------------------------------------------------
+// === Integration with toMeta ================================================
 
 QUnit.test("inherited metadata is visible on context.toMeta in guards", async function (assert: Assert) {
 	// Arrange: metadata on ancestor, both inheritance modes enabled
@@ -2302,7 +2302,7 @@ QUnit.test("guard inheritance works in lazy loading mode", async function (asser
 });
 
 // ============================================================
-// Module: Pattern ancestry -- UI5 pattern syntax edge cases
+// Module: Pattern ancestry: UI5 pattern syntax edge cases
 // ============================================================
 
 QUnit.module("Router - Pattern ancestry edge cases", {
@@ -2316,7 +2316,7 @@ QUnit.module("Router - Pattern ancestry edge cases", {
 });
 
 QUnit.test("metadata inherits when parent and child use different parameter names", function (assert: Assert) {
-	// Arrange: parent uses {empId}, child uses {id} -- should still be recognized as ancestor
+	// Arrange: parent uses {empId}, child uses {id}. Should still be recognized as ancestor
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -2484,7 +2484,7 @@ QUnit.test("guard inheritance works with mixed parameter names", async function 
 });
 
 QUnit.test("mandatory param combined with inline query does not break ancestry", function (assert: Assert) {
-	// UI5 allows {id}{?query} -- the query portion is stripped, leaving just {id}
+	// UI5 allows {id}{?query}. The query portion is stripped, leaving just {id}
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -2527,7 +2527,7 @@ QUnit.test("optional parameter in mid-path position does not block inheritance",
 });
 
 QUnit.test("all-optional pattern is not treated as ancestor of other routes", function (assert: Assert) {
-	// Pattern ":mode:" consists entirely of optional segments -- should NOT be ancestor of anything
+	// Pattern ":mode:" consists entirely of optional segments. Should NOT be ancestor of anything
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -2559,7 +2559,7 @@ QUnit.test("all-optional pattern is not treated as ancestor of other routes", fu
 });
 
 QUnit.test("multiple consecutive optional params are ignored for ancestry", function (assert: Assert) {
-	// Pattern "reports/:year:/:month:" -- only "reports" is mandatory
+	// Pattern "reports/:year:/:month:". Only "reports" is mandatory
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -2585,7 +2585,7 @@ QUnit.test("multiple consecutive optional params are ignored for ancestry", func
 });
 
 QUnit.test("rest catchall pattern with prefix still acts as ancestor", function (assert: Assert) {
-	// Pattern "files/:path*:" -- "files" is mandatory, :path*: is rest/catchall
+	// Pattern "files/:path*:". "files" is mandatory, :path*: is rest/catchall
 	// "files/{id}" should inherit from "files/:path*:"
 	router = new GuardRouterClass(
 		[
@@ -2669,7 +2669,7 @@ QUnit.test("child metadata overrides root-pattern metadata on conflict", functio
 QUnit.test(
 	"guard on root-pattern route propagates to all routes with pattern-tree inheritance",
 	async function (assert: Assert) {
-		// Use bagWriterGuard on root -- it allows navigation and writes to context.bag,
+		// Use bagWriterGuard on root. It allows navigation and writes to context.bag,
 		// proving it ran. Then add a bagReaderGuard imperatively on the descendant
 		// to verify the inherited guard wrote to the bag before the reader ran.
 		router = createHierarchicalRouter({
@@ -2683,7 +2683,7 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home", 5000);
 
-		// Add an imperative bagReaderGuard on "employees" -- it blocks if "writer"
+		// Add an imperative bagReaderGuard on "employees". It blocks if "writer"
 		// key is NOT in the bag. If the inherited root guard wrote to the bag,
 		// the reader will find it and allow navigation.
 		let bagHadWriter = false;
@@ -2906,7 +2906,7 @@ QUnit.test("addRoute() clears metadata cache so inheritance updates", async func
 	const metaBefore = router.getRouteMeta("employee");
 	assert.strictEqual(metaBefore.section, "hr", "child inherits before addRoute");
 
-	// Add a deeper child -- cache must be cleared
+	// Add a deeper child. Cache must be cleared
 	addRouteDynamic(router, { name: "employeeResume", pattern: "employees/{id}/resume" });
 
 	const metaDeep = router.getRouteMeta("employeeResume");
@@ -2935,7 +2935,7 @@ QUnit.test("addRoute() for already-known route is a no-op", async function (asse
 	router.initialize();
 	await waitForRoute(router, "home", 5000);
 
-	// Re-add "employees" which already exists -- should be a no-op
+	// Re-add "employees" which already exists. Should be a no-op
 	addRouteDynamic(router, { name: "employees", pattern: "employees" });
 
 	// Guard should still work normally (not duplicated)
