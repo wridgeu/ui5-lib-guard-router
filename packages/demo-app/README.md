@@ -9,29 +9,40 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-| Route       | Pattern       | Guard behavior                                                                       |
-| ----------- | ------------- | ------------------------------------------------------------------------------------ |
-| `home`      | `""`          | Open, no guard                                                                       |
-| `protected` | `"protected"` | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty |
-| `blocked`   | `"blocked"`   | Enter: always blocks and stays on the current route                                  |
-| `forbidden` | `"forbidden"` | Always redirects to `home`                                                           |
-| (bypassed)  | no match      | Shows the Not Found page with a button to return home                                |
+| Route       | Pattern            | Guard behavior                                                                       |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------ |
+| `home`      | `""`               | Open, no guard                                                                       |
+| `protected` | `"protected"`      | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty |
+| `blocked`   | `"blocked"`        | Enter: always blocks and stays on the current route                                  |
+| `forbidden` | `"forbidden"`      | Always redirects to `home`                                                           |
+| `admin`     | `"admin"`          | Enter: always redirects to `protected` (demonstrates redirect chains)                |
+| `employees` | `"employees"`      | Open, no guard. Displays route metadata and supports runtime metadata updates        |
+| `employee`  | `"employees/{id}"` | Open, no guard. Displays inherited metadata via `pattern-tree` inheritance           |
+| (bypassed)  | no match           | Shows the Not Found page with a button to return home                                |
 
 ## Guards
 
-Guard registration happens in two places:
+Guard registration happens in three ways: declarative manifest guards, programmatic guards in `Component.ts`, and controller-level guards.
 
-All demo guard factories live in `webapp/guards.ts` for single-file discoverability. The file is structured with active runtime guards first and reference-only examples second.
+Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file is structured with active runtime guards first and reference-only examples second.
 
-**Component level** (`Component.ts`): Registers guards during `init()` for the component lifetime. The component explicitly destroys its runtime coordinator, and the router-owned guard registrations are cleared when the component/router is destroyed.
+Individual guard modules for declarative manifest registration live in `webapp/guards/` as standalone files.
 
-| Guard                          | Type         | Route       | Description                                  |
-| ------------------------------ | ------------ | ----------- | -------------------------------------------- |
-| `createNavigationLogger()`     | Global enter | all         | Logs every navigation (always allows)        |
-| `createAsyncPermissionGuard()` | Route enter  | `protected` | Async login check with `AbortSignal` support |
-| `blockedGuard`                 | Route enter  | `blocked`   | Always blocks before navigation commits      |
-| `createDirtyFormGuard()`       | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
-| `forbiddenGuard`               | Route enter  | `forbidden` | Always redirects to `home`                   |
+**Declarative** (manifest.json `guardRouter.guards`): Loaded automatically by the router during `initialize()`.
+
+| Guard module              | Type         | Route       | Description                                  |
+| ------------------------- | ------------ | ----------- | -------------------------------------------- |
+| `guards.navigationLogger` | Global enter | all (`"*"`) | Logs every navigation with metadata keys     |
+| `guards.blockedGuard`     | Route enter  | `blocked`   | Always blocks before navigation commits      |
+| `guards.forbiddenGuard`   | Route enter  | `forbidden` | Always redirects to `home`                   |
+| `guards.dirtyFormGuard`   | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
+
+**Programmatic** (`Component.ts`): Registers guards during `init()` for the component lifetime. These guards need closure access to component models that declarative guards cannot have.
+
+| Guard                          | Type        | Route       | Description                                           |
+| ------------------------------ | ----------- | ----------- | ----------------------------------------------------- |
+| `adminGuard`                   | Route enter | `admin`     | Always redirects to `protected` (redirect chain demo) |
+| `createAsyncPermissionGuard()` | Route enter | `protected` | Async login check with `AbortSignal` support          |
 
 **Controller level** (`Home.controller.ts`): Demonstrates per-controller guard lifecycle.
 
@@ -54,15 +65,18 @@ All demo guard factories live in `webapp/guards.ts` for single-file discoverabil
 
 All controllers extend `BaseController`, which provides shared helpers (`getRouter()`, `getModel()`, `createScenarioRunner()`).
 
-| File                                 | Purpose                                                                 |
-| ------------------------------------ | ----------------------------------------------------------------------- |
-| `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, and scenario runner |
-| `controller/App.controller.ts`       | Root view controller                                                    |
-| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard      |
-| `controller/Blocked.controller.ts`   | Blocked view (never rendered, guard always blocks)                      |
-| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back          |
-| `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                 |
-| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button   |
+| File                                 | Purpose                                                                                         |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, and scenario runner                         |
+| `controller/App.controller.ts`       | Root view controller                                                                            |
+| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard                              |
+| `controller/Blocked.controller.ts`   | Blocked view (never rendered, guard always blocks)                                              |
+| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back                                  |
+| `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                                         |
+| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button                           |
+| `controller/Admin.controller.ts`     | Admin view (never rendered, guard always redirects to `protected`)                              |
+| `controller/Employees.controller.ts` | Employees list: displays route metadata, supports runtime metadata updates via `setRouteMeta()` |
+| `controller/Employee.controller.ts`  | Employee detail: displays inherited metadata from the parent `employees` route via pattern-tree |
 
 ### Demo-only helpers
 
@@ -75,6 +89,17 @@ These files power the runtime inspector panels and hash-driven scenario buttons 
 | `routing/hashNavigation.ts`  | Thin wrapper around `HashChanger` for `getCurrentHash()`, `setHash()`, `runHashSequence()`, and `attachHashChanged()`          |
 | `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, launch mode, FLP status, last action, and last navigation settlement details) |
 | `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                    |
+
+### Declarative guard modules
+
+Individual guard functions loaded by the router from `manifest.json` `guardRouter.guards`. These modules have no closure access to the Component instance; the `dirtyFormGuard` locates the form model via the Component registry at runtime.
+
+| File                         | Type         | Description                                      |
+| ---------------------------- | ------------ | ------------------------------------------------ |
+| `guards/navigationLogger.ts` | Global enter | Logs every navigation with metadata keys         |
+| `guards/blockedGuard.ts`     | Route enter  | Always blocks navigation                         |
+| `guards/forbiddenGuard.ts`   | Route enter  | Always redirects to `home`                       |
+| `guards/dirtyFormGuard.ts`   | Route leave  | Blocks leaving when the form model reports dirty |
 
 ### Models
 
@@ -157,21 +182,23 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                         | Coverage                                                         |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                           |
-| `guard-allow.e2e.ts`         | Navigation allowed after login                                   |
-| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                  |
-| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                            |
-| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                |
-| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                          |
-| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                         |
-| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                    |
-| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes         |
-| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back   |
-| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect |
+| File                         | Coverage                                                                |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                  |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                          |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                         |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                   |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                       |
+| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                                 |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                           |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back          |
+| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect        |
+| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points |
+| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates       |
 
-Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, and `waitForRuntimeSettlement` helpers.
+Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, `waitForRuntimeSettlement`, `getRuntimeSettlementRevision`, and `getHistoryLength` helpers.
 
 FLP-specific coverage lives in `test/flp/` and is split across three spec files:
 
