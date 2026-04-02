@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.0...v1.6.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **guard-pipeline:** pass Error objects to Log.error for stack trace preservation ([6da9d91](https://github.com/wridgeu/ui5-lib-guard-router/commit/6da9d913008ff915807d18ea2c1c72a3b35ef0fd))
+
 ## [1.6.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.5.3...v1.6.0) (2026-03-30)
 
 
