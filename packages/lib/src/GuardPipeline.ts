@@ -235,7 +235,7 @@ export default class GuardPipeline {
 			} catch (error) {
 				Log.error(
 					`Leave guard [${i}] on route "${context.fromRoute}" threw, navigation failed`,
-					String(error),
+					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
 				if (context.signal.aborted) return false;
@@ -293,7 +293,7 @@ export default class GuardPipeline {
 			} catch (error) {
 				Log.error(
 					`Enter guard [${i}] on route "${context.toRoute}" threw, navigation failed`,
-					String(error),
+					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
 				if (context.signal.aborted) return false;
@@ -338,7 +338,7 @@ export default class GuardPipeline {
 				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
 					`${label} [${guardIndex}] on route "${route}" threw, navigation failed`,
-					String(error),
+					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
 				throw error;
