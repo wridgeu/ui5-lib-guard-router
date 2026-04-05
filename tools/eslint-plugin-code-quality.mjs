@@ -2,43 +2,15 @@
  * Custom oxlint JS plugin that catches AI-generated code anti-patterns.
  *
  * Detects common patterns left behind by AI coding assistants:
- * double type assertions, console-only error handling, redundant
- * boolean returns, and em-dashes in string literals.
+ * console-only error handling, redundant boolean returns, and
+ * em-dashes in string literals.
+ *
+ * Type-assertion rules (no-as-any, no-double-type-assertion) have been
+ * replaced by native typescript/no-explicit-any, no-unsafe-type-assertion,
+ * and no-unnecessary-type-assertion.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
-
-/**
- * Detects `x as unknown as T` double type-assertion chains.
- *
- * AI assistants reach for double assertions instead of proper type
- * narrowing (type guards, `in` checks, `.isA()` etc.). This rule
- * flags the pattern so it can be replaced with safe narrowing.
- *
- * Inspired by unguard's no-type-assertion / no-inline-type-assertion.
- */
-const noDoubleTypeAssertion = {
-	meta: {
-		type: "problem",
-		docs: {
-			description: "Disallow double type assertions (as unknown as T)",
-		},
-		messages: {
-			noDoubleTypeAssertion:
-				"Avoid double type assertions (as unknown as T). Use proper type narrowing (type guards, `in` checks, or .isA()) instead.",
-		},
-		schema: [],
-	},
-	create(context) {
-		return {
-			TSAsExpression(node) {
-				if (node.expression?.type === "TSAsExpression") {
-					context.report({ node, messageId: "noDoubleTypeAssertion" });
-				}
-			},
-		};
-	},
-};
 
 /**
  * Detects catch blocks where the only statement is a console call.
@@ -252,47 +224,12 @@ const noEmDash = {
 	},
 };
 
-/**
- * Detects `expression as any` type assertions.
- *
- * `as any` silences the type system entirely and hides real type
- * errors. This rule is enabled even in test files (where the broader
- * `@typescript-eslint/no-explicit-any` is off) to prevent unchecked
- * casts from accumulating. Legitimate uses should go through a typed
- * helper with a single eslint-disable comment.
- */
-const noAsAnyAssertion = {
-	meta: {
-		type: "problem",
-		docs: {
-			description: "Disallow `as any` type assertions",
-		},
-		messages: {
-			noAsAnyAssertion:
-				"Avoid `as any`. Use a typed helper, type guard, or add an eslint-disable comment with justification.",
-		},
-		schema: [],
-	},
-	create(context) {
-		return {
-			TSAsExpression(node) {
-				const annotation = node.typeAnnotation;
-				if (annotation?.type === "TSAnyKeyword") {
-					context.report({ node, messageId: "noAsAnyAssertion" });
-				}
-			},
-		};
-	},
-};
-
 /** @type {import('eslint').ESLint.Plugin} */
 export default {
 	meta: { name: "code-quality" },
 	rules: {
-		"no-double-type-assertion": noDoubleTypeAssertion,
 		"no-console-only-catch": noConsoleOnlyCatch,
 		"no-redundant-boolean-return": noRedundantBooleanReturn,
 		"no-em-dash": noEmDash,
-		"no-as-any-assertion": noAsAnyAssertion,
 	},
 };

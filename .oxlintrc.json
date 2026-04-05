@@ -30,11 +30,12 @@
 		"unicorn/no-static-only-class": "off",
 		"unicorn/prefer-global-this": "off",
 		"unicorn/consistent-function-scoping": "off",
-		"code-quality/no-double-type-assertion": "error",
+		"typescript/no-explicit-any": "warn",
+		"typescript/no-unsafe-type-assertion": "error",
+		"typescript/no-unnecessary-type-assertion": "warn",
 		"code-quality/no-console-only-catch": "warn",
 		"code-quality/no-redundant-boolean-return": "warn",
 		"code-quality/no-em-dash": "warn",
-		"code-quality/no-as-any-assertion": "warn",
 		"comment-quality/no-obvious-comment": "warn",
 		"comment-quality/no-narrator-comment": "warn",
 		"comment-quality/no-section-divider": "warn",
@@ -46,7 +47,7 @@
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
-				"code-quality/no-double-type-assertion": "off",
+				"typescript/no-unsafe-type-assertion": "off",
 				"comment-quality/no-section-divider": "off",
 				"test-guardrails/no-browser-pause": "error"
 			}
