@@ -117,12 +117,12 @@ Source-level analysis of TanStack Router's internal navigation pipeline: its two
 
 ### Async Routing Merge (May 2025)
 
-In May 2025, SAP merged [`CPOUI5FRAMEWORK-776`](https://github.com/SAP/openui5/commit/b7fc43c46cee8c5b6371b4a895d1c86d82e431bf) ("[INTERNAL] core/routing: merge async version to the base"), making async routing the default code path. The sync implementation files (`sync/Route.js`, `sync/Target.js`, `sync/TargetCache.js`, `sync/Targets.js`) are slated for removal in UI5 2.x. Manifest Version 2 makes `routing/config/async: true` implicit.
+In May 2025, SAP merged [`CPOUI5FRAMEWORK-776`](https://github.com/UI5/openui5/commit/b7fc43c46cee8c5b6371b4a895d1c86d82e431bf) ("[INTERNAL] core/routing: merge async version to the base"), making async routing the default code path. The sync implementation files (`sync/Route.js`, `sync/Target.js`, `sync/TargetCache.js`, `sync/Targets.js`) are slated for removal in UI5 2.x. Manifest Version 2 makes `routing/config/async: true` implicit.
 
-This is significant because the SAP team cited the synchronous nature of the hash-change/`parse()` cycle as the **blocker** for implementing navigation guards (see [#3411 comment, September 2022](https://github.com/SAP/openui5/issues/3411#issuecomment-1239439104)). That technical barrier is now partially removed. However, `parse()` itself remains synchronous — the async merge affects target/view loading _after_ route matching, not the `parse()` entry point. The SAP team has not built guard features on top of this change.
+This is significant because the SAP team cited the synchronous nature of the hash-change/`parse()` cycle as the **blocker** for implementing navigation guards (see [#3411 comment, September 2022](https://github.com/UI5/openui5/issues/3411#issuecomment-1239439104)). That technical barrier is now partially removed. However, `parse()` itself remains synchronous — the async merge affects target/view loading _after_ route matching, not the `parse()` entry point. The SAP team has not built guard features on top of this change.
 
 **Impact on this library:** None. The `parse()` override still works identically. The async routing merge actually aligns well with this library's design — async guard resolution feeds naturally into async target loading.
 
 ### UI5 2.0 Outlook
 
-[Issue #4234](https://github.com/SAP/openui5/issues/4234) tracks the UI5 2.0 roadmap. As of July 2025, no timeline is published. The 1.136.x-legacy-free version serves as the baseline — everything deprecated there will be removed in 2.x. There is **no indication** that UI5 2.0 will include navigation guard features. The `parse()` method is not on the deprecation list, and the `.extend()` class pattern remains supported.
+[Issue #4234](https://github.com/UI5/openui5/issues/4234) tracks the UI5 2.0 roadmap. As of July 2025, no timeline is published. The 1.136.x-legacy-free version serves as the baseline — everything deprecated there will be removed in 2.x. There is **no indication** that UI5 2.0 will include navigation guard features. The `parse()` method is not on the deprecation list, and the `.extend()` class pattern remains supported.

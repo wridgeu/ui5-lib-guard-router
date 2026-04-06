@@ -73,7 +73,7 @@ hashChanger.fireHashChanged = (newHash: string, oldHash: string) => {
 ## Cons
 
 - **HashChanger is a singleton**: Monkey-patching affects ALL routers in the application. In Fiori launchpad scenarios with multiple apps/components, this is dangerous.
-- **Breaks encapsulation**: @jversignify noted in [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411#issuecomment-1005815277): _"From an encapsulation point of view, this approach is bad practice, but I don't see an alternative."_
+- **Breaks encapsulation**: @jversignify noted in [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): _"From an encapsulation point of view, this approach is bad practice, but I don't see an alternative."_
 - **Fragile across versions**: HashChanger internals have changed across UI5 versions. Method signatures, event names, and internal state management are not guaranteed stable.
 - **No route awareness**: The HashChanger only knows about raw hash strings, not route names. You must parse route patterns yourself to make decisions.
 - **Complex cleanup**: When the component is destroyed, you must restore the original methods. If multiple components monkey-patch the same methods, cleanup order matters.
@@ -117,5 +117,5 @@ This is a variant of the same approach applied to FLP cross-app navigation rathe
 
 ## References
 
-- [SAP/openui5#3411 comment](https://github.com/SAP/openui5/issues/3411#issuecomment-1005815277): @jversignify's CrossApplicationNavigation interception
-- [SAP/openui5#3411 comment](https://github.com/SAP/openui5/issues/3411#issuecomment-1012948097): UI5 team acknowledges HashChanger override as "bad practice"
+- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): @jversignify's CrossApplicationNavigation interception
+- [UI5/openui5#3411 comment](https://github.com/UI5/openui5/issues/3411#issuecomment-1012948097): UI5 team acknowledges HashChanger override as "bad practice"

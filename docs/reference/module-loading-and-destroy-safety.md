@@ -178,4 +178,4 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 | Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions) |
 | Set order in destroy | After iterating cache, before `bIsDestroyed` | First statement, before clearing guards     |
 
-[targetcache-src]: https://github.com/niclas-niclas-niclas/niclas-openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/async/TargetCache.js
+[targetcache-src]: https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/async/TargetCache.js

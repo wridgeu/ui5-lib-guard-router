@@ -15,8 +15,8 @@ UI5's `sap.m.NavContainer` (which `sap.m.App` extends) fires a `navigate` event 
 
 - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292)
 - [Plunker: Navigation prevention example by boghyon](https://embed.plnkr.co/plunk/wp6yes)
-- [GitHub Issue #3411: How to interrupt/override ongoing routing?](https://github.com/SAP/openui5/issues/3411)
-- [sap.m.NavContainer API — navigate event](https://sdk.openui5.org/api/sap.m.NavContainer%23events/navigate)
+- [GitHub Issue #3411: How to interrupt/override ongoing routing?](https://github.com/UI5/openui5/issues/3411)
+- [sap.m.NavContainer API — navigate event](https://sdk.openui5.org/#/api/sap.m.NavContainer%23events/navigate)
 
 ## The NavContainer "navigate" Event
 

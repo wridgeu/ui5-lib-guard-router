@@ -435,6 +435,6 @@ router.addGuard((context) => {
 ## References
 
 - [Vue Router Route Meta Fields](https://router.vuejs.org/guide/advanced/meta.html)
-- [Angular Route Data](https://angular.io/api/router/Route#data)
+- [Angular Route Data](https://angular.dev/api/router/Route#data)
 - [Nuxt definePageMeta](https://nuxt.com/docs/api/utils/define-page-meta)
-- [TanStack Router Route Context](https://tanstack.com/router/v1/docs/framework/react/guide/route-context)
+- [TanStack Router Route Context](https://tanstack.com/router/latest/docs/framework/react/guide/route-context)

@@ -84,7 +84,7 @@ Encapsulate the visibility logic in a reusable custom control:
 </ewmLib:LoginGateContainer>
 ```
 
-This is described in detail in [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1) as "Approach B".
+This is described in detail as "Approach B" in the original proof-of-concept.
 
 ## When to Use
 
@@ -107,5 +107,3 @@ This is described in detail in [wridgeu/ui5-poc-ewm-one-login#1](https://github.
 | Browser back protection | Inherent (no nav)        | Via guard re-evaluation       |
 
 ## References
-
-- [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1): Approaches A and B

@@ -6,13 +6,11 @@ UI5's native router (`sap.ui.core.routing.Router` / `sap.m.routing.Router`) has 
 
 ### 1.1 Back-Navigation to Invalid States
 
-**Reference**: [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1)
-
 `navTo()` creates browser history entries. After a user completes a step (e.g., login), the browser back button can return them to a screen that should no longer be accessible (e.g., the login page after successful authentication). The framework provides no way to prevent this at the routing level.
 
 ### 1.2 No Route-Level Guards
 
-**Reference**: [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), CPOUI5FRAMEWORK-338
+**Reference**: [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), CPOUI5FRAMEWORK-338
 
 There is no way to prevent a route from displaying based on conditions (permissions, authentication state, feature flags). The `beforeRouteMatched` event fires but offers no `preventDefault()` capability. The framework team acknowledged this need (CPOUI5FRAMEWORK-338) but the feature remains unimplemented after 4+ years.
 
@@ -49,18 +47,18 @@ There is no way to prevent a route from displaying based on conditions (permissi
     - @wridgeu (Oct 2024): _"Would be awesome to build this into the router... Many ideas, not enough time to evaluate them all"_
     - Suggestion from @wridgeu to extend Router and override `parse` method (referencing [SO answer](https://stackoverflow.com/a/29167292))
 
-#### SAP/openui5#3094: "Prevent showing the UI5 app internal page without successful authentication" (CLOSED)
+#### UI5/openui5#3094: "Prevent showing the UI5 app internal page without successful authentication" (CLOSED)
 
 - **Core scenario**: Client-side navigation can be manipulated via DevTools to bypass authentication checks
 - **SAP response** (@matz3): _"You can't fully prevent a user from manipulating code that runs on the client-side"_. Recommended server-side authorization and separate components for public/authenticated content.
 - **Key takeaway**: Client-side guards are UX measures, not security measures. Server-side authorization is still required.
 
-#### SAP/openui5#1326: "Protect a route path" (CLOSED, 2017)
+#### UI5/openui5#1326: "Protect a route path" (CLOSED, 2017)
 
 - Earliest documented request for route-level guards in UI5
 - SAP's response: use `attachPatternMatched`, which is the "flash of unauthorized content" pattern
 
-#### wridgeu/ui5-poc-ewm-one-login#1: "Prevent browser back navigation to not logged in screen"
+#### Back-Navigation to Invalid States
 
 - **Scenario**: After login, browser back button returns to "not logged in" screen despite still being authenticated
 - **Root cause**: `navTo()` creates browser history entries, allowing users to navigate "back" to invalid states
@@ -233,7 +231,7 @@ We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` becaus
 
 ### 2.7 Minimum UI5 Version
 
-The current published package declares and tests against **1.144.0**. The compatibility baseline is **1.120** because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. Other APIs used include [`sap.ui.core.Lib`](https://sdk.openui5.org/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
+The current published package declares and tests against **1.144.0**. The compatibility baseline is **1.120** because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. Other APIs used include [`sap.ui.core.Lib`](https://sdk.openui5.org/#/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
 
 ---
 
@@ -462,11 +460,10 @@ If a guard blocks the very first navigation (where `_currentHash` is `null`):
 
 ## 6. Related Work and References
 
-- [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411): The primary issue motivating this project
-- [SAP/openui5#3094](https://github.com/SAP/openui5/issues/3094): Auth protection (server-side vs client-side)
-- [SAP/openui5#1326](https://github.com/SAP/openui5/issues/1326): Earliest "protect a route" request (2017)
-- [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1): Back-navigation to invalid state
-- [CPOUI5FRAMEWORK-338](https://github.com/SAP/openui5/issues/3411#issuecomment-1012994735): SAP internal backlog item (unimplemented as of 2026)
+- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): The primary issue motivating this project
+- [UI5/openui5#3094](https://github.com/UI5/openui5/issues/3094): Auth protection (server-side vs client-side)
+- [UI5/openui5#1326](https://github.com/UI5/openui5/issues/1326): Earliest "protect a route" request (2017)
+- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): CPOUI5FRAMEWORK-338, SAP internal backlog item (unimplemented as of 2026)
 - [DSAG UI5 Best Practice: Routing](https://1dsag.github.io/UI5-Best-Practice/routing/): Community routing guidelines
 - [Vue Router Navigation Guards](https://router.vuejs.org/guide/advanced/navigation-guards.html): The gold standard for SPA navigation guards
 - [Plunker: UI5 preventing navigation](https://embed.plnkr.co/wp6yes): @boghyon's sample for focus handling + navigation prevention

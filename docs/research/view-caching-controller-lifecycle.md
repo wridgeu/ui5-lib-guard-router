@@ -47,7 +47,7 @@ TargetCache.prototype.destroy = function () {
 
 There is no public API to remove a single cached view. The `set()` method can overwrite a cached entry, but this is not commonly used and does not destroy the previous instance.
 
-**Source**: [`sap/ui/core/routing/TargetCache.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js)
+**Source**: [`sap/ui/core/routing/TargetCache.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js)
 
 ## No Cache Configuration on Targets
 
@@ -73,7 +73,7 @@ setView: function(sViewName, oView) {
 
 All actual caching logic lives in `TargetCache`. The `created` event fires only when a **new** view is created. From the source: _"It will not be fired, if a view or component was read from the cache."_
 
-**Source**: [`sap/ui/core/routing/Views.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Views.js)
+**Source**: [`sap/ui/core/routing/Views.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Views.js)
 
 ## Controller Lifecycle: When `onExit()` Fires
 
@@ -120,7 +120,7 @@ The JSDoc in `Controller.js` confirms: _"This method is called upon destruction 
 1. The **Router is destroyed** (which destroys the `TargetCache`, which destroys all cached views) — typically because the owning Component was destroyed.
 2. The view is **explicitly destroyed** via application code.
 
-**Source**: [`sap/ui/core/mvc/Controller.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/Controller.js), [`sap/ui/core/mvc/View.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/View.js)
+**Source**: [`sap/ui/core/mvc/Controller.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/Controller.js), [`sap/ui/core/mvc/View.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/View.js)
 
 ## No Navigation-Away Controller Hooks
 
@@ -168,7 +168,7 @@ suspend: function() {
 
 **For View targets, `suspend()` does nothing meaningful.** It recurses to parent targets and checks if the loaded object is a `UIComponent` (which a View is not). No event is fired, no state is changed, and the view remains in the DOM aggregation of its container control until the new route's target replaces it.
 
-**Source**: [`sap/ui/core/routing/Target.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Target.js)
+**Source**: [`sap/ui/core/routing/Target.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Target.js)
 
 ### 3. New route: display targets
 
@@ -222,7 +222,7 @@ if (mSettings.cache && XMLView._bUseCache) {
 
 The `xx` prefix indicates it is an experimental feature. Both camelCase (`sap-ui-xx-viewCache`) and kebab-case (`sap-ui-xx-view-cache`) forms work identically.
 
-**Source**: [`sap/ui/core/mvc/XMLView.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/XMLView.js)
+**Source**: [`sap/ui/core/mvc/XMLView.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/XMLView.js)
 
 ## FLP `sap-keep-alive` Interaction
 
@@ -267,21 +267,21 @@ All findings were verified by reading the OpenUI5 source on GitHub and the unmin
 
 ### OpenUI5 GitHub (MIT-licensed, authoritative)
 
-- [`sap/ui/core/routing/TargetCache.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js) — `_oCache` structure, `_getObjectWithGlobalId`, `destroy`
-- [`sap/ui/core/routing/Views.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Views.js) — thin wrapper over `TargetCache`
-- [`sap/ui/core/routing/Target.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Target.js) — `suspend()`, `_place()`, `display()`
-- [`sap/ui/core/routing/Targets.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Targets.js) — `suspend()` delegation
-- [`sap/ui/core/routing/Route.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Route.js) — `_routeMatched`, `_routeSwitched`, event sequence
-- [`sap/ui/core/routing/Router.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Router.js) — `destroy`, view lifecycle orchestration
-- [`sap/ui/core/mvc/Controller.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/Controller.js) — `connectToView`, `onExit` wiring
-- [`sap/ui/core/mvc/View.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/View.js) — `exit()`, `fireBeforeExit`, destroy chain
-- [`sap/ui/core/mvc/XMLView.js`](https://github.com/SAP/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/XMLView.js) — `_bUseCache`, `sapUiXxViewCache` preprocessing cache
+- [`sap/ui/core/routing/TargetCache.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js) — `_oCache` structure, `_getObjectWithGlobalId`, `destroy`
+- [`sap/ui/core/routing/Views.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Views.js) — thin wrapper over `TargetCache`
+- [`sap/ui/core/routing/Target.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Target.js) — `suspend()`, `_place()`, `display()`
+- [`sap/ui/core/routing/Targets.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Targets.js) — `suspend()` delegation
+- [`sap/ui/core/routing/Route.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Route.js) — `_routeMatched`, `_routeSwitched`, event sequence
+- [`sap/ui/core/routing/Router.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/Router.js) — `destroy`, view lifecycle orchestration
+- [`sap/ui/core/mvc/Controller.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/Controller.js) — `connectToView`, `onExit` wiring
+- [`sap/ui/core/mvc/View.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/View.js) — `exit()`, `fireBeforeExit`, destroy chain
+- [`sap/ui/core/mvc/XMLView.js`](https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/mvc/XMLView.js) — `_bUseCache`, `sapUiXxViewCache` preprocessing cache
 
 ### SAP Community and Documentation
 
 - [Controller Lifecycle Methods Explained (SAP Blog)](https://community.sap.com/t5/technology-blog-posts-by-sap/sapui5-controller-lifecycle-methods-explained/ba-p/13364874)
 - [When onExit() will be executed? (SAP Community Q&A)](https://community.sap.com/t5/technology-q-a/when-onexit-will-be-executed/qaq-p/372607)
-- [SAPUI5 Routing Configuration](https://sapui5.hana.ondemand.com/sdk/docs/topics/902313063d6f45aeaa3388cc4c13c34e.html)
-- [Methods and Events for Navigation](https://sapui5.hana.ondemand.com/sdk/docs/topics/516e477e7e0b4e188b19a406e7528c1e.html)
+- [SAPUI5 Routing Configuration](https://ui5.sap.com/sdk/docs/topics/902313063d6f45aeaa3388cc4c13c34e.html)
+- [Methods and Events for Navigation](https://ui5.sap.com/sdk/docs/topics/516e477e7e0b4e188b19a406e7528c1e.html)
 - [Keep Alive Mode for SAP Fiori Apps](https://help.sap.com/doc/34796706f38646f68d51a0fa0d4636e4/100/en-US/d6d3f3ed187f47799712cc88d7bb548f.html)
-- [Refresh Entity Sets in sap-keep-alive Mode](https://sapui5.hana.ondemand.com/sdk/#/topic/3c65f2cc630c472da8328a6f3c193683.html)
+- [Refresh Entity Sets in sap-keep-alive Mode](https://ui5.sap.com/sdk/#/topic/3c65f2cc630c472da8328a6f3c193683.html)

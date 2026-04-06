@@ -123,5 +123,5 @@ From the [problem analysis](../reference/analysis.md#22-override-navto-only):
 
 ## References
 
-- [SAP/openui5#3411 comment](https://github.com/SAP/openui5/issues/3411#issuecomment-1000067038): Discussion of where to place guard checks
+- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): Discussion of where to place guard checks
 - [Problem analysis — Override navTo()](../reference/analysis.md#22-override-navto-only): Why navTo override was rejected

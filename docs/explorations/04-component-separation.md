@@ -53,7 +53,7 @@ async onLogin(): Promise<void> {
 ## Pros
 
 - **Strongest client-side isolation**: The authenticated component's JavaScript, views, and controllers are never loaded until authentication succeeds. A user cannot access them via DevTools.
-- **SAP-recommended pattern**: @matz3 in [SAP/openui5#3094](https://github.com/SAP/openui5/issues/3094): _"One approach would be to have 2 separate components, one for the public page / auth dialog and one for the actual application."_
+- **SAP-recommended pattern**: @matz3 in [UI5/openui5#3094](https://github.com/UI5/openui5/issues/3094): _"One approach would be to have 2 separate components, one for the public page / auth dialog and one for the actual application."_
 - **Server-side enforceable**: The server can refuse to serve the authenticated component's bundle until a valid session exists.
 - **Clean separation of concerns**: Public and authenticated parts have independent routing, models, and lifecycle.
 
@@ -107,6 +107,6 @@ This is cleaner than manual `ComponentContainer` management but still doesn't so
 
 ## References
 
-- [SAP/openui5#3094 comment](https://github.com/SAP/openui5/issues/3094#issuecomment-737976447): SAP recommends component separation for auth
+- [UI5/openui5#3094](https://github.com/UI5/openui5/issues/3094): SAP recommends component separation for auth
 - [SAP BTP XSUAA](https://community.sap.com/t5/technology-blogs-by-members/demystifying-approuter-xsuaa-and-idp-in-btp-cf-environment/ba-p/13517688): Server-side auth enforcement
 - [SAP Application Router](https://community.sap.com/t5/technology-blogs-by-sap/sap-application-router/ba-p/13393550): Request-level auth

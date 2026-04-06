@@ -33,7 +33,7 @@ Source: `sap/ui/core/Component.js` lines 2764-2782 in OpenUI5 1.144.0
 
 ### Lib.load API (official documentation)
 
-The [`Lib.load`](https://openui5.org/1.144.0/api/sap.ui.core.Lib/methods/load) API documentation states:
+The [`Lib.load`](https://sdk.openui5.org/#/api/sap.ui.core.Lib%23methods/load) API documentation states:
 
 > "For applications that follow the best practices and use components with component descriptors (manifest.json), the framework will load all declared mandatory libraries and their dependencies automatically before instantiating the application component."
 
@@ -113,8 +113,8 @@ The core module loader (`ui5loader.js`) is a plain AMD-style system with no conc
 
 ## References
 
-- [Lib.load API](https://openui5.org/1.144.0/api/sap.ui.core.Lib/methods/load)
-- [Component.create API](https://openui5.org/1.144.0/api/sap.ui.core.Component/methods/create)
+- [Lib.load API](https://sdk.openui5.org/#/api/sap.ui.core.Lib%23methods/load)
+- [Component.create API](https://sdk.openui5.org/#/api/sap.ui.core.Component%23methods/create)
 - [Descriptor Dependencies to Libraries](https://ui5.sap.com/docs/topics/28fcd55b04654977b63dacbee0552712.html)
 - Source: `sap/ui/core/Component.js` lines 2752-2782 (OpenUI5 1.144.0)
 - Source: `sap/ui/core/UIComponent.js` lines 343-345, 900-959 (OpenUI5 1.144.0)

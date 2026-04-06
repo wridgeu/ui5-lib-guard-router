@@ -2,7 +2,7 @@
 
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
-> Born from [SAP/openui5#3411](https://github.com/SAP/openui5/issues/3411), an open request for native navigation guard support in UI5.
+> Born from [SAP/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5.
 >
 > **Related resources**:
 >
@@ -177,7 +177,7 @@ export default class Component extends UIComponent {
 
 ## How it works
 
-The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/api/sap.m.routing.Router) and intercepts navigation through two entry points:
+The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
 
 - **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. If a guard blocks or redirects, the hash never changes, so no history entry is created.
 - **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks or redirects, the router restores the previous hash via `replaceHash()`.

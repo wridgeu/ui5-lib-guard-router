@@ -86,4 +86,3 @@ For application code, using `bReplace: true` in explicit `navTo` calls is still 
 ## References
 
 - [UI5 API: Router.navTo](https://ui5.sap.com/#/api/sap.ui.core.routing.Router%23methods/navTo)
-- [wridgeu/ui5-poc-ewm-one-login#1](https://github.com/wridgeu/ui5-poc-ewm-one-login/issues/1): Approach C1

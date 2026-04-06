@@ -359,8 +359,8 @@ parse(newHash) called
 ## References
 
 - [Vue Router beforeRouteLeave](https://router.vuejs.org/guide/advanced/navigation-guards.html#in-component-guards)
-- [Angular canDeactivate](https://angular.io/api/router/CanDeactivate)
-- [React Router useBlocker](https://reactrouter.com/en/main/hooks/use-blocker)
+- [Angular canDeactivate](https://angular.dev/api/router/CanDeactivate)
+- [React Router useBlocker](https://reactrouter.com/api/hooks/useBlocker)
 - [React Router Navigation Blocking How-To](https://reactrouter.com/how-to/navigation-blocking)
 - [TanStack Router useBlocker](https://tanstack.com/router/v1/docs/framework/react/api/router/useBlockerHook)
 - [Ember.js Preventing and Retrying Transitions](https://guides.emberjs.com/release/routing/preventing-and-retrying-transitions/)
