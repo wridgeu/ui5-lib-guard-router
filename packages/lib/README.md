@@ -453,7 +453,7 @@ The full object form with `enter` and `leave` keys registers both enter and leav
 To use an absolute module path, prefix it with `"module:"`:
 
 ```json
-"*": ["module:com.shared.guards.authGuard"]
+"*": ["module:com/shared/guards/authGuard"]
 ```
 
 ### Complete example
