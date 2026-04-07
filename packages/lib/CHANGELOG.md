@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.1...v1.6.2) (2026-04-07)
+
+
+### Bug Fixes
+
+* **docs:** revert module: prefix to slash notation per UI5 convention ([8cbad26](https://github.com/wridgeu/ui5-lib-guard-router/commit/8cbad2633777db355c2dac40277d0c5db5f72f0c))
+
 ## [1.6.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.0...v1.6.1) (2026-04-02)
 
 
