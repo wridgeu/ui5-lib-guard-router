@@ -563,7 +563,7 @@ When a module exports multiple guards, you can register a subset using `#` to se
 | `"guards.security"`                  | Register all exports (key/array order)        |
 | `"guards.security#checkAuth"`        | Register only that named export               |
 | `"guards.security#1"`                | Register by index (array or object key order) |
-| `"module:some.lib.guards#checkAuth"` | `module:` prefix composes with `#`            |
+| `"module:some/lib/guards#checkAuth"` | `module:` prefix composes with `#`            |
 
 When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
 
