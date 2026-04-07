@@ -83,6 +83,7 @@ interface RedirectChainContext {
 	fromHash: string; // original source hash
 	signal: AbortSignal; // shared signal from original navigation
 	generation: number; // shared generation counter
+	bag: Map<string, unknown>; // shared bag from original navigation
 }
 ```
 
@@ -160,6 +161,9 @@ empty `fromRoute`; that would hide context from guard functions.
 | `fromRoute`   | Original source route (constant across chain)  |
 | `fromHash`    | Original source hash (constant across chain)   |
 | `signal`      | Shared AbortSignal from original navigation    |
+| `bag`         | Shared bag from original navigation            |
+| `toMeta`      | Resolved metadata for the redirect target      |
+| `fromMeta`    | Resolved metadata for the original source      |
 
 ### `_redirect` Method Body (Pseudocode)
 
@@ -201,6 +205,9 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         fromRoute: chain.fromRoute,    // original source, constant
         fromHash: chain.fromHash,      // original source, constant
         signal: chain.signal,          // shared signal
+        bag: chain.bag,               // shared bag
+        toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
+        fromMeta: this.getRouteMeta(chain.fromRoute),
     };
 
     // 5. Evaluate guards (skip leave guards -- they already ran on first hop)

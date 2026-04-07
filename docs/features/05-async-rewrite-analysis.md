@@ -5,7 +5,7 @@
 ## Context: OpenUI5 Issue #3411
 
 The UI5 team has been trying to solve navigation interception since December 2021
-([SAP/openui5#3411](https://github.com/UI5/openui5/issues/3411), backlog item CPOUI5FRAMEWORK-338).
+([UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), backlog item CPOUI5FRAMEWORK-338).
 The issue is still open and labeled "in progress" as of 2024.
 
 ### The UI5 Team's Dilemma

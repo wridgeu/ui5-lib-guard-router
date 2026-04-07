@@ -114,7 +114,7 @@ Same pattern, adapted for our use case:
 
 ```typescript
 // Router.ts — initialize() in "block" mode
-this._loadAndRegisterGuards(descriptors)
+this._loadAndRegisterGuards(expandedDescriptors)
     .then(() => {
         if (!this._destroyed) super.initialize();  // ◄── sentinel check
     })
@@ -127,9 +127,10 @@ this._loadAndRegisterGuards(descriptors)
 // Router.ts — destroy()
 override destroy(): this {
     this._destroyed = true;  // ◄── set sentinel FIRST
-    this._globalGuards = [];
-    this._enterGuards.clear();
-    this._leaveGuards.clear();
+    this._pipeline.clear();
+    this._pendingGuardDescriptors = [];
+    this._sourceDescriptors = [];
+    this._cancelPendingNavigation();
     // ...
     super.destroy();
     return this;
@@ -147,7 +148,7 @@ JavaScript closures keep the enclosing scope alive:
 │                                                           │
 │  Closure captures `this` (the Router instance)            │
 │  ╰── this._destroyed                                     │
-│  ╰── this._globalGuards                                  │
+│  ╰── this._pipeline                                      │
 │  ╰── super.initialize (bound to MobileRouter prototype)  │
 │                                                           │
 │  The Router object CANNOT be garbage collected            │
@@ -155,7 +156,7 @@ JavaScript closures keep the enclosing scope alive:
 └───────────────────────────────────────────────────────────┘
 ```
 
-`destroy()` clears the router's internal state (guards, listeners, settlement resolvers) but the JavaScript object stays in memory. It has no event listeners, no registered guards, and `_destroyed === true` — but it's still a valid object with callable methods. Without the sentinel check, `super.initialize()` would succeed and re-attach hash listeners on a "zombie" router that nobody holds a reference to (except the closure).
+`destroy()` clears the router's internal state (pipeline, descriptors, metadata, settlement resolvers) but the JavaScript object stays in memory. It has no event listeners, no registered guards, and `_destroyed === true` but it's still a valid object with callable methods. Without the sentinel check, `super.initialize()` would succeed and re-attach hash listeners on a "zombie" router that nobody holds a reference to (except the closure).
 
 Once the Promise resolves, the closure releases `this`, and the router becomes eligible for garbage collection.
 
@@ -167,7 +168,7 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 
 1. The generation counter increments, causing the in-flight pipeline to discard its result.
 2. The `AbortController` fires, signalling guards to cancel async work (e.g. `fetch`).
-3. Guard arrays are cleared, preventing any further guard execution.
+3. The guard pipeline is cleared, preventing any further guard execution.
 
 ## Summary
 

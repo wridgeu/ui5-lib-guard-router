@@ -16,7 +16,7 @@ There is no way to prevent a route from displaying based on conditions (permissi
 
 ### 1.3 Key GitHub Issues
 
-#### SAP/openui5#3411: "How to interrupt / override the ongoing routing?" (OPEN since Dec 2021)
+#### UI5/openui5#3411: "How to interrupt / override the ongoing routing?" (OPEN since Dec 2021)
 
 - **Reporter**: @pubmikeb (OpenUI5 1.98.0)
 - **Core scenario**: User clicks a sidebar item to navigate from view A to view B, but permissions should redirect them to view C instead. The user should **never see** view B.
@@ -345,7 +345,7 @@ router.removeGuard(guard1);
 
 ### 3.7 What This Is NOT
 
-- **Not a security solution.** As SAP/openui5#3094 makes clear, client-side guards are UX measures. Server-side authorization is still required.
+- **Not a security solution.** As UI5/openui5#3094 makes clear, client-side guards are UX measures. Server-side authorization is still required.
 - **Not a replacement for `beforeRouteMatched` / `routePatternMatched`.** Those events still fire for allowed navigations. Guards add a pre-check layer.
 - **Not permanent.** If UI5 natively implements CPOUI5FRAMEWORK-338, migration is straightforward: remove guard registrations, revert `routerClass`, use native API.
 
@@ -362,6 +362,8 @@ No application logic changes needed beyond the guard definitions themselves.
 ---
 
 ## 4. Test Coverage
+
+> **Note**: This table is a point-in-time snapshot from the initial implementation. The test suite has since expanded with additional suites (RouterOptions, RouterNavigation, RouterSettlement, GuardPipeline) and E2E files (navto-preflight, redirect-chain, route-metadata). See the actual test files for current coverage.
 
 | Category                       | Count | What's Tested                                                                                                             |
 | ------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------- |

@@ -11,6 +11,8 @@ This directory groups the repository's longer-form documentation by intent.
 - [Guides](./guides/)
     - [Migration from attachPatternMatched](./guides/migration-from-pattern-matched.md)
     - [Guard integration patterns](./guides/integration-patterns.md)
+- [Investigations](./investigations/)
+    - [QUnit test truncation](./investigations/01-qunit-test-truncation.md)
 - [Research](./research/)
     - [FLP dirty state](./research/flp-dirty-state.md)
     - [Native NavContainer navigate event](./research/native-router-navigate-event.md)
