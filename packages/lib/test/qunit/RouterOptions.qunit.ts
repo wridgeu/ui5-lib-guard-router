@@ -775,6 +775,38 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard loaded via module: prefix blocks navigation");
 });
 
+QUnit.test('"module:" prefix with slash notation (UI5 convention)', async function (assert: Assert) {
+	initHashChanger();
+	router = new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				unknownRouteRegistration: "ignore",
+				guards: {
+					protected: ["module:ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+				},
+			},
+		} as object,
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home", 5000);
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(
+		result.status,
+		NavigationOutcome.Blocked,
+		"slash notation after module: prefix resolves correctly",
+	);
+});
+
 // ============================================================
 // Module: Cherry-pick syntax
 // ============================================================
