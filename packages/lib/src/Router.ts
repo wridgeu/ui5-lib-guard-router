@@ -147,12 +147,18 @@ interface GuardDescriptor {
 }
 
 /**
- * Resolve a dot-notation module path following UI5 routing conventions.
- * Mirrors `sap.ui.core.routing.Target._getEffectiveObjectName()`.
+ * Resolve a guard module path to a slash-separated AMD module path.
  *
- * - Paths prefixed with `"module:"` are treated as absolute (the prefix is
- *   stripped and dots become slashes).
- * - All other paths are prefixed with the component namespace.
+ * Inspired by `sap.ui.core.routing.Target._getEffectiveObjectName()`,
+ * which skips namespace prepending for `"module:"`-prefixed paths. This
+ * function goes further: it also converts dots to slashes in a single
+ * step, so both dot notation (`module:some.lib.guard`) and slash
+ * notation (`module:some/lib/guard`) are accepted.
+ *
+ * - Paths prefixed with `"module:"` are treated as absolute (the prefix
+ *   is stripped, dots become slashes).
+ * - All other paths are prefixed with the component namespace, then dots
+ *   become slashes.
  */
 function resolveGuardModulePath(dotPath: string, componentNamespace: string): string {
 	if (dotPath.startsWith("module:")) {

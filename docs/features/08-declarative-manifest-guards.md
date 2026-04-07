@@ -272,7 +272,9 @@ interface GuardRouterOptions {
 	unknownRouteRegistration?: UnknownRouteRegistrationPolicy;
 	navToPreflight?: NavToPreflightMode;
 	guardLoading?: GuardLoading;
+	inheritance?: Inheritance; // added in v1.6.0
 	guards?: ManifestGuardConfig;
+	routeMeta?: Record<string, Record<string, unknown>>; // added in v1.6.0
 }
 
 interface GuardNavToOptions {
@@ -295,7 +297,9 @@ interface GuardContext {
 	fromRoute: string;
 	fromHash: string;
 	signal: AbortSignal;
-	bag: Map<string, unknown>; // NEW — breaking change to public type
+	bag: Map<string, unknown>; // added in v1.5.0
+	toMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
+	fromMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
 }
 
 // --- GuardRouter interface navTo overloads ---

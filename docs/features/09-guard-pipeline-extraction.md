@@ -37,7 +37,7 @@ class GuardPipeline {
 	addLeaveGuard(route: string, guard: GuardFn): void;
 	removeLeaveGuard(route: string, guard: GuardFn): void;
 
-	evaluate(context: GuardContext): GuardDecision | Promise<GuardDecision>;
+	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision>;
 
 	clear(): void;
 }
@@ -84,7 +84,11 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 - `GuardDecision` — the normalized pipeline result, promoted from a Router-internal type to an inter-module contract:
 
 ```typescript
-type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redirect"; target: string | GuardRedirect };
+type GuardDecision =
+	| { action: "allow" }
+	| { action: "block" }
+	| { action: "redirect"; target: string | GuardRedirect }
+	| { action: "error"; error: unknown };
 ```
 
 ### Result normalization
@@ -98,6 +102,7 @@ type GuardDecision = { action: "allow" } | { action: "block" } | { action: "redi
 | non-empty string       | `{ action: "redirect", target: <string> }` |
 | `GuardRedirect` object | `{ action: "redirect", target: <object> }` |
 | any other value        | logs warning, `{ action: "block" }`        |
+| guard throws / rejects | `{ action: "error", error }`               |
 
 Leave guards are boolean-only: any non-boolean return logs a warning and blocks.
 

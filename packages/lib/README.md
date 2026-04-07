@@ -2,7 +2,7 @@
 
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
-> Born from [SAP/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5.
+> Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5.
 >
 > **Related resources**:
 >
@@ -450,10 +450,10 @@ The full object form with `enter` and `leave` keys registers both enter and leav
 
 **Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
 
-To use an absolute module path, prefix it with `"module:"`:
+To use an absolute module path, prefix it with `"module:"`. Dot notation is used for consistency with relative paths; slash notation (`module:com/shared/guards/authGuard`) is also accepted:
 
 ```json
-"*": ["module:com/shared/guards/authGuard"]
+"*": ["module:com.shared.guards.authGuard"]
 ```
 
 ### Complete example
@@ -1026,10 +1026,10 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Running tests
 
-The library ships three QUnit test suites that run in headless Chrome via WebdriverIO:
+The library ships nine QUnit test suites that run in headless Chrome via WebdriverIO:
 
 ```bash
-# All three suites (Router, NativeRouterCompat, UpstreamParity)
+# All suites (Router, RouterGuards, RouterAsync, RouterNavigation, RouterSettlement, RouterOptions, GuardPipeline, NativeRouterCompat, UpstreamParity)
 npm run test:qunit
 
 # Full matrix including OpenUI5 1.120 compatibility lane and E2E

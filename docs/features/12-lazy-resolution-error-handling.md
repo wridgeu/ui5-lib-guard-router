@@ -120,7 +120,7 @@ When a guard descriptor references a route name that never gets added to the rou
 | Scenario                                  | Return             | Warning                  | Cache            |
 | ----------------------------------------- | ------------------ | ------------------------ | ---------------- |
 | `getRouteMeta`: Unknown route             | `{}`               | Yes (always)             | No               |
-| `getRouteMeta`: Route exists, no metadata | `{}`               | No                       | No               |
+| `getRouteMeta`: Route exists, no metadata | `{}`               | No                       | Yes (empty meta) |
 | `setRouteMeta`: Unknown route             | Policy-dependent   | Policy-dependent         | Policy-dependent |
 | `setRouteMeta`: Invalid `meta` arg        | No-op              | Yes (always)             | No               |
 | Guard pipeline: No inherited descriptors  | Empty list (allow) | No                       | No               |
@@ -128,7 +128,7 @@ When a guard descriptor references a route name that never gets added to the rou
 
 ## Shared Design Principle
 
-**Never cache empty results.** Only cache when there is actual resolved data. Empty results are either error states (unknown route) or normal no-data states (no metadata/guards configured). In both cases, caching would either mask a persistent error or waste cache entries for routes that genuinely have nothing to resolve. This aligns with how every surveyed routing library handles metadata: none cache empty or missing results.
+**Cache empty metadata results.** The original spec proposed never caching empty results, but the implementation caches them (as documented in the Phase 1 note above). Empty metadata results are cached using a shared frozen sentinel object, which avoids redundant ancestor walks on repeated calls. The cache is cleared on `setRouteMeta` and `addRoute`, so stale results are not a concern. Unknown routes (where `getRoute()` returns falsy) are still not cached.
 
 ## Impact on Existing Plans
 

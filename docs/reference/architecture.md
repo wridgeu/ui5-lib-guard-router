@@ -26,9 +26,10 @@ ui5-lib-guard-router/
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
-        |   |-- controller/         Home, Protected, Blocked, Forbidden, NotFound
+        |   |-- controller/         App, Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
         |   |-- view/               XML views + SettlementPanel fragment
         |   |-- guards.ts           guard factories (auth, dirty form, blocked, forbidden)
+        |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, dirtyFormGuard, navigationLogger)
         |   |-- demo/               RuntimeCoordinator, ScenarioRunner
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
         |   |-- model/              runtime model factory
@@ -77,7 +78,8 @@ matching, target loading, or event firing occurs.
 |   | navigationSettled()        |    | _redirect()                   |  |
 |   | attachNavigationSettled()  |    | _applyRedirectDecision()      |  |
 |   | detachNavigationSettled()  |    | _blockNavigation()            |  |
-|   +----------------------------+    | _flushSettlement()            |  |
+|   +----------------------------+    | _errorNavigation()            |  |
+|                                     | _flushSettlement()            |  |
 |                                     | _restoreHash()                |  |
 |                                     +-------------------------------+  |
 |                                                                        |
@@ -117,6 +119,9 @@ GuardContext                        GuardResult
 | fromRoute    |  string           | GuardRedirect -> redirect |
 | fromHash     |  string           |   with params & targets   |
 | signal       |  AbortSignal      +---------------------------+
+| bag          |  Map<string, unknown>
+| toMeta       |  Readonly<Record<string, unknown>>
+| fromMeta     |  Readonly<Record<string, unknown>>
 +--------------+
 
 NavigationOutcome (UI5 enum)        NavigationResult
@@ -131,14 +136,17 @@ NavigationOutcome (UI5 enum)        NavigationResult
 
 GuardRouter (public interface)      Router (ES6 class)
   extends sap.m.routing.Router        extends sap.m.routing.Router
-  + 6 guard methods + 1 query         implements GuardRouter
-  + 2 event methods                   + internal state fields
-    addGuard / removeGuard             + private _cancelPendingNavigation()
-    addRouteGuard / removeRouteGuard   + private _flushSettlement()
-    addLeaveGuard / removeLeaveGuard   + override navTo(), parse(), stop(), destroy()
+  + 6 guard methods                   implements GuardRouter
+  + 2 metadata methods                + internal state fields
+  + 1 query + 2 event methods         + private _cancelPendingNavigation()
+    addGuard / removeGuard             + private _flushSettlement()
+    addRouteGuard / removeRouteGuard   + override initialize(), addRoute(),
+    addLeaveGuard / removeLeaveGuard     navTo(), parse(), stop(), destroy()
+    getRouteMeta / setRouteMeta
     navigationSettled()
     attachNavigationSettled()
     detachNavigationSettled()
+    navTo() overloads (GuardNavToOptions)
 
   addRouteGuard / removeRouteGuard accept both:
     - GuardFn (enter guard)
@@ -452,16 +460,24 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                  | Type                                | Purpose                                                               |
-| ---------------------- | ----------------------------------- | --------------------------------------------------------------------- |
-| `_pipeline`            | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)      |
-| `_currentRoute`        | `string`                            | Name of the currently active route                                    |
-| `_currentHash`         | `string \| null`                    | Hash of the active route, `null` before first                         |
-| `_phase`               | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below) |
-| `_parseGeneration`     | `number`                            | Monotonic counter for async invalidation                              |
-| `_suppressedHash`      | `string \| null`                    | Hash to suppress in the next `parse()` call                           |
-| `_settlementResolvers` | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                               |
-| `_lastSettlement`      | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                  |
+| Field                      | Type                                             | Purpose                                                               |
+| -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| `_options`                 | `ResolvedGuardRouterOptions`                     | Resolved manifest options with defaults applied                       |
+| `_pipeline`                | `GuardPipeline`                                  | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)      |
+| `_currentRoute`            | `string`                                         | Name of the currently active route                                    |
+| `_currentHash`             | `string \| null`                                 | Hash of the active route, `null` before first                         |
+| `_phase`                   | `RouterPhase`                                    | Discriminated union tracking the router's lifecycle phase (see below) |
+| `_parseGeneration`         | `number`                                         | Monotonic counter for async invalidation                              |
+| `_suppressedHash`          | `string \| null`                                 | Hash to suppress in the next `parse()` call                           |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`              | Pending `navigationSettled()` callbacks                               |
+| `_lastSettlement`          | `NavigationResult \| null`                       | Most recent settlement result (for post-hoc queries)                  |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Guard descriptors awaiting lazy resolution                            |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                              | Original manifest descriptors (for inheritance expansion on addRoute) |
+| `_destroyed`               | `boolean`                                        | Set by `destroy()`, prevents post-destroy guard execution             |
+| `_manifestMeta`            | `Map<string, Readonly<Record<string, unknown>>>` | Manifest-declared route metadata                                      |
+| `_runtimeMeta`             | `Map<string, Readonly<Record<string, unknown>>>` | Runtime metadata set via `setRouteMeta()`                             |
+| `_resolvedMetaCache`       | `Map<string, Readonly<Record<string, unknown>>>` | Merged metadata cache, cleared on mutation                            |
+| `_routeNames`              | `string[]`                                       | Known route names, collected for inheritance lookups                  |
 
 `RouterPhase` is a discriminated union with three variants:
 
@@ -508,16 +524,23 @@ navigation proceeds directly to Shell-home) in its own isolated session.
               |                             |
   +---------------------+     +---------------------------+
   | Router.qunit.ts     |     | routing-basic.e2e.ts      |
-  |                     |     | guard-allow.e2e.ts        |
-  | NativeRouterCompat  |     | guard-block.e2e.ts        |
-  |  .qunit.ts          |     | guard-redirect-auth.e2e.ts |
-  +---------------------+     | guard-redirect.e2e.ts     |
-                               | browser-back.e2e.ts       |
-                               | direct-url.e2e.ts         |
-                               | multi-route.e2e.ts        |
-                               | nav-button.e2e.ts         |
-                               | leave-guard.e2e.ts        |
-                               +---------------------------+
+  | RouterGuards         |     | guard-allow.e2e.ts        |
+  |  .qunit.ts          |     | guard-block.e2e.ts        |
+  | RouterAsync          |     | guard-redirect-auth.e2e.ts |
+  |  .qunit.ts          |     | guard-redirect.e2e.ts     |
+  | RouterNavigation     |     | browser-back.e2e.ts       |
+  |  .qunit.ts          |     | direct-url.e2e.ts         |
+  | RouterSettlement     |     | multi-route.e2e.ts        |
+  |  .qunit.ts          |     | nav-button.e2e.ts         |
+  | RouterOptions        |     | leave-guard.e2e.ts        |
+  |  .qunit.ts          |     | navto-preflight.e2e.ts    |
+  | GuardPipeline        |     | redirect-chain.e2e.ts     |
+  |  .qunit.ts          |     | route-metadata.e2e.ts     |
+  | NativeRouterCompat   |     +---------------------------+
+  |  .qunit.ts          |
+  | UpstreamParity       |
+  |  .qunit.ts          |
+  +---------------------+
 
   Unit tests verify:            E2e tests verify:
   - Guard lifecycle             - Full browser navigation
@@ -528,6 +551,9 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   - API parity with native      - Multi-step user flows
   - Leave guard pipeline        - Leave guard dirty form
   - Settlement outcomes         - Settlement-based wait
+  - Router options + config     - navTo preflight modes
+  - Guard pipeline isolation    - Redirect chains
+  - Manifest guard loading      - Route metadata in guards
 
   Additional CI lanes (not part of `npm test`):
 
@@ -575,20 +601,19 @@ The demo app shows the minimal integration pattern:
   | routing.config.routerClass |-------->| router = getRouter() as          |
   | = "ui5.guard.router.Router" |         |            GuardRouter        |
   |                            |         |                                  |
-  | routes:                    |         | router.addRouteGuard("blocked",  |
-  |   home      -> ""          |         |   () => false                    |
-  |   protected -> "protected" |         | )                                |
-  |   blocked   -> "blocked"   |         |                                  |
-  |   forbidden -> "forbidden" |         | router.addRouteGuard("protected",|
-  +----------------------------+         |   () => isLoggedIn ? true : "home"|
-                                         | )                                |
-                                         |                                  |
-                                         | router.addRouteGuard("forbidden",|
-                                         |   () => "home"                   |
-                                         | )                                |
-                                         |                                  |
-                                         | router.initialize()              |
-                                         +----------------------------------+
+  | guardRouter.guards:        |         | router.addRouteGuard("admin",    |
+  |   "*": [navigationLogger]  |         |   adminGuard)                    |
+  |   blocked: [blockedGuard]  |         |                                  |
+  |   forbidden: [forbiddenGd] |         | router.addRouteGuard("protected",|
+  |   protected: {leave: [...]}|         |   createAsyncPermissionGuard(    |
+  |                            |         |     authModel))                  |
+  | routes:                    |         |                                  |
+  |   home      -> ""          |         | router.initialize()              |
+  |   protected -> "protected" |         +----------------------------------+
+  |   blocked   -> "blocked"   |
+  |   forbidden -> "forbidden" |
+  |   admin     -> "admin"     |
+  +----------------------------+
 ```
 
 The `IAsyncContentCreation` interface on the Component eliminates the need for
