@@ -1772,8 +1772,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Sort by pattern depth (segment count) so ancestor guards run first.
 		// Global ("*") descriptors return 0 here -- their relative position is irrelevant
 		// because GuardPipeline evaluates globals separately from route-specific guards.
-		// oxlint-disable-next-line unicorn/no-array-sort -- expanded is a local array, mutation is intentional
-		return expanded.sort((a, b) => {
+		return expanded.toSorted((a, b) => {
 			if (a.route === "*" || b.route === "*") return 0;
 			const pa = patternByName.get(a.route) ?? "";
 			const pb = patternByName.get(b.route) ?? "";
@@ -1789,8 +1788,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const manifest = this._manifestMeta.get(routeName);
 		const runtime = this._runtimeMeta.get(routeName);
 		if (!manifest && !runtime) return Router._EMPTY_META;
-		if (!runtime) return manifest ?? Router._EMPTY_META;
-		if (!manifest) return Object.freeze({ ...runtime });
+		if (!runtime) return manifest!;
+		if (!manifest) return runtime;
 		return Object.freeze({ ...manifest, ...runtime });
 	}
 
