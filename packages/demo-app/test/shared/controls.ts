@@ -1,5 +1,5 @@
 import type { wdi5Selector } from "wdio-ui5-service";
-import type UIComponent from "sap/ui/core/UIComponent";
+import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 
 /**
  * Control references shared by the standalone and FLP suites. Only app-declared IDs
@@ -85,13 +85,23 @@ export function selectorFor(ref: ControlRef, extra: Partial<wdi5Selector["select
  * silently picking one instance.
  */
 export async function getAppComponentId(): Promise<string> {
-	const ids = await browser.execute((appId: string) => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component.registry.all() as Record<string, UIComponent>;
-		return Object.values(all)
-			.filter((component) => component.getManifestEntry("sap.app")?.id === appId)
-			.map((component) => component.getId());
-	}, APP_ID);
+	const ids = await browser.execute(
+		(appId: string) =>
+			new Promise<string[]>((resolve, reject) => {
+				sap.ui.require(
+					["sap/ui/core/ComponentRegistry"],
+					(registry: typeof ComponentRegistry) => {
+						resolve(
+							registry
+								.filter((component) => component.getManifestEntry("/sap.app/id") === appId)
+								.map((component) => component.getId()),
+						);
+					},
+					reject,
+				);
+			}),
+		APP_ID,
+	);
 
 	if (ids.length !== 1) {
 		throw new Error(`Expected exactly one "${APP_ID}" component, found ${ids.length}`);

@@ -7,5 +7,6 @@ import UIComponent from "sap/ui/core/UIComponent";
 export default class Component extends UIComponent {
 	static readonly metadata = {
 		manifest: "json",
+		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 }

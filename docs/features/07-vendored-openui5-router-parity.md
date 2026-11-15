@@ -143,7 +143,7 @@ That is the contract the vendored suite should support.
 | Action | File                                                                   | Responsibility                                                                                                     |
 | ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Create | `packages/lib/test/qunit/upstream-parity/README.md`                    | Local overview of the vendored parity suite, provenance rules, scripts, and how to update it                       |
-| Create | `packages/lib/test/qunit/upstream-parity/manifest.json`                | Machine-readable index of vendored raw files, executable ports, source paths, pinned tag/SHA, and adaptation notes |
+| Create | `packages/lib/test/qunit/upstream-parity/vendor-manifest.json`         | Machine-readable index of vendored raw files, executable ports, source paths, pinned tag/SHA, and adaptation notes |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/routerFactories.ts`  | Factory helpers for native router vs guard router construction                                                     |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/fixtures.ts`         | Shared route configs, test fixtures, hash reset helpers, and reusable setup                                        |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/assertions.ts`       | Parity assertions and shared event/hash comparison helpers                                                         |
@@ -170,7 +170,7 @@ packages/lib/test/qunit/
   upstream-parity/
     Current.qunit.ts               # imports all active versioned ports
     README.md
-    manifest.json
+    vendor-manifest.json
     adapters/
       assertions.ts
       fixtures.ts
@@ -193,7 +193,7 @@ Constraints:
 - exact upstream snapshots stay under `vendor/openui5/<tag>/raw/` preserving the original source path
 - executable local ports live under `ports/openui5/<tag>/` grouped by upstream module
 - local harness code stays in `adapters/`, outside both vendor and ports
-- provenance is tracked centrally in `manifest.json`
+- provenance is tracked centrally in `vendor-manifest.json`
 
 ---
 

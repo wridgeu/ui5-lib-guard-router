@@ -1,3 +1,4 @@
+import type UshellContainer from "sap/ushell/Container";
 import { CONTROLS, type ControlRef, getAppComponentId, selectorFor } from "../shared/controls";
 
 type PageWaitOptions = {
@@ -213,22 +214,19 @@ export function installDialogHandler(accept: boolean): { record: DialogRecord; c
 }
 
 /**
- * Trigger cross-app navigation via FLP's CrossApplicationNavigation service.
+ * Trigger cross-app navigation via the FLP Navigation service.
  * Does not install a dialog handler. Callers handle dialogs separately.
  */
 export async function triggerFlpCrossAppNavigation(): Promise<void> {
-	const triggered = await browser.execute(() => {
-		const Container = sap.ui.require("sap/ushell/Container");
-		const navService = Container?.getService("CrossApplicationNavigation");
-		if (!navService?.toExternal) return false;
-
-		navService.toExternal({ target: { shellHash: "Shell-home" } });
-		return true;
+	await browser.execute(async () => {
+		const Container: typeof UshellContainer | undefined = sap.ui.require("sap/ushell/Container");
+		if (!Container) {
+			throw new Error("FLP container is not available");
+		}
+		const navigation = await Container.getServiceAsync("Navigation");
+		// Not awaited: a dirty-state confirm() blocks the page until the caller handles the dialog.
+		void navigation.navigate({ target: { shellHash: "Shell-home" } });
 	});
-
-	if (!triggered) {
-		throw new Error("FLP CrossApplicationNavigation service was not available");
-	}
 }
 
 /**

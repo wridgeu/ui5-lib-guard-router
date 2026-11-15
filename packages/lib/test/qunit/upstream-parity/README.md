@@ -14,7 +14,7 @@ It does **not** verify guard-specific behavior.
 ```text
 upstream-parity/
   adapters/              shared local harness helpers
-  manifest.json          pinned upstream provenance and raw-to-port mapping
+  vendor-manifest.json   pinned upstream provenance and raw-to-port mapping
   ports/                 executable local ports/wrappers
   vendor/                raw upstream snapshots
 ```
@@ -42,7 +42,7 @@ We do **not** keep additional raw support modules unless they are independently 
 
 ## Provenance
 
-`manifest.json` is the source of truth for:
+`vendor-manifest.json` is the source of truth for:
 
 - upstream repo, tag, and commit SHA
 - tracked raw source files
@@ -51,7 +51,7 @@ We do **not** keep additional raw support modules unless they are independently 
 - local executable port paths
 - adaptation notes
 
-`manifest.json` is intentionally lightweight and internal to this repository.
+`vendor-manifest.json` is intentionally lightweight and internal to this repository.
 The custom verifier enforces both its structural rules and its repo-state rules.
 
 ## Scripts
@@ -66,12 +66,12 @@ Use this folder in two modes:
 
 - `refresh existing upstream version`
     - re-fetch the already pinned raw files for the current version
-    - keep `manifest.json`, `Current.qunit.ts`, and the versioned `ports/` layout on the same upstream tag
+    - keep `vendor-manifest.json`, `Current.qunit.ts`, and the versioned `ports/` layout on the same upstream tag
 - `bump to a new upstream version`
     - add a new raw snapshot under a new `vendor/openui5/<tag>/raw/` tree
     - migrate or add matching executable ports under `ports/openui5/<tag>/`
     - point `Current.qunit.ts` at the new current port set
-    - update `manifest.json` only after the versioned ports are in place
+    - update `vendor-manifest.json` only after the versioned ports are in place
 
 The important rule is:
 
@@ -99,7 +99,7 @@ Make sure the current branch is green before changing the upstream version.
 npm run vendor:openui5-router-tests -- --tag 1.145.0
 ```
 
-This writes the raw files into `vendor/openui5/1.145.0/raw/`, but it does not switch the active version in `manifest.json`.
+This writes the raw files into `vendor/openui5/1.145.0/raw/`, but it does not switch the active version in `vendor-manifest.json`.
 
 3. Review the upstream diff
 
@@ -113,7 +113,7 @@ This writes the raw files into `vendor/openui5/1.145.0/raw/`, but it does not sw
 - update the new port files so they still reflect the intended upstream cases
 - keep the ports thin; put shared helpers in `adapters/`
 - update `Current.qunit.ts` to import the new current port set
-- keep the raw-to-port mapping explicit in `manifest.json`
+- keep the raw-to-port mapping explicit in `vendor-manifest.json`
 
 5. Update the manifest only after the ports are ready
 

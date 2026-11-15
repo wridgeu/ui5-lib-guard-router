@@ -494,7 +494,7 @@ export default function authGuard(context: GuardContext): GuardResult {
 
 The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
 
-Manifest guards have no closure over the component. To read component-scoped state such as models, use `context.ownerComponent` instead of module-level singletons or `Component.registry` lookups, so each component instance sees its own state:
+Manifest guards have no closure over the component. To read component-scoped state such as models, use `context.ownerComponent` instead of module-level singletons or `ComponentRegistry` lookups, so each component instance sees its own state:
 
 ```typescript
 export default function dirtyFormGuard(context: GuardContext): boolean {
