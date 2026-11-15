@@ -580,7 +580,7 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   +------------------------------+
 
   CI also runs:
-  - node26-pack-smoke: build + pack + consumer type smoke on Node 26
+  - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)
   - windows-smoke: QUnit smoke on windows-latest
 
   Local only:

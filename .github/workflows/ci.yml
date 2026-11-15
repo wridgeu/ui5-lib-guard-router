@@ -21,7 +21,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -52,7 +52,7 @@ jobs:
             - name: Pack check
               run: npm run pack:check
 
-    node26-pack-smoke:
+    node24-pack-smoke:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -61,7 +61,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 26
+                  node-version: 24
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -88,7 +88,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -115,7 +115,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -139,7 +139,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
