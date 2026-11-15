@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import { getRuntimeSettlementRevision, waitForPage, expectHashToBe, waitForRuntimeSettlement } from "./helpers";
 
 describe("Guard redirects to Home", () => {
@@ -5,9 +6,7 @@ describe("Guard redirects to Home", () => {
 		await browser.goTo({ sHash: "" });
 
 		// Try to navigate to forbidden
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navForbiddenBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
@@ -18,7 +17,7 @@ describe("Guard redirects to Home", () => {
 		});
 
 		// Verify we're on Home page
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{

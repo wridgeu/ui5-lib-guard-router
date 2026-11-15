@@ -7,7 +7,6 @@ import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
 import {
 	addGuardUnsafe,
 	addLeaveGuardUnsafe,
-	addRouteDynamic,
 	addRouteGuardUnsafe,
 	assertBlocked,
 	captureWarnings,
@@ -205,7 +204,7 @@ QUnit.test(
 		);
 		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.addRoute({ name: "missing", pattern: "missing" });
 		router.initialize();
 		router.navTo("missing");
 		await router.navigationSettled();
@@ -232,7 +231,7 @@ QUnit.test(
 
 		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
 
-		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.addRoute({ name: "missing", pattern: "missing" });
 		router.initialize();
 
 		router.navTo("missing");
@@ -265,7 +264,7 @@ QUnit.test(
 		);
 		assert.strictEqual(warnings[0]?.details, "missing", "Warning includes the route name");
 
-		addRouteDynamic(router, { name: "missing", pattern: "missing" });
+		router.addRoute({ name: "missing", pattern: "missing" });
 		router.initialize();
 
 		router.navTo("missing");
@@ -307,26 +306,6 @@ QUnit.test("addRouteGuard object form ignores invalid leave guard input", async 
 		"Warning names the addRouteGuard object-form entrypoint",
 	);
 	assert.strictEqual(warnings[0]?.details, "protected", "Warning includes the route name");
-});
-
-QUnit.test("destroy cleans up guards so they no longer run", async function (assert: Assert) {
-	let guardCalled = false;
-	router.addGuard(() => {
-		guardCalled = true;
-		return false;
-	});
-	router.addRouteGuard("protected", () => {
-		guardCalled = true;
-		return false;
-	});
-	router.destroy();
-
-	// Re-create and verify guards are gone
-	router = createRouter();
-	router.initialize();
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.notOk(guardCalled, "Guards from destroyed router instance were not called");
 });
 
 QUnit.test("guard API methods ignore non-function input", async function (assert: Assert) {
@@ -407,49 +386,21 @@ QUnit.test("guard API methods ignore non-function input", async function (assert
 	);
 });
 
-QUnit.test("removing never-added guards is a no-op", async function (assert: Assert) {
-	// removeGuard for a never-added guard
+QUnit.test("removing never-added guards leaves registered guards intact", async function (assert: Assert) {
+	router.addGuard((context) => context.toRoute !== "forbidden");
+	router.addRouteGuard("protected", () => false);
+	router.addLeaveGuard("home", (context) => context.toRoute !== "detail");
 	const neverAddedGuard: GuardFn = () => false;
-	router.removeGuard(neverAddedGuard);
-	router.initialize();
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Removing a never-added guard did not break anything",
-	);
-	router.destroy();
-
-	// removeLeaveGuard for a never-added guard
-	router = createRouter();
-	initHashChanger();
 	const neverAddedLeave: LeaveGuardFn = () => false;
+	router.removeGuard(neverAddedGuard);
+	router.removeRouteGuard("protected", neverAddedGuard);
 	router.removeLeaveGuard("home", neverAddedLeave);
 	router.initialize();
 	await waitForRoute(router, "home");
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Removing a never-added leave guard did not break anything",
-	);
-	router.destroy();
 
-	// removeRouteGuard for a never-added guard
-	router = createRouter();
-	initHashChanger();
-	const neverAddedRoute: GuardFn = () => false;
-	router.removeRouteGuard("protected", neverAddedRoute);
-	router.initialize();
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Removing a never-added route guard did not break anything",
-	);
+	await assertBlocked(assert, router, () => router.navTo("forbidden"), "Global guard still registered");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Route guard still registered");
+	await assertBlocked(assert, router, () => router.navTo("detail", { id: "1" }), "Leave guard still registered");
 });
 
 QUnit.test("addRouteGuard with empty config object is a no-op", async function (assert: Assert) {

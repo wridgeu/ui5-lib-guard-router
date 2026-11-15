@@ -8,8 +8,7 @@
  * 3. We need to manipulate model state without UI interaction
  */
 
-/** Component ID used throughout the demo app */
-const COMPONENT_ID = "container-demo.app";
+import { type ControlRef, getAppComponentId } from "../shared/controls";
 
 type SettlementSnapshot = {
 	status?: string;
@@ -56,8 +55,9 @@ type SettlementWaitResult = {
  * Wait for a UI5 Page control to be available, have the expected title,
  * AND be currently visible with navigation fully settled.
  *
- * Uses browser.execute with Element.getElementById() directly to avoid
- * wdi5's control resolution incorrectly picking up sub-elements (e.g. navButton).
+ * Resolves the page through the component (`component.byId(viewId).byId(id)`)
+ * in browser.execute, so only app-declared IDs are used and wdi5's control
+ * resolution cannot pick up sub-elements (e.g. navButton).
  *
  * Runs in two phases:
  * 1. Settlement: calls `router.navigationSettled()` to wait for the guard
@@ -66,16 +66,18 @@ type SettlementWaitResult = {
  *    (not hidden by NavContainer's display:none on inactive pages).
  */
 export async function waitForPage(
-	controlId: string,
+	page: ControlRef,
 	expectedTitle: string,
 	timeoutOrOptions: number | PageWaitOptions = 10000,
 ): Promise<void> {
 	const timeout = typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeout ?? 10000);
 	const afterRevision = typeof timeoutOrOptions === "number" ? undefined : timeoutOrOptions.afterRevision;
+	const pageName = `${page.viewId}/${page.id}`;
+	const componentId = await getAppComponentId();
 
 	// Phase 1: Wait for the guard pipeline to settle.
 	const settlement = (await browser.executeAsync(
-		(componentId: string, timeoutMs: number, done: (result: SettlementWaitResult) => void) => {
+		(compId: string, timeoutMs: number, done: (result: SettlementWaitResult) => void) => {
 			let finished = false;
 
 			const finish = (result: SettlementWaitResult) => {
@@ -113,12 +115,12 @@ export async function waitForPage(
 					return;
 				}
 
-				const component = Component.getComponentById(componentId);
+				const component = Component.getComponentById(compId);
 				if (!component?.getRouter) {
 					finish({
 						ok: false,
 						result: null,
-						message: `Component "${componentId}" was not found or does not expose getRouter()`,
+						message: `Component "${compId}" was not found or does not expose getRouter()`,
 					});
 					return;
 				}
@@ -128,7 +130,7 @@ export async function waitForPage(
 					finish({
 						ok: false,
 						result: null,
-						message: `Router was not found for component "${componentId}"`,
+						message: `Router was not found for component "${compId}"`,
 					});
 					return;
 				}
@@ -160,20 +162,20 @@ export async function waitForPage(
 				});
 			}
 		},
-		COMPONENT_ID,
+		componentId,
 		timeout,
 	)) as SettlementWaitResult;
 
 	if (!settlement.ok) {
 		throw new Error(
-			`waitForPage(${controlId}) could not confirm navigation settlement before checking "${expectedTitle}": ${settlement.message}`,
+			`waitForPage(${pageName}) could not confirm navigation settlement before checking "${expectedTitle}": ${settlement.message}`,
 		);
 	}
 
 	if (afterRevision !== undefined) {
 		await browser.waitUntil(async () => (await getRuntimeSettlementRevision()) > afterRevision, {
 			timeout,
-			timeoutMsg: `Page "${controlId}" did not observe a fresh settlement after revision ${afterRevision} within ${timeout}ms`,
+			timeoutMsg: `Page "${pageName}" did not observe a fresh settlement after revision ${afterRevision} within ${timeout}ms`,
 		});
 	}
 
@@ -181,9 +183,9 @@ export async function waitForPage(
 	await browser.waitUntil(
 		async () => {
 			return browser.execute(
-				(id: string, title: string) => {
-					const Element = sap.ui.require("sap/ui/core/Element");
-					const control = Element?.getElementById(id);
+				(compId: string, viewId: string, id: string, title: string) => {
+					const Component = sap.ui.require("sap/ui/core/Component");
+					const control = Component?.getComponentById(compId)?.byId(viewId)?.byId(id);
 					if (control?.getTitle?.() !== title) {
 						return false;
 					}
@@ -201,27 +203,31 @@ export async function waitForPage(
 
 					return true;
 				},
-				controlId,
+				componentId,
+				page.viewId,
+				page.id,
 				expectedTitle,
 			);
 		},
 		{
 			timeout,
-			timeoutMsg: `Page "${controlId}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
+			timeoutMsg: `Page "${pageName}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
 		},
 	);
 }
 
 /**
- * Fire an event on a UI5 control by ID, bypassing wdi5's control resolution.
+ * Fire an event on a UI5 control, bypassing wdi5's control resolution.
  */
-export async function fireEvent(controlId: string, eventName: string): Promise<void> {
+export async function fireEvent(control: ControlRef, eventName: string): Promise<void> {
 	await browser.execute(
-		(id: string, evt: string) => {
-			const Element = sap.ui.require("sap/ui/core/Element");
-			Element?.getElementById(id)?.fireEvent(evt);
+		(compId: string, viewId: string, id: string, evt: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			Component?.getComponentById(compId)?.byId(viewId)?.byId(id)?.fireEvent(evt);
 		},
-		controlId,
+		await getAppComponentId(),
+		control.viewId,
+		control.id,
 		eventName,
 	);
 }
@@ -235,10 +241,13 @@ export async function fireEvent(controlId: string, eventName: string): Promise<v
  * known auth state.
  */
 export async function resetAuth(): Promise<void> {
-	await browser.execute((componentId: string) => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		Component?.getComponentById(componentId)?.getModel("auth")?.setProperty("/isLoggedIn", false);
-	}, COMPONENT_ID);
+	await browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			Component?.getComponentById(componentId)?.getModel("auth")?.setProperty("/isLoggedIn", false);
+		},
+		await getAppComponentId(),
+	);
 }
 
 /**
@@ -270,17 +279,20 @@ export async function expectHashToBe(expected: string, timeoutMsgOrOptions?: str
 }
 
 async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
-	return browser.execute((componentId: string) => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const runtimeModel = Component?.getComponentById(componentId)?.getModel("runtime");
+	return browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const runtimeModel = Component?.getComponentById(componentId)?.getModel("runtime");
 
-		return {
-			status: String(runtimeModel?.getProperty("/lastSettlementStatus") ?? ""),
-			route: String(runtimeModel?.getProperty("/lastSettlementRoute") ?? ""),
-			hash: String(runtimeModel?.getProperty("/lastSettlementHash") ?? ""),
-			revision: Number(runtimeModel?.getProperty("/lastSettlementRevision") ?? 0),
-		};
-	}, COMPONENT_ID) as Promise<RuntimeSettlementSnapshot>;
+			return {
+				status: String(runtimeModel?.getProperty("/lastSettlementStatus") ?? ""),
+				route: String(runtimeModel?.getProperty("/lastSettlementRoute") ?? ""),
+				hash: String(runtimeModel?.getProperty("/lastSettlementHash") ?? ""),
+				revision: Number(runtimeModel?.getProperty("/lastSettlementRevision") ?? 0),
+			};
+		},
+		await getAppComponentId(),
+	) as Promise<RuntimeSettlementSnapshot>;
 }
 
 export async function getRuntimeSettlementRevision(): Promise<number> {
@@ -341,7 +353,7 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 			Component?.getComponentById(componentId)?.getModel("form")?.setProperty("/isDirty", dirty);
 		},
 		isDirty,
-		COMPONENT_ID,
+		await getAppComponentId(),
 	);
 }
 

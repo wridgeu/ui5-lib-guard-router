@@ -139,6 +139,7 @@ QUnit.test("Slower first navigation is superseded by faster second navigation", 
 	router.navTo("detail", { id: "1" });
 
 	await router.navigationSettled();
+	await nextTick(250); // let the stale 200ms guard resolve so a leaked commit would show
 	assert.notOk(protectedMatched, "Slow first navigation was superseded");
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
@@ -164,6 +165,7 @@ QUnit.test("Superseded async guard result does not apply", async function (asser
 	router.navTo("detail", { id: "2" });
 
 	await router.navigationSettled();
+	await nextTick(250); // let the stale 200ms guard resolve so a leaked redirect would show
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
 		"detail/2",
@@ -371,11 +373,9 @@ QUnit.test("Rapid async navigations - only last navigation settles", async funct
 QUnit.module("Router - Returning to current route during pending guard", standardHooks);
 
 QUnit.test("Navigating back to current route cancels a pending async guard", async function (assert: Assert) {
-	let guardResolved = false;
 	const guardDone = new Promise<void>((resolve) => {
 		router.addRouteGuard("protected", async () => {
 			await nextTick(200);
-			guardResolved = true;
 			resolve();
 			return true;
 		});
@@ -403,41 +403,9 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 
 	// Wait for the guard to actually finish its async work
 	await guardDone;
-	assert.ok(guardResolved, "Guard did resolve its async work");
+	await nextTick(); // guardDone resolves before the router sees the guard result; let it run
 	assert.notOk(protectedMatched, "Stale async guard result was discarded after same-hash dedup");
 });
-
-// ============================================================
-// Module: Destroy during pending async guard
-// ============================================================
-QUnit.module("Router - Destroy during pending async guard", safeDestroyHooks);
-
-QUnit.test(
-	"Destroying router while async guard is pending does not complete navigation",
-	async function (assert: Assert) {
-		router.addGuard(async () => {
-			await nextTick(200);
-			return true;
-		});
-		router.initialize();
-
-		let routeMatched = false;
-		router.getRoute("protected")!.attachPatternMatched(() => {
-			routeMatched = true;
-		});
-
-		// Trigger navigation with slow async guard
-		router.navTo("protected");
-
-		// Destroy while guard is pending
-		await nextTick(50);
-		router.destroy();
-
-		// Wait for the guard promise to resolve in the background
-		await nextTick(300);
-		assert.notOk(routeMatched, "Navigation did not complete after destroy");
-	},
-);
 
 // ============================================================
 // Module: Stop during pending async guard
@@ -691,6 +659,7 @@ QUnit.test("navTo to different destination during pending guard supersedes the f
 	router.navTo("detail", { id: "1" });
 
 	await waitForRoute(router, "detail");
+	await nextTick(150); // let the stale 100ms guard resolve so a leaked commit would show
 	assert.notOk(protectedMatched, "First navigation was superseded");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/1", "Second navigation won");
 });

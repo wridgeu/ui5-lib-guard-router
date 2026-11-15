@@ -1,8 +1,11 @@
+import type Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import UIComponent from "sap/ui/core/UIComponent";
 import Log from "sap/base/Log";
+import jQuery from "sap/ui/thirdparty/jquery";
 import Router from "ui5/guard/router/Router";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import type { GuardRouter } from "ui5/guard/router/types";
+import type { GuardRouter, GuardRouterOptions } from "ui5/guard/router/types";
 
 export interface CapturedLogEntry {
 	message: string;
@@ -14,77 +17,75 @@ export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
+const TEST_ROUTES = [
+	{ name: "home", pattern: "" },
+	{ name: "protected", pattern: "protected" },
+	{ name: "forbidden", pattern: "forbidden" },
+	{ name: "detail", pattern: "detail/{id}" },
+];
+
 export function createRouter(): GuardRouter {
-	return new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-			{ name: "forbidden", pattern: "forbidden" },
-			{ name: "detail", pattern: "detail/{id}" },
-		],
-		{
-			async: true,
-		},
-	);
+	return new GuardRouterClass(TEST_ROUTES, { async: true });
 }
 
-export function createRouterWithOptions(guardRouter: Record<string, unknown>): GuardRouter {
-	return new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-			{ name: "forbidden", pattern: "forbidden" },
-			{ name: "detail", pattern: "detail/{id}" },
-		],
-		{
-			async: true,
-			guardRouter,
-		} as object,
-	);
+export function createRouterWithOptions(guardRouter: GuardRouterOptions): GuardRouter {
+	return new GuardRouterClass(TEST_ROUTES, { async: true, guardRouter });
 }
 
-function getRouterMethod(router: GuardRouter, methodName: string): (...args: unknown[]) => unknown {
-	const method = Reflect.get(router, methodName);
-	if (typeof method !== "function") {
-		throw new Error(`Router method "${methodName}" is not available`);
+/** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
+export function createRouterUnsafe(routes: object[], config: unknown): GuardRouter {
+	return Reflect.construct(GuardRouterClass, [routes, config]);
+}
+
+/** {@link createRouterWithOptions} for invalid `guardRouter` values. */
+export function createRouterWithOptionsUnsafe(guardRouter: unknown): GuardRouter {
+	return createRouterUnsafe(TEST_ROUTES, { async: true, guardRouter });
+}
+
+/** The guard router of a fixture component; throws if the component has none. */
+export function getComponentRouter(component: Component): GuardRouter {
+	const router = component instanceof UIComponent ? component.getRouter() : undefined;
+	if (!(router instanceof Router)) {
+		throw new Error(`Component "${component.getId()}" has no guard router`);
 	}
-	return (...args: unknown[]) => Reflect.apply(method, router, args);
+	return router;
+}
+
+/** Call `target[methodName]` as an untyped JS caller would, to test runtime validation of invalid arguments. */
+export function callUnsafe(target: object, methodName: string, ...args: unknown[]): unknown {
+	const method = Reflect.get(target, methodName);
+	if (typeof method !== "function") {
+		throw new Error(`Method "${methodName}" is not available`);
+	}
+	return Reflect.apply(method, target, args);
 }
 
 export function addGuardUnsafe(router: GuardRouter, guard: unknown): void {
-	getRouterMethod(router, "addGuard")(guard);
+	callUnsafe(router, "addGuard", guard);
 }
 
 export function removeGuardUnsafe(router: GuardRouter, guard: unknown): void {
-	getRouterMethod(router, "removeGuard")(guard);
+	callUnsafe(router, "removeGuard", guard);
 }
 
 export function addRouteGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
-	getRouterMethod(router, "addRouteGuard")(routeName, guard);
+	callUnsafe(router, "addRouteGuard", routeName, guard);
 }
 
 export function removeRouteGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
-	getRouterMethod(router, "removeRouteGuard")(routeName, guard);
+	callUnsafe(router, "removeRouteGuard", routeName, guard);
 }
 
 export function addLeaveGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
-	getRouterMethod(router, "addLeaveGuard")(routeName, guard);
+	callUnsafe(router, "addLeaveGuard", routeName, guard);
 }
 
 export function removeLeaveGuardUnsafe(router: GuardRouter, routeName: string, guard: unknown): void {
-	getRouterMethod(router, "removeLeaveGuard")(routeName, guard);
+	callUnsafe(router, "removeLeaveGuard", routeName, guard);
 }
 
-/**
- * Dynamically add a route to a router.
- *
- * Uses the inherited `sap.ui.core.routing.Router#addRoute` API. The `oParent`
- * parameter is optional at runtime (no parent = top-level route), but the UI5
- * type declarations mark it as required. We call through `getRouterMethod` to
- * avoid fighting the incorrect type signature.
- */
-export function addRouteDynamic(router: GuardRouter, config: { name: string; pattern: string }): void {
-	getRouterMethod(router, "addRoute")(config);
+export function setRouteMetaUnsafe(router: GuardRouter, routeName: string, meta: unknown): void {
+	callUnsafe(router, "setRouteMeta", routeName, meta);
 }
 
 /**
@@ -96,6 +97,11 @@ export function initHashChanger(): void {
 		hashChanger.init();
 	}
 	hashChanger.setHash("");
+}
+
+/** A non-native thenable (jQuery Deferred), for testing that guards accept any PromiseLike. */
+export function createPromiseLike<T>(value: T): PromiseLike<T> {
+	return jQuery.Deferred<T>().resolve(value).promise();
 }
 
 /** Wait for a timer tick. */
@@ -151,6 +157,21 @@ export async function assertBlocked(
 	navigate();
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, message);
+}
+
+/**
+ * Record every hash the HashChanger reports via `hashChanged` until `stop()`.
+ * Proves a hash was never set, which a final `getHash()` check cannot:
+ * the parse() fallback restores the hash after a block.
+ */
+export function recordHashChanges(): { hashes: string[]; stop: () => void } {
+	const hashChanger = HashChanger.getInstance();
+	const hashes: string[] = [];
+	const listener = (event: { getParameter(name: string): unknown }): void => {
+		hashes.push(String(event.getParameter("newHash")));
+	};
+	hashChanger.attachEvent("hashChanged", listener);
+	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };
 }
 
 /** Return the current hash from the HashChanger. */

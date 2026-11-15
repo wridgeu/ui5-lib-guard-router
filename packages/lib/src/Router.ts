@@ -2,7 +2,9 @@ import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
 import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
+import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
+import type UIComponent from "sap/ui/core/UIComponent";
 import type {
 	GuardFn,
 	GuardContext,
@@ -10,6 +12,7 @@ import type {
 	GuardResult,
 	GuardRedirect,
 	GuardRouter,
+	GuardRouterConfig,
 	GuardLoading,
 	Inheritance,
 	LeaveGuardFn,
@@ -493,13 +496,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
 	private _routeNames: string[] = [];
+	private readonly _ownerComponent: UIComponent | undefined;
 
-	constructor(...args: ConstructorParameters<typeof MobileRouter>) {
-		const [routes, config, owner, ...rest] = args;
-		const rawConfig = config as Record<string, unknown> | undefined;
-		const isRecordConfig = isRecord(rawConfig);
-		const { guardRouter, ...cleanConfig } = isRecordConfig ? rawConfig : ({} as Record<string, unknown>);
-		super(routes, isRecordConfig ? (cleanConfig as typeof config) : config, owner, ...rest);
+	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object) {
+		const isRecordConfig = isRecord(config);
+		const { guardRouter, ...cleanConfig } = isRecordConfig ? config : {};
+		super(routes, isRecordConfig ? cleanConfig : config, owner, targetsConfig);
+		this._ownerComponent = owner;
 		this._options = normalizeGuardRouterOptions(guardRouter);
 
 		// Collect route names from the constructor's routes parameter for pattern-tree traversal.
@@ -607,13 +610,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * manifest guards when `inheritance` is `"pattern-tree"`.
 	 *
 	 * @param oConfig - Route configuration object as defined by `sap.ui.core.routing.Route`.
-	 * @param rest - Additional arguments forwarded to the parent `addRoute`.
+	 * @param oParent - Optional parent route, forwarded to the parent `addRoute`.
 	 * @override sap.ui.core.routing.Router#addRoute
 	 * @since 1.6.0
 	 */
-	override addRoute(oConfig: $RouteSettings, ...rest: unknown[]): void {
-		// @ts-expect-error -- oParent is required in the type declaration but optional at runtime
-		super.addRoute(oConfig, ...rest);
+	override addRoute(oConfig: $RouteSettings, oParent?: Route): void {
+		super.addRoute(oConfig, oParent);
 
 		// Skip when called by the parent constructor before field initializers have run.
 		// Routes from the constructor args are captured in _routeNames by the constructor body.
@@ -742,7 +744,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 			if (!hasHandler) {
 				Log.info("addRouteGuard: config has no beforeEnter or beforeLeave", routeName, LOG_COMPONENT);
-				return this;
 			}
 			return this;
 		}
@@ -1150,10 +1151,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
-		this._phase = {
-			kind: "evaluating",
-			attempt: { hash: targetHash, route: toRoute, controller, generation },
-		};
+		const attempt: NavigationAttempt = { hash: targetHash, route: toRoute, controller, generation };
+		this._phase = { kind: "evaluating", attempt };
 
 		const context = this._createGuardContext(toRoute, targetHash, routeInfo, controller.signal);
 
@@ -1179,6 +1178,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						targetHash,
 						toRoute,
 						context.bag,
+						attempt,
 					);
 				})
 				.catch((error: unknown) => {
@@ -1206,6 +1206,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			targetHash,
 			toRoute,
 			context.bag,
+			attempt,
 		);
 		return this;
 	}
@@ -1233,6 +1234,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		targetHash: string,
 		toRoute: string,
 		bag: Map<string, unknown>,
+		attempt: NavigationAttempt,
 	): void {
 		switch (decision.action) {
 			case "allow":
@@ -1249,7 +1251,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(targetHash, false);
 				break;
 			case "redirect":
-				this._startRedirectChain(decision.target, targetHash, false, bag);
+				this._startRedirectChain(decision.target, targetHash, false, bag, attempt);
 				break;
 			case "error":
 				this._errorNavigation(decision.error, targetHash, false);
@@ -1300,10 +1302,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const controller = new AbortController();
 		const generation = this._parseGeneration;
 
-		this._phase = {
-			kind: "evaluating",
-			attempt: { hash: newHash, route: toRoute, controller, generation },
-		};
+		const attempt: NavigationAttempt = { hash: newHash, route: toRoute, controller, generation };
+		this._phase = { kind: "evaluating", attempt };
 
 		const context = this._createGuardContext(toRoute, newHash, routeInfo, controller.signal);
 
@@ -1320,7 +1320,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 						);
 						return;
 					}
-					this._applyDecision(d, newHash, toRoute, context.bag);
+					this._applyDecision(d, newHash, toRoute, context.bag, attempt);
 				})
 				.catch((error: unknown) => {
 					// Only check generation here, not phase. If _redirect threw and its
@@ -1337,7 +1337,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		this._applyDecision(decision, newHash, toRoute, context.bag);
+		this._applyDecision(decision, newHash, toRoute, context.bag, attempt);
 	}
 
 	/**
@@ -1383,7 +1383,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/**
 	 * Apply a guard decision for the parse() fallback path.
 	 */
-	private _applyDecision(decision: GuardDecision, hash: string, route: string, bag: Map<string, unknown>): void {
+	private _applyDecision(
+		decision: GuardDecision,
+		hash: string,
+		route: string,
+		bag: Map<string, unknown>,
+		attempt: NavigationAttempt,
+	): void {
 		switch (decision.action) {
 			case "allow":
 				this._phase = { kind: "committing", hash, route, origin: "parse" };
@@ -1393,7 +1399,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._blockNavigation(hash);
 				break;
 			case "redirect":
-				this._startRedirectChain(decision.target, hash, true, bag);
+				this._startRedirectChain(decision.target, hash, true, bag, attempt);
 				break;
 			case "error":
 				this._errorNavigation(decision.error, hash);
@@ -1408,10 +1414,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * (e.g., routeMatched) trigger nested navigation, the leave guards will
 	 * run for the correct (new) route rather than the old one.
 	 */
-	private _commitNavigation(hash: string, route?: string): void {
+	private _commitNavigation(hash: string, route: string): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
 		this._currentHash = hash;
-		this._currentRoute = route ?? this.getRouteInfoByHash(hash)?.name ?? "";
+		this._currentRoute = route;
 		// Transition to idle before super.parse so that routeMatched/patternMatched
 		// handlers that call navTo() go through the full guard pipeline.
 		this._phase = IDLE;
@@ -1518,6 +1524,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			bag: chain.bag,
 			toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
 			fromMeta: this.getRouteMeta(chain.fromRoute),
+			ownerComponent: this._ownerComponent,
 		};
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
@@ -1630,11 +1637,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			bag: new Map(),
 			toMeta: this.getRouteMeta(toRoute),
 			fromMeta: this.getRouteMeta(this._currentRoute),
+			ownerComponent: this._ownerComponent,
 		};
 	}
 
 	/**
-	 * Start a new redirect chain from the current evaluating phase.
+	 * Start a new redirect chain for the given evaluating attempt.
 	 * Called by {@link _applyPreflightDecision} and {@link _applyDecision}
 	 * when a guard returns a redirect. Delegates to {@link _redirect} with
 	 * a fresh {@link RedirectChainContext}.
@@ -1644,8 +1652,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		hash: string,
 		restoreHash: boolean,
 		bag: Map<string, unknown>,
+		attempt: NavigationAttempt,
 	): void {
-		const { attempt } = this._phase as PhaseEvaluating;
 		const visited = new Set<string>();
 		visited.add(hash);
 		this._redirect(target, {
@@ -1695,7 +1703,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** Conditionally restore the browser hash after a blocked or errored navigation. */
 	private _restoreHashIfNeeded(attemptedHash: string | undefined, restoreHash: boolean): void {
 		if (!restoreHash) return;
-		if (this._currentHash === null && attemptedHash && attemptedHash !== "") {
+		if (this._currentHash === null && attemptedHash) {
 			this._restoreHash("", false);
 			return;
 		}
@@ -1804,14 +1812,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (!routeEntry) return this._resolveFlatMeta(routeName);
 
 		// Find ancestors that have declared metadata (manifest or runtime)
-		const ancestors = allRoutes.filter(
-			(r) =>
-				r.name !== routeName &&
-				(this._manifestMeta.has(r.name) || this._runtimeMeta.has(r.name)) &&
-				isPatternAncestor(r.pattern, routeEntry.pattern),
-		);
-		// oxlint-disable-next-line unicorn/no-array-sort -- ancestors is a fresh array from filter()
-		ancestors.sort((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length);
+		const ancestors = allRoutes
+			.filter(
+				(r) =>
+					r.name !== routeName &&
+					(this._manifestMeta.has(r.name) || this._runtimeMeta.has(r.name)) &&
+					isPatternAncestor(r.pattern, routeEntry.pattern),
+			)
+			.toSorted((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length);
 
 		// Merge shallowest-first: root ancestor -> deeper ancestors -> own manifest -> own runtime
 		const merged: Record<string, unknown> = {};

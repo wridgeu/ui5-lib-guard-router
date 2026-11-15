@@ -131,8 +131,9 @@ export default class GuardPipeline {
 	 *   or a `Promise<GuardDecision>` when at least one guard returns a thenable.
 	 */
 	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
-		const hasLeaveGuards =
-			!options?.skipLeaveGuards && context.fromRoute !== "" && this._leaveGuards.has(context.fromRoute);
+		const leaveGuards =
+			options?.skipLeaveGuards || context.fromRoute === "" ? undefined : this._leaveGuards.get(context.fromRoute);
+		const hasLeaveGuards = leaveGuards !== undefined;
 		const hasEnterGuards =
 			this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
 
@@ -165,8 +166,8 @@ export default class GuardPipeline {
 		};
 
 		try {
-			if (hasLeaveGuards) {
-				const leaveResult = this._runLeaveGuards(context);
+			if (leaveGuards) {
+				const leaveResult = this._runLeaveGuards(leaveGuards, context);
 
 				if (isPromiseLike(leaveResult)) {
 					return leaveResult
@@ -212,10 +213,7 @@ export default class GuardPipeline {
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	private _runLeaveGuards(context: GuardContext): boolean | Promise<boolean> {
-		const registered = this._leaveGuards.get(context.fromRoute);
-		if (!registered || registered.length === 0) return true;
-
+	private _runLeaveGuards(registered: GuardFn[], context: GuardContext): boolean | Promise<boolean> {
 		const guards = registered.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {

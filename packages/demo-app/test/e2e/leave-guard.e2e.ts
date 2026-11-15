@@ -1,3 +1,4 @@
+import { CONTROLS, getAppComponentId } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -9,9 +10,9 @@ import {
 } from "./helpers";
 
 async function loginAndGoToProtected(): Promise<void> {
-	await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
-	await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
-	await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+	await fireEvent(CONTROLS.home.toggleLoginBtn, "press");
+	await fireEvent(CONTROLS.home.navProtectedBtn, "press");
+	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 }
 
 describe("Leave Guard - Dirty Form", () => {
@@ -19,16 +20,16 @@ describe("Leave Guard - Dirty Form", () => {
 		await resetAuth();
 		await setDirtyState(false); // Ensure clean state before each test
 		await browser.goTo({ sHash: "" });
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should allow leaving protected page when form is clean", async () => {
 		await loginAndGoToProtected();
 		await setDirtyState(false);
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
 		await expectHashToBe("", "Hash should settle to home after leave guard allows");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should block leaving protected page when form is dirty", async () => {
@@ -36,7 +37,7 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(true);
 		const settlementRevision = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
 
 		// Leave guard should block - hash should stay at protected
 		await expectHashToBe("#/protected", {
@@ -63,9 +64,9 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(true);
 		await setDirtyState(false);
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
 		await expectHashToBe("", "Hash should settle to home after leave guard allows");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should block browser back when form is dirty", async () => {
@@ -73,10 +74,13 @@ describe("Leave Guard - Dirty Form", () => {
 		await setDirtyState(true);
 
 		// Verify dirty state was set before attempting navigation
-		const isDirty = await browser.execute(() => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			return Component?.getComponentById("container-demo.app")?.getModel("form")?.getProperty("/isDirty");
-		});
+		const isDirty = await browser.execute(
+			(componentId: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				return Component?.getComponentById(componentId)?.getModel("form")?.getProperty("/isDirty");
+			},
+			await getAppComponentId(),
+		);
 		expect(isDirty).toBe(true);
 
 		const settlementRevision = await getRuntimeSettlementRevision();

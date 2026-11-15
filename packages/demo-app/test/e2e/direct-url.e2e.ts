@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -10,7 +11,7 @@ describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => {
 			window.location.hash = "#/protected";
@@ -21,7 +22,7 @@ describe("Direct URL navigation with guards", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -39,7 +40,7 @@ describe("Direct URL navigation with guards", () => {
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
 		await browser.goTo({ sHash: "" });
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => {
 			window.location.hash = "#/forbidden";
@@ -50,7 +51,7 @@ describe("Direct URL navigation with guards", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -69,7 +70,7 @@ describe("Direct URL navigation with guards", () => {
 	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 
 		await browser.execute(() => {
@@ -80,7 +81,7 @@ describe("Direct URL navigation with guards", () => {
 			timeoutMsg: "Hash should settle to home after enter guard blocks",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -100,9 +101,7 @@ describe("Direct URL navigation with guards", () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
 
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		await browser.execute(() => {
@@ -110,13 +109,13 @@ describe("Direct URL navigation with guards", () => {
 		});
 
 		// Wait for view to load - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 	});
 
 	it("should show Not Found page for a nonexistent route hash", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		await browser.execute(() => {
 			window.location.hash = "#/this/does/not/exist";
@@ -131,34 +130,28 @@ describe("Direct URL navigation with guards", () => {
 		);
 
 		// Verify the Not Found page is displayed
-		await waitForPage("container-demo.app---notFoundView--notFoundPage", "Not Found");
+		await waitForPage(CONTROLS.notFound.notFoundPage, "Not Found");
 
-		const settlementStatus = await browser.asControl({
-			selector: { id: "container-demo.app---notFoundView--settlementStatus" },
-		});
+		const settlementStatus = await browser.asControl(selectorFor(CONTROLS.notFound.settlementStatus));
 		expect(await settlementStatus.getProperty("text")).toBe("Bypassed");
 
-		const settlementRoute = await browser.asControl({
-			selector: { id: "container-demo.app---notFoundView--settlementRouteText" },
-		});
+		const settlementRoute = await browser.asControl(selectorFor(CONTROLS.notFound.settlementRouteText));
 		expect(await settlementRoute.getProperty("text")).toBe("(no match)");
 
-		const settlementHash = await browser.asControl({
-			selector: { id: "container-demo.app---notFoundView--settlementHashText" },
-		});
+		const settlementHash = await browser.asControl(selectorFor(CONTROLS.notFound.settlementHashText));
 		expect(await settlementHash.getProperty("text")).toBe("this/does/not/exist");
 
 		// Verify the app recovers by navigating back to a known route
 		await browser.execute(() => {
 			window.location.hash = "#/";
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should handle rapid hash changes in the address bar", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 
 		// Rapidly change the hash multiple times
@@ -174,7 +167,7 @@ describe("Direct URL navigation with guards", () => {
 
 		// Should end up on Home (all guarded while logged out).
 		// waitForPage calls navigationSettled() then checks DOM visibility.
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 		await waitForRuntimeSettlement(
 			{
 				status: "Redirected",

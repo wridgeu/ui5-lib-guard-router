@@ -19,6 +19,7 @@ ui5-lib-guard-router/
     |   |-- test/
     |       |-- qunit/              QUnit tests (unit)
     |       |-- wdio-qunit.conf.ts  runs QUnit in headless Chrome
+    |       |-- wdio-qunit.stryker.conf.ts  QUnit run per Stryker mutant
     |
     |-- demo-app/                   demo application
         |-- ui5.yaml                serves lib + app with transpile (OpenUI5)
@@ -37,6 +38,7 @@ ui5-lib-guard-router/
         |-- test/
             |-- e2e/                wdi5 e2e tests (standalone)
             |-- flp/                wdi5 FLP preview smoke tests
+            |-- shared/controls.ts  control references (view ID + control ID) for both suites
             |-- wdio.conf.ts        standalone e2e config
             |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
@@ -112,17 +114,18 @@ GuardFn      = (context: GuardContext) => GuardResult | PromiseLike<GuardResult>
 LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>
 
 GuardContext                        GuardResult
-+--------------+                   +---------------------------+
-| toRoute      |  string           | true    -> allow          |
-| toHash       |  string           | false   -> block          |
-| toArguments  |  RouteInfo["arguments"] | string  -> redirect  |
-| fromRoute    |  string           | GuardRedirect -> redirect |
-| fromHash     |  string           |   with params & targets   |
-| signal       |  AbortSignal      +---------------------------+
-| bag          |  Map<string, unknown>
-| toMeta       |  Readonly<Record<string, unknown>>
-| fromMeta     |  Readonly<Record<string, unknown>>
-+--------------+
++----------------+                 +---------------------------+
+| toRoute        |  string         | true    -> allow          |
+| toHash         |  string         | false   -> block          |
+| toArguments    |  RouteInfo["arguments"] | string  -> redirect  |
+| fromRoute      |  string         | GuardRedirect -> redirect |
+| fromHash       |  string         |   with params & targets   |
+| signal         |  AbortSignal    +---------------------------+
+| bag            |  Map<string, unknown>
+| toMeta         |  Readonly<Record<string, unknown>>
+| fromMeta       |  Readonly<Record<string, unknown>>
+| ownerComponent |  UIComponent | undefined
++----------------+
 
 NavigationOutcome (UI5 enum)        NavigationResult
 +----------------+                  +----------------------------+
@@ -460,24 +463,25 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                      | Type                                             | Purpose                                                               |
-| -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
-| `_options`                 | `ResolvedGuardRouterOptions`                     | Resolved manifest options with defaults applied                       |
-| `_pipeline`                | `GuardPipeline`                                  | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)      |
-| `_currentRoute`            | `string`                                         | Name of the currently active route                                    |
-| `_currentHash`             | `string \| null`                                 | Hash of the active route, `null` before first                         |
-| `_phase`                   | `RouterPhase`                                    | Discriminated union tracking the router's lifecycle phase (see below) |
-| `_parseGeneration`         | `number`                                         | Monotonic counter for async invalidation                              |
-| `_suppressedHash`          | `string \| null`                                 | Hash to suppress in the next `parse()` call                           |
-| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`              | Pending `navigationSettled()` callbacks                               |
-| `_lastSettlement`          | `NavigationResult \| null`                       | Most recent settlement result (for post-hoc queries)                  |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Guard descriptors awaiting lazy resolution                            |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                              | Original manifest descriptors (for inheritance expansion on addRoute) |
-| `_destroyed`               | `boolean`                                        | Set by `destroy()`, prevents post-destroy guard execution             |
-| `_manifestMeta`            | `Map<string, Readonly<Record<string, unknown>>>` | Manifest-declared route metadata                                      |
-| `_runtimeMeta`             | `Map<string, Readonly<Record<string, unknown>>>` | Runtime metadata set via `setRouteMeta()`                             |
-| `_resolvedMetaCache`       | `Map<string, Readonly<Record<string, unknown>>>` | Merged metadata cache, cleared on mutation                            |
-| `_routeNames`              | `string[]`                                       | Known route names, collected for inheritance lookups                  |
+| Field                      | Type                                             | Purpose                                                                        |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `_options`                 | `ResolvedGuardRouterOptions`                     | Resolved manifest options with defaults applied                                |
+| `_pipeline`                | `GuardPipeline`                                  | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)               |
+| `_currentRoute`            | `string`                                         | Name of the currently active route                                             |
+| `_currentHash`             | `string \| null`                                 | Hash of the active route, `null` before first                                  |
+| `_phase`                   | `RouterPhase`                                    | Discriminated union tracking the router's lifecycle phase (see below)          |
+| `_parseGeneration`         | `number`                                         | Monotonic counter for async invalidation                                       |
+| `_suppressedHash`          | `string \| null`                                 | Hash to suppress in the next `parse()` call                                    |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`              | Pending `navigationSettled()` callbacks                                        |
+| `_lastSettlement`          | `NavigationResult \| null`                       | Most recent settlement result (for post-hoc queries)                           |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Guard descriptors awaiting lazy resolution                                     |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                              | Original manifest descriptors (for inheritance expansion on addRoute)          |
+| `_destroyed`               | `boolean`                                        | Set by `destroy()`, prevents post-destroy guard execution                      |
+| `_manifestMeta`            | `Map<string, Readonly<Record<string, unknown>>>` | Manifest-declared route metadata                                               |
+| `_runtimeMeta`             | `Map<string, Readonly<Record<string, unknown>>>` | Runtime metadata set via `setRouteMeta()`                                      |
+| `_resolvedMetaCache`       | `Map<string, Readonly<Record<string, unknown>>>` | Merged metadata cache, cleared on mutation                                     |
+| `_routeNames`              | `string[]`                                       | Known route names, collected for inheritance lookups                           |
+| `_ownerComponent`          | `UIComponent \| undefined`                       | Owner component from the constructor, exposed as `GuardContext.ownerComponent` |
 
 `RouterPhase` is a discriminated union with three variants:
 
@@ -576,8 +580,12 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   +------------------------------+
 
   CI also runs:
-  - node22-pack-smoke: build + pack + consumer type smoke on Node 22
+  - node26-pack-smoke: build + pack + consumer type smoke on Node 26
   - windows-smoke: QUnit smoke on windows-latest
+
+  Local only:
+  - test:mutation: Stryker mutates packages/lib/src and runs the
+    QUnit suite once per mutant (report: reports/mutation/)
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.

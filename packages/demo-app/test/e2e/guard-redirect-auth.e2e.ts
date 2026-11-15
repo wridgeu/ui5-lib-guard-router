@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -12,15 +13,11 @@ describe("Guard redirects unauthenticated navigation", () => {
 		await resetAuth();
 
 		// Verify we start on Home and are logged out
-		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" },
-		});
+		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try to navigate to protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
@@ -31,7 +28,7 @@ describe("Guard redirects unauthenticated navigation", () => {
 		});
 
 		// Verify we're back on Home page after the redirect
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{

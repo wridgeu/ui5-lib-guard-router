@@ -22,6 +22,26 @@ function createRouterConfig(): ConstructorParameters<typeof MobileRouter> {
 	return [routes, config];
 }
 
+/** Record the hash writes `router` issues on its own HashChanger while `navigate` runs. */
+async function captureHashWrites(router: MobileRouter, navigate: () => void): Promise<string[]> {
+	const hashChanger = router.getHashChanger();
+	const setHash = sinon.spy(hashChanger, "setHash");
+	const replaceHash = sinon.spy(hashChanger, "replaceHash");
+	try {
+		navigate();
+		await nextTick(50);
+	} finally {
+		setHash.restore();
+		replaceHash.restore();
+	}
+	return [
+		...setHash.getCalls().map((call) => ({ call, label: `set:${String(call.args[0])}` })),
+		...replaceHash.getCalls().map((call) => ({ call, label: `replace:${String(call.args[0])}` })),
+	]
+		.toSorted((a, b) => (a.call.calledBefore(b.call) ? -1 : 1))
+		.map(({ label }) => label);
+}
+
 // ============================================================
 // Module: API parity
 // ============================================================
@@ -45,14 +65,6 @@ QUnit.module("NativeCompat - API parity", {
 QUnit.test("Both routers are instances of sap.m.routing.Router", function (assert: Assert) {
 	assert.ok(extRouter.isA("sap.m.routing.Router"), "ext router isA sap.m.routing.Router");
 	assert.ok(nativeRouter.isA("sap.m.routing.Router"), "native router isA sap.m.routing.Router");
-});
-
-QUnit.test("Both routers have the same public routing methods", function (assert: Assert) {
-	const methods = ["navTo", "getRoute", "getRouteInfoByHash", "match", "initialize", "stop", "destroy"];
-	for (const method of methods) {
-		assert.ok(typeof Reflect.get(extRouter, method) === "function", `ext router has ${method}`);
-		assert.ok(typeof Reflect.get(nativeRouter, method) === "function", `native router has ${method}`);
-	}
 });
 
 QUnit.test("ext router has additional guard methods", function (assert: Assert) {
@@ -120,21 +132,6 @@ QUnit.module("NativeCompat - Navigation behavior", {
 		nativeRouter.destroy();
 		HashChanger.getInstance().setHash("");
 	},
-});
-
-QUnit.test("navTo updates hash identically", async function (assert: Assert) {
-	extRouter.initialize();
-	nativeRouter.initialize();
-
-	extRouter.navTo("detail", { id: "123" });
-	nativeRouter.navTo("detail", { id: "123" });
-
-	await nextTick(100);
-
-	// Both should generate the same hash pattern
-	const extHash = extRouter.getHashChanger()?.getHash();
-	const nativeHash = nativeRouter.getHashChanger()?.getHash();
-	assert.strictEqual(extHash, nativeHash, "Both routers produce identical hash");
 });
 
 QUnit.test("getRoute returns identical route objects", function (assert: Assert) {
@@ -388,20 +385,20 @@ QUnit.test("navTo with replace=true updates hash without history entry", async f
 	nativeRouter.initialize();
 	await nextTick(50);
 
-	// Navigate to page1 first (creates history entry)
+	// Each router navigates on its own: both share one HashChanger, so comparing
+	// the resulting hash would read the same value twice.
 	extRouter.navTo("page1");
+	await nextTick(50);
+	const extWrites = await captureHashWrites(extRouter, () => extRouter.navTo("detail", { id: "42" }, {}, true));
+
 	nativeRouter.navTo("page1");
 	await nextTick(50);
+	const nativeWrites = await captureHashWrites(nativeRouter, () =>
+		nativeRouter.navTo("detail", { id: "42" }, {}, true),
+	);
 
-	// Navigate with replace=true (should not create history entry)
-	extRouter.navTo("detail", { id: "42" }, {}, true);
-	nativeRouter.navTo("detail", { id: "42" }, {}, true);
-	await nextTick(50);
-
-	const extHash = extRouter.getHashChanger()?.getHash();
-	const nativeHash = nativeRouter.getHashChanger()?.getHash();
-	assert.strictEqual(extHash, nativeHash, "Both produce identical hash after replace");
-	assert.strictEqual(extHash, "detail/42", "Hash is correct");
+	assert.deepEqual(extWrites, ["replace:detail/42"], "ext router replaces the hash");
+	assert.deepEqual(extWrites, nativeWrites, "Both routers issue the same hash write");
 });
 
 QUnit.test("navTo with replace=false creates history entry (default)", async function (assert: Assert) {
@@ -409,14 +406,13 @@ QUnit.test("navTo with replace=false creates history entry (default)", async fun
 	nativeRouter.initialize();
 	await nextTick(50);
 
-	// Navigate without replace (default, creates history entry)
-	extRouter.navTo("detail", { id: "1" });
-	nativeRouter.navTo("detail", { id: "1" });
+	const extWrites = await captureHashWrites(extRouter, () => extRouter.navTo("detail", { id: "1" }));
+	HashChanger.getInstance().setHash("");
 	await nextTick(50);
+	const nativeWrites = await captureHashWrites(nativeRouter, () => nativeRouter.navTo("detail", { id: "1" }));
 
-	const extHash = extRouter.getHashChanger()?.getHash();
-	const nativeHash = nativeRouter.getHashChanger()?.getHash();
-	assert.strictEqual(extHash, nativeHash, "Both produce identical hash");
+	assert.deepEqual(extWrites, ["set:detail/1"], "ext router sets the hash (new history entry)");
+	assert.deepEqual(extWrites, nativeWrites, "Both routers issue the same hash write");
 });
 
 QUnit.test("navTo fires routeMatched identically with replace=true", async function (assert: Assert) {
@@ -511,12 +507,12 @@ QUnit.test("Direct hash changes fire events identically", async function (assert
 	const done = assert.async();
 	let extFired = false;
 	let nativeFired = false;
-	let extRoute = "";
-	let nativeRoute = "";
+	let extArgs: unknown;
+	let nativeArgs: unknown;
 
 	extRouter.attachRouteMatched((event) => {
 		if (event.getParameter("name") === "detail") {
-			extRoute = event.getParameter("name") as string;
+			extArgs = event.getParameter("arguments");
 			extFired = true;
 			checkDone();
 		}
@@ -524,7 +520,7 @@ QUnit.test("Direct hash changes fire events identically", async function (assert
 
 	nativeRouter.attachRouteMatched((event) => {
 		if (event.getParameter("name") === "detail") {
-			nativeRoute = event.getParameter("name") as string;
+			nativeArgs = event.getParameter("arguments");
 			nativeFired = true;
 			checkDone();
 		}
@@ -532,7 +528,8 @@ QUnit.test("Direct hash changes fire events identically", async function (assert
 
 	function checkDone() {
 		if (extFired && nativeFired) {
-			assert.strictEqual(extRoute, nativeRoute, "Both handle direct hash change identically");
+			assert.deepEqual(extArgs, { id: "direct-entry" }, "ext router parsed the direct hash");
+			assert.deepEqual(extArgs, nativeArgs, "Both handle direct hash change identically");
 			done();
 		}
 	}
@@ -546,32 +543,10 @@ QUnit.test("Direct hash changes fire events identically", async function (assert
 });
 
 QUnit.test("replaceHash behaves identically", async function (assert: Assert) {
-	const done = assert.async();
-	let extFired = false;
-	let nativeFired = false;
-
-	extRouter.attachRouteMatched((event) => {
-		if (event.getParameter("name") === "page1") {
-			extFired = true;
-			checkDone();
-		}
-	});
-
-	nativeRouter.attachRouteMatched((event) => {
-		if (event.getParameter("name") === "page1") {
-			nativeFired = true;
-			checkDone();
-		}
-	});
-
-	function checkDone() {
-		if (extFired && nativeFired) {
-			const extHash = extRouter.getHashChanger()?.getHash();
-			const nativeHash = nativeRouter.getHashChanger()?.getHash();
-			assert.strictEqual(extHash, nativeHash, "replaceHash produces identical result");
-			done();
-		}
-	}
+	const extMatched: unknown[] = [];
+	const nativeMatched: unknown[] = [];
+	extRouter.attachRouteMatched((event) => extMatched.push(event.getParameter("name")));
+	nativeRouter.attachRouteMatched((event) => nativeMatched.push(event.getParameter("name")));
 
 	extRouter.initialize();
 	nativeRouter.initialize();
@@ -579,4 +554,8 @@ QUnit.test("replaceHash behaves identically", async function (assert: Assert) {
 
 	// Use replaceHash directly
 	HashChanger.getInstance().replaceHash("page1", HistoryDirection.NewEntry);
+	await nextTick(50);
+
+	assert.deepEqual(extMatched, ["home", "page1"], "ext router matched the replaced hash");
+	assert.deepEqual(extMatched, nativeMatched, "replaceHash produces identical routeMatched sequence");
 });

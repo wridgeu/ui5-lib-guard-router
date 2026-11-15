@@ -1,133 +1,4 @@
-import type { wdi5Selector } from "wdio-ui5-service";
-import type UIComponent from "sap/ui/core/UIComponent";
-import type JSONModel from "sap/ui/model/json/JSONModel";
-
-const SELECTORS = {
-	homePage: {
-		selector: {
-			id: /^homePage$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.Page",
-			interaction: "root",
-		},
-		forceSelect: true,
-	},
-	protectedPage: {
-		selector: {
-			id: /^protectedPage$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.Page",
-			interaction: "root",
-		},
-		forceSelect: true,
-	},
-	toggleLoginButton: {
-		selector: {
-			id: /^toggleLoginBtn$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.Button",
-		},
-		forceSelect: true,
-	},
-	navigateProtectedButton: {
-		selector: {
-			id: /^navProtectedBtn$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.Button",
-		},
-		forceSelect: true,
-	},
-	authStatus: {
-		selector: {
-			id: /^authStatus$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.ObjectStatus",
-		},
-		forceSelect: true,
-	},
-	dirtyCheckbox: {
-		selector: {
-			id: /^dirtyCheckbox$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.CheckBox",
-		},
-		forceSelect: true,
-	},
-	launchModeText: {
-		selector: {
-			id: /^launchModeText$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.Text",
-		},
-		forceSelect: true,
-	},
-	ushellStatus: {
-		selector: {
-			id: /^ushellStatus$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.ObjectStatus",
-		},
-		forceSelect: true,
-	},
-	flpDirtyProviderStatus: {
-		selector: {
-			id: /^flpDirtyProviderStatus$/,
-			viewName: "demo.app.view.Home",
-			controlType: "sap.m.ObjectStatus",
-		},
-		forceSelect: true,
-	},
-	protectedFlpDirtyProviderStatus: {
-		selector: {
-			id: /^protectedFlpDirtyProviderStatus$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.ObjectStatus",
-		},
-		forceSelect: true,
-	},
-	protectedCurrentHashText: {
-		selector: {
-			id: /^protectedCurrentHashText$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.Text",
-		},
-		forceSelect: true,
-	},
-	settlementStatus: {
-		selector: {
-			id: /^settlementStatus$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.ObjectStatus",
-		},
-		forceSelect: true,
-	},
-	settlementRouteText: {
-		selector: {
-			id: /^settlementRouteText$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.Text",
-		},
-		forceSelect: true,
-	},
-	settlementHashText: {
-		selector: {
-			id: /^settlementHashText$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.Text",
-		},
-		forceSelect: true,
-	},
-	settlementHashTechnicalText: {
-		selector: {
-			id: /^settlementHashTechnicalText$/,
-			viewName: "demo.app.view.Protected",
-			controlType: "sap.m.Text",
-		},
-		forceSelect: true,
-	},
-} as const satisfies Record<string, wdi5Selector>;
-
-type SelectorName = keyof typeof SELECTORS;
+import { CONTROLS, type ControlRef, getAppComponentId, selectorFor } from "../shared/controls";
 
 type PageWaitOptions = {
 	timeout?: number;
@@ -139,15 +10,15 @@ type AppHashWaitOptions = {
 	afterRevision?: number;
 };
 
-async function getControl(name: SelectorName) {
-	return browser.asControl(SELECTORS[name]);
+async function getControl(ref: ControlRef, extra: Parameters<typeof selectorFor>[1] = {}) {
+	return browser.asControl(selectorFor(ref, extra));
 }
 
-async function waitForControlText(name: SelectorName, expected: string, timeout = 5000): Promise<void> {
+async function waitForControlText(ref: ControlRef, expected: string, timeout = 5000): Promise<void> {
 	await browser.waitUntil(
 		async () => {
 			try {
-				const control = await getControl(name);
+				const control = await getControl(ref);
 				return (await control.getProperty("text")) === expected;
 			} catch {
 				return false;
@@ -155,26 +26,25 @@ async function waitForControlText(name: SelectorName, expected: string, timeout 
 		},
 		{
 			timeout,
-			timeoutMsg: `Control "${name}" did not expose text "${expected}"`,
+			timeoutMsg: `Control "${ref.viewId}/${ref.id}" did not expose text "${expected}"`,
 		},
 	);
 }
 
 export async function getRuntimeSettlementRevisionInFlp(): Promise<number> {
-	return browser.execute(() => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component.registry.all() as Record<string, UIComponent>;
-		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-		return Number(component?.getModel("runtime")?.getProperty("/lastSettlementRevision") ?? 0);
-	});
+	return browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const component = Component.getComponentById(componentId);
+			return Number(component?.getModel("runtime")?.getProperty("/lastSettlementRevision") ?? 0);
+		},
+		await getAppComponentId(),
+	);
 }
 
-async function waitForPage(
-	name: "homePage" | "protectedPage",
-	expectedTitle: string,
-	options: PageWaitOptions = {},
-): Promise<void> {
+async function waitForPage(page: ControlRef, expectedTitle: string, options: PageWaitOptions = {}): Promise<void> {
 	const { timeout = 30000, afterRevision } = options;
+	const name = `${page.viewId}/${page.id}`;
 
 	if (afterRevision !== undefined) {
 		await browser.waitUntil(async () => (await getRuntimeSettlementRevisionInFlp()) > afterRevision, {
@@ -186,26 +56,26 @@ async function waitForPage(
 	await browser.waitUntil(
 		async () => {
 			try {
-				const page = await getControl(name);
-				if ((await page.getProperty("title")) !== expectedTitle) {
+				const control = await getControl(page, { interaction: "root" });
+				if ((await control.getProperty("title")) !== expectedTitle) {
 					return false;
 				}
 
-				return browser.execute((selectorName: string) => {
-					const Element = sap.ui.require("sap/ui/core/Element");
-					const controlId =
-						selectorName === "homePage"
-							? "application-app-preview-component---homeView--homePage"
-							: "application-app-preview-component---protectedView--protectedPage";
-					const control = Element?.getElementById(controlId);
-					const domRef = control?.getDomRef?.();
-					if (!domRef) {
-						return false;
-					}
+				return browser.execute(
+					(componentId: string, viewId: string, id: string) => {
+						const Component = sap.ui.require("sap/ui/core/Component");
+						const domRef = Component?.getComponentById(componentId)?.byId(viewId)?.byId(id)?.getDomRef();
+						if (!domRef) {
+							return false;
+						}
 
-					const style = window.getComputedStyle(domRef);
-					return style.display !== "none" && style.visibility !== "hidden";
-				}, name);
+						const style = window.getComputedStyle(domRef);
+						return style.display !== "none" && style.visibility !== "hidden";
+					},
+					await getAppComponentId(),
+					page.viewId,
+					page.id,
+				);
 			} catch {
 				return false;
 			}
@@ -218,11 +88,10 @@ async function waitForPage(
 }
 
 async function isDemoAppMounted(): Promise<boolean> {
-	return browser.execute(() => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component?.registry?.all?.() as Record<string, UIComponent> | undefined;
-		return Object.values(all ?? {}).some((component) => component.getManifestEntry("sap.app")?.id === "demo.app");
-	});
+	return getAppComponentId().then(
+		() => true,
+		() => false,
+	);
 }
 
 export async function launchFlpApp(): Promise<void> {
@@ -240,33 +109,33 @@ export async function launchFlpApp(): Promise<void> {
 	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
 	await resetDirtyState();
 	await navigateToRouteInFlp("home");
-	await waitForPage("homePage", "Home");
+	await waitForPage(CONTROLS.home.homePage, "Home");
 }
 
 export async function resetFlpDemo(): Promise<void> {
 	await launchFlpApp();
 
-	const authStatus = await getControl("authStatus");
+	const authStatus = await getControl(CONTROLS.home.authStatus);
 	if ((await authStatus.getProperty("text")) === "Logged In") {
-		const toggleLoginButton = await getControl("toggleLoginButton");
+		const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
 		await toggleLoginButton.press();
-		await waitForControlText("authStatus", "Logged Out");
+		await waitForControlText(CONTROLS.home.authStatus, "Logged Out");
 	}
 }
 
 export async function loginAndGoToProtectedInFlp(): Promise<void> {
-	const toggleLoginButton = await getControl("toggleLoginButton");
+	const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
 	await toggleLoginButton.press();
-	await waitForControlText("authStatus", "Logged In");
+	await waitForControlText(CONTROLS.home.authStatus, "Logged In");
 
 	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
-	const navigateProtectedButton = await getControl("navigateProtectedButton");
+	const navigateProtectedButton = await getControl(CONTROLS.home.navProtectedBtn);
 	await navigateProtectedButton.press();
-	await waitForPage("protectedPage", "Protected Page", { afterRevision: settlementRevision });
+	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 }
 
 export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
-	const dirtyCheckbox = await getControl("dirtyCheckbox");
+	const dirtyCheckbox = await getControl(CONTROLS.protected.dirtyCheckbox);
 	const selected = (await dirtyCheckbox.getProperty("selected")) === true;
 
 	if (selected !== isDirty) {
@@ -275,21 +144,23 @@ export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 }
 
 export async function pressToggleLoginInFlp(): Promise<void> {
-	const toggleLoginButton = await getControl("toggleLoginButton");
+	const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
 	await toggleLoginButton.press();
 }
 
-export async function expectControlText(name: SelectorName, expected: string): Promise<void> {
-	await waitForControlText(name, expected);
+export async function expectControlText(ref: ControlRef, expected: string): Promise<void> {
+	await waitForControlText(ref, expected);
 }
 
 async function resetDirtyState(): Promise<void> {
-	await browser.execute(() => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component.registry.all() as Record<string, UIComponent>;
-		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-		(component?.getModel("form") as JSONModel | undefined)?.setProperty("/isDirty", false);
-	});
+	await browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const component = Component.getComponentById(componentId);
+			component?.getModel("form")?.setProperty("/isDirty", false);
+		},
+		await getAppComponentId(),
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,26 +259,29 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 }
 
 export async function waitForProtectedPageInFlp(options?: PageWaitOptions): Promise<void> {
-	await waitForPage("protectedPage", "Protected Page", options);
+	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", options);
 }
 
 export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<void> {
-	await waitForPage("homePage", "Home", options);
+	await waitForPage(CONTROLS.home.homePage, "Home", options);
 }
 
 /**
  * Navigate to a route programmatically via the demo app's router.
  */
 export async function navigateToRouteInFlp(routeName: string): Promise<void> {
-	const navigated = await browser.execute((route: string) => {
-		const Component = sap.ui.require("sap/ui/core/Component");
-		const all = Component.registry.all() as Record<string, UIComponent>;
-		const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-		if (!component) return false;
+	const navigated = await browser.execute(
+		(componentId: string, route: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const component = Component.getComponentById(componentId);
+			if (!component) return false;
 
-		component.getRouter().navTo(route, {}, undefined, true);
-		return true;
-	}, routeName);
+			component.getRouter().navTo(route, {}, undefined, true);
+			return true;
+		},
+		await getAppComponentId(),
+		routeName,
+	);
 
 	if (!navigated) {
 		throw new Error(`Demo router was not available to navigate to "${routeName}"`);

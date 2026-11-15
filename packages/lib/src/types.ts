@@ -1,6 +1,7 @@
 import type Event from "sap/ui/base/Event";
 import type MobileRouter from "sap/m/routing/Router";
 import type { ComponentTargetParameters, RouteInfo } from "sap/ui/core/routing/Router";
+import type UIComponent from "sap/ui/core/UIComponent";
 import type NavigationOutcome from "./NavigationOutcome";
 
 /**
@@ -93,6 +94,14 @@ export interface GuardContext {
 	 * @since 1.6.0
 	 */
 	fromMeta: Readonly<Record<string, unknown>>;
+	/**
+	 * Component that owns the router. Gives guards without a closure over the
+	 * component (e.g. manifest-declared guards) access to its models and services.
+	 * `undefined` when the router has no owner.
+	 *
+	 * @since 1.7.0
+	 */
+	ownerComponent?: UIComponent;
 }
 
 /**
@@ -237,6 +246,20 @@ export interface GuardRouterOptions {
 	 * @since 1.6.0
 	 */
 	routeMeta?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Router constructor config: the standard `sap.m.routing.Router` config
+ * (`async`, `controlId`, `viewType`, ...) plus the guard router options.
+ *
+ * @since 1.7.0
+ */
+export interface GuardRouterConfig {
+	/** Load views and targets asynchronously, as `sap.m.routing.Router` recommends. */
+	async?: boolean;
+	/** Guard router options, set in the manifest under `sap.ui5.routing.config.guardRouter`. */
+	guardRouter?: GuardRouterOptions;
+	[key: string]: unknown;
 }
 
 /**

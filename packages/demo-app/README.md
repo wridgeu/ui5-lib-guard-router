@@ -92,7 +92,7 @@ These files power the runtime inspector panels and hash-driven scenario buttons 
 
 ### Declarative guard modules
 
-Individual guard functions loaded by the router from `manifest.json` `guardRouter.guards`. These modules have no closure access to the Component instance; the `dirtyFormGuard` locates the form model via the Component registry at runtime.
+Individual guard functions loaded by the router from `manifest.json` `guardRouter.guards`. These modules have no closure access to the Component instance; the `dirtyFormGuard` reads the form model from `context.ownerComponent`.
 
 | File                         | Type         | Description                                      |
 | ---------------------------- | ------------ | ------------------------------------------------ |
@@ -116,6 +116,11 @@ The `start:flp` script launches a local FLP sandbox at `/test/flp.html#app-previ
 **Enhanced homepage (CDM mode):** The FLP preview uses `enhancedHomePage: true`, which bootstraps the shell via CDM (`container.init('cdm')`) instead of the classic `sandbox.js`. This provides a more complete UShell service layer (`ShellNavigationHashChanger`, `CrossApplicationNavigation`, dirty-state infrastructure) that closely matches production FLP behavior. Requires UI5 >= 1.123.0.
 
 **Why SAPUI5?** The FLP sandbox requires `sap.ushell`, which is not available in OpenUI5. The FLP config (`ui5-flp.yaml`) uses SAPUI5 while the standalone config (`ui5.yaml`) uses OpenUI5. Both pin version 1.144.0.
+
+**Typings:** The demo compiles against `@sapui5/types`, so `flp/ContainerAdapter.ts` uses the official `sap/ushell/Container` types. The container is looked up at runtime via `sap.ui.require` rather than imported, because standalone mode runs on OpenUI5 without `sap.ushell`. The library itself compiles against `@openui5/types` to stay OpenUI5-compatible.
+
+> [!NOTE]
+> `Container.registerDirtyStateProvider` is deprecated since UI5 1.146 in favor of `sap/ushell/navigation/DirtyState`. The demo targets 1.144, where `DirtyState` does not exist yet, so it keeps the Container API. Switch to `DirtyState` once the minimum version is 1.146 or later.
 
 **What's different in FLP mode:**
 
@@ -197,6 +202,8 @@ Test files are in `test/e2e/`:
 | `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect        |
 | `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points |
 | `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates       |
+
+Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 
 Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, `waitForRuntimeSettlement`, `getRuntimeSettlementRevision`, and `getHistoryLength` helpers.
 

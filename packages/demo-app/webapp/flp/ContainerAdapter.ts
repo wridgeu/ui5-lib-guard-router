@@ -1,39 +1,25 @@
-type FlpNavigationContext = {
-	isCrossAppNavigation?: boolean;
-};
+import type Container from "sap/ushell/Container";
 
-export type FlpDirtyStateProvider = (navigationContext?: FlpNavigationContext) => boolean;
+type DirtyStateProvider = Parameters<typeof Container.registerDirtyStateProvider>[0];
 
-type FlpContainer = {
-	registerDirtyStateProvider?: (provider: FlpDirtyStateProvider) => void;
-	deregisterDirtyStateProvider?: (provider: FlpDirtyStateProvider) => void;
-};
-
-type FlpGlobal = typeof globalThis & {
-	sap?: {
-		ushell?: {
-			Container?: FlpContainer;
-		};
-	};
-};
-
-function getContainer(): FlpContainer | null {
-	return (globalThis as FlpGlobal).sap?.ushell?.Container ?? null;
+// Probe instead of import: standalone runs on OpenUI5, which has no sap.ushell.
+function getContainer(): typeof Container | undefined {
+	return sap.ui.require("sap/ushell/Container");
 }
 
 export function hasUshellContainer(): boolean {
-	return getContainer() !== null;
+	return getContainer() !== undefined;
 }
 
-export function registerDirtyStateProvider(provider: FlpDirtyStateProvider): (() => void) | null {
+export function registerDirtyStateProvider(provider: DirtyStateProvider): (() => void) | null {
 	const container = getContainer();
-	if (!container?.registerDirtyStateProvider || !container?.deregisterDirtyStateProvider) {
+	if (!container) {
 		return null;
 	}
 
 	container.registerDirtyStateProvider(provider);
 
 	return (): void => {
-		container.deregisterDirtyStateProvider?.(provider);
+		container.deregisterDirtyStateProvider(provider);
 	};
 }

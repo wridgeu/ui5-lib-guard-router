@@ -16,6 +16,8 @@ The router provides:
 - Guard evaluation on redirect targets with loop detection
 - Declarative manifest-based guard and metadata configuration
 - Route metadata (`getRouteMeta` / `setRouteMeta`, `toMeta` / `fromMeta` on GuardContext)
+- Owner component on GuardContext (`ownerComponent`) for component-scoped state in manifest guards
+- Typed constructor config (`GuardRouterConfig`) for creating the router in code
 - Pattern-tree inheritance for guards and metadata (`inheritance: "pattern-tree"`)
 
 ## Documents

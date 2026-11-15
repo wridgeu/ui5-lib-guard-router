@@ -1,4 +1,5 @@
-import type UIComponent from "sap/ui/core/UIComponent";
+import type { GuardRouter } from "ui5/guard/router/types";
+import { CONTROLS, getAppComponentId } from "../shared/controls";
 import {
 	expectAppHashToBe,
 	expectControlText,
@@ -20,19 +21,22 @@ describe("FLP preview integration", () => {
 	});
 
 	it("shows FLP runtime state on launch", async () => {
-		await expectControlText("launchModeText", "FLP Preview");
-		await expectControlText("ushellStatus", "sap.ushell.Container available");
-		await expectControlText("flpDirtyProviderStatus", "FLP cross-app dirty protection active");
+		await expectControlText(CONTROLS.home.launchModeText, "FLP Preview");
+		await expectControlText(CONTROLS.home.ushellStatus, "sap.ushell.Container available");
+		await expectControlText(CONTROLS.home.flpDirtyProviderStatus, "FLP cross-app dirty protection active");
 	});
 
 	it("keeps app navigation working inside FLP preview", async () => {
 		await loginAndGoToProtectedInFlp();
-		await expectControlText("protectedFlpDirtyProviderStatus", "FLP cross-app dirty protection active");
-		await expectControlText("protectedCurrentHashText", "#/protected");
-		await expectControlText("settlementStatus", "Committed");
-		await expectControlText("settlementRouteText", "protected");
-		await expectControlText("settlementHashText", "protected");
-		await expectControlText("settlementHashTechnicalText", 'Technical: "protected"');
+		await expectControlText(
+			CONTROLS.protected.protectedFlpDirtyProviderStatus,
+			"FLP cross-app dirty protection active",
+		);
+		await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
+		await expectControlText(CONTROLS.protected.settlementStatus, "Committed");
+		await expectControlText(CONTROLS.protected.settlementRouteText, "protected");
+		await expectControlText(CONTROLS.protected.settlementHashText, "protected");
+		await expectControlText(CONTROLS.protected.settlementHashTechnicalText, 'Technical: "protected"');
 	});
 
 	it("triggers FLP dirty-state prompt on cross-app navigation and stays on page after cancel", async () => {
@@ -54,7 +58,7 @@ describe("FLP preview integration", () => {
 
 			await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
 			await expectAppHashToBe("protected", { afterRevision: settlementRevision });
-			await expectControlText("protectedCurrentHashText", "#/protected");
+			await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
 			expect(record.called).toBe(false);
 		} finally {
 			cleanup();
@@ -92,14 +96,17 @@ describe("FLP route metadata and inheritance", () => {
 	it("getRouteMeta returns inherited metadata under FLP", async () => {
 		await navigateToRouteInFlp("employees");
 
-		const meta = (await browser.execute((routeName: string) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			const all = Component.registry.all() as Record<string, UIComponent>;
-			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-			if (!component) return null;
-			type MetaRouter = { getRouteMeta(n: string): Record<string, unknown> };
-			return (component.getRouter() as unknown as MetaRouter).getRouteMeta(routeName);
-		}, "employee")) as Record<string, unknown> | null;
+		const meta = (await browser.execute(
+			(componentId: string, routeName: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				const component = Component.getComponentById(componentId);
+				if (!component) return null;
+				const router: GuardRouter = component.getRouter();
+				return router.getRouteMeta(routeName);
+			},
+			await getAppComponentId(),
+			"employee",
+		)) as Record<string, unknown> | null;
 
 		expect(meta).not.toBeNull();
 		expect(meta!.section).toBe("hr");
@@ -108,19 +115,17 @@ describe("FLP route metadata and inheritance", () => {
 	});
 
 	it("setRouteMeta invalidates cache and propagates under FLP", async () => {
-		const childMeta = (await browser.execute(() => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			const all = Component.registry.all() as Record<string, UIComponent>;
-			const component = Object.values(all).find((c) => c.getManifestEntry("sap.app")?.id === "demo.app");
-			if (!component) return null;
-			type MetaRouter = {
-				setRouteMeta(n: string, m: Record<string, unknown>): unknown;
-				getRouteMeta(n: string): Record<string, unknown>;
-			};
-			const router = component.getRouter() as unknown as MetaRouter;
-			router.setRouteMeta("employees", { section: "engineering", requiresAuth: true });
-			return router.getRouteMeta("employee");
-		})) as Record<string, unknown> | null;
+		const childMeta = (await browser.execute(
+			(componentId: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				const component = Component.getComponentById(componentId);
+				if (!component) return null;
+				const router: GuardRouter = component.getRouter();
+				router.setRouteMeta("employees", { section: "engineering", requiresAuth: true });
+				return router.getRouteMeta("employee");
+			},
+			await getAppComponentId(),
+		)) as Record<string, unknown> | null;
 
 		expect(childMeta).not.toBeNull();
 		expect(childMeta!.section).toBe("engineering");
@@ -213,7 +218,7 @@ describe("FLP guard router hardening", () => {
 
 		// Logout.
 		await pressToggleLoginInFlp();
-		await expectControlText("authStatus", "Logged Out");
+		await expectControlText(CONTROLS.home.authStatus, "Logged Out");
 
 		// Browser forward toward previously visited #/protected.
 		const settlementRevision = await getRuntimeSettlementRevisionInFlp();

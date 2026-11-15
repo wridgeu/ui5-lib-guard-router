@@ -53,7 +53,7 @@
 	},
 	"devDependencies": {
 		"@types/qunit": "^2.19.13",
-		"@ui5/cli": "^4.0.0",
+		"@ui5/cli": "^4.0.73",
 		"ui5-tooling-transpile": "^3.0.0"
 	}
 }

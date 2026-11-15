@@ -3,7 +3,7 @@ import Router from "ui5/guard/router/Router";
 import type { GuardRouter } from "ui5/guard/router/types";
 import { initHashChanger } from "../../testHelpers";
 
-export type RouterArgs = ConstructorParameters<typeof MobileRouter>;
+export type RouterArgs = ConstructorParameters<typeof Router>;
 export type ComparableRouter = MobileRouter | GuardRouter;
 export type RouterFlavor = "native" | "guard";
 

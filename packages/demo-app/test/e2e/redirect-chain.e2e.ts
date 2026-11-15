@@ -1,3 +1,4 @@
+import { CONTROLS } from "../shared/controls";
 import {
 	expectHashToBe,
 	fireEvent,
@@ -10,14 +11,14 @@ import {
 describe("Redirect chain: admin -> protected -> home", () => {
 	beforeEach(async () => {
 		await browser.url("#");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should follow the full chain when logged out (admin -> protected -> home)", async () => {
 		await resetAuth();
 
 		const rev = await getRuntimeSettlementRevision();
-		await fireEvent("container-demo.app---homeView--navAdminBtn", "press");
+		await fireEvent(CONTROLS.home.navAdminBtn, "press");
 
 		// Admin guard redirects to protected, protected's async auth guard
 		// checks login state (logged out) and redirects to home.
@@ -28,10 +29,10 @@ describe("Redirect chain: admin -> protected -> home", () => {
 
 	it("should stop at protected when logged in (admin -> protected)", async () => {
 		// Log in first
-		await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
+		await fireEvent(CONTROLS.home.toggleLoginBtn, "press");
 
 		const rev = await getRuntimeSettlementRevision();
-		await fireEvent("container-demo.app---homeView--navAdminBtn", "press");
+		await fireEvent(CONTROLS.home.navAdminBtn, "press");
 
 		// Admin guard redirects to protected, protected's auth guard allows
 		// because user is logged in. Chain stops at protected.

@@ -6,7 +6,7 @@
 			"ui5/guard/router/*": ["../lib/src/*"],
 			"demo/app/*": ["./webapp/*"]
 		},
-		"types": ["@openui5/types"]
+		"types": ["@sapui5/types"]
 	},
 	"include": ["webapp/**/*.ts", "../lib/src/**/*.ts"]
 }

@@ -490,26 +490,6 @@ QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async 
 // ============================================================
 QUnit.module("Router - Destroy during redirect", safeDestroyHooks);
 
-QUnit.test(
-	"Destroying router while async guard is evaluating a redirect does not throw",
-	async function (assert: Assert) {
-		router.addRouteGuard("protected", async () => {
-			await nextTick(50);
-			return "forbidden"; // redirect
-		});
-		router.initialize();
-		await waitForRoute(router, "home");
-
-		router.navTo("protected");
-		await nextTick(10); // guard still pending (50ms)
-		router.destroy();
-
-		// Wait for the guard promise to resolve in the background
-		await nextTick(200);
-		assert.ok(true, "No errors thrown after destroy during pending redirect");
-	},
-);
-
 QUnit.test("Destroy during redirect settles pending navigationSettled as cancelled", async function (assert: Assert) {
 	router.addRouteGuard("protected", async () => {
 		await nextTick(100);
@@ -529,6 +509,8 @@ QUnit.test("Destroy during redirect settles pending navigationSettled as cancell
 		NavigationOutcome.Cancelled,
 		"Settlement is cancelled on destroy during redirect",
 	);
+	// Let the guard resolve its redirect after destroy; an error on that late path fails the test.
+	await nextTick(150);
 });
 
 // ============================================================

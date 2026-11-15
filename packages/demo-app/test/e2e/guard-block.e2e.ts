@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -10,11 +11,9 @@ describe("Guard blocks enter navigation", () => {
 	it("should stay on Home and report Blocked when navigating to Blocked", async () => {
 		await browser.goTo({ sHash: "" });
 		await resetAuth();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navBlockedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navBlockedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
@@ -22,7 +21,7 @@ describe("Guard blocks enter navigation", () => {
 			timeoutMsg: "Hash should stay on home after enter guard blocks",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{

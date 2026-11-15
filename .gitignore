@@ -31,5 +31,9 @@ NUL
 # wdio
 allure-results/
 
+# Stryker
+reports/
+.stryker-tmp/
+
 # Git worktrees
 .worktrees/

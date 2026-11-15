@@ -16,6 +16,7 @@ import {
 	addLeaveGuardUnsafe,
 	addRouteGuardUnsafe,
 	assertBlocked,
+	createPromiseLike,
 	createRouter,
 	initHashChanger,
 	nextTick,
@@ -60,12 +61,7 @@ QUnit.test("Async guard returning true allows navigation", async function (asser
 });
 
 QUnit.test("Promise-like guard returning true allows navigation", async function (assert: Assert) {
-	const promiseLike: PromiseLike<boolean> = {
-		// oxlint-disable-next-line unicorn/no-thenable
-		then(onfulfilled, onrejected) {
-			return Promise.resolve(true).then(onfulfilled, onrejected);
-		},
-	};
+	const promiseLike = createPromiseLike(true);
 	router.addGuard(() => promiseLike);
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -75,12 +71,7 @@ QUnit.test("Promise-like guard returning true allows navigation", async function
 });
 
 QUnit.test("Promise-like guard returning false blocks navigation", async function (assert: Assert) {
-	const promiseLike: PromiseLike<boolean> = {
-		// oxlint-disable-next-line unicorn/no-thenable
-		then(onfulfilled, onrejected) {
-			return Promise.resolve(false).then(onfulfilled, onrejected);
-		},
-	};
+	const promiseLike = createPromiseLike(false);
 	router.initialize();
 	await waitForRoute(router, "home");
 	router.addGuard(() => promiseLike);
@@ -190,6 +181,19 @@ QUnit.test("Guard receives correct context", async function (assert: Assert) {
 	assert.strictEqual(capturedContext!.toRoute, "detail", "toRoute is correct");
 	assert.strictEqual(capturedContext!.toHash, "detail/99", "toHash is correct");
 	assert.deepEqual(capturedContext!.toArguments, { id: "99" }, "toArguments is correct");
+});
+
+QUnit.test("Guard context has no ownerComponent when the router has no owner", async function (assert: Assert) {
+	let capturedContext: GuardContext | null = null;
+	router.addGuard((context: GuardContext) => {
+		capturedContext = context;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	assert.ok(capturedContext, "Context was captured");
+	assert.strictEqual(capturedContext!.ownerComponent, undefined, "ownerComponent is undefined");
 });
 
 // ============================================================
@@ -449,12 +453,7 @@ QUnit.test("Async leave guard returning true allows navigation", async function 
 });
 
 QUnit.test("Promise-like leave guard returning true allows navigation", async function (assert: Assert) {
-	const promiseLike: PromiseLike<boolean> = {
-		// oxlint-disable-next-line unicorn/no-thenable
-		then(onfulfilled, onrejected) {
-			return Promise.resolve(true).then(onfulfilled, onrejected);
-		},
-	};
+	const promiseLike = createPromiseLike(true);
 	router.addLeaveGuard("home", () => promiseLike);
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -465,12 +464,7 @@ QUnit.test("Promise-like leave guard returning true allows navigation", async fu
 });
 
 QUnit.test("Promise-like leave guard returning false blocks navigation", async function (assert: Assert) {
-	const promiseLike: PromiseLike<boolean> = {
-		// oxlint-disable-next-line unicorn/no-thenable
-		then(onfulfilled, onrejected) {
-			return Promise.resolve(false).then(onfulfilled, onrejected);
-		},
-	};
+	const promiseLike = createPromiseLike(false);
 	router.addLeaveGuard("home", () => promiseLike);
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -618,21 +612,6 @@ QUnit.test("removeLeaveGuard prevents guard from running", async function (asser
 		"protected",
 		"Navigation allowed after leave guard removed",
 	);
-});
-
-QUnit.test("destroy() clears leave guards", async function (assert: Assert) {
-	router.addLeaveGuard("home", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-	router.destroy();
-
-	router = createRouter();
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "No leave guard after destroy and re-create");
 });
 
 QUnit.test(

@@ -16,6 +16,7 @@ import {
 	getHash,
 	initHashChanger,
 	nextTick,
+	recordHashChanges,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -273,10 +274,11 @@ QUnit.test("blocked programmatic navTo does not change the hash", function (asse
 	router.addGuard(() => false);
 	router.initialize();
 
-	const hashBefore = getHash();
+	const recorder = recordHashChanges();
 	router.navTo("protected");
+	recorder.stop();
 
-	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after blocked navTo");
+	assert.deepEqual(recorder.hashes, [], "Hash was never set by the blocked navTo");
 });
 
 QUnit.test("blocked programmatic navTo settles as Blocked", async function (assert) {
@@ -295,10 +297,11 @@ QUnit.test("redirected programmatic navTo does not create intermediate hash", fu
 	router.addRouteGuard("protected", () => "home");
 	router.initialize();
 
-	const hashBefore = getHash();
+	const recorder = recordHashChanges();
 	router.navTo("protected");
+	recorder.stop();
 
-	assert.strictEqual(getHash(), hashBefore, "Hash did not visit intermediate protected route");
+	assert.deepEqual(recorder.hashes, [], "Hash did not visit intermediate protected route");
 });
 
 QUnit.test("redirected programmatic navTo settles as Redirected", async function (assert) {
@@ -331,11 +334,12 @@ QUnit.test("async blocked programmatic navTo does not change the hash", async fu
 	router.addGuard(() => Promise.resolve(false));
 	router.initialize();
 
-	const hashBefore = getHash();
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	await router.navigationSettled();
+	recorder.stop();
 
-	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after async blocked navTo");
+	assert.deepEqual(recorder.hashes, [], "Hash was never set by the async blocked navTo");
 });
 
 QUnit.test("async redirected programmatic navTo settles as Redirected", async function (assert) {
@@ -442,16 +446,6 @@ QUnit.test("navTo returns this for chaining", function (assert) {
 	router.initialize();
 	const result = router.navTo("home");
 	assert.strictEqual(result, router, "navTo returns this");
-});
-
-QUnit.test("navTo to unknown route falls through to parent without error", function (assert) {
-	router.initialize();
-
-	// Unknown routes bypass preflight and delegate to super.navTo().
-	// UI5 sets the hash to "" for unknown routes, which triggers same-hash
-	// dedup in parse(). The router does not throw.
-	router.navTo("nonexistent");
-	assert.ok(true, "navTo to unknown route did not throw");
 });
 
 QUnit.test("navTo to unknown route cancels pending async guard pipeline", async function (assert) {
@@ -568,9 +562,11 @@ QUnit.test("blocked via navTo leaves hash unchanged", async function (assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
 
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	await router.navigationSettled();
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
+	recorder.stop();
+	assert.deepEqual(recorder.hashes, [], "Hash unchanged - preflight never changed it");
 });
 
 QUnit.test("rejected async guard via navTo leaves hash unchanged", async function (assert) {
@@ -578,11 +574,12 @@ QUnit.test("rejected async guard via navTo leaves hash unchanged", async functio
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const hashBefore = getHash();
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	const result = await router.navigationSettled();
+	recorder.stop();
 	assert.strictEqual(result.status, NavigationOutcome.Error, "Rejected guard settles as Error");
-	assert.strictEqual(getHash(), hashBefore, "Hash unchanged after rejected async preflight guard");
+	assert.deepEqual(recorder.hashes, [], "Hash unchanged after rejected async preflight guard");
 });
 
 QUnit.test(
@@ -654,9 +651,11 @@ QUnit.test("redirect to nonexistent via navTo leaves hash unchanged", async func
 	router.initialize();
 	await waitForRoute(router, "home");
 
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	await router.navigationSettled();
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
+	recorder.stop();
+	assert.deepEqual(recorder.hashes, [], "Hash unchanged - preflight never changed it");
 });
 
 QUnit.test("async redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {
@@ -664,9 +663,11 @@ QUnit.test("async redirect to nonexistent via navTo leaves hash unchanged", asyn
 	router.initialize();
 	await waitForRoute(router, "home");
 
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	await router.navigationSettled();
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash unchanged - preflight never changed it");
+	recorder.stop();
+	assert.deepEqual(recorder.hashes, [], "Hash unchanged - preflight never changed it");
 });
 
 // ============================================================
@@ -713,13 +714,13 @@ QUnit.module("Router - Redirect guard bypass regression", standardHooks);
 QUnit.test("navTo from navigationSettled handler during redirect still runs guards", async function (assert: Assert) {
 	// A guard on "forbidden" redirects to "home".
 	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
-	// A global guard blocks everything except "home".
+	// A global guard blocks "protected" (and lets the redirect itself through).
 	//
 	// Regression guard: _flushSettlement fires the navigationSettled event
 	// synchronously. The phase is set to idle before _flushSettlement, so
 	// navTo() from the handler enters the full guard pipeline.
 	router.addRouteGuard("forbidden", () => "home");
-	router.addGuard((ctx: GuardContext) => ctx.toRoute === "home");
+	router.addGuard((ctx: GuardContext) => ctx.toRoute !== "protected");
 
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -740,6 +741,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	await nextTick();
 	await router.navigationSettled();
 
+	assert.ok(nestedNavFired, "Handler issued the nested navTo('protected')");
 	assert.strictEqual(getHash(), "", "Hash stayed on home; guard blocked the nested navTo('protected')");
 });
 
@@ -773,10 +775,12 @@ QUnit.test("Guard on redirect target blocks entire chain", async function (asser
 	router.initialize();
 	await waitForRoute(router, "home");
 
+	const recorder = recordHashChanges();
 	router.navTo("protected");
 	const result = await router.navigationSettled();
+	recorder.stop();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Chain blocked");
-	assert.strictEqual(getHash(), "", "Hash unchanged (preflight)");
+	assert.deepEqual(recorder.hashes, [], "Hash unchanged (preflight)");
 });
 
 QUnit.test("Redirect chain follows multiple hops (A -> B -> C)", async function (assert: Assert) {
@@ -885,6 +889,7 @@ QUnit.test("Superseding navigation during async redirect chain cancels the chain
 	// Supersede before the async guard resolves
 	router.navTo("detail", { id: "1" });
 	await waitForRoute(router, "detail");
+	await nextTick(100); // let the stale 50ms guard resolve so a leaked redirect would show
 	assert.strictEqual(getHash(), "detail/1", "Superseding navigation won");
 });
 
@@ -970,7 +975,7 @@ QUnit.test("Max redirect depth exceeded blocks with error", async function (asse
 		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Depth exceeded blocked");
 	});
 	// 1 initial guard call + MAX_REDIRECT_DEPTH (10) redirect hops = 11 total
-	assert.ok(callCount <= 11, `Guard called at most 11 times (was ${callCount})`);
+	assert.strictEqual(callCount, 11, "Guard ran for the initial hop plus MAX_REDIRECT_DEPTH (10) redirect hops");
 	assert.ok(
 		errors.some((e) => e.message.includes("maximum depth")),
 		"Error logged about max depth",

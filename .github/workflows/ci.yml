@@ -52,7 +52,7 @@ jobs:
             - name: Pack check
               run: npm run pack:check
 
-    node22-pack-smoke:
+    node26-pack-smoke:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -61,7 +61,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 22
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources

@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -12,25 +13,21 @@ describe("Browser back navigation with guards", () => {
 		await resetAuth();
 
 		// Login
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Navigate to Protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Browser back
 		await browser.back();
 
 		// Should be on Home
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("should not show protected page on browser back after logout", async () => {
@@ -38,35 +35,25 @@ describe("Browser back navigation with guards", () => {
 		await resetAuth();
 
 		// Login
-		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		let toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Navigate to Protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Navigate back to Home
 		await browser.back();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		// Logout (re-retrieve control with forceSelect after navigation)
-		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true,
-		});
+		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Verify logged out
-		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" },
-			forceSelect: true,
-		});
+		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try browser forward (toward previously visited #/protected)
@@ -78,7 +65,7 @@ describe("Browser back navigation with guards", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 
 		const settlement = await waitForRuntimeSettlement(
 			{
@@ -97,30 +84,26 @@ describe("Browser back navigation with guards", () => {
 		await resetAuth();
 
 		// Login
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Navigate Home → Protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Back to Home
 		await browser.back();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		// Forward to Protected (still logged in)
 		await browser.execute(() => window.history.forward());
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Back to Home again
 		await browser.back();
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 });

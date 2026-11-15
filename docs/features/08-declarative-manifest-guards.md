@@ -65,7 +65,7 @@ Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json`
 - Module paths use **dot notation** and resolve **relative to the component namespace** (`sap.app.id`).
     - Example: In app `demo.app`, `"guards.authGuard"` resolves to `demo/app/guards/authGuard` for `sap.ui.require`.
     - `"authGuard"` (no folder) resolves to `demo/app/authGuard` — the component root.
-    - The component namespace is obtained via `this.getOwnerComponent()?.getManifestEntry("sap.app")?.id` (the public UI5 API for accessing the owning component). If unavailable (e.g. standalone tests without a component), manifest guards are skipped with a warning.
+    - The component namespace is read from the router's owner component (the `oOwner` constructor argument) via `owner.getManifestEntry("sap.app")?.id`. If unavailable (e.g. standalone tests without a component), manifest guards are skipped with a warning.
     - Paths prefixed with `"module:"` bypass namespace resolution, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()` convention. Example: `"module:some.other.lib.guard"` resolves to `some/other/lib/guard` directly.
 - Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)).
 - A module entry may include a `#` cherry-pick suffix to select a single export: `"guards.security#checkAuth"` (see [Cherry-Pick Syntax](#cherry-pick-syntax)).
@@ -84,7 +84,8 @@ import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export default function authGuard(context: GuardContext): GuardResult {
 	// Standalone function — no closure over component state.
-	// For shared state, use context.bag or a service/singleton pattern.
+	// For inter-guard data, use context.bag; for component state (models),
+	// use context.ownerComponent (since 1.7.0).
 	const user = context.bag.get("user");
 	return user ? true : "login";
 }
@@ -458,7 +459,7 @@ Key properties:
 
 | Risk                                                          | Mitigation                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guard modules with closures can't access component state      | Document: manifest guards are standalone; use `context.bag` or services for shared state; imperative registration for component-bound guards                                                                                                       |
+| Guard modules with closures can't access component state      | Document: manifest guards are standalone; use `context.ownerComponent` (since 1.7.0) for component state and `context.bag` for inter-guard data                                                                                                    |
 | Guard ordering is implicit (array order)                      | Document clearly; test array-order execution                                                                                                                                                                                                       |
 | Module paths are strings with no compile-time validation      | Graceful runtime warnings on invalid paths; future: UI5 linter rule                                                                                                                                                                                |
 | Manifest + imperative guards coexist                          | Well-defined order: manifest first, imperative second                                                                                                                                                                                              |

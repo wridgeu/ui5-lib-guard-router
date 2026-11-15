@@ -1,3 +1,4 @@
+import { CONTROLS } from "../shared/controls";
 import {
 	expectHashToBe,
 	fireEvent,
@@ -12,14 +13,14 @@ describe("navTo preflight - history guarantees", () => {
 	beforeEach(async () => {
 		await resetAuth();
 		await browser.url("#");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 
 	it("programmatic navTo to blocked route should not increase history length", async () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navBlockedBtn", "press");
+		await fireEvent(CONTROLS.home.navBlockedBtn, "press");
 
 		await waitForRuntimeSettlement({ status: "Blocked", route: "home" }, { afterRevision: rev });
 		await expectHashToBe("");
@@ -32,7 +33,7 @@ describe("navTo preflight - history guarantees", () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navForbiddenBtn", "press");
+		await fireEvent(CONTROLS.home.navForbiddenBtn, "press");
 
 		await waitForRuntimeSettlement({ status: "Redirected", route: "home" }, { afterRevision: rev });
 		await expectHashToBe("");
@@ -45,7 +46,7 @@ describe("navTo preflight - history guarantees", () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
+		await fireEvent(CONTROLS.home.navProtectedBtn, "press");
 
 		await waitForRuntimeSettlement({ status: "Redirected", route: "home" }, { afterRevision: rev });
 		await expectHashToBe("");
@@ -56,14 +57,14 @@ describe("navTo preflight - history guarantees", () => {
 
 	it("programmatic navTo to allowed route should increase history length by 1", async () => {
 		// Log in first
-		await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
+		await fireEvent(CONTROLS.home.toggleLoginBtn, "press");
 
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
+		await fireEvent(CONTROLS.home.navProtectedBtn, "press");
 
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page", {
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", {
 			afterRevision: rev,
 		});
 		await waitForRuntimeSettlement({ status: "Committed", route: "protected" }, { afterRevision: rev });

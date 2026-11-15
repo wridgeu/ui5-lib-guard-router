@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import {
 	getRuntimeSettlementRevision,
 	waitForPage,
@@ -13,29 +14,22 @@ describe("Multi-route navigation sequences", () => {
 		await resetAuth();
 
 		// Login
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Go to Protected (allowed)
-		const navProtected = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navProtected = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navProtected.press();
 
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Nav back to Home
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		// Try Forbidden (always redirects to Home)
-		const navForbidden = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navForbiddenBtn" },
-			forceSelect: true,
-		});
+		const navForbidden = await browser.asControl(selectorFor(CONTROLS.home.navForbiddenBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navForbidden.press();
 
@@ -44,7 +38,7 @@ describe("Multi-route navigation sequences", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
 			{
 				status: "Redirected",
@@ -60,41 +54,28 @@ describe("Multi-route navigation sequences", () => {
 		await resetAuth();
 
 		// Login
-		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		let toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Navigate to Protected (allowed)
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		// Logout (re-retrieve control with forceSelect after navigation)
-		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true,
-		});
+		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Verify logged out
-		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" },
-			forceSelect: true,
-		});
+		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
 		expect(await status.getProperty("text")).toBe("Logged Out");
 
 		// Try Protected again (should now redirect home)
-		const navBtn2 = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true,
-		});
+		const navBtn2 = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn2.press();
 
@@ -103,7 +84,7 @@ describe("Multi-route navigation sequences", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
 			{
 				status: "Redirected",
@@ -119,36 +100,26 @@ describe("Multi-route navigation sequences", () => {
 		await resetAuth();
 
 		// Login
-		let toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		let toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Protected (allowed)
-		let navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		let navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		// Back to home
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await waitForPage(CONTROLS.home.homePage, "Home");
 
 		// Logout
-		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true,
-		});
+		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Try Protected (redirected)
-		navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true,
-		});
+		navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
@@ -156,7 +127,7 @@ describe("Multi-route navigation sequences", () => {
 			timeoutMsg: "Hash should settle to home after guard redirect",
 			afterRevision: settlementRevision,
 		});
-		await waitForPage("container-demo.app---homeView--homePage", "Home", { afterRevision: settlementRevision });
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
 			{
 				status: "Redirected",
@@ -167,20 +138,14 @@ describe("Multi-route navigation sequences", () => {
 		);
 
 		// Login again
-		toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-			forceSelect: true,
-		});
+		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Protected (allowed again)
-		navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true,
-		});
+		navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		await navBtn.press();
 
 		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 	});
 });

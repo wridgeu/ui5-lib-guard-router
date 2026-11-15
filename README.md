@@ -140,7 +140,7 @@ tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-gu
 
 ### Prerequisites
 
-- Node.js >= 22
+- Node.js ^24.22.1 or >= 26.12.1
 - npm >= 9 (workspaces)
 
 ### Install and run
@@ -169,6 +169,7 @@ npm run test:qunit    # unit tests only (includes vendored upstream parity)
 npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
 npm run test:e2e      # integration tests only
 npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
+npm run test:mutation # Stryker mutation testing of packages/lib (slow; report in reports/mutation/)
 ```
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.

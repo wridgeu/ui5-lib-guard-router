@@ -225,17 +225,18 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 Every guard receives a `GuardContext` object:
 
-| Property      | Type                                               | Description                                                             |
-| ------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `toRoute`     | `string`                                           | Target route name (empty if no match)                                   |
-| `toHash`      | `string`                                           | Raw hash being navigated to                                             |
-| `toArguments` | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                 |
-| `fromRoute`   | `string`                                           | Current route name (empty on first navigation)                          |
-| `fromHash`    | `string`                                           | Current hash                                                            |
-| `signal`      | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
-| `bag`         | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
-| `toMeta`      | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
-| `fromMeta`    | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
+| Property         | Type                                               | Description                                                             |
+| ---------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `toRoute`        | `string`                                           | Target route name (empty if no match)                                   |
+| `toHash`         | `string`                                           | Raw hash being navigated to                                             |
+| `toArguments`    | `Record<string, string \| Record<string, string>>` | Parsed route parameters                                                 |
+| `fromRoute`      | `string`                                           | Current route name (empty on first navigation)                          |
+| `fromHash`       | `string`                                           | Current hash                                                            |
+| `signal`         | `AbortSignal`                                      | Aborted when navigation is superseded, or on `stop()`/`destroy()`       |
+| `bag`            | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
+| `toMeta`         | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
+| `fromMeta`       | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
+| `ownerComponent` | `UIComponent \| undefined`                         | Component that owns the router; `undefined` for routers without owner   |
 
 ### Return values (`GuardResult`)
 
@@ -417,6 +418,8 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
+When constructing the router in code rather than from the manifest, the config argument is typed as `GuardRouterConfig` (since 1.7.0): the standard router config plus `guardRouter`, so `new Router(routes, { async: true, guardRouter: { navToPreflight: "bypass" } })` type-checks without casts.
+
 ### Declarative guards
 
 The `guards` map wires guard modules to routes without writing code in `Component.ts`.
@@ -490,6 +493,14 @@ export default function authGuard(context: GuardContext): GuardResult {
 ```
 
 The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
+
+Manifest guards have no closure over the component. To read component-scoped state such as models, use `context.ownerComponent` instead of module-level singletons or `Component.registry` lookups, so each component instance sees its own state:
+
+```typescript
+export default function dirtyFormGuard(context: GuardContext): boolean {
+	return context.ownerComponent?.getModel("form")?.getProperty("/isDirty") !== true;
+}
+```
 
 ### Guard module format
 
@@ -1056,6 +1067,10 @@ This works because TypeScript `private` is a [compile-time-only constraint](http
 | UI5 compatibility                | Full (prototype-based class system) | Limited (UI5 metadata introspection cannot see `#` fields) |
 
 This library uses TypeScript `private` because UI5's `ManagedObject.extend()` class system relies on prototype-based inheritance and runtime metadata introspection, which is incompatible with ECMAScript `#private` fields. `Reflect.get` is the established pattern across the test suite for inspecting internal state without type-safety escape hatches.
+
+### Testing invalid input
+
+Some tests pass values the types forbid, as an untyped JavaScript caller could (e.g. a guard returning `42`). Instead of casting, they go through the helpers in `test/qunit/testHelpers.ts`: `callUnsafe(target, method, ...args)`, the `*Unsafe` wrappers built on it, and `createRouterUnsafe(routes, config)`.
 
 ## Compatibility
 

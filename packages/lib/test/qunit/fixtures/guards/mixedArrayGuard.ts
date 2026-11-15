@@ -5,7 +5,7 @@ export default [
 		return true;
 	},
 	"not a function",
-	function allowThird(_context: GuardContext): GuardResult {
-		return true;
+	function blockThird(_context: GuardContext): GuardResult {
+		return false;
 	},
 ];

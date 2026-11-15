@@ -13,6 +13,7 @@
 // (importing resolves a different instance that breaks stub/spy assertions; see commit 66d036d)
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
+import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import Views from "sap/ui/core/routing/Views";
 import { cloneJson, normalizeNavContainerToArgs } from "../../../../adapters/assertions";
 import { createForwardNavigationFixture, createViewLevelFixture } from "../../../../adapters/fixtures";
@@ -30,15 +31,6 @@ type ForwardNavigationResult = {
 		name: string | undefined;
 		arguments: unknown;
 	} | null;
-};
-
-type RouteMatchedEvent = {
-	getParameter(name: string): unknown;
-};
-
-type RouteMatchedApi = {
-	attachRouteMatched(data: undefined, handler: (event: RouteMatchedEvent) => void): void;
-	detachRouteMatched(handler: (event: RouteMatchedEvent) => void, listener?: unknown): void;
 };
 
 function stubViewsForSinglePage(targetPage: Page) {
@@ -70,27 +62,25 @@ function waitForRouteMatched(
 	timeout = 1000,
 ): Promise<ForwardNavigationResult["routeMatched"]> {
 	return new Promise((resolve, reject) => {
-		const routeMatchedApi = router as unknown as RouteMatchedApi;
-
 		const timer = setTimeout(() => {
-			routeMatchedApi.detachRouteMatched(handler, undefined);
+			router.detachRouteMatched(handler, router);
 			reject(new Error(`Timed out waiting for routeMatched "${routeName}"`));
 		}, timeout);
 
-		const handler = (event: RouteMatchedEvent) => {
-			if ((event.getParameter("name") as string | undefined) !== routeName) {
+		const handler = (event: Router$RouteMatchedEvent) => {
+			if (event.getParameter("name") !== routeName) {
 				return;
 			}
 
 			clearTimeout(timer);
-			routeMatchedApi.detachRouteMatched(handler, undefined);
+			router.detachRouteMatched(handler, router);
 			resolve({
-				name: event.getParameter("name") as string | undefined,
-				arguments: cloneJson(event.getParameter("arguments") as unknown),
+				name: event.getParameter("name"),
+				arguments: cloneJson(event.getParameter("arguments")),
 			});
 		};
 
-		routeMatchedApi.attachRouteMatched(undefined, handler);
+		router.attachRouteMatched(handler, router);
 	});
 }
 

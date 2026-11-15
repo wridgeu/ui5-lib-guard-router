@@ -1,3 +1,4 @@
+import { CONTROLS, selectorFor } from "../shared/controls";
 import { getRuntimeSettlementRevision, waitForPage, resetAuth, waitForRuntimeSettlement } from "./helpers";
 
 describe("Guard allows navigation when logged in", () => {
@@ -6,27 +7,21 @@ describe("Guard allows navigation when logged in", () => {
 		await resetAuth();
 
 		// Toggle login
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
+		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
 		await toggleBtn.press();
 
 		// Verify logged in
-		const status = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--authStatus" },
-		});
+		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
 		expect(await status.getProperty("text")).toBe("Logged In");
 
 		// Navigate to protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
+		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navBtn.press();
 
 		// Wait for view to load - this confirms async guard completed and navigation committed.
 		// Don't wait for hash first because it changes BEFORE async guard completes.
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 
 		const settlement = await waitForRuntimeSettlement(
 			{

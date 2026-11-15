@@ -1,6 +1,8 @@
 import Log from "sap/base/Log";
-import GuardPipeline from "ui5/guard/router/GuardPipeline";
+import jQuery from "sap/ui/thirdparty/jquery";
+import GuardPipeline, { isPromiseLike } from "ui5/guard/router/GuardPipeline";
 import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
+import { callUnsafe } from "./testHelpers";
 
 /**
  * Sinon-qunit-bridge injects `stub`, `spy`, `mock` onto the QUnit test
@@ -91,15 +93,28 @@ QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
 
 QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) {
 	const pipeline = new GuardPipeline();
+	const calls: string[] = [];
+	pipeline.addGlobalGuard(() => {
+		calls.push("global");
+		return true;
+	});
+	pipeline.addEnterGuard("target", () => {
+		calls.push("enter");
+		return true;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		calls.push("leave");
+		return true;
+	});
 	const guard: GuardFn = () => false;
-	pipeline.addGlobalGuard(() => true);
 
 	pipeline.removeGlobalGuard(guard);
 	pipeline.removeEnterGuard("target", guard);
 	pipeline.removeLeaveGuard("current", guard);
 
-	const result = pipeline.evaluate(createContext());
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "Pipeline unaffected by removing non-existent guards");
+	assert.deepEqual(calls, ["leave", "global", "enter"], "Every registered guard is still registered");
 });
 
 // ============================================================
@@ -298,19 +313,31 @@ QUnit.test("multiple leave guards run in order and short-circuit on first false"
 // ============================================================
 QUnit.module("GuardPipeline - validation");
 
+QUnit.test("isPromiseLike accepts function thenables and rejects non-thenables", function (assert: Assert) {
+	// deferred.promise(target) attaches then() to the target, here a function.
+	const functionThenable = jQuery.Deferred().promise(() => undefined);
+	assert.strictEqual(isPromiseLike(functionThenable), true, "function with then() is a thenable");
+	assert.strictEqual(
+		isPromiseLike(() => undefined),
+		false,
+		"plain function is not",
+	);
+	assert.strictEqual(isPromiseLike(null), false, "null is not");
+});
+
 QUnit.test("invalid return values treated as block", function (this: SinonTestContext, assert: Assert) {
 	const warnStub = this.stub(Log, "warning");
 
 	const p1 = new GuardPipeline();
-	p1.addGlobalGuard((() => 42) as unknown as GuardFn);
+	callUnsafe(p1, "addGlobalGuard", () => 42);
 	assert.deepEqual(p1.evaluate(createContext()), { action: "block" }, "Number treated as block");
 
 	const p2 = new GuardPipeline();
-	p2.addGlobalGuard((() => "") as unknown as GuardFn);
+	callUnsafe(p2, "addGlobalGuard", () => "");
 	assert.deepEqual(p2.evaluate(createContext()), { action: "block" }, "Empty string treated as block");
 
 	const p3 = new GuardPipeline();
-	p3.addLeaveGuard("current", (() => "nope") as unknown as LeaveGuardFn);
+	callUnsafe(p3, "addLeaveGuard", "current", () => "nope");
 	assert.deepEqual(
 		p3.evaluate(createContext({ fromRoute: "current" })),
 		{ action: "block" },
@@ -499,7 +526,7 @@ QUnit.test(
 	async function (this: SinonTestContext, assert: Assert) {
 		const warnStub = this.stub(Log, "warning");
 		const pipeline = new GuardPipeline();
-		pipeline.addGlobalGuard(() => Promise.resolve(42 as unknown as boolean));
+		callUnsafe(pipeline, "addGlobalGuard", () => Promise.resolve(42));
 
 		const result = await pipeline.evaluate(createContext());
 		assert.deepEqual(result, { action: "block" });
@@ -518,14 +545,20 @@ QUnit.test("guard can remove itself during iteration", function (assert: Assert)
 		pipeline.removeGlobalGuard(oneShotGuard);
 		return true;
 	};
+	let secondGuardCalls = 0;
 	pipeline.addGlobalGuard(oneShotGuard);
-	pipeline.addGlobalGuard(() => true);
+	pipeline.addGlobalGuard(() => {
+		secondGuardCalls++;
+		return true;
+	});
 
 	const result1 = pipeline.evaluate(createContext());
-	assert.deepEqual(result1, { action: "allow" }, "First call: both guards run, allow");
+	assert.deepEqual(result1, { action: "allow" }, "First call: allow");
+	assert.strictEqual(secondGuardCalls, 1, "First call: the guard after the self-removing one still ran");
 
 	const result2 = pipeline.evaluate(createContext());
 	assert.deepEqual(result2, { action: "allow" }, "Second call: one-shot removed, still allow");
+	assert.strictEqual(secondGuardCalls, 2, "Second call: remaining guard ran");
 });
 
 // ============================================================
