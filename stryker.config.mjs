@@ -13,5 +13,4 @@ export default {
 	checkers: ["typescript"],
 	tsconfigFile: "packages/lib/tsconfig.json",
 	concurrency: "50%", // one headless Chrome per worker
-	incremental: true,
 };

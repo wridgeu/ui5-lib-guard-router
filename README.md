@@ -174,6 +174,8 @@ npm run test:mutation # Stryker mutation testing of packages/lib (slow; report i
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
 
+`test:mutation` always runs every mutant. To reuse results from the last run (`reports/stryker-incremental.json`) while iterating on library source, start the library server with `npm run start:lib` and run `npx stryker run --incremental`. Do not reuse results after changing tests: Stryker sees the QUnit run as a single test, so it cannot tell which results a test change invalidates.
+
 The vendored parity sources themselves are maintained with:
 
 ```bash
