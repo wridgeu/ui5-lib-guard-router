@@ -5,6 +5,7 @@ import type { GuardContext, GuardFn, GuardLoading, GuardRouter } from "ui5/guard
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureWarnings,
+	captureErrorsAsync,
 	captureWarningsAsync,
 	createRouter,
 	createRouterUnsafe,
@@ -1477,12 +1478,29 @@ QUnit.test("lazy mode: uncached module runs all of its guards in order", async f
 	};
 	const both = ["uncachedFirst", "uncachedSecond"];
 
+	router.navTo("protected");
+	router.navTo("home");
+	await router.navigationSettled();
+	await loadModule(path);
+	await flushPromises();
+	assert.deepEqual(probe.calls, [], "a navigation superseded while the module loads runs no guards");
+
 	assert.deepEqual(await visit([]), { status: NavigationOutcome.Committed, calls: both }, "first navigation");
-	assert.deepEqual(await visit([]), { status: NavigationOutcome.Committed, calls: both }, "later navigation");
+	probe.calls.length = 0;
+	router.navTo("protected");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "later navigation commits within navTo");
+	assert.deepEqual(probe.calls, both, "later navigation runs all guards");
+	router.navTo("home");
+	await router.navigationSettled();
 	assert.deepEqual(
 		await visit([() => Promise.resolve(true), () => false]),
 		{ status: NavigationOutcome.Blocked, calls: both },
 		"a guard after an async one still runs and can block",
+	);
+	assert.deepEqual(
+		await visit([() => true, () => Promise.resolve(true)]),
+		{ status: NavigationOutcome.Committed, calls: both },
+		"an async last guard runs once and no guard runs twice",
 	);
 	assert.deepEqual(
 		await visit([() => Promise.resolve(false)]),
@@ -1537,6 +1555,21 @@ QUnit.test("lazy mode: uncached cherry-pick of a missing export allows", async f
 	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed, "no guard ran");
 });
 
+QUnit.test("lazy mode: a guard that throws on first load fails the navigation", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedThrowingGuard`;
+	router = createLazyRouter({ protected: [path] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+	await waitForRoute(router, "home");
+
+	await captureErrorsAsync(async () => {
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Error, "navigation fails");
+		assert.strictEqual((result.error as Error).message, "guard failed", "with the thrown error");
+	});
+});
+
 QUnit.test("lazy mode: a module that fails to load fails the navigation", async function (assert: Assert) {
 	const path = `${FIXTURES}/doesNotExist`;
 	router = createLazyRouter({ protected: [path], forbidden: [`${path}#guard`] });
@@ -1589,8 +1622,17 @@ QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (a
 
 	router.navTo("protected");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "picked export blocked within navTo");
-	router.navTo("forbidden");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "missing export: committed within navTo");
+	const warnings = captureWarnings(() => {
+		router.navTo("forbidden");
+		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "missing export: committed within navTo");
+		router.navTo("home");
+		router.navTo("forbidden");
+	});
+	assert.strictEqual(
+		warnings.filter((w) => w.message.includes("#missing")).length,
+		1,
+		"missing export warns once, not per navigation",
+	);
 });
 
 // ============================================================

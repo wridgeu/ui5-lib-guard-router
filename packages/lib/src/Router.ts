@@ -312,16 +312,38 @@ function resolveModuleExports(
 }
 
 /**
- * Run guards in order, stopping at the first result that is not `true`
- * or once the navigation is superseded.
+ * Run guards in order, stopping at the first result that is not `true`.
+ * Stays synchronous until a guard returns a Promise, like the pipeline.
  */
-async function runGuardsInOrder(guards: GuardFn[], context: GuardContext): Promise<GuardResult> {
-	for (const guard of guards) {
-		if (context.signal.aborted) return false;
-		const result = await guard(context);
+function runGuardsInOrder(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+	for (let i = 0; i < guards.length; i++) {
+		const result = guards[i](context);
+		if (isPromiseLike(result)) return finishGuardsAsync(result, guards.slice(i + 1), context);
 		if (result !== true) return result;
 	}
 	return true;
+}
+
+/** Await a pending guard result, then run the remaining guards unless the navigation was superseded. */
+async function finishGuardsAsync(
+	pending: PromiseLike<GuardResult>,
+	remaining: GuardFn[],
+	context: GuardContext,
+): Promise<GuardResult> {
+	const result = await pending;
+	if (result !== true) return result;
+	if (context.signal.aborted) return false;
+	return runGuardsInOrder(remaining, context);
+}
+
+/** Load a guard module asynchronously. Rejects (with a warning) when the load fails. */
+function loadGuardModule(modulePath: string): Promise<unknown> {
+	return new Promise((resolve, reject) => {
+		sap.ui.require([modulePath], resolve, (err: Error) => {
+			Log.warning(`guardRouter.guards: lazy load of "${modulePath}" failed`, String(err), LOG_COMPONENT);
+			reject(err);
+		});
+	});
 }
 
 /**
@@ -559,8 +581,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
 
-			// Fire-and-forget preload hint: warm the module cache so lazy
-			// wrappers resolve synchronously on first navigation.
+			// Fire-and-forget preload hint: a module cached by initialize()
+			// needs no async load on navigation (see _registerLazyGuards).
 			// Block mode loads modules itself in initialize().
 			if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
 				const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
@@ -1927,42 +1949,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Bare-path descriptors try a sync cache probe first; if the module is
 	 * cached (preload likely finished), all guards are expanded immediately.
 	 * On cache miss, a single wrapper loads the module on first navigation and
-	 * runs all of its guards in order.
+	 * runs all of its guards in order; later navigations run them synchronously.
 	 */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
 			const { modulePath, exportKey, name } = descriptor;
 
 			if (exportKey !== undefined) {
-				// Cherry-picked: one lazy wrapper, resolves to exactly one guard
+				// Cherry-picked: one lazy wrapper, resolves to at most one guard.
+				// Resolved once, so a missing export warns once rather than on every navigation.
+				let picked: GuardFn[] | undefined;
+				const runPicked = (mod: unknown, context: GuardContext): GuardResult | Promise<GuardResult> => {
+					picked ??= resolveModuleExports(mod, modulePath, name, exportKey).map((exp) => exp.fn);
+					return runGuardsInOrder(picked, context);
+				};
 				const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
 					const cached = sap.ui.require(modulePath) as unknown;
-					if (cached !== undefined) {
-						const exports = resolveModuleExports(cached, modulePath, name, exportKey);
-						if (exports.length === 0) return true;
-						return exports[0].fn(context);
-					}
-					return new Promise<GuardResult>((resolve, reject) => {
-						sap.ui.require(
-							[modulePath],
-							(mod: unknown) => {
-								const exports = resolveModuleExports(mod, modulePath, name, exportKey);
-								if (exports.length === 0) {
-									resolve(true);
-									return;
-								}
-								resolve(exports[0].fn(context));
-							},
-							(err: Error) => {
-								Log.warning(
-									`guardRouter.guards: lazy load of "${modulePath}" failed`,
-									String(err),
-									LOG_COMPONENT,
-								);
-								reject(err);
-							},
-						);
-					});
+					if (cached !== undefined) return runPicked(cached, context);
+					return loadGuardModule(modulePath).then((mod) =>
+						context.signal.aborted ? false : runPicked(mod, context),
+					);
 				};
 				this._registerGuardFromDescriptor(descriptor, lazyGuard);
 				continue;
@@ -1980,23 +1986,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 			// Cache miss: registering the module's guards on first use would miss the current
 			// navigation, whose guard list the pipeline is already iterating.
-			const lazyModule = (context: GuardContext): PromiseLike<GuardResult> => {
-				return new Promise<GuardResult>((resolve, reject) => {
-					sap.ui.require(
-						[modulePath],
-						(mod: unknown) => {
-							const guards = resolveModuleExports(mod, modulePath, name).map((exp) => exp.fn);
-							runGuardsInOrder(guards, context).then(resolve, reject);
-						},
-						(err: Error) => {
-							Log.warning(
-								`guardRouter.guards: lazy load of "${modulePath}" failed`,
-								String(err),
-								LOG_COMPONENT,
-							);
-							reject(err);
-						},
-					);
+			let loadedGuards: GuardFn[] | undefined;
+			const lazyModule = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+				if (loadedGuards) return runGuardsInOrder(loadedGuards, context);
+				return loadGuardModule(modulePath).then((mod) => {
+					if (context.signal.aborted) return false;
+					loadedGuards ??= resolveModuleExports(mod, modulePath, name).map((exp) => exp.fn);
+					return runGuardsInOrder(loadedGuards, context);
 				});
 			};
 			this._registerGuardFromDescriptor(descriptor, lazyModule);

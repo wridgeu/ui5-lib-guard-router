@@ -228,10 +228,10 @@ export interface GuardRouterOptions {
 	/**
 	 * Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`.
 	 *
-	 * In `"lazy"` mode, if the preload hint has not completed before the first
-	 * navigation, multi-export module guards beyond the first are appended after
-	 * any imperatively registered guards. Use `"block"` for strict declaration-order
-	 * guarantees.
+	 * In `"lazy"` mode, a module already cached at `initialize()` has its guards
+	 * registered one by one, in order. Otherwise one wrapper at the module's
+	 * position loads it on first navigation, runs all of its guards in order and
+	 * keeps them for later navigations. Either way the declared order holds.
 	 */
 	guardLoading?: GuardLoading;
 	/** Strategy for inheriting guards and metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
