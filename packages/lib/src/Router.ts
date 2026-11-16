@@ -312,23 +312,13 @@ function resolveModuleExports(
 }
 
 /**
- * Run a module's guards in order for one navigation, stopping at the first
- * result that is not `true` or once the navigation was superseded.
+ * Run guards in order, stopping at the first result that is not `true`
+ * or once the navigation is superseded.
  */
-function runGuardsInOrder(
-	guards: GuardFn[],
-	context: GuardContext,
-	start: number,
-): GuardResult | PromiseLike<GuardResult> {
-	for (let i = start; i < guards.length; i++) {
-		const result = guards[i](context);
-		if (isPromiseLike(result)) {
-			return Promise.resolve(result).then((resolved) => {
-				if (resolved !== true) return resolved;
-				if (context.signal.aborted) return false;
-				return runGuardsInOrder(guards, context, i + 1);
-			});
-		}
+async function runGuardsInOrder(guards: GuardFn[], context: GuardContext): Promise<GuardResult> {
+	for (const guard of guards) {
+		if (context.signal.aborted) return false;
+		const result = await guard(context);
 		if (result !== true) return result;
 	}
 	return true;
@@ -1937,7 +1927,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Bare-path descriptors try a sync cache probe first; if the module is
 	 * cached (preload likely finished), all guards are expanded immediately.
 	 * On cache miss, a single wrapper loads the module on first navigation and
-	 * runs all of its guards in order, so they hold one contiguous position.
+	 * runs all of its guards in order.
 	 */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
@@ -1988,16 +1978,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 				continue;
 			}
 
-			// Cache miss: one wrapper loads the module on first use and runs all of its guards
-			// in order. Registering the remaining guards from inside the wrapper would be too
-			// late: the pipeline is already iterating this navigation's guard list.
+			// Cache miss: registering the module's guards on first use would miss the current
+			// navigation, whose guard list the pipeline is already iterating.
 			const lazyModule = (context: GuardContext): PromiseLike<GuardResult> => {
 				return new Promise<GuardResult>((resolve, reject) => {
 					sap.ui.require(
 						[modulePath],
 						(mod: unknown) => {
 							const guards = resolveModuleExports(mod, modulePath, name).map((exp) => exp.fn);
-							Promise.resolve(runGuardsInOrder(guards, context, 0)).then(resolve, reject);
+							runGuardsInOrder(guards, context).then(resolve, reject);
 						},
 						(err: Error) => {
 							Log.warning(

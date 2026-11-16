@@ -64,15 +64,15 @@ function createLazyGuard(modulePath: string, exportKey?: string): GuardFn {
 }
 ```
 
-**Lazy wrapper — bare-path multi-guard modules** (on a cache miss, one wrapper that loads the module and runs all of its guards in order on every navigation; registering the remaining guards from inside the wrapper would miss the current navigation, because the pipeline already iterates its guard list):
+**Lazy wrapper — bare-path multi-guard modules:**
 
 A single lazy wrapper cannot expand into N guards at invocation time. Two strategies:
 
 1. **Eager expansion for bare-path entries**: At `initialize()` time, if a descriptor has no `exportKey`, load the module (it may already be cached from preload), detect shape, and expand into individual descriptors before registering. This makes bare-path multi-guard modules behave like mini-block-loads — but only for the shape detection, not for all modules.
 
-2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are loaded at `initialize()` time to detect their shape and expand. Since the preload fired in the constructor, modules are likely cached — making this expansion effectively synchronous in practice. If not cached, this single module load is awaited before registering its guards.
+2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are probed in the module cache at `initialize()` time. Since the preload fired in the constructor, modules are likely cached, and their guards are registered individually. On a cache miss, one wrapper loads the module on first navigation and runs all of its guards in order. Registering them from inside the wrapper instead would miss that navigation, because the pipeline already iterates its guard list.
 
-The implementation uses approach 2: `_registerLazyGuards()` partitions descriptors into cherry-picked (lazy wrapper) and bare-path (expand-on-init). This keeps `initialize()` synchronous in the common case (preload finished) while correctly handling multi-guard expansion.
+The implementation uses approach 2: `_registerLazyGuards()` partitions descriptors into cherry-picked (lazy wrapper) and bare-path (cache probe, else module wrapper). `initialize()` stays synchronous in both cases.
 
 ### Why This Is Better
 
