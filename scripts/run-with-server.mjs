@@ -34,10 +34,10 @@ async function waitForExit(child) {
 	return { code, signal };
 }
 
-function spawnNpmScript(script, extra = {}) {
+function spawnNpmScript(script, extra = {}, scriptArgs = []) {
 	const [command, args] = npmArgs();
 
-	return spawn(command, [...args, "run", script], {
+	return spawn(command, [...args, "run", script, ...(scriptArgs.length > 0 ? ["--", ...scriptArgs] : [])], {
 		cwd: process.cwd(),
 		shell: false,
 		stdio: "inherit",
@@ -45,8 +45,8 @@ function spawnNpmScript(script, extra = {}) {
 	});
 }
 
-async function runNpmScript(script, extra = {}) {
-	const child = spawnNpmScript(script, extra);
+async function runNpmScript(script, extra = {}, scriptArgs = []) {
+	const child = spawnNpmScript(script, extra, scriptArgs);
 	const { code, signal } = await waitForExit(child);
 	if (code !== 0) {
 		throw new Error(`npm run ${script} exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}`);
@@ -174,8 +174,8 @@ async function freePort(port) {
 
 	const pids = findPidsOnPort(port);
 	if (pids.length === 0) {
-		console.log(`Port ${port} is occupied but could not identify the process`);
-		return;
+		// ui5 serve would silently fall back to the next port while the tests keep calling this one.
+		throw new Error(`Port ${port} is occupied but could not identify the process`);
 	}
 
 	for (const pid of pids) {
@@ -188,6 +188,10 @@ async function freePort(port) {
 			}
 		} catch {}
 	}
+
+	if (!(await isPortFree(port))) {
+		throw new Error(`Port ${port} is still occupied after stopping PID ${pids.join(", ")}`);
+	}
 }
 
 async function main() {
@@ -198,6 +202,8 @@ async function main() {
 	const testScript = getOption("--test-script");
 	const testBaseUrl = process.argv.includes("--test-base-url") ? getOption("--test-base-url") : null;
 	const timeoutMs = process.argv.includes("--timeout-ms") ? Number(getOption("--timeout-ms")) : DEFAULT_TIMEOUT_MS;
+	const separator = process.argv.indexOf("--");
+	const testArgs = separator === -1 ? [] : process.argv.slice(separator + 1);
 
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
 		throw new Error("Invalid --timeout-ms value");
@@ -214,12 +220,16 @@ async function main() {
 
 	try {
 		await waitForUrl(readyUrl, timeoutMs, serverScript, activeServer);
-		await runNpmScript(testScript, {
-			env: {
-				...process.env,
-				...(testBaseUrl ? { UI5_TEST_BASE_URL: testBaseUrl } : {}),
+		await runNpmScript(
+			testScript,
+			{
+				env: {
+					...process.env,
+					...(testBaseUrl ? { UI5_TEST_BASE_URL: testBaseUrl } : {}),
+				},
 			},
-		});
+			testArgs,
+		);
 	} finally {
 		await stopActiveServer();
 	}

@@ -1640,9 +1640,12 @@ QUnit.test(
 			await waitForRoute(router, "home");
 		});
 
-		assert.ok(
-			warnings.some((w) => w.message.includes("[1] is not a function")),
-			"warning logged for non-function entry at index 1",
+		assert.deepEqual(
+			warnings.filter((w) => w.message.includes("mixedArrayGuard")).map((w) => w.message),
+			[
+				'guardRouter.guards: "ui5/guard/router/qunit/fixtures/guards/mixedArrayGuard" [1] is not a function, skipping',
+			],
+			"only the non-function entry at index 1 warns",
 		);
 
 		// Index 0 allows, index 2 blocks: Blocked proves the entry after the skipped one was registered

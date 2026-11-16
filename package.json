@@ -40,7 +40,7 @@
 		"test:qunit:compat:120": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8082 --server-script start:lib:compat:120:test --test-script wdio:qunit --test-base-url http://localhost:8082",
 		"test:e2e": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8081 --server-script serve:demo:test --test-script wdio:e2e --test-base-url http://localhost:8081/index.html",
 		"test:e2e:flp": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp:test --test-script wdio:e2e:flp --test-base-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
-		"test:mutation": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8084 --server-script start:lib:mutation --test-script stryker --test-base-url http://localhost:8084",
+		"test:mutation": "node ./scripts/mutation-by-file.mjs",
 		"stryker": "stryker run",
 		"pack:smoke": "node ./scripts/pack-smoke.mjs",
 		"pack:check": "npm run pack:check --workspace=packages/lib && npm run pack:smoke",

@@ -1,6 +1,6 @@
 // @ts-check
-// Run via `npm run test:mutation`: one UI5 server (port 8084) serves the in-place
-// instrumented sources to a wdio QUnit run per mutant.
+// Run via `npm run test:mutation`: per source file, one UI5 server (port 8084) serves the
+// in-place instrumented sources to a wdio QUnit run per mutant.
 /** @type {import("@stryker-mutator/api/core").PartialStrykerOptions} */
 export default {
 	mutate: ["packages/lib/src/**/*.ts", "!packages/lib/src/types.ts", "!packages/lib/src/library.ts"],
@@ -12,5 +12,7 @@ export default {
 	disableTypeChecks: false,
 	checkers: ["typescript"],
 	tsconfigFile: "packages/lib/tsconfig.json",
-	concurrency: "50%", // one headless Chrome per worker
+	reporters: ["clear-text", "progress", "html", "json"],
+	// Each worker runs its own wdio + headless Chrome; a core-based share starts too many on large machines.
+	concurrency: 2,
 };
