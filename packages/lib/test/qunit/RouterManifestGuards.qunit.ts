@@ -3,6 +3,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
+	captureErrors,
 	captureWarnings,
 	captureErrorsAsync,
 	captureWarningsAsync,
@@ -99,13 +100,17 @@ QUnit.test("a manifest guard that throws is logged with its name (block mode)", 
 		[
 			{ name: "home", pattern: "" },
 			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
 		],
 		{
 			async: true,
 			guardRouter: {
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
-				guards: { protected: [`${FIXTURES}/throwingArrayGuard`] },
+				guards: {
+					protected: [`${FIXTURES}/throwingArrayGuard`],
+					forbidden: [`${FIXTURES}/throwingObjectGuard`],
+				},
 			},
 		},
 	);
@@ -115,10 +120,15 @@ QUnit.test("a manifest guard that throws is logged with its name (block mode)", 
 	const errors = await captureErrorsAsync(async () => {
 		router.navTo("protected");
 		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error);
+		router.navTo("forbidden");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error);
 	});
 	assert.deepEqual(
 		errors.map((entry) => entry.message),
-		['Enter guard [1] "throwingArrayGuard#1" on route "protected" threw, navigation failed'],
+		[
+			'Enter guard [1] "throwingArrayGuard#1" on route "protected" threw, navigation failed',
+			'Enter guard [1] "explode" on route "forbidden" threw, navigation failed',
+		],
 	);
 });
 
@@ -280,7 +290,7 @@ QUnit.module("Router - Declarative manifest guards (lazy loading)", {
 	},
 });
 
-QUnit.test("lazy guard loads module on first navigation and blocks", async function (assert: Assert) {
+QUnit.test("lazy manifest guard blocks navigation", async function (assert: Assert) {
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -1591,5 +1601,373 @@ QUnit.test(
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
 		assert.strictEqual(getHash(), "protected", "navigation works after load failure");
+	},
+);
+
+// ============================================================
+// Module: Manifest guard order, shapes and lifecycle
+// ============================================================
+QUnit.module("Router - Manifest guard order, shapes and lifecycle", {
+	beforeEach: function () {
+		initHashChanger();
+	},
+	afterEach: function () {
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+	},
+});
+
+const ROUTES = [
+	{ name: "home", pattern: "" },
+	{ name: "protected", pattern: "protected" },
+	{ name: "forbidden", pattern: "forbidden" },
+];
+
+function createBlockRouter(guards: Record<string, string[]>, unknownRouteRegistration = "ignore"): GuardRouter {
+	return createRouterUnsafe(ROUTES, {
+		async: true,
+		guardRouter: { guardLoading: "block", unknownRouteRegistration, guards },
+	});
+}
+
+/** Resolve with the status of the first settlement, including one that happens while the router starts. */
+function firstSettlement(target: GuardRouter): Promise<string> {
+	return new Promise((resolve) => {
+		target.attachNavigationSettled((event) => resolve(event.getParameter("status") as string));
+	});
+}
+
+function pushCall(probe: LazyProbe, name: string): GuardFn {
+	return () => {
+		probe.calls.push(name);
+		return true;
+	};
+}
+
+QUnit.test(
+	"guards added before initialize() run before manifest guards, guards added after run after",
+	async function (assert: Assert) {
+		const path = `${FIXTURES}/lazyCachedGuard`;
+		await loadModule(path);
+		const probe = await loadProbe();
+		router = createLazyRouter({ protected: [path] });
+		router.addRouteGuard("protected", pushCall(probe, "before"));
+		router.initialize();
+		router.addRouteGuard("protected", pushCall(probe, "after"));
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		await router.navigationSettled();
+		assert.deepEqual(probe.calls, ["before", "cachedFirst", "cachedSecond", "after"]);
+	},
+);
+
+QUnit.test("block mode: guards added while modules load run before manifest guards", async function (assert: Assert) {
+	const probe = await loadProbe();
+	router = createBlockRouter({ protected: [`${FIXTURES}/lazyCachedGuard`] });
+	router.initialize();
+	router.addRouteGuard("protected", pushCall(probe, "while loading"));
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+	assert.deepEqual(probe.calls, ["while loading", "cachedFirst", "cachedSecond"]);
+});
+
+QUnit.test("entries keep their declared positions, and a duplicate entry runs twice", async function (assert: Assert) {
+	const cached = `${FIXTURES}/lazyCachedGuard`;
+	const uncached = `${FIXTURES}/lazyUncachedPositionGuard`;
+	await loadModule(cached);
+	const probe = await loadProbe();
+	router = createLazyRouter({ protected: [`${cached}#1`, uncached, cached, `${cached}#1`] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(uncached), undefined, "one entry's module was not cached yet");
+	await waitForRoute(router, "home");
+
+	const expected = ["cachedSecond", "uncachedPosition", "cachedFirst", "cachedSecond", "cachedSecond"];
+	router.navTo("protected");
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+	assert.deepEqual(probe.calls, expected, "first navigation, which loads a module");
+
+	router.navTo("home");
+	await router.navigationSettled();
+	probe.calls.length = 0;
+	router.navTo("protected");
+	assert.deepEqual(probe.calls, expected, "later navigation, within navTo");
+});
+
+QUnit.test("block mode guards the first navigation", async function (assert: Assert) {
+	HashChanger.getInstance().setHash("protected");
+	router = createBlockRouter({ protected: [`${FIXTURES}/blockGuard`] });
+	const first = firstSettlement(router);
+	router.initialize();
+
+	assert.strictEqual(await first, NavigationOutcome.Blocked, "the start hash was guarded");
+	assert.strictEqual(getHash(), "", "the router fell back to the root route");
+});
+
+QUnit.test(
+	"lazy mode guards the first navigation with a module that is not cached yet",
+	async function (assert: Assert) {
+		const path = `${FIXTURES}/lazyUncachedFirstNavigationGuard`;
+		HashChanger.getInstance().setHash("protected");
+		router = createLazyRouter({ protected: [path] });
+		const first = firstSettlement(router);
+		router.initialize();
+		assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the router started");
+
+		assert.strictEqual(await first, NavigationOutcome.Blocked, "the start hash was guarded");
+		assert.strictEqual(getHash(), "", "the router fell back to the root route");
+	},
+);
+
+QUnit.test("lazy mode: uncached function module, named after the module in logs", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedFunctionGuard`;
+	const probe = await loadProbe();
+	router = createLazyRouter({ protected: [path] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+	await waitForRoute(router, "home");
+
+	probe.behaviors = [
+		() => {
+			throw new Error("function guard failed");
+		},
+	];
+	const errors = await captureErrorsAsync(async () => {
+		router.navTo("protected");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error);
+	});
+	assert.deepEqual(
+		errors.map((entry) => entry.message),
+		['Enter guard [0] "lazyUncachedFunctionGuard" on route "protected" threw, navigation failed'],
+	);
+
+	probe.calls.length = 0;
+	probe.behaviors = [];
+	router.navTo("protected");
+	assert.strictEqual(getHash(), "protected", "later navigation commits within navTo");
+	assert.deepEqual(probe.calls, ["function"]);
+});
+
+QUnit.test(
+	"lazy mode: uncached object module runs every key in order, logged under the module name",
+	async function (assert: Assert) {
+		const path = `${FIXTURES}/lazyUncachedObjectGuard`;
+		const probe = await loadProbe();
+		router = createLazyRouter({ protected: [path] });
+		router.initialize();
+		assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+		await waitForRoute(router, "home");
+
+		probe.behaviors = [
+			() => true,
+			() => {
+				throw new Error("second key failed");
+			},
+		];
+		const errors = await captureErrorsAsync(async () => {
+			router.navTo("protected");
+			assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error);
+		});
+		assert.deepEqual(probe.calls, ["objectFirst", "objectSecond"]);
+		assert.deepEqual(
+			errors.map((entry) => entry.message),
+			['Enter guard [0] "lazyUncachedObjectGuard" on route "protected" threw, navigation failed'],
+			"one wrapper runs both guards, so the log names the module",
+		);
+
+		probe.calls.length = 0;
+		probe.behaviors = [() => true, () => false];
+		router.navTo("protected");
+		assert.deepEqual(probe.calls, ["objectFirst", "objectSecond"], "later navigation runs both, within navTo");
+		assert.strictEqual(getHash(), "", "and the second key blocks");
+	},
+);
+
+QUnit.test("lazy mode: uncached array index and function #key picks", async function (assert: Assert) {
+	const arrayPath = `${FIXTURES}/lazyUncachedArrayPickGuard`;
+	const functionPath = `${FIXTURES}/lazyUncachedKeyedFunctionGuard`;
+	const probe = await loadProbe();
+	router = createLazyRouter({ protected: [`${arrayPath}#1`], forbidden: [`${functionPath}#anything`] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(arrayPath), undefined, "array module was not cached");
+	assert.strictEqual(sap.ui.require(functionPath), undefined, "function module was not cached");
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+	router.navTo("forbidden");
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+	assert.deepEqual(
+		probe.calls,
+		["arraySecond", "keyedFunction"],
+		"only the picked index; the key on a function is ignored",
+	);
+
+	probe.calls.length = 0;
+	router.navTo("protected");
+	assert.strictEqual(getHash(), "protected", "later navigation commits within navTo");
+	router.navTo("forbidden");
+	assert.strictEqual(getHash(), "forbidden", "later navigation commits within navTo");
+	assert.deepEqual(probe.calls, ["arraySecond", "keyedFunction"]);
+});
+
+QUnit.test("lazy mode: cached array index and function #key picks run within navTo", async function (assert: Assert) {
+	await loadModule(`${FIXTURES}/arrayGuard`);
+	await loadModule(`${FIXTURES}/blockGuard`);
+	router = createLazyRouter({
+		protected: [`${FIXTURES}/arrayGuard#1`],
+		forbidden: [`${FIXTURES}/blockGuard#anything`],
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(getHash(), "", "array #1 (blockSecond) blocked within navTo");
+	router.navTo("forbidden");
+	assert.strictEqual(getHash(), "", "function module with a key blocked within navTo");
+});
+
+QUnit.test("lazy mode: modules with no usable guards warn and allow", async function (assert: Assert) {
+	const uncached = `${FIXTURES}/lazyUncachedPrimitiveGuard`;
+	await loadModule(`${FIXTURES}/emptyArrayGuard`);
+	router = createLazyRouter({ protected: [`${FIXTURES}/emptyArrayGuard`], forbidden: [uncached] });
+	const initWarnings = captureWarnings(() => router.initialize());
+	assert.strictEqual(sap.ui.require(uncached), undefined, "primitive-export module was not cached");
+	assert.ok(
+		initWarnings.some((w) => w.message.includes("emptyArrayGuard") && w.message.includes("empty array")),
+		"cached module warns at initialize",
+	);
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(getHash(), "protected", "cached module without guards allows within navTo");
+
+	const warnings = await captureWarningsAsync(async () => {
+		router.navTo("forbidden");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+		router.navTo("home");
+		await router.navigationSettled();
+		router.navTo("forbidden");
+		await router.navigationSettled();
+	});
+	assert.deepEqual(
+		warnings.filter((w) => w.message.includes("lazyUncachedPrimitiveGuard")).map((w) => w.message),
+		[`guardRouter.guards: "${uncached}" did not export a function, array, or plain object, skipping`],
+		"uncached module warns once, on first use",
+	);
+});
+
+QUnit.test("lazy mode: destroy() while a module loads runs none of its guards", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedDestroyGuard`;
+	const probe = await loadProbe();
+	const destroyed = createLazyRouter({ protected: [path] });
+	destroyed.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+	await waitForRoute(destroyed, "home");
+
+	destroyed.navTo("protected");
+	destroyed.destroy();
+	await loadModule(path);
+	await flushPromises();
+	assert.deepEqual(probe.calls, [], "the guard did not run after destroy()");
+	router = createRouter();
+});
+
+QUnit.test(
+	'unknownRouteRegistration "throw" on a manifest guard logs and skips it (lazy mode)',
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		router = createRouterUnsafe(ROUTES, {
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteRegistration: "throw",
+				guards: { nope: [block], protected: [block] },
+			},
+		});
+		const errors = captureErrors(() => router.initialize());
+		assert.deepEqual(
+			errors.map((entry) => entry.message),
+			[`guardRouter.guards: failed to register "${block}"`],
+			"initialize() does not throw; the error is logged",
+		);
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		assert.strictEqual(
+			(await router.navigationSettled()).status,
+			NavigationOutcome.Blocked,
+			"other manifest guards still apply",
+		);
+	},
+);
+
+QUnit.test(
+	'unknownRouteRegistration "throw" on a manifest guard logs and skips it (block mode)',
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		router = createBlockRouter({ nope: [block], protected: [block] }, "throw");
+		const errors = await captureErrorsAsync(async () => {
+			router.initialize();
+			await waitForRoute(router, "home");
+		});
+		assert.deepEqual(
+			errors.map((entry) => entry.message),
+			[`guardRouter.guards: failed to register "${block}"`],
+		);
+
+		router.navTo("protected");
+		assert.strictEqual(
+			(await router.navigationSettled()).status,
+			NavigationOutcome.Blocked,
+			"other manifest guards still apply",
+		);
+	},
+);
+
+QUnit.test(
+	'unknownRouteRegistration "warn" registers a manifest guard for an unknown route with one warning',
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		await loadModule(block);
+		router = createRouterUnsafe(ROUTES, {
+			async: true,
+			guardRouter: { guardLoading: "lazy", unknownRouteRegistration: "warn", guards: { nope: [block] } },
+		});
+		const warnings = captureWarnings(() => router.initialize());
+		assert.deepEqual(
+			warnings.map((w) => [w.message, w.details]),
+			[["addRouteGuard: unknown route, guard registered anyway", "nope"]],
+		);
+	},
+);
+
+QUnit.test(
+	"addRoute() registers an inherited guard whose module is not cached yet (lazy mode)",
+	async function (assert: Assert) {
+		const path = `${FIXTURES}/lazyUncachedInheritedGuard`;
+		router = createRouterUnsafe(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "employees", pattern: "employees" },
+			],
+			{
+				async: true,
+				guardRouter: { guardLoading: "lazy", inheritance: "pattern-tree", guards: { employees: [path] } },
+			},
+		);
+		router.initialize();
+		router.addRoute({ name: "employee", pattern: "employees/{id}" });
+		assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the route was added");
+		await waitForRoute(router, "home");
+
+		router.navTo("employee", { id: "1" });
+		assert.strictEqual(
+			(await router.navigationSettled()).status,
+			NavigationOutcome.Blocked,
+			"the new route inherited the guard",
+		);
 	},
 );

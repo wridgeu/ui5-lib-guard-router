@@ -547,6 +547,56 @@ QUnit.test("async guard decisions", async function (assert: Assert) {
 	assert.deepEqual(await p3.evaluate(createContext()), { action: "redirect", target: "login" }, "Async redirect");
 });
 
+QUnit.test("an all-sync pipeline returns its decision directly", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addLeaveGuard("current", () => true);
+	pipeline.addGlobalGuard(() => true);
+	pipeline.addEnterGuard("target", () => false);
+	assert.deepEqual(pipeline.evaluate(createContext({ fromRoute: "current" })), { action: "block" });
+});
+
+QUnit.test("after a guard returns a Promise, the rest of the evaluation waits for it", async function (assert: Assert) {
+	const order: string[] = [];
+	const pipeline = new GuardPipeline();
+	pipeline.addGlobalGuard(() => {
+		order.push("async global");
+		return Promise.resolve(true);
+	});
+	pipeline.addGlobalGuard(() => {
+		order.push("global");
+		return true;
+	});
+	pipeline.addEnterGuard("target", () => {
+		order.push("route");
+		return true;
+	});
+
+	const decision = pipeline.evaluate(createContext());
+	assert.ok(isPromiseLike(decision), "the decision is a Promise");
+	assert.deepEqual(order, ["async global"], "later guards of the phase and later phases have not run");
+	assert.deepEqual(await decision, { action: "allow" });
+	assert.deepEqual(order, ["async global", "global", "route"]);
+});
+
+QUnit.test("an async leave guard defers the enter phases", async function (assert: Assert) {
+	const order: string[] = [];
+	const pipeline = new GuardPipeline();
+	pipeline.addLeaveGuard("current", () => {
+		order.push("leave");
+		return Promise.resolve(true);
+	});
+	pipeline.addGlobalGuard(() => {
+		order.push("global");
+		return true;
+	});
+
+	const decision = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.ok(isPromiseLike(decision), "the decision is a Promise");
+	assert.deepEqual(order, ["leave"]);
+	assert.deepEqual(await decision, { action: "allow" });
+	assert.deepEqual(order, ["leave", "global"]);
+});
+
 QUnit.test("mixed sync-async pipeline preserves order", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	const order: number[] = [];

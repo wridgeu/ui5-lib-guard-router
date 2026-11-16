@@ -234,6 +234,37 @@ QUnit.test("Global guards run before route-specific guards", async function (ass
 	assert.deepEqual(order, ["global", "route"], "Global guard ran before route guard");
 });
 
+QUnit.test(
+	"Route guards on one route run in registration order, first rejection wins",
+	async function (assert: Assert) {
+		const order: number[] = [];
+		router.addRouteGuard("protected", () => {
+			order.push(1);
+			return true;
+		});
+		router.addRouteGuard("protected", {
+			beforeEnter: () => {
+				order.push(2);
+				return true;
+			},
+		});
+		router.addRouteGuard("protected", () => {
+			order.push(3);
+			return false;
+		});
+		router.addRouteGuard("protected", () => {
+			order.push(4);
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("protected");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Blocked);
+		assert.deepEqual(order, [1, 2, 3]);
+	},
+);
+
 QUnit.test("Route guard only runs for its route", async function (assert: Assert) {
 	let protectedGuardCalled = false;
 	router.addRouteGuard("protected", () => {

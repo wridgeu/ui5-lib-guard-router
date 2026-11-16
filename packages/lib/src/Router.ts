@@ -1283,27 +1283,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return result;
 	}
 
-	/**
-	 * Load all guard modules, then register their guards in declaration order.
-	 * Registration errors (e.g. from `unknownRouteRegistration: "throw"`) are
-	 * caught per guard.
-	 */
+	/** Load all guard modules, then register their guards in declaration order. */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
 		return loadGuardModules(descriptors).then((results) => {
 			for (const { descriptor, guards } of results) {
-				for (const fn of guards) {
-					try {
-						this._registerGuardFromDescriptor(descriptor, fn);
-					} catch (err: unknown) {
-						Log.error(
-							`guardRouter.guards: failed to register "${descriptor.modulePath}"`,
-							String(err),
-							LOG_COMPONENT,
-						);
-					}
-				}
+				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
 			}
 		});
+	}
+
+	/**
+	 * Register one manifest guard. A registration error (`unknownRouteRegistration: "throw"`
+	 * for an unknown route) is logged and skips the guard: no caller of the manifest config
+	 * could catch it, and it must not keep the router from starting.
+	 */
+	private _registerManifestGuard(descriptor: GuardDescriptor, guardFn: GuardFn): void {
+		try {
+			this._registerGuardFromDescriptor(descriptor, guardFn);
+		} catch (err: unknown) {
+			Log.error(`guardRouter.guards: failed to register "${descriptor.modulePath}"`, String(err), LOG_COMPONENT);
+		}
 	}
 
 	/**
@@ -1323,9 +1322,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** Register the guards of each descriptor, loading their modules on first use (see `createLazyGuards`). */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
-			for (const fn of createLazyGuards(descriptor)) {
-				this._registerGuardFromDescriptor(descriptor, fn);
-			}
+			for (const fn of createLazyGuards(descriptor)) this._registerManifestGuard(descriptor, fn);
 		}
 	}
 

@@ -76,6 +76,44 @@ QUnit.test("Direct hash change with redirect restores correct hash", async funct
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored to home route");
 });
 
+QUnit.test("Direct hash change to a guard that throws restores the hash", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => {
+		throw new Error("guard failed");
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	await captureErrorsAsync(async () => {
+		HashChanger.getInstance().setHash("protected");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error);
+	});
+	assert.strictEqual(getHash(), "", "hash restored to the previous route");
+});
+
+QUnit.test("Direct hash change redirect replaces the history entry", async function (assert: Assert) {
+	router.addRouteGuard("forbidden", () => "protected");
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const hashChanger = HashChanger.getInstance();
+	const setHash = sinon.spy(hashChanger, "setHash");
+	const replaceHash = sinon.spy(hashChanger, "replaceHash");
+	try {
+		hashChanger.setHash("forbidden");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Redirected);
+		assert.deepEqual(
+			replaceHash.getCalls().map((call) => call.args[0]),
+			["protected"],
+			"the redirect replaces the entry the user's hash change created",
+		);
+		assert.strictEqual(setHash.callCount, 1, "only the user's own hash change added an entry");
+	} finally {
+		setHash.restore();
+		replaceHash.restore();
+	}
+	assert.strictEqual(getHash(), "protected");
+});
+
 // ============================================================
 // Module: Sequential navigation with dynamic guard state
 // ============================================================

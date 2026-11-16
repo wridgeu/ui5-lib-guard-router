@@ -7,6 +7,7 @@ import {
 	assertBlocked,
 	createRouter,
 	flushPromises,
+	getHash,
 	initHashChanger,
 	waitForRoute,
 } from "./testHelpers";
@@ -35,6 +36,167 @@ const safeDestroyHooks = {
 		HashChanger.getInstance().setHash("");
 	},
 };
+
+// ============================================================
+// Module: Sync until a guard returns a Promise
+// ============================================================
+QUnit.module("Router - Sync until a guard returns a Promise", standardHooks);
+
+/** Record each settlement's status as it fires, so a test can check what settled before navTo/setHash returned. */
+function recordSettlements(): string[] {
+	const statuses: string[] = [];
+	router.attachNavigationSettled((event) => {
+		statuses.push(event.getParameter("status") as string);
+	});
+	return statuses;
+}
+
+QUnit.test("an all-sync navTo commits before navTo returns", async function (assert) {
+	router.addGuard(() => true);
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	router.navTo("protected");
+
+	assert.strictEqual(getHash(), "protected", "hash changed in the same tick");
+	assert.deepEqual(settled, [NavigationOutcome.Committed], "settled in the same tick");
+});
+
+QUnit.test("an all-sync hash change commits before setHash returns", async function (assert) {
+	router.addRouteGuard("protected", () => true);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	HashChanger.getInstance().setHash("protected");
+
+	assert.deepEqual(settled, [NavigationOutcome.Committed], "settled in the same tick");
+});
+
+QUnit.test("a sync block settles before navTo returns", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	router.navTo("protected");
+
+	assert.strictEqual(getHash(), "", "hash unchanged");
+	assert.deepEqual(settled, [NavigationOutcome.Blocked], "settled in the same tick");
+});
+
+QUnit.test("a sync block on a hash change restores the hash before setHash returns", async function (assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	HashChanger.getInstance().setHash("protected");
+
+	assert.strictEqual(getHash(), "", "hash restored in the same tick");
+	assert.deepEqual(settled, [NavigationOutcome.Blocked], "settled in the same tick");
+});
+
+QUnit.test("guards after one that returns a Promise wait for it", async function (assert) {
+	const calls: string[] = [];
+	router.addGuard(() => {
+		calls.push("async global");
+		return Promise.resolve(true);
+	});
+	router.addRouteGuard("protected", () => {
+		calls.push("route");
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	calls.length = 0;
+	const settled = recordSettlements();
+
+	router.navTo("protected");
+
+	assert.deepEqual(calls, ["async global"], "the route guard has not run yet");
+	assert.deepEqual(settled, [], "not settled yet");
+	assert.strictEqual(getHash(), "", "hash unchanged yet");
+
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+	assert.deepEqual(calls, ["async global", "route"]);
+	assert.strictEqual(getHash(), "protected");
+});
+
+QUnit.test("an async leave guard defers the enter guards", async function (assert) {
+	const calls: string[] = [];
+	router.addLeaveGuard("home", () => {
+		calls.push("leave");
+		return Promise.resolve(true);
+	});
+	router.addGuard(() => {
+		calls.push("global");
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	calls.length = 0;
+
+	router.navTo("protected");
+	assert.deepEqual(calls, ["leave"], "enter guards have not run yet");
+
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+	assert.deepEqual(calls, ["leave", "global"]);
+});
+
+QUnit.test("the next navigation starts sync again", async function (assert) {
+	router.addGuard((context) => (context.toRoute === "protected" ? Promise.resolve(true) : true));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(getHash(), "", "the async navigation has not committed yet");
+	await router.navigationSettled();
+
+	const settled = recordSettlements();
+	router.navTo("forbidden");
+	assert.strictEqual(getHash(), "forbidden", "committed in the same tick");
+	assert.deepEqual(settled, [NavigationOutcome.Committed]);
+});
+
+QUnit.test("an all-sync redirect chain finishes before navTo returns, with one settlement", async function (assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => ({ route: "detail", parameters: { id: "1" } }));
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	router.navTo("protected");
+
+	assert.strictEqual(getHash(), "detail/1", "both hops ran in the same tick");
+	assert.deepEqual(settled, [NavigationOutcome.Redirected], "one settlement for the whole chain");
+});
+
+QUnit.test("an async redirect hop makes the remaining hops async", async function (assert) {
+	let detailCalls = 0;
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => Promise.resolve({ route: "detail", parameters: { id: "1" } }));
+	router.addRouteGuard("detail", () => {
+		detailCalls++;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled = recordSettlements();
+
+	router.navTo("protected");
+
+	assert.strictEqual(detailCalls, 0, "the hop after the async one has not run yet");
+	assert.deepEqual(settled, [], "not settled yet");
+	assert.strictEqual(getHash(), "", "hash unchanged yet");
+
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Redirected);
+	assert.strictEqual(detailCalls, 1);
+	assert.strictEqual(getHash(), "detail/1");
+	assert.deepEqual(settled, [NavigationOutcome.Redirected], "one settlement for the whole chain");
+});
 
 // ============================================================
 // Module: Mixed sync/async guard pipelines

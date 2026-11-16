@@ -46,11 +46,11 @@ Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json`
 
 ### Router Options
 
-| Option                     | Values                              | Default   | Description                                                      |
-| -------------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Behavior when registering guards for unknown route names         |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How programmatic `navTo()` interacts with the guard pipeline     |
-| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest-declared guard modules are loaded at initialization |
+| Option                     | Values                              | Default   | Description                                                                                                                                                                     |
+| -------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Behavior when registering guards for unknown route names. With `"throw"`, a manifest guard on an unknown route is skipped and an error is logged; `initialize()` does not throw |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How programmatic `navTo()` interacts with the guard pipeline                                                                                                                    |
+| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest-declared guard modules are loaded at initialization                                                                                                                |
 
 ### Guards Block
 

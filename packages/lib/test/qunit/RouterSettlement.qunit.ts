@@ -40,6 +40,17 @@ const safeDestroyHooks = {
 // ============================================================
 QUnit.module("Router - navigationSettled()", standardHooks);
 
+QUnit.test(
+	"Resolves with 'committed' and empty route/hash on a router that never navigated",
+	async function (assert: Assert) {
+		const result = await router.navigationSettled();
+		assert.deepEqual(
+			{ status: result.status, route: result.route, hash: result.hash },
+			{ status: NavigationOutcome.Committed, route: "", hash: "" },
+		);
+	},
+);
+
 QUnit.test("Resolves immediately with 'committed' when nothing pending", async function (assert: Assert) {
 	router.initialize();
 	await waitForRoute(router, "home");

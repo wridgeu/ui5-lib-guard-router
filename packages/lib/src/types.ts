@@ -149,7 +149,8 @@ export interface RouteGuardConfig {
  *
  * - `"ignore"`: Register silently.
  * - `"warn"`: Log a warning and still register (default).
- * - `"throw"`: Throw synchronously; guard is not registered.
+ * - `"throw"`: Throw synchronously; guard is not registered. A manifest guard has no caller
+ *   to catch the error, so it is logged instead and the guard is skipped; the router still starts.
  *
  * @since 1.5.0
  */
