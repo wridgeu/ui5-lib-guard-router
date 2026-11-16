@@ -312,6 +312,29 @@ function resolveModuleExports(
 }
 
 /**
+ * Run a module's guards in order for one navigation, stopping at the first
+ * result that is not `true` or once the navigation was superseded.
+ */
+function runGuardsInOrder(
+	guards: GuardFn[],
+	context: GuardContext,
+	start: number,
+): GuardResult | PromiseLike<GuardResult> {
+	for (let i = start; i < guards.length; i++) {
+		const result = guards[i](context);
+		if (isPromiseLike(result)) {
+			return Promise.resolve(result).then((resolved) => {
+				if (resolved !== true) return resolved;
+				if (context.signal.aborted) return false;
+				return runGuardsInOrder(guards, context, i + 1);
+			});
+		}
+		if (result !== true) return result;
+	}
+	return true;
+}
+
+/**
  * Parse the `guards` block from the guardRouter config into an array of
  * {@link GuardDescriptor} objects.
  *
@@ -1913,8 +1936,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Cherry-picked descriptors (with exportKey) get one lazy wrapper each.
 	 * Bare-path descriptors try a sync cache probe first; if the module is
 	 * cached (preload likely finished), all guards are expanded immediately.
-	 * On cache miss, a single "expander" wrapper loads the module on first
-	 * navigation, registers remaining guards, and executes the first.
+	 * On cache miss, a single wrapper loads the module on first navigation and
+	 * runs all of its guards in order, so they hold one contiguous position.
 	 */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
@@ -1965,31 +1988,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 				continue;
 			}
 
-			// Cache miss: register an expander that loads, expands once, and runs guard[0].
-			// NOTE: Guards 1..N are appended to the guard array on first invocation,
-			// which means they execute AFTER any imperative guards registered between
-			// initialize() and first navigation. This differs from block mode where
-			// all guards occupy contiguous positions. In practice this is rare because
-			// the preload hint fires in the constructor and modules are typically cached
-			// by the time initialize() runs.
-			let expanded = false;
-			const lazyExpander = (context: GuardContext): PromiseLike<GuardResult> => {
+			// Cache miss: one wrapper loads the module on first use and runs all of its guards
+			// in order. Registering the remaining guards from inside the wrapper would be too
+			// late: the pipeline is already iterating this navigation's guard list.
+			const lazyModule = (context: GuardContext): PromiseLike<GuardResult> => {
 				return new Promise<GuardResult>((resolve, reject) => {
 					sap.ui.require(
 						[modulePath],
 						(mod: unknown) => {
-							const exports = resolveModuleExports(mod, modulePath, name);
-							if (exports.length === 0) {
-								resolve(true);
-								return;
-							}
-							if (!expanded) {
-								expanded = true;
-								for (let i = 1; i < exports.length; i++) {
-									this._registerGuardFromDescriptor(descriptor, exports[i].fn);
-								}
-							}
-							resolve(exports[0].fn(context));
+							const guards = resolveModuleExports(mod, modulePath, name).map((exp) => exp.fn);
+							Promise.resolve(runGuardsInOrder(guards, context, 0)).then(resolve, reject);
 						},
 						(err: Error) => {
 							Log.warning(
@@ -2002,7 +2010,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					);
 				});
 			};
-			this._registerGuardFromDescriptor(descriptor, lazyExpander);
+			this._registerGuardFromDescriptor(descriptor, lazyModule);
 		}
 	}
 

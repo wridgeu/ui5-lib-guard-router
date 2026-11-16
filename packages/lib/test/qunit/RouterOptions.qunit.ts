@@ -1,6 +1,7 @@
+import sinon from "sinon";
 import Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
+import type { GuardContext, GuardFn, GuardLoading, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureWarnings,
@@ -1392,6 +1393,204 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 		NavigationOutcome.Blocked,
 		"lazy array module: blockSecond (false) blocks after expansion",
 	);
+});
+
+const FIXTURES = "ui5/guard/router/qunit/fixtures/guards";
+
+function createLazyRouter(guards: Record<string, string[]>, guardLoading: GuardLoading = "lazy"): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+		],
+		{ async: true, guardRouter: { guardLoading, unknownRouteRegistration: "ignore", guards } },
+	);
+}
+
+// Load fixtures by the module name the router uses: the test page loads test files under
+// test-resources/, so a relative import would get a second instance of the module.
+function loadModule<T>(path: string): Promise<T> {
+	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
+}
+
+interface LazyProbe {
+	calls: string[];
+	behaviors: GuardFn[];
+}
+
+async function loadProbe(): Promise<LazyProbe> {
+	const probe = await loadModule<LazyProbe>(`${FIXTURES}/lazyProbe`);
+	probe.calls.length = 0;
+	probe.behaviors = [];
+	return probe;
+}
+
+QUnit.test("lazy mode: constructor preloads each guard module once", function (assert: Assert) {
+	const requireSpy = sinon.spy(sap.ui, "require");
+	try {
+		const guards = {
+			protected: [
+				`${FIXTURES}/arrayGuard`,
+				`${FIXTURES}/objectGuard#checkAuth`,
+				`${FIXTURES}/objectGuard#checkRole`,
+			],
+		};
+		const preloads = (): unknown[] =>
+			requireSpy
+				.getCalls()
+				.map((call) => call.args[0])
+				.filter((paths) => Array.isArray(paths) && paths.some((path) => String(path).startsWith(FIXTURES)));
+
+		createLazyRouter(guards, "block").destroy();
+		assert.deepEqual(preloads(), [], "block mode does not preload");
+
+		router = createLazyRouter(guards);
+		assert.deepEqual(
+			preloads(),
+			[[`${FIXTURES}/arrayGuard`, `${FIXTURES}/objectGuard`]],
+			"lazy mode preloads each module path once",
+		);
+	} finally {
+		requireSpy.restore();
+	}
+});
+
+QUnit.test("lazy mode: uncached module runs all of its guards in order", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedGuard`;
+	const probe = await loadProbe();
+	router = createLazyRouter({ protected: [path] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guards were registered");
+	await waitForRoute(router, "home");
+
+	const visit = async (behaviors: GuardFn[]): Promise<{ status: string; calls: string[] }> => {
+		probe.calls.length = 0;
+		probe.behaviors = behaviors;
+		router.navTo("protected");
+		const { status } = await router.navigationSettled();
+		if (status === NavigationOutcome.Committed) {
+			router.navTo("home");
+			await router.navigationSettled();
+		}
+		return { status, calls: [...probe.calls] };
+	};
+	const both = ["uncachedFirst", "uncachedSecond"];
+
+	assert.deepEqual(await visit([]), { status: NavigationOutcome.Committed, calls: both }, "first navigation");
+	assert.deepEqual(await visit([]), { status: NavigationOutcome.Committed, calls: both }, "later navigation");
+	assert.deepEqual(
+		await visit([() => Promise.resolve(true), () => false]),
+		{ status: NavigationOutcome.Blocked, calls: both },
+		"a guard after an async one still runs and can block",
+	);
+	assert.deepEqual(
+		await visit([() => Promise.resolve(false)]),
+		{ status: NavigationOutcome.Blocked, calls: ["uncachedFirst"] },
+		"an async block stops the remaining guards",
+	);
+	assert.deepEqual(
+		await visit([() => false]),
+		{ status: NavigationOutcome.Blocked, calls: ["uncachedFirst"] },
+		"a sync block stops the remaining guards",
+	);
+
+	const firstCalled = Promise.withResolvers<void>();
+	const gate = Promise.withResolvers<boolean>();
+	probe.calls.length = 0;
+	probe.behaviors = [
+		() => {
+			firstCalled.resolve();
+			return gate.promise;
+		},
+	];
+	router.navTo("protected");
+	await firstCalled.promise;
+	router.navTo("home");
+	await router.navigationSettled();
+	gate.resolve(true);
+	await flushPromises();
+	assert.deepEqual(probe.calls, ["uncachedFirst"], "a superseded navigation stops the remaining guards");
+});
+
+QUnit.test("lazy mode: uncached cherry-pick loads the picked export", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedPickGuard`;
+	router = createLazyRouter({ protected: [`${path}#block`] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Blocked, "picked export ran");
+});
+
+// Separate router per module: the constructor preloads every configured module, which would
+// otherwise cache this one while the other navigation is pending.
+QUnit.test("lazy mode: uncached cherry-pick of a missing export allows", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyUncachedMissingPickGuard`;
+	router = createLazyRouter({ protected: [`${path}#missing`] });
+	router.initialize();
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed, "no guard ran");
+});
+
+QUnit.test("lazy mode: a module that fails to load fails the navigation", async function (assert: Assert) {
+	const path = `${FIXTURES}/doesNotExist`;
+	router = createLazyRouter({ protected: [path], forbidden: [`${path}#guard`] });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const statuses: string[] = [];
+	const warnings = await captureWarningsAsync(async () => {
+		router.navTo("protected");
+		statuses.push((await router.navigationSettled()).status);
+		router.navTo("forbidden");
+		statuses.push((await router.navigationSettled()).status);
+	});
+
+	assert.deepEqual(statuses, [NavigationOutcome.Error, NavigationOutcome.Error], "bare path and cherry-pick fail");
+	assert.deepEqual(
+		warnings.map((w) => w.message).filter((message) => message.startsWith("guardRouter.")),
+		[`guardRouter.guards: lazy load of "${path}" failed`, `guardRouter.guards: lazy load of "${path}" failed`],
+		"each failed load warns",
+	);
+});
+
+QUnit.test("lazy mode: cached module registers its guards at initialize", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyCachedGuard`;
+	await loadModule(path);
+	const probe = await loadProbe();
+	router = createLazyRouter({ protected: [path] });
+	router.initialize();
+	router.addRouteGuard("protected", () => {
+		probe.calls.push("imperative");
+		return true;
+	});
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "committed within navTo");
+	assert.deepEqual(
+		probe.calls,
+		["cachedFirst", "cachedSecond", "imperative"],
+		"module guards run before guards added after initialize",
+	);
+});
+
+QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (assert: Assert) {
+	const path = `${FIXTURES}/objectGuard`;
+	await loadModule(path);
+	router = createLazyRouter({ protected: [`${path}#checkRole`], forbidden: [`${path}#missing`] });
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "", "picked export blocked within navTo");
+	router.navTo("forbidden");
+	assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "missing export: committed within navTo");
 });
 
 // ============================================================

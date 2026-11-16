@@ -64,7 +64,7 @@ function createLazyGuard(modulePath: string, exportKey?: string): GuardFn {
 }
 ```
 
-**Lazy wrapper — bare-path multi-guard modules** (one "expander" wrapper that, on first invocation, loads the module, detects shape, registers the remaining guards, and executes itself as the first):
+**Lazy wrapper — bare-path multi-guard modules** (on a cache miss, one wrapper that loads the module and runs all of its guards in order on every navigation; registering the remaining guards from inside the wrapper would miss the current navigation, because the pipeline already iterates its guard list):
 
 A single lazy wrapper cannot expand into N guards at invocation time. Two strategies:
 
