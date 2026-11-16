@@ -1191,11 +1191,14 @@ QUnit.test("lazy mode: a module that fails to load fails the navigation", async 
 	await waitForRoute(router, "home");
 
 	const statuses: string[] = [];
+	let errors: { message: string }[] = [];
 	const warnings = await captureWarningsAsync(async () => {
-		router.navTo("protected");
-		statuses.push((await router.navigationSettled()).status);
-		router.navTo("forbidden");
-		statuses.push((await router.navigationSettled()).status);
+		errors = await captureErrorsAsync(async () => {
+			router.navTo("protected");
+			statuses.push((await router.navigationSettled()).status);
+			router.navTo("forbidden");
+			statuses.push((await router.navigationSettled()).status);
+		});
 	});
 
 	assert.deepEqual(statuses, [NavigationOutcome.Error, NavigationOutcome.Error], "bare path and cherry-pick fail");
@@ -1203,6 +1206,14 @@ QUnit.test("lazy mode: a module that fails to load fails the navigation", async 
 		warnings.map((w) => w.message).filter((message) => message.startsWith("guardRouter.")),
 		[`guardRouter.guards: lazy load of "${path}" failed`, `guardRouter.guards: lazy load of "${path}" failed`],
 		"each failed load warns",
+	);
+	assert.deepEqual(
+		errors.map((entry) => entry.message).filter((message) => message.startsWith("Enter guard")),
+		[
+			'Enter guard [0] "doesNotExist" on route "protected" threw, navigation failed',
+			'Enter guard [0] "doesNotExist#guard" on route "forbidden" threw, navigation failed',
+		],
+		"a guard that never loaded is logged as the manifest names it",
 	);
 });
 

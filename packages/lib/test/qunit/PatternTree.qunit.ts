@@ -82,6 +82,25 @@ QUnit.test("keeps global entries without copying them", function (assert) {
 	assert.strictEqual(expanded.length, 3);
 });
 
+QUnit.test("an entry of the empty-pattern route is not copied to that route again", function (assert) {
+	assert.deepEqual(expandToDescendants([{ route: "home" }], ROUTES), [
+		{ route: "home" },
+		{ route: "employees" },
+		{ route: "other" },
+		{ route: "employee" },
+		{ route: "resume" },
+	]);
+});
+
+QUnit.test('global entries are not copied even when a route is named "*"', function (assert) {
+	const routes = [
+		{ name: "*", pattern: "a" },
+		{ name: "child", pattern: "a/b" },
+	];
+	assert.deepEqual(expandToDescendants([{ route: "*" }], routes), [{ route: "*" }]);
+	assert.deepEqual(expandForNewRoute([{ route: "*" }], "child", routes), []);
+});
+
 QUnit.test("without known routes the entries are returned as they are", function (assert) {
 	const entries = [{ route: "employee" }];
 	assert.strictEqual(expandToDescendants(entries, []), entries);

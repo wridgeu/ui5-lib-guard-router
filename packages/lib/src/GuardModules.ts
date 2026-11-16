@@ -88,14 +88,11 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		}
 
 		if (exportKey !== undefined) {
-			let entry: [string, unknown] | undefined =
-				moduleExport[exportKey] === undefined ? undefined : [exportKey, moduleExport[exportKey]];
-			if (entry === undefined) {
-				const index = parseInt(exportKey, 10);
-				if (!Number.isNaN(index) && index >= 0 && index < entries.length) {
-					entry = entries[index];
-				}
-			}
+			// A key wins over a position. A position that is not a number or out of range finds no entry.
+			const entry: [string, unknown] | undefined =
+				moduleExport[exportKey] === undefined
+					? entries[parseInt(exportKey, 10)]
+					: [exportKey, moduleExport[exportKey]];
 			if (entry === undefined) {
 				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
 				return [];

@@ -78,6 +78,7 @@ function depthOf(route: string, patternByName: ReadonlyMap<string, string>): num
  * Global (`"*"`) entries and entries for routes without a known pattern are kept as-is.
  * Sorted by pattern depth, so ancestor guards run before descendant guards. Where global
  * entries end up does not matter: the pipeline runs global guards separately.
+ * A route named `"*"` does not pass its entries on, because a `"*"` entry is a global one.
  */
 export function expandToDescendants<T extends { readonly route: string }>(entries: T[], routes: RoutePattern[]): T[] {
 	if (routes.length === 0) return entries;
@@ -96,10 +97,7 @@ export function expandToDescendants<T extends { readonly route: string }>(entrie
 		}
 	}
 
-	return expanded.toSorted((a, b) => {
-		if (a.route === "*" || b.route === "*") return 0;
-		return depthOf(a.route, patternByName) - depthOf(b.route, patternByName);
-	});
+	return expanded.toSorted((a, b) => depthOf(a.route, patternByName) - depthOf(b.route, patternByName));
 }
 
 /**

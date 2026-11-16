@@ -1,5 +1,5 @@
 import Log from "sap/base/Log";
-import { resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
+import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
 import type { GuardContext, GuardFn } from "ui5/guard/router/types";
 
 interface SinonTestContext {
@@ -152,4 +152,18 @@ QUnit.test("skips the remaining guards when the navigation is aborted while awai
 	controller.abort();
 	assert.strictEqual(await result, false);
 	assert.deepEqual(calls, ["a"]);
+});
+
+QUnit.module("GuardModules - createLazyGuards");
+
+QUnit.test("a navigation aborted while the module loads resolves false and runs no guard", async function (assert) {
+	const modulePath = "ui5/guard/router/qunit/fixtures/guards/lazyUncachedAbortGuard";
+	const controller = new AbortController();
+	const [wrapper] = createLazyGuards({ route: "t", type: "enter", modulePath });
+	assert.strictEqual(sap.ui.require(modulePath), undefined, "module was not cached when the guard was created");
+
+	const result = wrapper(createContext(controller.signal));
+	controller.abort();
+	assert.strictEqual(await result, false, "neither an allow nor the guard's own result");
+	assert.strictEqual(await wrapper(createContext()), "ran", "a later navigation runs the guard");
 });
