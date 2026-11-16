@@ -1002,7 +1002,7 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 
 ### Enabling guard logs
 
-The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged.
+The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged. When a manifest guard throws, the error log names it, e.g. `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
 
 Enable debug-level output programmatically:
 

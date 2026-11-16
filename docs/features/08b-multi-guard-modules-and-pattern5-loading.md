@@ -72,7 +72,7 @@ A single lazy wrapper cannot expand into N guards at invocation time. Two strate
 
 2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are probed in the module cache at `initialize()` time. Since the preload fired in the constructor, modules are likely cached, and their guards are registered individually. On a cache miss, one wrapper loads the module on first navigation and runs all of its guards in order; later navigations run them synchronously. Registering them from inside the wrapper instead would miss that navigation, because the pipeline already iterates its guard list.
 
-The implementation uses approach 2: `_registerLazyGuards()` partitions descriptors into cherry-picked (lazy wrapper) and bare-path (cache probe, else module wrapper). `initialize()` stays synchronous in both cases.
+The implementation uses approach 2: `createLazyGuards()` in `GuardModules.ts` turns each descriptor into the guards to register: a lazy wrapper for a cherry-pick, the module's own guards for a cached bare path, and a module wrapper on a cache miss. `initialize()` stays synchronous in all cases.
 
 ### Why This Is Better
 
@@ -256,7 +256,17 @@ Names are used for **logging only** in this iteration:
 - `"guard 'checkAuth' (guards/security) blocked navigation to 'admin'"`
 - Pipeline trace in debug: `"checkAuth → checkRole → [blocked by checkRole]"`
 
-**Implementation note:** the router derives these names (`GuardDescriptor.name`) but does not use them in log output yet. Pipeline logs identify a guard by phase and index, for example `Enter guard [0] on route "admin" threw, navigation failed`.
+**Implementation note:** names are derived when a module's exports are resolved (`resolveModuleExports()` in `GuardModules.ts`), not stored on `GuardDescriptor`, and only error logs for a guard that throws show them. The block and debug-trace messages above are not implemented.
+
+Manifest guards are named after their module, and the name appears when the guard throws:
+`Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
+
+- Function export: the module's last path segment (`guards.auth` → `auth`); with `#key`, the key
+- Array export: `moduleName#index` (`checks#0`, `checks#1`), also when cherry-picked
+- Object export: the key (`checkAuth`); cherry-picked by index, the key at that index
+- A lazy wrapper whose module missed the cache is named after the module (or `module#key`) until it loads, then after the guard it resolved to. A bare-path module with several guards keeps the module name, because one wrapper runs them all.
+
+Guards registered with `addGuard()` and the other imperative methods have no name; their logs show phase and index only.
 
 Future extensibility (not implemented now): disable by name, ordering hints, DevTools integration. The naming foundation makes these possible without retrofit.
 
@@ -308,7 +318,7 @@ The PR includes:
 - **Pattern 5 preload**: lazy mode with preload hint — guard available synchronously on first navigation (requires module to be pre-cached)
 - **Pattern 5 fallback**: lazy mode where preload hasn't finished — guard loads async on first navigation, which makes the rest of that navigation async; later navigations are synchronous
 - **Default guardLoading is lazy**: no config → lazy behavior
-- **Named guard in log output**: verify guard name appears in warning/error logs (not implemented; see [Usage](#usage))
+- **Named guard in log output**: a manifest guard that throws is logged with its name, in block and lazy mode
 - **Execution order with multi-guard modules**: bare path registers all in order, cherry-picks respect manifest position
 - **Cherry-pick with `module:` prefix**: verify `"module:some.lib#key"` parsing order
 - **Same module from multiple routes**: module loaded once, guards registered per-route correctly

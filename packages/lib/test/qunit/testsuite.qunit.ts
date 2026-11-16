@@ -23,6 +23,8 @@ export default {
 		loader: {
 			paths: {
 				"ui5/guard/router": "resources/ui5/guard/router",
+				// Guard fixtures that manifest guard tests load by module name.
+				"ui5/guard/router/qunit/fixtures": "test-resources/ui5/guard/router/qunit/fixtures",
 			},
 		},
 		module: "./{name}.qunit",
@@ -40,6 +42,9 @@ export default {
 		PatternTree: {
 			title: "QUnit Tests for ui5.guard.router.PatternTree",
 		},
+		RouteMeta: {
+			title: "QUnit Tests for ui5.guard.router.RouteMeta",
+		},
 		Router: {
 			title: "QUnit Tests for ui5.guard.router.Router",
 		},
@@ -56,7 +61,13 @@ export default {
 			title: "QUnit Tests for Router Settlement and Lifecycle",
 		},
 		RouterOptions: {
-			title: "QUnit Tests for Router Options and Manifest Guards",
+			title: "QUnit Tests for Router Options",
+		},
+		RouterManifestGuards: {
+			title: "QUnit Tests for Router Manifest Guards",
+		},
+		RouterRouteMeta: {
+			title: "QUnit Tests for Router Route Metadata and Inheritance",
 		},
 		NativeRouterCompat: {
 			title: "QUnit Tests for Native Router Compatibility",

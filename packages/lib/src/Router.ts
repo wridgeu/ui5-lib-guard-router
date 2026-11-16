@@ -9,7 +9,6 @@ import type {
 	GuardFn,
 	GuardContext,
 	GuardNavToOptions,
-	GuardResult,
 	GuardRedirect,
 	GuardRouter,
 	GuardRouterConfig,
@@ -21,8 +20,9 @@ import type {
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
-import { loadGuardModule, resolveModuleExports, runGuardsInOrder } from "./GuardModules";
-import { isPatternAncestor, patternSegments } from "./PatternTree";
+import { createLazyGuards, loadGuardModules } from "./GuardModules";
+import { expandForNewRoute, expandToDescendants, type RoutePattern } from "./PatternTree";
+import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -120,9 +120,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pendingGuardDescriptors: GuardDescriptor[];
 	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
-	private _manifestMeta: Map<string, Readonly<Record<string, unknown>>>;
-	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
-	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
+	private _meta: RouteMetaStore;
 	private _routeNames: string[] = [];
 	private readonly _ownerComponent: UIComponent | undefined;
 
@@ -138,7 +136,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 		const parsed = parseGuardRouterConfig(guardRouter, componentNamespace);
 		this._options = parsed.options;
-		this._manifestMeta = parsed.routeMeta;
+		this._meta = new RouteMetaStore(
+			parsed.routeMeta,
+			this._options.inheritance === "pattern-tree" ? () => this._collectRoutePatterns() : null,
+		);
 		this._pendingGuardDescriptors = parsed.guards;
 
 		// Collect route names from the constructor's routes parameter for pattern-tree traversal.
@@ -179,7 +180,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._sourceDescriptors = descriptors;
 
 		const expandedDescriptors =
-			this._options.inheritance === "pattern-tree" ? this._expandGuardDescriptors(descriptors) : descriptors;
+			this._options.inheritance === "pattern-tree"
+				? expandToDescendants(descriptors, this._collectRoutePatterns())
+				: descriptors;
 
 		if (this._options.guardLoading === "lazy") {
 			this._registerLazyGuards(expandedDescriptors);
@@ -229,63 +232,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (this._routeNames.includes(name)) return;
 
 		this._routeNames.push(name);
-		this._resolvedMetaCache.clear();
+		this._meta.invalidate();
 
 		if (this._options.inheritance !== "pattern-tree") return;
 		if (this._sourceDescriptors.length === 0) return;
 
-		const route = this.getRoute(name);
-		if (!route) return;
-		const newPattern = route.getPattern();
-		if (newPattern === undefined) return;
-
-		const newDescriptors = this._expandGuardDescriptorsForNewRoute(name, newPattern);
-		if (newDescriptors.length === 0) return;
+		const newDescriptors = expandForNewRoute(this._sourceDescriptors, name, this._collectRoutePatterns());
 
 		// Always use lazy registration: if the module was loaded during
 		// initialize() (block mode), the sync cache probe succeeds immediately.
 		// This avoids an async gap between addRoute() and the first navigation.
 		this._registerLazyGuards(newDescriptors);
-	}
-
-	/**
-	 * Expand manifest guard descriptors for a single newly added route.
-	 *
-	 * For each source descriptor whose route is an ancestor of the new
-	 * route's pattern, emits a copy targeting the new route. Also emits
-	 * copies for existing routes that are descendants of the new route
-	 * (in case the new route has declared guards). Sorted by depth.
-	 */
-	private _expandGuardDescriptorsForNewRoute(newName: string, newPattern: string): GuardDescriptor[] {
-		const result: GuardDescriptor[] = [];
-
-		for (const descriptor of this._sourceDescriptors) {
-			if (descriptor.route === "*") continue;
-
-			if (descriptor.route !== newName) {
-				// Check if the source descriptor's route is an ancestor of the new route.
-				const ancestorRoute = this.getRoute(descriptor.route);
-				const ancestorPattern = ancestorRoute?.getPattern();
-				if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
-					result.push({ ...descriptor, route: newName });
-				}
-			} else {
-				// The new route itself has a source descriptor: expand to existing descendants.
-				for (const { name, pattern } of this._collectRoutePatterns()) {
-					if (name === newName) continue;
-					if (isPatternAncestor(newPattern, pattern)) {
-						result.push({ ...descriptor, route: name });
-					}
-				}
-			}
-		}
-
-		// Sort by pattern depth (ancestor guards run before descendant guards).
-		return result.toSorted((a, b) => {
-			const pa = this.getRoute(a.route)?.getPattern() ?? "";
-			const pb = this.getRoute(b.route)?.getPattern() ?? "";
-			return patternSegments(pa).length - patternSegments(pb).length;
-		});
 	}
 
 	/**
@@ -481,8 +438,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return this;
 	}
 
-	private static readonly _EMPTY_META: Readonly<Record<string, unknown>> = Object.freeze({});
-
 	/**
 	 * Return the resolved metadata for a route.
 	 *
@@ -502,28 +457,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Empty string is a valid root route name (initial state before first navigation)
 		if (routeName !== "" && !this.getRoute(routeName)) {
 			Log.warning("getRouteMeta: unknown route, returning empty metadata", routeName, LOG_COMPONENT);
-			return Router._EMPTY_META;
+			return EMPTY_META;
 		}
-
-		// Cache hit
-		const cached = this._resolvedMetaCache.get(routeName);
-		if (cached) return cached;
-
-		let result: Readonly<Record<string, unknown>>;
-
-		if (this._options.inheritance === "pattern-tree") {
-			result = this._resolveInheritedMeta(routeName);
-		} else {
-			result = this._resolveFlatMeta(routeName);
-		}
-
-		if (Object.keys(result).length === 0) {
-			this._resolvedMetaCache.set(routeName, Router._EMPTY_META);
-			return Router._EMPTY_META;
-		}
-
-		this._resolvedMetaCache.set(routeName, result);
-		return result;
+		return this._meta.get(routeName);
 	}
 
 	/**
@@ -548,8 +484,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (routeName !== "" && !this._handleUnknownRouteRegistration(routeName, "setRouteMeta")) {
 			return this;
 		}
-		this._runtimeMeta.set(routeName, Object.freeze({ ...meta }));
-		this._resolvedMetaCache.clear();
+		this._meta.set(routeName, meta);
 		return this;
 	}
 
@@ -1334,8 +1269,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Collect all route names and their patterns from the router.
 	 * Skips routes whose pattern is undefined (no pattern configured).
 	 */
-	private _collectRoutePatterns(): { name: string; pattern: string }[] {
-		const result: { name: string; pattern: string }[] = [];
+	private _collectRoutePatterns(): RoutePattern[] {
+		const result: RoutePattern[] = [];
 		for (const name of this._routeNames) {
 			const route = this.getRoute(name);
 			if (route) {
@@ -1349,133 +1284,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Expand guard descriptors to descendant routes when guard inheritance
-	 * is set to `"pattern-tree"`. Global (`"*"`) descriptors are kept as-is.
-	 * Descriptors are sorted by pattern depth (ancestor guards run before
-	 * descendant guards).
-	 */
-	private _expandGuardDescriptors(descriptors: GuardDescriptor[]): GuardDescriptor[] {
-		const allRoutes = this._collectRoutePatterns();
-		if (allRoutes.length === 0) return descriptors;
-
-		// Build a name -> pattern map for quick lookup
-		const patternByName = new Map(allRoutes.map((r) => [r.name, r.pattern]));
-
-		const expanded: GuardDescriptor[] = [];
-
-		for (const descriptor of descriptors) {
-			expanded.push(descriptor);
-
-			// Global guards and routes without a known pattern are not expanded
-			if (descriptor.route === "*") continue;
-			const ancestorPattern = patternByName.get(descriptor.route);
-			if (ancestorPattern === undefined) continue;
-
-			// Find descendant routes whose pattern extends the ancestor's pattern
-			for (const { name, pattern } of allRoutes) {
-				if (name === descriptor.route) continue;
-				if (isPatternAncestor(ancestorPattern, pattern)) {
-					expanded.push({ ...descriptor, route: name });
-				}
-			}
-		}
-
-		// Sort by pattern depth (segment count) so ancestor guards run first.
-		// Global ("*") descriptors return 0 here -- their relative position is irrelevant
-		// because GuardPipeline evaluates globals separately from route-specific guards.
-		return expanded.toSorted((a, b) => {
-			if (a.route === "*" || b.route === "*") return 0;
-			const pa = patternByName.get(a.route) ?? "";
-			const pb = patternByName.get(b.route) ?? "";
-			return patternSegments(pa).length - patternSegments(pb).length;
-		});
-	}
-
-	/**
-	 * Resolve metadata for a route without inheritance (flat merge of
-	 * manifest and runtime metadata).
-	 */
-	private _resolveFlatMeta(routeName: string): Readonly<Record<string, unknown>> {
-		const manifest = this._manifestMeta.get(routeName);
-		const runtime = this._runtimeMeta.get(routeName);
-		if (!manifest && !runtime) return Router._EMPTY_META;
-		if (!runtime) return manifest!;
-		if (!manifest) return runtime;
-		return Object.freeze({ ...manifest, ...runtime });
-	}
-
-	/**
-	 * Resolve metadata for a route with pattern-tree inheritance.
-	 * Walks ancestor patterns shallowest-first, merging manifest and
-	 * runtime metadata at each level, then overlays the route's own.
-	 */
-	private _resolveInheritedMeta(routeName: string): Readonly<Record<string, unknown>> {
-		const allRoutes = this._collectRoutePatterns();
-		const routeEntry = allRoutes.find((r) => r.name === routeName);
-		if (!routeEntry) return this._resolveFlatMeta(routeName);
-
-		// Find ancestors that have declared metadata (manifest or runtime)
-		const ancestors = allRoutes
-			.filter(
-				(r) =>
-					r.name !== routeName &&
-					(this._manifestMeta.has(r.name) || this._runtimeMeta.has(r.name)) &&
-					isPatternAncestor(r.pattern, routeEntry.pattern),
-			)
-			.toSorted((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length);
-
-		// Merge shallowest-first: root ancestor -> deeper ancestors -> own manifest -> own runtime
-		const merged: Record<string, unknown> = {};
-
-		for (const ancestor of ancestors) {
-			const ancestorManifest = this._manifestMeta.get(ancestor.name);
-			if (ancestorManifest) Object.assign(merged, ancestorManifest);
-			const ancestorRuntime = this._runtimeMeta.get(ancestor.name);
-			if (ancestorRuntime) Object.assign(merged, ancestorRuntime);
-		}
-
-		const ownManifest = this._manifestMeta.get(routeName);
-		if (ownManifest) Object.assign(merged, ownManifest);
-		const ownRuntime = this._runtimeMeta.get(routeName);
-		if (ownRuntime) Object.assign(merged, ownRuntime);
-
-		if (Object.keys(merged).length === 0) return Router._EMPTY_META;
-		return Object.freeze(merged);
-	}
-
-	/**
-	 * Load guard modules individually via `sap.ui.require` and register
-	 * each resolved function with the appropriate guard API.
-	 *
-	 * Each module is loaded in its own `sap.ui.require` call so that a
-	 * single invalid path only skips that guard (with a warning) rather
-	 * than failing the entire batch. Once all loads settle, guards
-	 * register in declaration order. Registration errors (e.g. from
-	 * `unknownRouteRegistration: "throw"`) are caught per-module.
+	 * Load all guard modules, then register their guards in declaration order.
+	 * Registration errors (e.g. from `unknownRouteRegistration: "throw"`) are
+	 * caught per guard.
 	 */
 	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
-		const promises = descriptors.map((descriptor) => {
-			return new Promise<{ descriptor: GuardDescriptor; moduleExport: unknown }>((resolve) => {
-				sap.ui.require(
-					[descriptor.modulePath],
-					(moduleExport: unknown) => {
-						resolve({ descriptor, moduleExport });
-					},
-					(err: Error) => {
-						Log.warning(
-							`guardRouter.guards: failed to load module "${descriptor.modulePath}", skipping`,
-							String(err),
-							LOG_COMPONENT,
-						);
-						resolve({ descriptor, moduleExport: null });
-					},
-				);
-			});
-		});
-		return Promise.all(promises).then((results) => {
-			for (const { descriptor, moduleExport } of results) {
-				if (moduleExport === null) continue;
-				for (const fn of resolveModuleExports(moduleExport, descriptor.modulePath, descriptor.exportKey)) {
+		return loadGuardModules(descriptors).then((results) => {
+			for (const { descriptor, guards } of results) {
+				for (const fn of guards) {
 					try {
 						this._registerGuardFromDescriptor(descriptor, fn);
 					} catch (err: unknown) {
@@ -1504,59 +1320,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
-	/**
-	 * Register lazy wrapper functions that load guard modules on first use.
-	 *
-	 * Cherry-picked descriptors (with exportKey) get one lazy wrapper each.
-	 * Bare-path descriptors try a sync cache probe first; if the module is
-	 * cached (preload likely finished), all guards are expanded immediately.
-	 * On cache miss, a single wrapper loads the module on first navigation and
-	 * runs all of its guards in order; later navigations run them synchronously.
-	 */
+	/** Register the guards of each descriptor, loading their modules on first use (see `createLazyGuards`). */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
-			const { modulePath, exportKey } = descriptor;
-
-			if (exportKey !== undefined) {
-				// Cherry-picked: one lazy wrapper, resolves to at most one guard.
-				// Resolved once, so a missing export warns once rather than on every navigation.
-				let picked: GuardFn[] | undefined;
-				const runPicked = (mod: unknown, context: GuardContext): GuardResult | Promise<GuardResult> => {
-					picked ??= resolveModuleExports(mod, modulePath, exportKey);
-					return runGuardsInOrder(picked, context);
-				};
-				const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
-					const cached = sap.ui.require(modulePath) as unknown;
-					if (cached !== undefined) return runPicked(cached, context);
-					return loadGuardModule(modulePath).then((mod) =>
-						context.signal.aborted ? false : runPicked(mod, context),
-					);
-				};
-				this._registerGuardFromDescriptor(descriptor, lazyGuard);
-				continue;
+			for (const fn of createLazyGuards(descriptor)) {
+				this._registerGuardFromDescriptor(descriptor, fn);
 			}
-
-			// Bare-path: try sync expansion from cache (preload likely finished)
-			const cached = sap.ui.require(modulePath) as unknown;
-			if (cached !== undefined) {
-				for (const fn of resolveModuleExports(cached, modulePath)) {
-					this._registerGuardFromDescriptor(descriptor, fn);
-				}
-				continue;
-			}
-
-			// Cache miss: registering the module's guards on first use would miss the current
-			// navigation, whose guard list the pipeline is already iterating.
-			let loadedGuards: GuardFn[] | undefined;
-			const lazyModule = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
-				if (loadedGuards) return runGuardsInOrder(loadedGuards, context);
-				return loadGuardModule(modulePath).then((mod) => {
-					if (context.signal.aborted) return false;
-					loadedGuards ??= resolveModuleExports(mod, modulePath);
-					return runGuardsInOrder(loadedGuards, context);
-				});
-			};
-			this._registerGuardFromDescriptor(descriptor, lazyModule);
 		}
 	}
 
@@ -1573,9 +1342,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
 		this._lastSettlement = null;
-		this._manifestMeta.clear();
-		this._runtimeMeta.clear();
-		this._resolvedMetaCache.clear();
+		this._meta.clear();
 		super.destroy();
 		return this;
 	}

@@ -1,6 +1,6 @@
 import Log from "sap/base/Log";
 import jQuery from "sap/ui/thirdparty/jquery";
-import GuardPipeline, { isPromiseLike } from "ui5/guard/router/GuardPipeline";
+import GuardPipeline, { isPromiseLike, nameGuard } from "ui5/guard/router/GuardPipeline";
 import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
 import { callUnsafe } from "./testHelpers";
 
@@ -412,6 +412,43 @@ QUnit.test("throwing guards produce error decisions and log errors", function (t
 			['Leave guard [0] on route "current" threw, navigation failed', "ui5.guard.router.Router"],
 		],
 		"Each throw is logged with the guard's route under the router's log component",
+	);
+});
+
+QUnit.test("a named guard's throw is logged with its name", async function (this: SinonTestContext, assert: Assert) {
+	const errorStub = this.stub(Log, "error");
+	const enter: GuardFn = () => {
+		throw new Error("enter");
+	};
+	const leave: LeaveGuardFn = () => {
+		throw new Error("leave");
+	};
+	const rejecting: GuardFn = () => Promise.reject(new Error("async"));
+	nameGuard(enter, "checks#0");
+	nameGuard(leave, "unsaved");
+	nameGuard(rejecting, "remote");
+
+	const sync = new GuardPipeline();
+	sync.addGlobalGuard(() => true);
+	sync.addGlobalGuard(enter);
+	sync.evaluate(createContext());
+
+	const leaving = new GuardPipeline();
+	leaving.addLeaveGuard("current", leave);
+	leaving.evaluate(createContext({ fromRoute: "current" }));
+
+	const async = new GuardPipeline();
+	async.addGlobalGuard(() => Promise.resolve(true));
+	async.addGlobalGuard(rejecting);
+	await async.evaluate(createContext());
+
+	assert.deepEqual(
+		errorStub.getCalls().map((call) => call.args[0]),
+		[
+			'Enter guard [1] "checks#0" on route "target" threw, navigation failed',
+			'Leave guard [0] "unsaved" on route "current" threw, navigation failed',
+			'Enter guard [1] "remote" on route "target" threw, navigation failed',
+		],
 	);
 });
 

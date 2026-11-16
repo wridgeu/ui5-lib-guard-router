@@ -61,3 +61,77 @@ export function isPatternAncestor(ancestorPattern: string, candidatePattern: str
 		return seg.startsWith("{") && candidateSeg.startsWith("{");
 	});
 }
+
+/** A route name with its pattern. */
+export interface RoutePattern {
+	readonly name: string;
+	readonly pattern: string;
+}
+
+/** Number of mandatory segments in the pattern of `route` (0 when unknown). */
+function depthOf(route: string, patternByName: ReadonlyMap<string, string>): number {
+	return patternSegments(patternByName.get(route) ?? "").length;
+}
+
+/**
+ * Copy each route-specific entry to every descendant route (`inheritance: "pattern-tree"`).
+ * Global (`"*"`) entries and entries for routes without a known pattern are kept as-is.
+ * Sorted by pattern depth, so ancestor guards run before descendant guards. Where global
+ * entries end up does not matter: the pipeline runs global guards separately.
+ */
+export function expandToDescendants<T extends { readonly route: string }>(entries: T[], routes: RoutePattern[]): T[] {
+	if (routes.length === 0) return entries;
+	const patternByName = new Map(routes.map((r) => [r.name, r.pattern]));
+
+	const expanded: T[] = [];
+	for (const entry of entries) {
+		expanded.push(entry);
+		if (entry.route === "*") continue;
+		const ancestorPattern = patternByName.get(entry.route);
+		if (ancestorPattern === undefined) continue;
+		for (const { name, pattern } of routes) {
+			if (name !== entry.route && isPatternAncestor(ancestorPattern, pattern)) {
+				expanded.push({ ...entry, route: name });
+			}
+		}
+	}
+
+	return expanded.toSorted((a, b) => {
+		if (a.route === "*" || b.route === "*") return 0;
+		return depthOf(a.route, patternByName) - depthOf(b.route, patternByName);
+	});
+}
+
+/**
+ * Entries a newly added route inherits (`inheritance: "pattern-tree"`): copies of its
+ * ancestors' entries for the new route, and copies of its own entries for its existing
+ * descendants. `routes` must include the new route. Sorted by pattern depth.
+ */
+export function expandForNewRoute<T extends { readonly route: string }>(
+	entries: T[],
+	newName: string,
+	routes: RoutePattern[],
+): T[] {
+	const patternByName = new Map(routes.map((r) => [r.name, r.pattern]));
+	const newPattern = patternByName.get(newName);
+	if (newPattern === undefined) return [];
+
+	const result: T[] = [];
+	for (const entry of entries) {
+		if (entry.route === "*") continue;
+		if (entry.route !== newName) {
+			const ancestorPattern = patternByName.get(entry.route);
+			if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
+				result.push({ ...entry, route: newName });
+			}
+		} else {
+			for (const { name, pattern } of routes) {
+				if (name !== newName && isPatternAncestor(newPattern, pattern)) {
+					result.push({ ...entry, route: name });
+				}
+			}
+		}
+	}
+
+	return result.toSorted((a, b) => depthOf(a.route, patternByName) - depthOf(b.route, patternByName));
+}

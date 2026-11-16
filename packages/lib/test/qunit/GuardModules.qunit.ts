@@ -26,22 +26,25 @@ QUnit.module("GuardModules - resolveModuleExports");
 
 QUnit.test("function export", function (this: SinonTestContext, assert) {
 	const debug = this.stub(Log, "debug");
-	assert.deepEqual(resolveModuleExports(a, PATH), [a]);
+	assert.deepEqual(resolveModuleExports(a, PATH), [{ name: "auth", fn: a }]);
 	assert.strictEqual(debug.callCount, 0, "no key, no debug log");
-	assert.deepEqual(resolveModuleExports(a, PATH, "x"), [a], "the export key is ignored");
+	assert.deepEqual(resolveModuleExports(a, PATH, "x"), [{ name: "x", fn: a }], "the export key only names it");
 	assert.deepEqual(messages(debug), [`guardRouter.guards: "${PATH}#x" is a single function, ignoring export key`]);
 });
 
 QUnit.test("array export", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
-	assert.deepEqual(resolveModuleExports([a, "x", b], PATH), [a, b]);
+	assert.deepEqual(resolveModuleExports([a, "x", b], PATH), [
+		{ name: "auth#0", fn: a },
+		{ name: "auth#2", fn: b },
+	]);
 	assert.deepEqual(messages(warning), warned("[1] is not a function, skipping"));
 });
 
 QUnit.test("array export picked by index", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
-	assert.deepEqual(resolveModuleExports([a, b], PATH, "0"), [a]);
-	assert.deepEqual(resolveModuleExports([a, b], PATH, "1"), [b]);
+	assert.deepEqual(resolveModuleExports([a, b], PATH, "0"), [{ name: "auth#0", fn: a }]);
+	assert.deepEqual(resolveModuleExports([a, b], PATH, "1"), [{ name: "auth#1", fn: b }]);
 	assert.strictEqual(warning.callCount, 0);
 	for (const key of ["2", "-1", "x"]) {
 		warning.resetHistory();
@@ -55,17 +58,24 @@ QUnit.test("array export picked by index", function (this: SinonTestContext, ass
 
 QUnit.test("object export", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
-	assert.deepEqual(resolveModuleExports({ first: a, bad: 1, second: b }, PATH), [a, b]);
+	assert.deepEqual(resolveModuleExports({ first: a, bad: 1, second: b }, PATH), [
+		{ name: "first", fn: a },
+		{ name: "second", fn: b },
+	]);
 	assert.deepEqual(messages(warning), warned(".bad is not a function, skipping"));
 });
 
 QUnit.test("object export picked by key or index", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
 	const mod = { first: a, second: b };
-	assert.deepEqual(resolveModuleExports(mod, PATH, "second"), [b]);
-	assert.deepEqual(resolveModuleExports(mod, PATH, "0"), [a]);
-	assert.deepEqual(resolveModuleExports(mod, PATH, "1"), [b]);
-	assert.deepEqual(resolveModuleExports({ first: a, "1": b }, PATH, "1"), [b], "a key wins over an index");
+	assert.deepEqual(resolveModuleExports(mod, PATH, "second"), [{ name: "second", fn: b }]);
+	assert.deepEqual(resolveModuleExports(mod, PATH, "0"), [{ name: "first", fn: a }]);
+	assert.deepEqual(resolveModuleExports(mod, PATH, "1"), [{ name: "second", fn: b }]);
+	assert.deepEqual(
+		resolveModuleExports({ first: a, "1": b }, PATH, "1"),
+		[{ name: "1", fn: b }],
+		"a key wins over an index",
+	);
 	assert.strictEqual(warning.callCount, 0);
 	for (const key of ["2", "-1", "missing"]) {
 		warning.resetHistory();

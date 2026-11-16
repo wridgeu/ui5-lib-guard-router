@@ -245,6 +245,7 @@ router.addRouteGuard("risky", () => {
 	throw new Error("something broke");
 	// Navigation settles as Error. The router logs:
 	// Enter guard [0] on route "risky" threw, navigation failed
+	// A manifest guard is also named: Enter guard [0] "auth" on route "risky" threw, ...
 });
 ```
 

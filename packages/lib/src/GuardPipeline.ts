@@ -26,6 +26,20 @@ export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	return typeof (value as PromiseLike<T>).then === "function";
 }
 
+/** Names of manifest guards, derived from their module, for log output. */
+const guardNames = new WeakMap<GuardFn, string>();
+
+/** Give a guard a name that its log messages show. */
+export function nameGuard(guard: GuardFn, name: string): void {
+	guardNames.set(guard, name);
+}
+
+/** Describe a guard for log output: `Enter guard [0]`, or `Enter guard [0] "checks#0"` when it has a name. */
+function describeGuard(label: string, index: number, guard: GuardFn): string {
+	const name = guardNames.get(guard);
+	return name === undefined ? `${label} [${index}]` : `${label} [${index}] "${name}"`;
+}
+
 /**
  * Normalized result of the guard decision pipeline.
  */
@@ -226,7 +240,7 @@ export default class GuardPipeline {
 			} catch (error) {
 				if (context.signal.aborted) return false;
 				Log.error(
-					`Leave guard [${i}] on route "${context.fromRoute}" threw, navigation failed`,
+					`${describeGuard("Leave guard", i, guards[i])} on route "${context.fromRoute}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
@@ -284,7 +298,7 @@ export default class GuardPipeline {
 			} catch (error) {
 				if (context.signal.aborted) return false;
 				Log.error(
-					`Enter guard [${i}] on route "${context.toRoute}" threw, navigation failed`,
+					`${describeGuard("Enter guard", i, guards[i])} on route "${context.toRoute}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
@@ -328,7 +342,7 @@ export default class GuardPipeline {
 			if (!context.signal.aborted) {
 				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
-					`${label} [${guardIndex}] on route "${route}" threw, navigation failed`,
+					`${describeGuard(label, guardIndex, guards[guardIndex])} on route "${route}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);

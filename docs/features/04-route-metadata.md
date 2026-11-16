@@ -180,7 +180,7 @@ const context: GuardContext = {
 
 ## Types
 
-> **Implementation note**: The shipped types differ from this original proposal. `mergeRouteMeta` was dropped. `GuardContext` includes `signal`, `bag`, `toMeta`, `fromMeta` but not `transition` (feature 03 was not implemented). `toArguments` is `RouteInfo["arguments"]`, not `Record<string, string>`.
+> **Implementation note**: The shipped types differ from this original proposal. `mergeRouteMeta` was dropped. `GuardContext` includes `signal`, `bag`, `toMeta`, `fromMeta` but not `transition` (feature 03 was not implemented). `toArguments` is `RouteInfo["arguments"]`, not `Record<string, string>`. The manifest and runtime maps live in `RouteMetaStore` (`RouteMeta.ts`), which also caches resolved metadata.
 
 ```typescript
 // RouterInstance additions

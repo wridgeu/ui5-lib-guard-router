@@ -1,13 +1,19 @@
 /**
- * Guard modules: detect a loaded module's export shape, load modules lazily,
- * and run a module's guards in order.
+ * Guard modules: detect a loaded module's export shape, load modules for
+ * manifest guards (blocking or lazy), and run a module's guards in order.
  */
 import Log from "sap/base/Log";
 import type { GuardContext, GuardFn, GuardResult } from "./types";
-import { isPromiseLike } from "./GuardPipeline";
-import { isRecord } from "./GuardConfig";
+import { isPromiseLike, nameGuard } from "./GuardPipeline";
+import { type GuardDescriptor, isRecord } from "./GuardConfig";
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
+
+/** A guard function from a module, with the name its log messages show. */
+export interface NamedGuard {
+	readonly name: string;
+	readonly fn: GuardFn;
+}
 
 /** Log a warning about a guard module entry in the manifest. */
 function guardWarning(modulePath: string, detail: string): void {
@@ -17,15 +23,17 @@ function guardWarning(modulePath: string, detail: string): void {
 /**
  * Detect the export shape of a loaded guard module and extract guard functions.
  *
- * Shapes:
- * - function        → single guard
- * - Array           → ordered guards (non-functions warned and skipped)
- * - plain object    → named guards in key order (non-functions warned and skipped)
+ * Shapes and the names they get (`moduleName` is the last path segment):
+ * - function        → single guard, named `moduleName` (or the export key when one is given)
+ * - Array           → ordered guards, named `moduleName#index` (non-functions warned and skipped)
+ * - plain object    → guards in key order, named by key (non-functions warned and skipped)
  *
  * When `exportKey` is set, only the matching export is returned.
- * When `exportKey` is set on a function export, the key is ignored with a debug warning.
+ * When `exportKey` is set on a function export, the key is ignored with a debug log.
  */
-export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): GuardFn[] {
+export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
+	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
+
 	// Shape 1: function
 	if (typeof moduleExport === "function") {
 		if (exportKey !== undefined) {
@@ -35,7 +43,7 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				LOG_COMPONENT,
 			);
 		}
-		return [moduleExport as GuardFn];
+		return [{ name: exportKey ?? moduleName, fn: moduleExport as GuardFn }];
 	}
 
 	// Shape 2: array
@@ -56,17 +64,17 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [entry as GuardFn];
+			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
 		}
 
-		const results: GuardFn[] = [];
+		const results: NamedGuard[] = [];
 		for (let i = 0; i < moduleExport.length; i++) {
 			const entry = moduleExport[i] as unknown;
 			if (typeof entry !== "function") {
 				guardWarning(modulePath, `[${i}] is not a function, skipping`);
 				continue;
 			}
-			results.push(entry as GuardFn);
+			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
 		}
 		return results;
 	}
@@ -80,37 +88,47 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		}
 
 		if (exportKey !== undefined) {
-			let value: unknown = moduleExport[exportKey];
-			if (value === undefined) {
+			let entry: [string, unknown] | undefined =
+				moduleExport[exportKey] === undefined ? undefined : [exportKey, moduleExport[exportKey]];
+			if (entry === undefined) {
 				const index = parseInt(exportKey, 10);
 				if (!Number.isNaN(index) && index >= 0 && index < entries.length) {
-					value = entries[index][1];
+					entry = entries[index];
 				}
 			}
-			if (value === undefined) {
+			if (entry === undefined) {
 				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
 				return [];
 			}
+			const [name, value] = entry;
 			if (typeof value !== "function") {
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [value as GuardFn];
+			return [{ name, fn: value as GuardFn }];
 		}
 
-		const results: GuardFn[] = [];
+		const results: NamedGuard[] = [];
 		for (const [key, value] of entries) {
 			if (typeof value !== "function") {
 				guardWarning(modulePath, `.${key} is not a function, skipping`);
 				continue;
 			}
-			results.push(value as GuardFn);
+			results.push({ name: key, fn: value as GuardFn });
 		}
 		return results;
 	}
 
 	guardWarning(modulePath, "did not export a function, array, or plain object, skipping");
 	return [];
+}
+
+/** Resolve a module's guards and name each one for log output. */
+function resolveNamedGuards(moduleExport: unknown, modulePath: string, exportKey?: string): GuardFn[] {
+	return resolveModuleExports(moduleExport, modulePath, exportKey).map(({ name, fn }) => {
+		nameGuard(fn, name);
+		return fn;
+	});
 }
 
 /**
@@ -146,4 +164,82 @@ export function loadGuardModule(modulePath: string): Promise<unknown> {
 			reject(err);
 		});
 	});
+}
+
+/**
+ * Load the modules of all descriptors (`guardLoading: "block"`) and resolve their guards.
+ *
+ * Each module is loaded in its own `sap.ui.require` call, so an invalid path
+ * only skips that descriptor (with a warning) instead of failing the batch.
+ * Results keep declaration order.
+ */
+export function loadGuardModules(
+	descriptors: GuardDescriptor[],
+): Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }[]> {
+	return Promise.all(
+		descriptors.map(
+			(descriptor) =>
+				new Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }>((resolve) => {
+					sap.ui.require(
+						[descriptor.modulePath],
+						(moduleExport: unknown) => {
+							resolve({
+								descriptor,
+								guards: resolveNamedGuards(moduleExport, descriptor.modulePath, descriptor.exportKey),
+							});
+						},
+						(err: Error) => {
+							Log.warning(
+								`guardRouter.guards: failed to load module "${descriptor.modulePath}", skipping`,
+								String(err),
+								LOG_COMPONENT,
+							);
+							resolve({ descriptor, guards: [] });
+						},
+					);
+				}),
+		),
+	);
+}
+
+/**
+ * Create the guards to register for one descriptor (`guardLoading: "lazy"`).
+ *
+ * - Cherry-pick (`module#export`): one wrapper that loads the module on first use
+ *   and resolves the export once, so a missing export warns once.
+ * - Bare path, module already cached (preload finished): the module's guards themselves.
+ * - Bare path, cache miss: one wrapper that loads the module on first use and runs all
+ *   of its guards in order. Registering them on first use would miss the current
+ *   navigation, whose guard list the pipeline is already iterating. Later navigations
+ *   run them synchronously.
+ *
+ * A wrapper is named after the module until it resolves to a single guard, then after that guard.
+ */
+export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
+	const { modulePath, exportKey } = descriptor;
+	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
+
+	if (exportKey === undefined) {
+		const cached = sap.ui.require(modulePath) as unknown;
+		if (cached !== undefined) return resolveNamedGuards(cached, modulePath);
+	}
+
+	let guards: GuardFn[] | undefined;
+	const run = (mod: unknown, context: GuardContext): GuardResult | Promise<GuardResult> => {
+		if (guards === undefined) {
+			const resolved = resolveModuleExports(mod, modulePath, exportKey);
+			if (resolved.length === 1) nameGuard(wrapper, resolved[0].name);
+			guards = resolved.map((guard) => guard.fn);
+		}
+		return runGuardsInOrder(guards, context);
+	};
+	const wrapper = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+		const mod = sap.ui.require(modulePath) as unknown;
+		if (mod !== undefined) return run(mod, context);
+		return loadGuardModule(modulePath).then((loadedModule) =>
+			context.signal.aborted ? false : run(loadedModule, context),
+		);
+	};
+	nameGuard(wrapper, exportKey === undefined ? moduleName : `${moduleName}#${exportKey}`);
+	return [wrapper];
 }

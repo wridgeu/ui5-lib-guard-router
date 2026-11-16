@@ -182,7 +182,7 @@ Constructor(routes, config, owner, ...)
   ├── parseGuardRouterConfig(guardRouter, sap.app/id) in GuardConfig.ts:
   │   ├── options (unknownRouteRegistration, navToPreflight, guardLoading, inheritance)
   │   │   → store as _options
-  │   ├── routeMeta → store as _manifestMeta
+  │   ├── routeMeta → RouteMetaStore (_meta, RouteMeta.ts)
   │   └── guards block → store as _pendingGuardDescriptors
   └── If guardLoading === "lazy" and pending guards exist:
         Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
@@ -441,8 +441,15 @@ Key properties:
 
 ### Named guard logging
 
-- Not implemented: guard names are derived but not logged; pipeline logs identify guards by phase and index (`Enter guard [0] on route "admin" ...`)
-- Object shape: key used as name; array shape: `moduleName#index`; function shape: module last segment
+Manifest guards are named after their module, and the name appears when the guard throws:
+`Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
+
+- Function export: the module's last path segment (`guards.auth` → `auth`); with `#key`, the key
+- Array export: `moduleName#index` (`checks#0`, `checks#1`), also when cherry-picked
+- Object export: the key (`checkAuth`); cherry-picked by index, the key at that index
+- A lazy wrapper whose module missed the cache is named after the module (or `module#key`) until it loads, then after the guard it resolved to. A bare-path module with several guards keeps the module name, because one wrapper runs them all.
+
+Guards registered with `addGuard()` and the other imperative methods have no name; their logs show phase and index only.
 
 ### Edge cases
 

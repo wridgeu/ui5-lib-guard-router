@@ -16,8 +16,9 @@ ui5-lib-guard-router/
     |   |   |-- Router.ts           extended Router (core implementation)
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
     |   |   |-- GuardConfig.ts      parses the guardRouter block (options, routeMeta, guards)
-    |   |   |-- GuardModules.ts     guard module export shapes, lazy loading, in-order runs
-    |   |   |-- PatternTree.ts      route pattern ancestry for pattern-tree inheritance
+    |   |   |-- GuardModules.ts     guard module export shapes and names, block and lazy loading
+    |   |   |-- PatternTree.ts      route pattern ancestry and pattern-tree guard expansion
+    |   |   |-- RouteMeta.ts        route metadata store with inheritance and caching
     |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
@@ -495,25 +496,23 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                      | Type                                             | Purpose                                                                        |
-| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `_options`                 | `ResolvedGuardRouterOptions`                     | Resolved manifest options with defaults applied                                |
-| `_pipeline`                | `GuardPipeline`                                  | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)               |
-| `_currentRoute`            | `string`                                         | Name of the currently active route                                             |
-| `_currentHash`             | `string \| null`                                 | Hash of the active route, `null` before first                                  |
-| `_phase`                   | `RouterPhase`                                    | Discriminated union tracking the router's lifecycle phase (see below)          |
-| `_parseGeneration`         | `number`                                         | Monotonic counter for async invalidation                                       |
-| `_suppressedHash`          | `string \| null`                                 | Hash to suppress in the next `parse()` call                                    |
-| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`              | Pending `navigationSettled()` callbacks                                        |
-| `_lastSettlement`          | `NavigationResult \| null`                       | Most recent settlement result (for post-hoc queries)                           |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Parsed manifest guard descriptors, registered and cleared by `initialize()`    |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                              | Original manifest descriptors (for inheritance expansion on addRoute)          |
-| `_destroyed`               | `boolean`                                        | Set by `destroy()`; stops block-mode loading from calling `super.initialize()` |
-| `_manifestMeta`            | `Map<string, Readonly<Record<string, unknown>>>` | Manifest-declared route metadata                                               |
-| `_runtimeMeta`             | `Map<string, Readonly<Record<string, unknown>>>` | Runtime metadata set via `setRouteMeta()`                                      |
-| `_resolvedMetaCache`       | `Map<string, Readonly<Record<string, unknown>>>` | Merged metadata cache, cleared on mutation                                     |
-| `_routeNames`              | `string[]`                                       | Known route names, collected for inheritance lookups                           |
-| `_ownerComponent`          | `UIComponent \| undefined`                       | Owner component from the constructor, exposed as `GuardContext.ownerComponent` |
+| Field                      | Type                                | Purpose                                                                        |
+| -------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
+| `_options`                 | `ResolvedGuardRouterOptions`        | Resolved manifest options with defaults applied                                |
+| `_pipeline`                | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)               |
+| `_currentRoute`            | `string`                            | Name of the currently active route                                             |
+| `_currentHash`             | `string \| null`                    | Hash of the active route, `null` before first                                  |
+| `_phase`                   | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below)          |
+| `_parseGeneration`         | `number`                            | Monotonic counter for async invalidation                                       |
+| `_suppressedHash`          | `string \| null`                    | Hash to suppress in the next `parse()` call                                    |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                                        |
+| `_lastSettlement`          | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                           |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                 | Parsed manifest guard descriptors, registered and cleared by `initialize()`    |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                 | Original manifest descriptors (for inheritance expansion on addRoute)          |
+| `_destroyed`               | `boolean`                           | Set by `destroy()`; stops block-mode loading from calling `super.initialize()` |
+| `_meta`                    | `RouteMetaStore`                    | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)  |
+| `_routeNames`              | `string[]`                          | Known route names, collected for inheritance lookups                           |
+| `_ownerComponent`          | `UIComponent \| undefined`          | Owner component from the constructor, exposed as `GuardContext.ownerComponent` |
 
 `RouterPhase` is a discriminated union with three variants:
 

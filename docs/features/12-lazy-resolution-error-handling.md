@@ -97,7 +97,7 @@ The existing `unknownRouteRegistration` policy covers both guard and metadata re
 
 ## Phase 2: Guard Error Handling
 
-> **As implemented:** guard inheritance is not resolved lazily per navigation. With `inheritance: "pattern-tree"`, `initialize()` expands each manifest guard descriptor to all descendant routes once (`_expandGuardDescriptors()`), and `addRoute()` expands descriptors for the new route (`_expandGuardDescriptorsForNewRoute()`). There is no guard descriptor cache. A route with no inherited guards simply has none registered, and `_runRouteGuards()` returns `true`. The sections below are kept as the design record.
+> **As implemented:** guard inheritance is not resolved lazily per navigation. With `inheritance: "pattern-tree"`, `initialize()` expands each manifest guard descriptor to all descendant routes once (`expandToDescendants()` in `PatternTree.ts`), and `addRoute()` expands descriptors for the new route (`expandForNewRoute()`). There is no guard descriptor cache. A route with no inherited guards simply has none registered, and `_runRouteGuards()` returns `true`. The sections below are kept as the design record.
 
 ### Pipeline cache miss: Ancestor walk finds zero descriptors
 

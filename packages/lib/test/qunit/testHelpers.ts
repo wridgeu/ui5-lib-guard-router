@@ -248,3 +248,22 @@ export async function captureErrorsAsync(fn: () => Promise<void>): Promise<Captu
 	}
 	return errors;
 }
+
+/**
+ * Create a router with hierarchical route patterns for inheritance tests.
+ * These routes form a URL-tree where `employees` is an ancestor of
+ * `employees/{id}`, which is in turn an ancestor of `employees/{id}/resume`.
+ */
+export function createHierarchicalRouter(guardRouter: Record<string, unknown>): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "employees", pattern: "employees" },
+			{ name: "employee", pattern: "employees/{id}" },
+			{ name: "employeeResume", pattern: "employees/{id}/resume" },
+			{ name: "settings", pattern: "settings" },
+			{ name: "settingsProfile", pattern: "settings/profile" },
+		],
+		{ async: true, guardRouter },
+	);
+}
