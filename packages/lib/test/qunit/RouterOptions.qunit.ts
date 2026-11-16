@@ -1,7 +1,6 @@
-import sinon from "sinon";
 import Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn, GuardLoading, GuardRouter } from "ui5/guard/router/types";
+import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureWarnings,
@@ -1398,14 +1397,14 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 
 const FIXTURES = "ui5/guard/router/qunit/fixtures/guards";
 
-function createLazyRouter(guards: Record<string, string[]>, guardLoading: GuardLoading = "lazy"): GuardRouter {
+function createLazyRouter(guards: Record<string, string[]>): GuardRouter {
 	return new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
 			{ name: "protected", pattern: "protected" },
 			{ name: "forbidden", pattern: "forbidden" },
 		],
-		{ async: true, guardRouter: { guardLoading, unknownRouteRegistration: "ignore", guards } },
+		{ async: true, guardRouter: { guardLoading: "lazy", unknownRouteRegistration: "ignore", guards } },
 	);
 }
 
@@ -1426,36 +1425,6 @@ async function loadProbe(): Promise<LazyProbe> {
 	probe.behaviors = [];
 	return probe;
 }
-
-QUnit.test("lazy mode: constructor preloads each guard module once", function (assert: Assert) {
-	const requireSpy = sinon.spy(sap.ui, "require");
-	try {
-		const guards = {
-			protected: [
-				`${FIXTURES}/arrayGuard`,
-				`${FIXTURES}/objectGuard#checkAuth`,
-				`${FIXTURES}/objectGuard#checkRole`,
-			],
-		};
-		const preloads = (): unknown[] =>
-			requireSpy
-				.getCalls()
-				.map((call) => call.args[0])
-				.filter((paths) => Array.isArray(paths) && paths.some((path) => String(path).startsWith(FIXTURES)));
-
-		createLazyRouter(guards, "block").destroy();
-		assert.deepEqual(preloads(), [], "block mode does not preload");
-
-		router = createLazyRouter(guards);
-		assert.deepEqual(
-			preloads(),
-			[[`${FIXTURES}/arrayGuard`, `${FIXTURES}/objectGuard`]],
-			"lazy mode preloads each module path once",
-		);
-	} finally {
-		requireSpy.restore();
-	}
-});
 
 QUnit.test("lazy mode: uncached module runs all of its guards in order", async function (assert: Assert) {
 	const path = `${FIXTURES}/lazyUncachedGuard`;

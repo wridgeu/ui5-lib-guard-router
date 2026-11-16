@@ -428,7 +428,7 @@ Key properties:
 
 ### Pattern 5 loading
 
-- Preload hint fires in constructor for all guard module paths
+- Preload hint fires in constructor for all guard module paths (not asserted: it only affects load timing, and observing it would mean spying on the global `sap.ui` object)
 - `initialize()` is always synchronous in lazy mode
 - Guard available sync on first navigation when preload has completed (cache hit)
 - Guard loads async on first navigation when preload has not completed (cache miss)
