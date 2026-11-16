@@ -163,6 +163,89 @@ QUnit.test("Superseded async guard result does not apply", async function (asser
 	);
 });
 
+/**
+ * Resolve a superseded guard after the winning navigation settled and assert
+ * that the stale result fires no settlement and leaves the last one in place.
+ */
+async function assertStaleResultIgnored(assert: Assert, resolveStale: () => void): Promise<void> {
+	const winner = await router.navigationSettled();
+	const lateSettlements: string[] = [];
+	router.attachNavigationSettled((event) => lateSettlements.push(event.getParameters().status));
+
+	resolveStale();
+	await flushPromises();
+
+	assert.deepEqual(lateSettlements, [], "stale guard result fires no settlement");
+	assert.deepEqual(await router.navigationSettled(), winner, "last settlement is still the winning navigation");
+}
+
+QUnit.test("Superseded async preflight result does not settle", async function (assert: Assert) {
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	router.navTo("detail", { id: "1" });
+
+	await assertStaleResultIgnored(assert, () => slowGuard.resolve(true));
+});
+
+QUnit.test(
+	"Stale result arriving while the newer navigation is still evaluating is ignored",
+	async function (assert: Assert) {
+		const staleGuard = Promise.withResolvers<boolean>();
+		const winnerGuard = Promise.withResolvers<boolean>();
+		router.addRouteGuard("protected", () => staleGuard.promise);
+		router.addRouteGuard("detail", () => winnerGuard.promise);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const settlements: string[] = [];
+		router.attachNavigationSettled((event) => settlements.push(event.getParameters().status));
+
+		router.navTo("protected");
+		router.navTo("detail", { id: "1" });
+		staleGuard.resolve(true);
+		await flushPromises();
+		assert.deepEqual(settlements, [NavigationOutcome.Cancelled], "only the superseded navigation has settled");
+
+		winnerGuard.resolve(true);
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "newer navigation commits");
+		assert.strictEqual(result.route, "detail", "newer navigation reaches its route");
+		assert.deepEqual(
+			settlements,
+			[NavigationOutcome.Cancelled, NavigationOutcome.Committed],
+			"no stale settlement",
+		);
+	},
+);
+
+QUnit.test("Superseded async hash-change result does not settle", async function (assert: Assert) {
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	HashChanger.getInstance().setHash("detail/1");
+
+	await assertStaleResultIgnored(assert, () => slowGuard.resolve(true));
+});
+
+QUnit.test("Superseded async redirect-chain result does not settle", async function (assert: Assert) {
+	const slowTargetGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("forbidden", () => slowTargetGuard.promise);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	router.navTo("detail", { id: "1" });
+
+	await assertStaleResultIgnored(assert, () => slowTargetGuard.resolve(true));
+});
+
 // ============================================================
 // Module: Guard context across navigations
 // ============================================================

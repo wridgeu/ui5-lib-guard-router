@@ -442,6 +442,35 @@ QUnit.test("navTo with replace=true works through preflight (4-arg overload)", a
 	assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
 });
 
+QUnit.test("Guard redirect replaces the history entry instead of adding one", async function (assert) {
+	router.addRouteGuard("protected", () => "forbidden");
+	router.addRouteGuard("detail", (context) =>
+		context.toArguments.id === "1" ? { route: "detail", parameters: { id: "7" } } : true,
+	);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const hashChanger = HashChanger.getInstance();
+	const setHash = sinon.spy(hashChanger, "setHash");
+	const replaceHash = sinon.spy(hashChanger, "replaceHash");
+	try {
+		router.navTo("protected");
+		await router.navigationSettled();
+		router.navTo("detail", { id: "1" });
+		await router.navigationSettled();
+
+		assert.deepEqual(
+			replaceHash.getCalls().map((call) => call.args[0]),
+			["forbidden", "detail/7"],
+			"string and object redirect targets replace the history entry",
+		);
+		assert.strictEqual(setHash.callCount, 0, "no redirect adds a history entry");
+	} finally {
+		setHash.restore();
+		replaceHash.restore();
+	}
+});
+
 QUnit.test("navTo returns this for chaining", function (assert) {
 	router.initialize();
 	const result = router.navTo("home");
