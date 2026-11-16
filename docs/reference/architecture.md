@@ -14,6 +14,7 @@ ui5-lib-guard-router/
     |   |-- src/
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
+    |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
     |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
@@ -173,39 +174,47 @@ directly on the class as typed fields; no separate internal interface is needed.
 
 Browser-initiated navigation (back/forward, URL bar, direct hash changes) flows through
 `parse()`. The override intercepts it to run guards before the parent router processes
-the hash. Programmatic `navTo()` calls bypass `parse()` via the preflight path above.
+the hash. Programmatic `navTo()` calls run the guards in the preflight path (see below); the
+hash change they cause re-enters `parse()` in the committing phase, which commits without
+running the guards again.
 
 ```mermaid
 flowchart TD
     start(["parse(newHash)"]) --> suppress{_suppressedHash set?}
     suppress -- "yes" --> smatch{hash matches?}
-    smatch -- "yes" --> sclear["clear flag"] --> ret(["return"])
-    smatch -- "no" --> sclear2["clear flag"] --> redir
+    smatch -- "yes" --> sclear["clear _suppressedHash"] --> ret(["return"])
+    smatch -- "no" --> sclear2["clear _suppressedHash"] --> redir
     suppress -- "no" --> redir{committing phase?}
-    redir -- "yes (redirect/preflight)" --> bypass(["_commitNavigation()"])
+    redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
-    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()"]
+    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>enter evaluating phase"]
 
-    setup --> guards{guards registered?}
-    guards -- "no" --> commit(["_commitNavigation()"])
-    guards -- "yes" --> leave
+    setup --> evaluate["_pipeline.evaluate(context)"]
+    evaluate -- "decision" --> apply{"_applyDecision()"}
+    evaluate -- "Promise" --> stale{"same generation and<br/>still evaluating?"}
+    stale -- "current" --> apply
+    stale -- "stale" --> discard(["discard result"])
 
-    leave{leave guards?}
-    leave -- "no" --> enter
-    leave -- "yes" --> runleave["_runLeaveGuards()"]
-    runleave -- "true" --> enter["_runEnterGuards()"]
-    runleave -- "false" --> block
-
-    enter --> result{result}
-    result -- "true" --> commit
-    result -- "false" --> block(["_blockNavigation()"])
-    result -- "redirect" --> redirect(["_redirect()"])
+    apply -- "allow" --> commit(["_commitNavigation()"])
+    apply -- "block" --> block(["_blockNavigation()"])
+    apply -- "redirect" --> redirect(["_startRedirectChain()"])
+    apply -- "error" --> errornav(["_errorNavigation()"])
 ```
 
-**Sync vs Async:** Guards run synchronously until one returns a Promise. From that point,
-remaining guards `await` sequentially. After each await, the `_parseGeneration` is checked; if
-a newer navigation started, the stale result is discarded.
+**Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
+awaits that Promise and calls the remaining guards of the same phase one at a time with
+`await`, checking the abort signal before each. Later phases run inside the same Promise
+chain after another abort-signal check, so they are async as well; they just don't add an
+`await` per guard unless one of their guards returns a Promise. `evaluate()` returns a
+Promise, so the navigation as a whole is async. Async-ness is per navigation: the next
+navigation starts synchronously again.
+When the decision arrives, `parse()` and `navTo()` discard it if `_parseGeneration` changed or
+the router left the evaluating phase; redirect hops check only `_parseGeneration`.
+
+A lazily loaded guard module that is not in the module cache yet returns a Promise while it
+loads, so it makes its navigation async from that guard on. Once loaded, its guards run
+synchronously again, unless they return Promises themselves.
 
 **Critical design decisions:**
 
@@ -242,26 +251,30 @@ Programmatic navigation:
     → _pipeline.evaluate(context)
         → allow  → enter committing/preflight phase, call super.navTo()
         → block  → _blockNavigation(hash, restoreHash=false), flush Blocked settlement
-        → redirect → _redirect(target), which enters committing/redirect phase and calls this.navTo(target)
+        → redirect → _startRedirectChain() → _redirect(target): evaluates the target's guards,
+                     then on allow enters committing/redirect phase and calls this.navTo(target, replace=true)
+        → error  → _errorNavigation(error, hash, restoreHash=false), flush Error settlement
 
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
-    → committing/preflight phase matches? → transition to idle, _commitNavigation()
+    → committing phase? → _commitNavigation() (transitions to idle)
     → otherwise → _pipeline.evaluate(context)
         → allow  → _commitNavigation()
         → block  → _blockNavigation() + _restoreHash()
-        → redirect → _redirect() via navTo(replace=true)
+        → redirect → _startRedirectChain() → _redirect() → navTo(replace=true)
+        → error  → _errorNavigation() + _restoreHash()
 ```
 
 ### The preflight handshake
 
 When `navTo()` runs guards and they allow navigation, the router enters the
-committing/preflight phase (which records the approved hash) before calling
+committing/preflight phase (which records the approved hash and route) before calling
 `super.navTo()`. The parent router triggers a hash change, which re-enters through
-`parse()`. On entry, `parse()` checks the committing/preflight phase: if the incoming
-hash matches, the phase transitions to idle and the router commits immediately without
-re-running guards. This avoids double evaluation while keeping `parse()` as the
-authoritative commit path.
+`parse()`. On entry, `parse()` sees the committing phase and calls `_commitNavigation()`
+with the incoming hash, which transitions to idle and commits without re-running guards.
+If `super.navTo()` does not change the hash, `parse()` is not called and `navTo()` commits
+directly. This avoids double evaluation while keeping `parse()` as the authoritative
+commit path.
 
 ### Why parse() remains authoritative
 
@@ -273,44 +286,56 @@ all navigation paths the `navTo()` preflight cannot reach.
 ## Guard Execution Pipeline
 
 Guards run in three phases: leave guards first, then global enter guards, then
-route-specific enter guards. Each phase stays synchronous until a guard returns a
-Promise, then switches to async for the rest.
+route-specific enter guards. Evaluation stays synchronous until a guard returns a
+Promise, then switches to async for the rest of the navigation, including all later
+phases.
 
 ```mermaid
 flowchart TD
-    subgraph phase1 ["Phase 1: Can we leave?"]
-        leave(["_runLeaveGuards(context)"]) --> lcheck{leave guards?}
-        lcheck -- none --> phase2
-        lcheck -- present --> lrun[run leave guards]
-        lrun -- "sync false" --> lblock(["_blockNavigation<br/>short-circuit"])
-        lrun -- "sync true" --> phase2
-        lrun -- Promise --> lfin["_continueGuardsAsync()"]
-        lfin -- "false" --> lblock
-        lfin -- "true" --> phase2
+    start(["evaluate(context)"]) --> lcheck{"leave guards for fromRoute?<br/>(skipped on redirect hops)"}
+
+    subgraph phase1 ["Phase 1: leave guards"]
+        lrun["_runLeaveGuards()"]
+        lfin["_continueGuardsAsync()"]
     end
 
-    subgraph phase2 ["Phase 2: Global enter guards"]
-        enter(["_runEnterGuards()"]) --> gsync["_runGuards(globalGuards)"]
-        gsync -- "all sync, all true" --> phase3
-        gsync -- "sync non-true" --> gblock(["return result<br/>short-circuit"])
-        gsync -- "Promise returned" --> gfin["_continueGuardsAsync()"]
-        gfin -- "resolved true" --> phase3
-        gfin -- "non-true" --> gblock2(["return<br/>short-circuit"])
-        gfin -- "rejected" --> gblock3(["return false<br/>block"])
+    subgraph phase2 ["Phase 2: global guards"]
+        gsync["_runGuards(globalGuards)"]
+        gfin["_continueGuardsAsync()"]
     end
 
-    subgraph phase3 ["Phase 3: Route-specific enter guards"]
-        renter(["_runRouteGuards(toRoute)"]) --> rcheck{route guards?}
-        rcheck -- none --> rtrue([return true])
-        rcheck -- present --> rsync["_runGuards(routeGuards)"]
-        rsync --> rnote([same sync/async split as above])
+    subgraph phase3 ["Phase 3: route guards"]
+        rcheck{"guards for toRoute?"}
+        rsync["_runGuards(routeGuards)"]
+        rfin["_continueGuardsAsync()"]
     end
 
-    phase1 --> phase2
-    phase2 --> phase3
+    lcheck -- "present" --> lrun
+    lcheck -- "none" --> gsync
+    lrun -- "sync, all true" --> gsync
+    lrun -- "Promise" --> lfin
+    lfin -- "all true, not aborted" --> gsync
+
+    gsync -- "sync, all true" --> rcheck
+    gsync -- "Promise" --> gfin
+    gfin -- "all true, not aborted" --> rcheck
+
+    rcheck -- "none" --> allow(["allow"])
+    rcheck -- "present" --> rsync
+    rsync -- "sync, all true" --> allow
+    rsync -- "Promise" --> rfin
+    rfin -- "all true" --> allow
+
+    lrun -- "non-true" --> block(["block"])
+    lfin -- "non-true or aborted" --> block
+    gsync -- "first non-true" --> result(["block or redirect"])
+    gfin -- "first non-true" --> result
+    rsync -- "first non-true" --> result
+    rfin -- "first non-true" --> result
 ```
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
+A guard that throws or rejects ends evaluation in any phase; see error handling below.
 
 Error handling: if a guard throws or its Promise rejects, the error is logged and
 re-thrown to `evaluate()`, which returns `{ action: "error", error }`. The Router
@@ -354,9 +379,12 @@ sequenceDiagram
     Note over Nav2: APPLY result
 ```
 
-Every `parse()` that enters the guard pipeline bumps the generation. After each `await`,
-the generation is rechecked. If a newer navigation started during the suspension, the
-stale result is silently discarded. This ensures only the latest navigation wins.
+Every `parse()` or `navTo()` that enters the guard pipeline first calls
+`_cancelPendingNavigation()`, which bumps the generation and aborts the pending
+navigation's `AbortSignal`. Inside the pipeline, the aborted signal stops the remaining
+guards between awaits. The generation is checked once, when the async decision settles:
+if a newer navigation started in the meantime, the stale result is discarded with a
+debug log. This ensures only the latest navigation wins.
 
 The generation is also bumped on same-hash dedup, invalidating any pending async guard
 that was running when the user navigated back to the original hash.
@@ -369,14 +397,14 @@ result carries a `NavigationOutcome` enum value indicating how the navigation re
 ```mermaid
 flowchart TD
     call(["navigationSettled()"]) --> pending{phase is evaluating?}
-    pending -- "no (idle)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
+    pending -- "no (idle or committing)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
     pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
 
     subgraph "Guard pipeline terminal actions"
         commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
-        redirect["_redirect()"] -- "flush (if target invalid)" --> fredirect["Blocked"]
+        redirect["_redirect() / _applyRedirectDecision()"] -- "loop, depth cap, or no navigation:<br/>_blockNavigation()" --> fredirect["Blocked"]
         errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
     end
 
@@ -388,12 +416,13 @@ flowchart TD
 ```
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
-`_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
+`_errorNavigation`, `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
 with the same `NavigationResult` and fires the `navigationSettled` event via
-`EventProvider.fireEvent()`. `_redirect()` includes a safety-net flush that settles as `Blocked` when
-`navTo()` does not trigger a re-entrant `parse()` (e.g. redirect to a
+`EventProvider.fireEvent()`. `_redirect()` and `_applyRedirectDecision()` include a safety net that
+calls `_blockNavigation()` when `navTo()` produces no settlement (e.g. redirect to a
 nonexistent route when the hash is already empty), because the observable
-outcome is that the user stays on the current route. This ensures:
+outcome is that the user stays on the current route. A redirect to the current hash
+settles as `Redirected` instead. This ensures:
 
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
@@ -474,9 +503,9 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 | `_suppressedHash`          | `string \| null`                                 | Hash to suppress in the next `parse()` call                                    |
 | `_settlementResolvers`     | `((r: NavigationResult) => void)[]`              | Pending `navigationSettled()` callbacks                                        |
 | `_lastSettlement`          | `NavigationResult \| null`                       | Most recent settlement result (for post-hoc queries)                           |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Guard descriptors awaiting lazy resolution                                     |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                              | Parsed manifest guard descriptors, registered and cleared by `initialize()`    |
 | `_sourceDescriptors`       | `GuardDescriptor[]`                              | Original manifest descriptors (for inheritance expansion on addRoute)          |
-| `_destroyed`               | `boolean`                                        | Set by `destroy()`, prevents post-destroy guard execution                      |
+| `_destroyed`               | `boolean`                                        | Set by `destroy()`; stops block-mode loading from calling `super.initialize()` |
 | `_manifestMeta`            | `Map<string, Readonly<Record<string, unknown>>>` | Manifest-declared route metadata                                               |
 | `_runtimeMeta`             | `Map<string, Readonly<Record<string, unknown>>>` | Runtime metadata set via `setRouteMeta()`                                      |
 | `_resolvedMetaCache`       | `Map<string, Readonly<Record<string, unknown>>>` | Merged metadata cache, cleared on mutation                                     |

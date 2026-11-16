@@ -37,7 +37,7 @@ For context, here is how popular routing libraries handle metadata access for no
 When `getRouteMeta` is called with a route name that does not exist (i.e., `this.getRoute(routeName)` returns falsy):
 
 - **Return value**: empty frozen object (`{}`).
-- **Warning**: log a warning: `getRouteMeta: unknown route "<routeName>", returning empty metadata`.
+- **Warning**: log a warning: `getRouteMeta: unknown route, returning empty metadata`, with the route name as the log details.
 - **Caching**: do **not** cache the empty result. The next call for the same unknown route will re-evaluate and warn again.
 
 **Empty string is a valid route name**: `getRouteMeta("")` must return `{}` **without** warning. The empty string represents the root/initial state before any route has matched. It is used as `_currentRoute` before the first navigation and passed to `_createGuardContext` to populate `fromMeta`. The unknown-route warning must only fire for non-empty route names that don't resolve via `this.getRoute()`.
@@ -62,11 +62,11 @@ When `setRouteMeta` is called with a route name that does not exist:
 - **Policy values**: `"ignore"` | `"warn"` | `"throw"`: Same semantics as `unknownRouteRegistration`.
 - **Default**: `"warn"`.
 
-| Policy     | Behavior                                                                           |
-| ---------- | ---------------------------------------------------------------------------------- |
-| `"ignore"` | Store the metadata silently. No warning logged.                                    |
-| `"warn"`   | Log a warning (`setRouteMeta: unknown route, metadata stored anyway`), then store. |
-| `"throw"`  | Throw an `Error` synchronously. Metadata is not stored.                            |
+| Policy     | Behavior                                                                            |
+| ---------- | ----------------------------------------------------------------------------------- |
+| `"ignore"` | Store the metadata silently. No warning logged.                                     |
+| `"warn"`   | Log a warning (`setRouteMeta: unknown route, guard registered anyway`), then store. |
+| `"throw"`  | Throw an `Error` synchronously. Metadata is not stored.                             |
 
 **Rationale**: `setRouteMeta` is a write/registration operation, same category as `addRouteGuard` / `addLeaveGuard`. The policy pattern is already established for guard registration (`unknownRouteRegistration`). Metadata registration deserves the same configurability because developers may intentionally set metadata before calling `addRoute()` (dynamic routes) or may have a typo that should be caught early.
 
@@ -96,6 +96,8 @@ The existing `unknownRouteRegistration` policy covers both guard and metadata re
 - `getRouteMeta` for an unknown route: no caching, no invalidation.
 
 ## Phase 2: Guard Error Handling
+
+> **As implemented:** guard inheritance is not resolved lazily per navigation. With `inheritance: "pattern-tree"`, `initialize()` expands each manifest guard descriptor to all descendant routes once (`_expandGuardDescriptors()`), and `addRoute()` expands descriptors for the new route (`_expandGuardDescriptorsForNewRoute()`). There is no guard descriptor cache. A route with no inherited guards simply has none registered, and `_runRouteGuards()` returns `true`. The sections below are kept as the design record.
 
 ### Pipeline cache miss: Ancestor walk finds zero descriptors
 
@@ -137,8 +139,8 @@ When a guard descriptor references a route name that never gets added to the rou
 - **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
 - **`Router.ts` implementation**: Done. `getRouteMeta` checks `this.getRoute()` with an empty-string carve-out. `setRouteMeta` delegates to the unified `_handleUnknownRouteRegistration` method.
 - **`packages/lib/README.md`**: Done. The options table documents `unknownRouteRegistration` and the unified `inheritance` option.
-- **Issue #62 Phase 1**: Done. The lazy resolver skips caching on empty results and logs a warning for unknown routes.
-- **Issue #62 Phase 2**: Done. The guard lazy resolver skips caching on empty descriptor lists.
+- **Issue #62 Phase 1**: Done. The lazy resolver logs a warning for unknown routes and does not cache them; empty results for known routes are cached (see the Phase 1 note).
+- **Issue #62 Phase 2**: Done differently. Guard descriptors are expanded eagerly at `initialize()` and `addRoute()`, so there is no lazy guard resolver or cache (see the Phase 2 note).
 
 ## Test Cases
 

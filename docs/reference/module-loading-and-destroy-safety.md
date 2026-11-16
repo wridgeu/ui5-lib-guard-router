@@ -168,7 +168,7 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 
 1. The generation counter increments, causing the in-flight pipeline to discard its result.
 2. The `AbortController` fires, signalling guards to cancel async work (e.g. `fetch`).
-3. The guard pipeline is cleared, preventing any further guard execution. A lazily loaded multi-guard module also checks the signal and skips its remaining guards.
+3. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazily loaded multi-guard module checks it after each of its guards that returns a Promise.
 
 ## Summary
 

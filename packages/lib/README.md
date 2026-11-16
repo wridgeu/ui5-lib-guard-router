@@ -270,10 +270,10 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 
 ### Lifecycle
 
-| Method      | Behavior                                                                                                                                                                                      |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`), resets guard state. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
-| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                               |
+| Method      | Behavior                                                                                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
+| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                                                                                              |
 
 ### Navigation settlement
 
@@ -409,12 +409,12 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 ### Router options
 
-| Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                           |
-| -------------------------- | ----------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names                                                                                                                                                                                                |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                         |
-| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: registers lazy wrappers, loads modules on first navigation; a preload hint fires in the constructor to warm the cache; `initialize()` is always synchronous. `"block"`: loads all modules before `initialize()` completes; `initialize()` is async.         |
-| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict). |
+| Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names                                                                                                                                                                                                                                                                                                                                                                         |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                                                                                                                                                                                                  |
+| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: a preload hint in the constructor warms the module cache; `initialize()` registers cached modules directly and a lazy wrapper for the rest, which loads its module on first navigation (a failed load settles that navigation as `Error`); `initialize()` is synchronous. `"block"`: `initialize()` returns at once but starts the router only after all modules have loaded; a module that fails to load is skipped with a warning. |
+| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                                                                                                                                                          |
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
@@ -691,7 +691,7 @@ Runtime metadata set via `setRouteMeta()` participates in inheritance. Child rou
 
 Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
 
-**Execution order:** manifest guards run first (in declaration order), then programmatic guards (in registration order). For the same route, both sets execute. They are additive, not exclusive.
+**Execution order:** within each phase, guards run in registration order. Manifest guards are registered in declaration order when `initialize()` runs (in `"block"` mode, once all modules have loaded), so they run after programmatic guards added before `initialize()` and before guards added after it. For the same route, both sets execute. They are additive, not exclusive.
 
 A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
 
@@ -1002,7 +1002,7 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 
 ### Enabling guard logs
 
-The router logs guard registration errors, pipeline decisions, and async discard events through UI5's `Log` API under the component name `ui5.guard.router.Router`.
+The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged.
 
 Enable debug-level output programmatically:
 
@@ -1023,7 +1023,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details. See [Redirect chains](#redirect-chains).
 
-**Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks. Enable debug-level logging to identify which guard blocked.
+**Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks and logs the warning `Guard returned invalid value, treating as block`. A plain `false` is not logged, so add logging to your guards to find the one that returned it.
 
 **Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong, but a same-hash no-op can look similar. The router logs the target name so you can verify the route and parameters.
 

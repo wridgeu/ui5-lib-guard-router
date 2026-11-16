@@ -274,38 +274,41 @@ features in this folder cover the main guard and middleware use cases without a 
 ## Current Architecture: Sync-First with Async Fallback
 
 ```
-hashChanged → parse() → _runEnterGuards()
-                          ├─ sync: _runGuards() → result in same tick
-                          └─ async: _continueGuardsAsync() → result in microtask
-                                    └─ generation check after each await
+navTo() preflight, or hashChanged → parse()
+  → _pipeline.evaluate()
+     ├─ sync: every guard returns a plain value → decision in the same tick
+     └─ async: first Promise → _continueGuardsAsync() awaits the rest of that phase
+               ├─ abort signal checked before each remaining guard and before the next phase
+               ├─ later phases run in a plain loop until a guard returns a Promise
+               └─ Router discards the decision if _parseGeneration changed
 ```
 
 The dual-path approach:
 
 1. **Sync fast path**: When all guards return non-Promise values, the entire guard evaluation +
    route activation happens in the same tick as the `hashChanged` event
-2. **Async fallback**: When any guard returns a Promise, the pipeline switches to async mode
-   with a generation counter for staleness detection
+2. **Async fallback**: When any guard returns a Promise, the decision for that
+   navigation becomes async, with a generation counter for staleness detection
 
 ### Why Sync-First Fits UI5
 
 The sync-first approach matches UI5's routing model well:
 
-- **Zero overhead without guards**: Direct call to `MobileRouter.prototype.parse()`
+- **Minimal overhead without guards**: The pipeline returns `allow` synchronously and the router commits in the same tick
 - **Same-tick for sync guards**: Framework sees navigation as complete within the event handler
 - **Async when needed**: Backend permission checks, `MessageBox.confirm()` dialogs, etc.
-- **Generation counter**: Lighter than per-match AbortControllers (TanStack's approach),
+- **Generation counter + one AbortController per navigation**: Lighter than per-match AbortControllers (TanStack's approach),
   sufficient for UI5's single-hash navigation model
 
 ### Dual-Path Complexity
 
-The current code has three guard-running methods:
+The current code (`GuardPipeline.ts`) has four guard-running methods:
 
-- `_runGuards()`: 14 lines
-- `_continueGuardsAsync()`: 22 lines (unified for both leave and enter guards)
-- `_runEnterGuards()`: 10 lines (coordinator)
+- `_runLeaveGuards()` and `_runGuards()`: about 28 lines each (sync loops for leave and enter guards)
+- `_continueGuardsAsync()`: about 34 lines (async continuation, shared by leave and enter guards)
+- `_runEnterGuards()`: about 13 lines (coordinator for global, then route enter guards)
 
-Total: ~36 lines of dual-path logic. This is not a maintenance burden.
+Total: about 100 lines of dual-path logic, including error logging. This is not a maintenance burden.
 
 ## Costs of a Fully Async Pipeline
 

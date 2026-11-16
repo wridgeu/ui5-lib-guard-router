@@ -60,21 +60,21 @@ Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json`
 | `"routeName"` | `string[]` (shorthand)                     | `addRouteGuard()` for each module (enter guards) |
 | `"routeName"` | `{ "enter": string[], "leave": string[] }` | `addRouteGuard()` / `addLeaveGuard()`            |
 
-- The `"*"` key only supports the `string[]` format (global leave guards do not exist in the API). Using the object form `{ "enter": [...] }` for `"*"` logs a warning and is treated as the array form.
+- The `"*"` key only supports the `string[]` format (global leave guards do not exist in the API). Using the object form `{ "enter": [...] }` for `"*"` logs an info message and is treated as the array form; a `leave` array under `"*"` logs a warning and is skipped.
 - Route keys match route `name` values exactly as declared in the `routes` array.
 - Module paths use **dot notation** and resolve **relative to the component namespace** (`sap.app.id`).
     - Example: In app `demo.app`, `"guards.authGuard"` resolves to `demo/app/guards/authGuard` for `sap.ui.require`.
     - `"authGuard"` (no folder) resolves to `demo/app/authGuard` — the component root.
-    - The component namespace is read from the router's owner component (the `oOwner` constructor argument) via `owner.getManifestEntry("sap.app")?.id`. If unavailable (e.g. standalone tests without a component), manifest guards are skipped with a warning.
+    - The component namespace is read from the router's owner component (the `oOwner` constructor argument) via `owner.getManifestEntry("sap.app")?.id`. If unavailable (e.g. standalone tests without a component), no namespace is prepended and the dot path is only converted to slashes.
     - Paths prefixed with `"module:"` bypass namespace resolution, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()` convention. Example: `"module:some.other.lib.guard"` resolves to `some/other/lib/guard` directly.
 - Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)).
 - A module entry may include a `#` cherry-pick suffix to select a single export: `"guards.security#checkAuth"` (see [Cherry-Pick Syntax](#cherry-pick-syntax)).
 - Array order defines execution order within a route.
-- Manifest guards run **before** imperatively registered guards (see [Execution Order](#execution-order) for caveats).
+- Manifest guards are registered in `initialize()`, so they run after imperative guards added before `initialize()` and before those added after it (see [Execution Order](#execution-order)).
 
 ### Guard Module Format
 
-A guard module's default export must be one of three shapes. The shape is detected at registration time.
+A guard module's default export must be one of three shapes. The shape is detected when the router resolves the module's exports: at `initialize()` for cached or `"block"`-loaded modules, otherwise when the lazy wrapper first loads the module.
 
 **Shape 1: Function** — single guard; name derived from the last segment of the module path.
 
@@ -129,7 +129,7 @@ Detection logic:
 ```
 typeof export === "function"    → Shape 1
 Array.isArray(export)           → Shape 2
-typeof export === "object"      → Shape 3
+plain object (Object or null prototype) → Shape 3
 anything else                   → warning, module skipped
 ```
 
@@ -180,11 +180,11 @@ Constructor(routes, config, owner, ...)
   ├── Destructure guardRouter from config inline
   ├── Call super(routes, cleanedConfig, owner, ...) with guardRouter removed
   ├── Validate & normalize options via normalizeGuardRouterOptions()
-  │   (unknownRouteRegistration, navToPreflight, guardLoading)
+  │   (unknownRouteRegistration, navToPreflight, guardLoading, inheritance)
+  │   → store as _options
   ├── Parse guards block → store as _pendingGuardDescriptors
-  ├── If guardLoading === "lazy" and pending guards exist:
-  │     Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
-  └── Store _options
+  └── If guardLoading === "lazy" and pending guards exist:
+        Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
 
 initialize()
   ├── If guardLoading === "block" and pending guards exist:
@@ -195,7 +195,7 @@ initialize()
   │     Bare-path descriptors: probe sap.ui.require(path)
   │     → Cache hit: register each guard of the module individually
   │     → Cache miss: register one wrapper that loads the module on first
-  │       navigation and runs all of its guards in order
+  │       navigation and runs all of its guards in order (sync once loaded)
   │     Cherry-picked descriptors: register one lazy wrapper each
   │     → Each wrapper tries sync sap.ui.require(path) first (cache hit)
   │     → On cache miss, loads async via sap.ui.require([path], cb)
@@ -341,13 +341,11 @@ No `_guardsBypassedHash` field is needed. Both `"bypass"` mode and `skipGuards: 
 
 Within a single navigation pipeline:
 
-1. Leave guards (current route) — manifest-declared first, then imperative
-2. Global enter guards (`"*"`) — manifest-declared first, then imperative
-3. Route-specific enter guards — manifest-declared first, then imperative
+1. Leave guards (current route) — registration order
+2. Global enter guards (`"*"`) — registration order
+3. Route-specific enter guards — registration order
 
-"Manifest first" is achieved by registering manifest guards during `initialize()`, before `super.initialize()` triggers the first navigation. Since manifest guards are registered via `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` before imperative guards, they appear earlier in the guard arrays.
-
-**Important caveat**: This ordering guarantee applies to guards registered during `Component.init()` before `router.initialize()` is called. Guards registered in controller lifecycle hooks (`onInit`) fire after the root view is created by `super.initialize()`, so they are added after manifest guards regardless. This matches the existing timing of imperative registration — it is not a new limitation.
+Manifest guards are registered during `initialize()`, before `super.initialize()` triggers the first navigation. In `"lazy"` mode this happens synchronously; in `"block"` mode it happens once all modules have loaded. Manifest guards therefore run after imperative guards registered before `router.initialize()` (for example in `Component.init()`), and before imperative guards registered after it (for example in controller `onInit` hooks, which run after the root view is created by `super.initialize()`). In `"block"` mode, imperative guards added after `initialize()` but before the modules finish loading also run before the manifest guards.
 
 ## Guard Loading Strategies
 
@@ -379,8 +377,9 @@ Key properties:
 
 - **No guards are skipped** — every guard is always evaluated, even on the first navigation.
 - **`initialize()` is always synchronous** — no async gap, no destroy race during init.
-- **First navigation** to a guarded route resolves from the preload cache (synchronous) in the common case; async load on cache miss.
-- **Subsequent navigations** resolve cherry-picked guards synchronously from the `sap.ui.require` cache. A bare-path module that missed the cache at `initialize()` stays behind its async wrapper.
+- **First navigation** to a guarded route resolves from the preload cache (synchronous) in the common case. On a cache miss the guard returns a Promise while its module loads, so that navigation is async from this guard on, including all later guards.
+- **All subsequent navigations** resolve synchronously: cherry-picked wrappers read the `sap.ui.require` cache, and a bare-path wrapper keeps the guards it loaded.
+- **A guard that throws** during the async first load fails the navigation (`error`), like any other throwing guard.
 - **True lazy loading** — if a route is never visited its guard modules produce no additional overhead beyond the preload hint.
 
 ## Testing Scope
@@ -402,12 +401,12 @@ Key properties:
 - `"*"` with object form warns and treats `enter` as global guards
 - Shorthand array form equivalent to `{ "enter": [...] }`
 - Module paths resolved relative to component namespace (dot-to-slash)
-- Component namespace obtained from owner's `sap.app.id`; missing owner skips manifest guards with warning
+- Component namespace obtained from owner's `sap.app.id`; without an owner, relative paths are used as-is (no namespace prefix)
 - `guardLoading: "block"` delays initialize until modules load
 - `guardLoading: "lazy"` (default) registers lazy wrappers with preload hint; first navigation resolves from cache (sync) or loads async on miss; subsequent navigations sync from cache
 - Default `guardLoading` is `"lazy"` — no explicit config needed
 - Invalid module paths warn and skip gracefully
-- Manifest guards execute before imperatively registered guards
+- Manifest guards execute before imperative guards registered after `initialize()`
 - Multiple guards per route execute in array order
 
 ### Multi-guard modules
@@ -436,10 +435,12 @@ Key properties:
 - Bare-path multi-guard modules expanded at `initialize()` time from cache; cherry-picked entries use lazy wrappers
 - Bare-path multi-guard module that misses the cache runs all of its guards in order on the first navigation, stops at the first block, and stops when the navigation is superseded
 - Module that fails to load warns and settles the navigation as `error`
+- Guard that throws during the async first load settles the navigation as `error`
+- Bare-path module loaded on a cache miss runs synchronously on later navigations
 
 ### Named guard logging
 
-- Guard name appears in warning/error log output when a guard blocks navigation
+- Not implemented: guard names are derived but not logged; pipeline logs identify guards by phase and index (`Enter guard [0] on route "admin" ...`)
 - Object shape: key used as name; array shape: `moduleName#index`; function shape: module last segment
 
 ### Edge cases

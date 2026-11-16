@@ -70,7 +70,7 @@ A single lazy wrapper cannot expand into N guards at invocation time. Two strate
 
 1. **Eager expansion for bare-path entries**: At `initialize()` time, if a descriptor has no `exportKey`, load the module (it may already be cached from preload), detect shape, and expand into individual descriptors before registering. This makes bare-path multi-guard modules behave like mini-block-loads — but only for the shape detection, not for all modules.
 
-2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are probed in the module cache at `initialize()` time. Since the preload fired in the constructor, modules are likely cached, and their guards are registered individually. On a cache miss, one wrapper loads the module on first navigation and runs all of its guards in order. Registering them from inside the wrapper instead would miss that navigation, because the pipeline already iterates its guard list.
+2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are probed in the module cache at `initialize()` time. Since the preload fired in the constructor, modules are likely cached, and their guards are registered individually. On a cache miss, one wrapper loads the module on first navigation and runs all of its guards in order; later navigations run them synchronously. Registering them from inside the wrapper instead would miss that navigation, because the pipeline already iterates its guard list.
 
 The implementation uses approach 2: `_registerLazyGuards()` partitions descriptors into cherry-picked (lazy wrapper) and bare-path (cache probe, else module wrapper). `initialize()` stays synchronous in both cases.
 
@@ -256,19 +256,23 @@ Names are used for **logging only** in this iteration:
 - `"guard 'checkAuth' (guards/security) blocked navigation to 'admin'"`
 - Pipeline trace in debug: `"checkAuth → checkRole → [blocked by checkRole]"`
 
+**Implementation note:** the router derives these names (`GuardDescriptor.name`) but does not use them in log output yet. Pipeline logs identify a guard by phase and index, for example `Enter guard [0] on route "admin" threw, navigation failed`.
+
 Future extensibility (not implemented now): disable by name, ordering hints, DevTools integration. The naming foundation makes these possible without retrofit.
 
 ## 5. Case Sensitivity
 
-No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce per-option warnings listing valid choices and fall back to defaults. This is how `normalizeGuardRouterOptions()` already works.
+No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce a per-option warning (`guardRouter.<option> has invalid value, using default`) and fall back to defaults. This is how `normalizeGuardRouterOptions()` already works.
 
 ## 6. Execution Order
 
 Within a single navigation pipeline:
 
-1. **Leave guards** (current route) — manifest-declared first (in declaration order), then imperative
-2. **Global enter guards** (`"*"`) — manifest-declared first, then imperative
-3. **Route-specific enter guards** — manifest-declared first, then imperative
+1. **Leave guards** (current route) — registration order
+2. **Global enter guards** (`"*"`) — registration order
+3. **Route-specific enter guards** — registration order
+
+Manifest guards are registered in declaration order during `initialize()`, so they run after imperative guards added before `initialize()` and before imperative guards added after it.
 
 For multi-guard modules registered via bare path (no cherry-pick), all guards from the module are inserted at the position where the module appears in the manifest array, in their internal order (array index / object key order).
 
@@ -302,9 +306,9 @@ The PR includes:
 - **Non-function entries in object/array**: warned and skipped individually
 - **Mixed shapes across routes**: one route uses object module, another uses function module
 - **Pattern 5 preload**: lazy mode with preload hint — guard available synchronously on first navigation (requires module to be pre-cached)
-- **Pattern 5 fallback**: lazy mode where preload hasn't finished — guard loads async on first navigation
+- **Pattern 5 fallback**: lazy mode where preload hasn't finished — guard loads async on first navigation, which makes the rest of that navigation async; later navigations are synchronous
 - **Default guardLoading is lazy**: no config → lazy behavior
-- **Named guard in log output**: verify guard name appears in warning/error logs
+- **Named guard in log output**: verify guard name appears in warning/error logs (not implemented; see [Usage](#usage))
 - **Execution order with multi-guard modules**: bare path registers all in order, cherry-picks respect manifest position
 - **Cherry-pick with `module:` prefix**: verify `"module:some.lib#key"` parsing order
 - **Same module from multiple routes**: module loaded once, guards registered per-route correctly

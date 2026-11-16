@@ -79,6 +79,8 @@ All changes are additive. No existing types change shape.
 
 ### Error decision instead of silent block
 
+> **As implemented:** the catch blocks do not return a `GuardDecision`. They log the error and re-throw it; when the signal is already aborted they return `false` without logging. `evaluate()` catches the re-thrown error (sync `try/catch`, async `.catch()`) and returns `{ action: "error", error }`, so the passthrough logic described below was not needed. The plan below is kept as the design record.
+
 The pipeline currently catches guard errors and returns `false`, which `evaluate()` maps to `{ action: "block" }`. The three catch blocks change to return `{ action: "error", error }` directly — a new variant of `GuardDecision`.
 
 **`_runGuards()` catch block** — sync enter guard throws:
@@ -115,7 +117,7 @@ Updated result normalization:
 
 ### Logging
 
-`Log.error()` calls stay in all catch blocks. Errors are still logged to the console regardless of whether the decision is `"error"` or `"block"` (abort case).
+`Log.error()` calls stay in all catch blocks, but only for errors that become an `"error"` decision. An error thrown after the signal was aborted produces a `"block"` decision without a log entry.
 
 ## Router changes
 
@@ -132,8 +134,8 @@ private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = t
 Parallel to `_blockNavigation()`. Same structure:
 
 - Clears phase to idle
-- Optionally restores browser hash to previous state
 - Flushes settlement with `{ status: NavigationOutcome.Error, route, hash, error }`
+- Optionally restores browser hash to previous state
 
 ### `_applyDecision()` and `_applyPreflightDecision()`
 

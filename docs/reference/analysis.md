@@ -262,13 +262,15 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
                     │  │ Resolve route from hash         │ │
                     │  │ Build GuardContext               │ │
                     │  │                                 │ │
-                    │  │ Run leave guards (fromRoute)    │ │
-                    │  │ Run global enter guards         │ │
-                    │  │ Run route enter guards          │ │
+                    │  │ _pipeline.evaluate(context):    │ │
+                    │  │   leave guards (fromRoute)      │ │
+                    │  │   global enter guards           │ │
+                    │  │   route enter guards            │ │
                     │  │                                 │ │
-                    │  │ true  → _commitNavigation()     │ │
-                    │  │ false → _restoreHash()          │ │
-                    │  │ string/redirect → navTo(replace)│ │
+                    │  │ allow → _commitNavigation()     │ │
+                    │  │ block → _blockNavigation()      │ │
+                    │  │ redirect → _startRedirectChain()│ │
+                    │  │ error → _errorNavigation()      │ │
                     │  └─────────────────────────────────┘ │
                     └─────────────────────────────────────┘
 ```
@@ -277,7 +279,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 
 | Decision                                                | Rationale                                                                                                                      |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Override `parse()` not `navTo()`                        | `navTo()` doesn't catch browser back/forward or direct URL changes                                                             |
+| Override `parse()`, plus a `navTo()` preflight          | `navTo()` alone misses browser back/forward and direct URL changes; the preflight keeps programmatic history clean             |
 | Synchronous-first pipeline                              | When all guards return plain values, navigation completes in the same tick as the hash change. No flash, no framework desync.  |
 | Async fallback with generation counter                  | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.              |
 | Guards evaluate on redirect targets with loop detection | Visited-set + depth cap prevents infinite loops; committing/redirect phase used only for the final commit step                 |
@@ -338,7 +340,7 @@ router.removeGuard(guard1);
 | View B flashes before redirect to C              | Guards run **before** `parse()` delegates to the parent router. No view is created.  |
 | `router.stop()` + `initialize()` still goes to B | Not needed. Guard returns `"C"` and the router never processes B's hash.             |
 | Browser back to invalid state                    | Guard runs on every `parse()` including back/forward. Returns `false` or redirect.   |
-| `navTo()` creates history entries                | Redirects use `replaceHash` (no history entry). Blocks restore previous hash.        |
+| `navTo()` creates history entries                | `navTo()` runs guards before the hash changes; redirects navigate with `replace`.    |
 | Guards scattered across controllers              | Centralized registration in `Component.init()`: one place for all guard logic.       |
 | No async support (UI5's blocker)                 | Async guards natively supported. Generation counter handles concurrency.             |
 | `beforeRouteMatched` has no `preventDefault()`   | Override at `parse()` level, earlier than any event. No need for `preventDefault()`. |

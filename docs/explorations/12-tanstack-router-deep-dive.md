@@ -357,13 +357,15 @@ TanStack Router:
             → onReady() [commit to state]
 
 ui5.guard.router:
-  navTo() / hashChange / URL bar
+  navTo()                                ← preflight: guards run before the hash changes
+  hashChange / URL bar
     → HashChanger fires hashChanged
       → parse(newHash)                      ← BLOCKING + GUARDING happens here
-        → _runLeaveGuards()
-        → _runEnterGuards()
-          → _runGuards()                ← sync-first optimization
-          → _continueGuardsAsync()             ← async fallback
+        → _pipeline.evaluate()
+          → _runLeaveGuards()
+          → _runEnterGuards()
+            → _runGuards()                  ← sync-first optimization
+            → _continueGuardsAsync()        ← async fallback, rest of the phase
         → _commitNavigation()
           → MobileRouter.parse()
             → route matching + target loading

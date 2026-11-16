@@ -64,7 +64,7 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 
 **Private methods (moved from Router):**
 
-- `_runLeaveGuards(context)` — uses `context.fromRoute` for leave-guard lookup
+- `_runLeaveGuards(registered, context)` — receives the leave guards that `evaluate()` looked up via `context.fromRoute`
 - `_runEnterGuards(toRoute, context)` — reads `this._globalGuards` directly (no longer needs `globalGuards` parameter)
 - `_runRouteGuards(toRoute, context)`
 - `_runGuards(guards, context)`
@@ -181,7 +181,7 @@ const decision = this._pipeline.evaluate(context);
 - `navTo()`, `parse()` — same control flow, just call `this._pipeline.evaluate()` instead of `this._evaluateGuards()`
 - `_applyPreflightDecision`, `_applyDecision`, `_redirect`, `_blockNavigation`, `_commitNavigation`, `_restoreHash` — all Router state management
 - `NavigationAttempt`, `RouterPhase`, phase state machine
-- `_warnIfRouteUnknown` — stays on Router (needs `this.getRoute()`)
+- `_warnIfRouteUnknown` (since renamed `_handleUnknownRouteRegistration`) — stays on Router (needs `this.getRoute()`)
 - `isRouteGuardConfig` — stays on Router (API overload resolution)
 - Settlement logic
 - All public API signatures

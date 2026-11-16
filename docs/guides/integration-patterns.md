@@ -144,7 +144,7 @@ router.addRouteGuard("dashboard", async (context) => {
 });
 ```
 
-Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. The router blocks navigation and logs an error when a guard Promise rejects.
+Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. When a guard Promise rejects, the router logs an error and settles the navigation as `NavigationOutcome.Error`. A rejection after the signal was aborted (the navigation was superseded) is not logged.
 
 Reference: `createAsyncPermissionGuard` in `guards.ts`. See the [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) for the full pattern with a busy indicator.
 
