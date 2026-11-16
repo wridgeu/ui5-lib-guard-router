@@ -133,13 +133,6 @@ export default class GuardPipeline {
 	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
 		const leaveGuards =
 			options?.skipLeaveGuards || context.fromRoute === "" ? undefined : this._leaveGuards.get(context.fromRoute);
-		const hasLeaveGuards = leaveGuards !== undefined;
-		const hasEnterGuards =
-			this._globalGuards.length > 0 || (context.toRoute !== "" && this._enterGuards.has(context.toRoute));
-
-		if (!hasLeaveGuards && !hasEnterGuards) {
-			return { action: "allow" };
-		}
 
 		const processEnterResult = (
 			enterResult: GuardResult | Promise<GuardResult>,
