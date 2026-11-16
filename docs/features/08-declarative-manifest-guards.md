@@ -192,8 +192,11 @@ initialize()
   │     → Register resolved functions via addGuard / addRouteGuard / addLeaveGuard
   │     → Then call super.initialize()
   ├── If guardLoading === "lazy" (default) and pending guards exist:
-  │     Expand bare-path descriptors from cache (shape detection, may await single module if cache miss)
-  │     Register lazy wrapper functions for cherry-picked descriptors
+  │     Bare-path descriptors: probe sap.ui.require(path)
+  │     → Cache hit: register each guard of the module individually
+  │     → Cache miss: register one wrapper that loads the module on first
+  │       navigation and runs all of its guards in order
+  │     Cherry-picked descriptors: register one lazy wrapper each
   │     → Each wrapper tries sync sap.ui.require(path) first (cache hit)
   │     → On cache miss, loads async via sap.ui.require([path], cb)
   │     Call super.initialize() — always synchronous in this mode
@@ -370,14 +373,14 @@ return super.initialize();
 
 The preload is a cache-warming optimization. Because guard modules are small and the preload fires early in the constructor, they are almost certainly cached by the time the first navigation occurs. On a cache hit the lazy wrapper resolves synchronously; on a miss it loads async exactly as before.
 
-Bare-path multi-guard entries (no `#` suffix) need shape detection to know how many guards to register. These are expanded at `initialize()` time from the cache; cherry-picked entries use individual lazy wrappers and require no expansion.
+Bare-path multi-guard entries (no `#` suffix) need shape detection to know how many guards to register. On a cache hit at `initialize()` they are expanded into individual guards. On a cache miss, one wrapper takes their place: it loads the module on first navigation and runs all of its guards in order, so none of them is skipped on that navigation. Cherry-picked entries use individual lazy wrappers and require no expansion.
 
 Key properties:
 
 - **No guards are skipped** — every guard is always evaluated, even on the first navigation.
 - **`initialize()` is always synchronous** — no async gap, no destroy race during init.
 - **First navigation** to a guarded route resolves from the preload cache (synchronous) in the common case; async load on cache miss.
-- **All subsequent navigations** use the `sap.ui.require` cache and resolve synchronously — no Promise overhead.
+- **Subsequent navigations** resolve cherry-picked guards synchronously from the `sap.ui.require` cache. A bare-path module that missed the cache at `initialize()` stays behind its async wrapper.
 - **True lazy loading** — if a route is never visited its guard modules produce no additional overhead beyond the preload hint.
 
 ## Testing Scope
@@ -431,6 +434,8 @@ Key properties:
 - Guard available sync on first navigation when preload has completed (cache hit)
 - Guard loads async on first navigation when preload has not completed (cache miss)
 - Bare-path multi-guard modules expanded at `initialize()` time from cache; cherry-picked entries use lazy wrappers
+- Bare-path multi-guard module that misses the cache runs all of its guards in order on the first navigation, stops at the first block, and stops when the navigation is superseded
+- Module that fails to load warns and settles the navigation as `error`
 
 ### Named guard logging
 

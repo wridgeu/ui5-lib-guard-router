@@ -308,7 +308,7 @@ The PR includes:
 - **Execution order with multi-guard modules**: bare path registers all in order, cherry-picks respect manifest position
 - **Cherry-pick with `module:` prefix**: verify `"module:some.lib#key"` parsing order
 - **Same module from multiple routes**: module loaded once, guards registered per-route correctly
-- **Lazy mode with bare-path multi-guard module**: expand-on-init behavior
+- **Lazy mode with bare-path multi-guard module**: expand-on-init on a cache hit; on a cache miss, all guards run in order on the first navigation
 - **`"*"` key with cherry-pick**: `"*": ["guards.logging#verbose"]`
 - **Leave guard from multi-guard module**: verify type safety is consumer's responsibility
 - **Empty array/object export**: warning logged, no guards registered
@@ -326,14 +326,14 @@ Cherry-picked and multi-guard module guards behave identically to single-functio
 
 ## 9. Risks and Mitigations
 
-| Risk                                                        | Mitigation                                                                                                                            |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Object key order assumed stable                             | Guaranteed by ES2015+ spec. Document requirement for modern runtime (already a UI5 requirement).                                      |
-| Cherry-pick `#` conflicts with future path syntax           | `#` never appears in UI5 module paths (dots and slashes only). Safe separator.                                                        |
-| Array index cherry-pick is fragile                          | Document that object form is preferred for cherry-picking. Index-based is available but order-dependent.                              |
-| Default change from block to lazy                           | No functional difference for guards — they always run before navigation completes. Only timing changes. Document in migration guide.  |
-| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. Lazy wrapper handles the miss case identically to current lazy mode.                |
-| Bare-path multi-guard + lazy mode needs module load at init | Partitioned: cherry-picked entries use lazy wrappers; bare-path entries expand at init (usually from cache). Documented in Section 1. |
+| Risk                                                        | Mitigation                                                                                                                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Object key order assumed stable                             | Guaranteed by ES2015+ spec. Document requirement for modern runtime (already a UI5 requirement).                                                                      |
+| Cherry-pick `#` conflicts with future path syntax           | `#` never appears in UI5 module paths (dots and slashes only). Safe separator.                                                                                        |
+| Array index cherry-pick is fragile                          | Document that object form is preferred for cherry-picking. Index-based is available but order-dependent.                                                              |
+| Default change from block to lazy                           | No functional difference for guards — they always run before navigation completes. Only timing changes. Document in migration guide.                                  |
+| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. Lazy wrapper handles the miss case identically to current lazy mode.                                                |
+| Bare-path multi-guard + lazy mode needs module load at init | Partitioned: cherry-picked entries use lazy wrappers; bare-path entries expand at init from cache, or run from one module wrapper on a miss. Documented in Section 1. |
 
 ## 10. Out of Scope
 
