@@ -179,10 +179,11 @@ In TypeScript native classes, `super()` must be called before accessing `this`. 
 Constructor(routes, config, owner, ...)
   ├── Destructure guardRouter from config inline
   ├── Call super(routes, cleanedConfig, owner, ...) with guardRouter removed
-  ├── Validate & normalize options via normalizeGuardRouterOptions()
-  │   (unknownRouteRegistration, navToPreflight, guardLoading, inheritance)
-  │   → store as _options
-  ├── Parse guards block → store as _pendingGuardDescriptors
+  ├── parseGuardRouterConfig(guardRouter, sap.app/id) in GuardConfig.ts:
+  │   ├── options (unknownRouteRegistration, navToPreflight, guardLoading, inheritance)
+  │   │   → store as _options
+  │   ├── routeMeta → store as _manifestMeta
+  │   └── guards block → store as _pendingGuardDescriptors
   └── If guardLoading === "lazy" and pending guards exist:
         Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
 

@@ -13,18 +13,16 @@ import type {
 	GuardRedirect,
 	GuardRouter,
 	GuardRouterConfig,
-	GuardLoading,
-	Inheritance,
 	LeaveGuardFn,
-	ManifestRouteGuardConfig,
-	NavToPreflightMode,
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
-	UnknownRouteRegistrationPolicy,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
+import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
+import { loadGuardModule, resolveModuleExports, runGuardsInOrder } from "./GuardModules";
+import { isPatternAncestor, patternSegments } from "./PatternTree";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -61,411 +59,6 @@ interface PhaseCommitting {
 type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting;
 
 const IDLE: PhaseIdle = { kind: "idle" };
-
-/** Type guard for plain objects. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
-}
-
-/** Create a type-narrowing validator for a finite set of string literal values. */
-function isOneOf<T extends string>(...values: T[]): (v: unknown) => v is T {
-	const set: ReadonlySet<string> = new Set(values);
-	return (v: unknown): v is T => typeof v === "string" && set.has(v);
-}
-
-const isUnknownRouteRegistrationPolicy = isOneOf<UnknownRouteRegistrationPolicy>("ignore", "warn", "throw");
-const isNavToPreflightMode = isOneOf<NavToPreflightMode>("guard", "bypass", "off");
-const isGuardLoading = isOneOf<GuardLoading>("block", "lazy");
-const isInheritance = isOneOf<Inheritance>("none", "pattern-tree");
-
-/** Matches a standalone optional (`:param:`) or rest (`:param*:`) segment. */
-const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*\*?:$/;
-
-/**
- * Strips inline query and optional-query suffixes from a segment.
- *
- * UI5 (crossroads.js) allows query parameters to attach directly to a
- * path segment without a `/` separator:
- * - `product{?query}`  → mandatory query on `product`
- * - `product:?query:`  → optional query on `product`
- * - `{id}{?query}`     → mandatory param + mandatory query
- *
- * For pattern-tree ancestry we only care about the path portion,
- * so these suffixes are stripped.
- */
-function stripInlineQuery(seg: string): string {
-	// Strip mandatory query `{?...}` suffix
-	const mqIdx = seg.indexOf("{?");
-	if (mqIdx !== -1) return seg.slice(0, mqIdx);
-	// Strip optional query `:?...:` suffix
-	const oqIdx = seg.indexOf(":?");
-	if (oqIdx !== -1) return seg.slice(0, oqIdx);
-	return seg;
-}
-
-/**
- * Extract mandatory path segments from a UI5 route pattern.
- *
- * Splits on `/`, strips inline query suffixes, then drops empty segments,
- * standalone optional (`:param:`), and rest (`:param*:`) segments.
- */
-function patternSegments(pattern: string): string[] {
-	return pattern
-		.split("/")
-		.map(stripInlineQuery)
-		.filter((seg) => seg !== "" && !OPTIONAL_OR_REST_SEGMENT.test(seg));
-}
-
-/**
- * Check if `ancestorPattern` is a URL-tree ancestor of `candidatePattern`.
- *
- * Both patterns are reduced to their mandatory path segments and compared
- * positionally. Mandatory parameter segments (`{paramA}`, `{paramB}`) are
- * treated as equivalent regardless of name, so `employees/{empId}` is
- * recognized as an ancestor of `employees/{id}/resume`.
- */
-function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
-	if (ancestorPattern === "") return true;
-	const ancestorSegments = patternSegments(ancestorPattern);
-	if (ancestorSegments.length === 0) return false;
-	const candidateSegments = patternSegments(candidatePattern);
-	if (candidateSegments.length <= ancestorSegments.length) return false;
-	return ancestorSegments.every((seg, i) => {
-		const candidateSeg = candidateSegments[i];
-		if (seg === candidateSeg) return true;
-		// Treat any two mandatory parameter segments as equivalent
-		return seg.startsWith("{") && candidateSeg.startsWith("{");
-	});
-}
-
-/** Parsed guard declaration from the manifest `guards` block. */
-interface GuardDescriptor {
-	readonly route: string; // "*" for global, route name for per-route
-	readonly type: "enter" | "leave";
-	readonly modulePath: string;
-	readonly name: string;
-	readonly exportKey?: string;
-}
-
-/**
- * Resolve a guard module path to a slash-separated AMD module path.
- *
- * Inspired by `sap.ui.core.routing.Target._getEffectiveObjectName()`,
- * which skips namespace prepending for `"module:"`-prefixed paths. This
- * function goes further: it also converts dots to slashes in a single
- * step, so both dot notation (`module:some.lib.guard`) and slash
- * notation (`module:some/lib/guard`) are accepted.
- *
- * - Paths prefixed with `"module:"` are treated as absolute (the prefix
- *   is stripped, dots become slashes).
- * - All other paths are prefixed with the component namespace, then dots
- *   become slashes.
- */
-function resolveGuardModulePath(dotPath: string, componentNamespace: string): string {
-	if (dotPath.startsWith("module:")) {
-		return dotPath.slice("module:".length).replace(/\./g, "/");
-	}
-	const fullDotPath = componentNamespace ? componentNamespace + "." + dotPath : dotPath;
-	return fullDotPath.replace(/\./g, "/");
-}
-
-/**
- * Split a manifest guard entry on the first `#` to separate the module path
- * from an optional export key, then derive a human-readable guard name.
- */
-function parseGuardEntry(
-	entry: string,
-	componentNamespace: string,
-): { modulePath: string; name: string; exportKey?: string } {
-	const hashIndex = entry.indexOf("#");
-	const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex);
-	const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1);
-
-	const modulePath = resolveGuardModulePath(rawPath, componentNamespace);
-
-	// Name: export key if present, otherwise last segment of the dot path
-	const lastSegment = rawPath.split(".").pop() ?? rawPath;
-	const name = exportKey ?? lastSegment;
-
-	return { modulePath, name, exportKey };
-}
-
-interface ResolvedGuardExport {
-	readonly name: string;
-	readonly fn: GuardFn;
-}
-
-/** Log a warning about a guard module entry in the manifest. */
-function guardWarning(modulePath: string, detail: string): void {
-	Log.warning(`guardRouter.guards: "${modulePath}" ${detail}`, undefined, LOG_COMPONENT);
-}
-
-/**
- * Detect the export shape of a loaded guard module and extract guard functions.
- *
- * Shapes:
- * - function        → single guard
- * - Array           → ordered guards (non-functions warned and skipped)
- * - plain object    → named guards in key order (non-functions warned and skipped)
- *
- * When `exportKey` is set, only the matching export is returned.
- * When `exportKey` is set on a function export, the key is ignored with a debug warning.
- */
-function resolveModuleExports(
-	moduleExport: unknown,
-	modulePath: string,
-	descriptorName: string,
-	exportKey?: string,
-): ResolvedGuardExport[] {
-	const moduleName = modulePath.split("/").pop() ?? modulePath;
-
-	// Shape 1: function
-	if (typeof moduleExport === "function") {
-		if (exportKey !== undefined) {
-			Log.debug(
-				`guardRouter.guards: "${modulePath}#${exportKey}" is a single function, ignoring export key`,
-				undefined,
-				LOG_COMPONENT,
-			);
-		}
-		return [{ name: descriptorName, fn: moduleExport as GuardFn }];
-	}
-
-	// Shape 2: array
-	if (Array.isArray(moduleExport)) {
-		if (moduleExport.length === 0) {
-			guardWarning(modulePath, "exported an empty array, skipping");
-			return [];
-		}
-
-		if (exportKey !== undefined) {
-			const index = parseInt(exportKey, 10);
-			if (Number.isNaN(index) || index < 0 || index >= moduleExport.length) {
-				guardWarning(modulePath, `#${exportKey} - index out of range, skipping`);
-				return [];
-			}
-			const entry = moduleExport[index] as unknown;
-			if (typeof entry !== "function") {
-				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
-				return [];
-			}
-			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
-		}
-
-		const results: ResolvedGuardExport[] = [];
-		for (let i = 0; i < moduleExport.length; i++) {
-			const entry = moduleExport[i] as unknown;
-			if (typeof entry !== "function") {
-				guardWarning(modulePath, `[${i}] is not a function, skipping`);
-				continue;
-			}
-			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
-		}
-		return results;
-	}
-
-	// Shape 3: plain object
-	if (isRecord(moduleExport)) {
-		const entries = Object.entries(moduleExport);
-		if (entries.length === 0) {
-			guardWarning(modulePath, "exported an empty object, skipping");
-			return [];
-		}
-
-		if (exportKey !== undefined) {
-			let value: unknown = moduleExport[exportKey];
-			let resolvedName = exportKey;
-			if (value === undefined) {
-				const index = parseInt(exportKey, 10);
-				if (!Number.isNaN(index) && index >= 0 && index < entries.length) {
-					const [key, val] = entries[index];
-					value = val;
-					resolvedName = key;
-				}
-			}
-			if (value === undefined) {
-				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
-				return [];
-			}
-			if (typeof value !== "function") {
-				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
-				return [];
-			}
-			return [{ name: resolvedName, fn: value as GuardFn }];
-		}
-
-		const results: ResolvedGuardExport[] = [];
-		for (const [key, value] of entries) {
-			if (typeof value !== "function") {
-				guardWarning(modulePath, `.${key} is not a function, skipping`);
-				continue;
-			}
-			results.push({ name: key, fn: value as GuardFn });
-		}
-		return results;
-	}
-
-	guardWarning(modulePath, "did not export a function, array, or plain object, skipping");
-	return [];
-}
-
-/**
- * Run guards in order, stopping at the first result that is not `true`.
- * Stays synchronous until a guard returns a Promise, like the pipeline.
- */
-function runGuardsInOrder(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
-	for (let i = 0; i < guards.length; i++) {
-		const result = guards[i](context);
-		if (isPromiseLike(result)) return finishGuardsAsync(result, guards.slice(i + 1), context);
-		if (result !== true) return result;
-	}
-	return true;
-}
-
-/** Await a pending guard result, then run the remaining guards unless the navigation was superseded. */
-async function finishGuardsAsync(
-	pending: PromiseLike<GuardResult>,
-	remaining: GuardFn[],
-	context: GuardContext,
-): Promise<GuardResult> {
-	const result = await pending;
-	if (result !== true) return result;
-	if (context.signal.aborted) return false;
-	return runGuardsInOrder(remaining, context);
-}
-
-/** Load a guard module asynchronously. Rejects (with a warning) when the load fails. */
-function loadGuardModule(modulePath: string): Promise<unknown> {
-	return new Promise((resolve, reject) => {
-		sap.ui.require([modulePath], resolve, (err: Error) => {
-			Log.warning(`guardRouter.guards: lazy load of "${modulePath}" failed`, String(err), LOG_COMPONENT);
-			reject(err);
-		});
-	});
-}
-
-/**
- * Parse the `guards` block from the guardRouter config into an array of
- * {@link GuardDescriptor} objects.
- *
- * Handles:
- * - `"*"` key with `string[]` -> global enter guards
- * - Route name with `string[]` (shorthand) -> enter guards
- * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
- * - `"*"` with object form -> warn, treat enter as global
- * - `"*"` leave -> warn, skip (global leave guards not supported)
- * - Invalid entries -> warn, skip
- */
-function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
-	if (!isRecord(guards)) {
-		Log.warning("guardRouter.guards is not a plain object, skipping", JSON.stringify(guards), LOG_COMPONENT);
-		return [];
-	}
-
-	const descriptors: GuardDescriptor[] = [];
-
-	function pushEntries(entries: unknown[], route: string, type: "enter" | "leave", label: string): void {
-		for (const entry of entries) {
-			if (typeof entry !== "string" || entry.length === 0) {
-				Log.warning(
-					`guardRouter.guards${label}: invalid entry, skipping`,
-					JSON.stringify(entry),
-					LOG_COMPONENT,
-				);
-				continue;
-			}
-			const parsed = parseGuardEntry(entry, componentNamespace);
-			descriptors.push({ route, type, ...parsed });
-		}
-	}
-
-	for (const [key, value] of Object.entries(guards)) {
-		if (Array.isArray(value)) {
-			pushEntries(value, key, "enter", `["${key}"]`);
-		} else if (isRecord(value)) {
-			const config = value as ManifestRouteGuardConfig;
-
-			if (key === "*" && config.leave !== undefined) {
-				Log.warning(
-					'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
-					undefined,
-					LOG_COMPONENT,
-				);
-			}
-
-			if (key === "*" && config.enter === undefined && config.leave !== undefined) {
-				continue;
-			}
-
-			if (key === "*" && config.enter !== undefined) {
-				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
-			}
-
-			if (Array.isArray(config.enter)) {
-				pushEntries(config.enter, key, "enter", `["${key}"].enter`);
-			}
-
-			if (key !== "*" && Array.isArray(config.leave)) {
-				pushEntries(config.leave, key, "leave", `["${key}"].leave`);
-			}
-		} else {
-			Log.warning(
-				`guardRouter.guards["${key}"]: expected string[] or { enter?, leave? }, skipping`,
-				JSON.stringify(value),
-				LOG_COMPONENT,
-			);
-		}
-	}
-
-	return descriptors;
-}
-
-interface ResolvedGuardRouterOptions {
-	readonly unknownRouteRegistration: UnknownRouteRegistrationPolicy;
-	readonly navToPreflight: NavToPreflightMode;
-	readonly guardLoading: GuardLoading;
-	readonly inheritance: Inheritance;
-}
-
-const DEFAULT_OPTIONS: ResolvedGuardRouterOptions = {
-	unknownRouteRegistration: "warn",
-	navToPreflight: "guard",
-	guardLoading: "lazy",
-	inheritance: "none",
-};
-
-function applyOption<K extends keyof ResolvedGuardRouterOptions>(
-	raw: Record<string, unknown>,
-	key: K,
-	guard: (v: unknown) => v is ResolvedGuardRouterOptions[K],
-	target: { -readonly [P in keyof ResolvedGuardRouterOptions]: ResolvedGuardRouterOptions[P] },
-): void {
-	if (raw[key] !== undefined) {
-		if (guard(raw[key])) {
-			target[key] = raw[key] as ResolvedGuardRouterOptions[K];
-		} else {
-			Log.warning(`guardRouter.${key} has invalid value, using default`, JSON.stringify(raw[key]), LOG_COMPONENT);
-		}
-	}
-}
-
-function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
-	if (!isRecord(raw)) {
-		if (raw !== undefined) {
-			Log.warning("guardRouter config is not a plain object, using defaults", JSON.stringify(raw), LOG_COMPONENT);
-		}
-		return DEFAULT_OPTIONS;
-	}
-
-	const result = { ...DEFAULT_OPTIONS };
-	applyOption(raw, "unknownRouteRegistration", isUnknownRouteRegistrationPolicy, result);
-	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
-	applyOption(raw, "guardLoading", isGuardLoading, result);
-	applyOption(raw, "inheritance", isInheritance, result);
-	return result;
-}
 
 /** Maximum number of hops in a redirect chain before it is treated as a loop. */
 const MAX_REDIRECT_DEPTH = 10;
@@ -515,7 +108,7 @@ interface RedirectChainContext {
  * @extends sap.m.routing.Router
  */
 export default class Router extends MobileRouter implements GuardRouter {
-	private _options: ResolvedGuardRouterOptions = DEFAULT_OPTIONS;
+	private _options: ResolvedGuardRouterOptions;
 	private _pipeline = new GuardPipeline();
 	private _currentRoute = "";
 	private _currentHash: string | null = null;
@@ -524,10 +117,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _suppressedHash: string | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
-	private _pendingGuardDescriptors: GuardDescriptor[] = [];
+	private _pendingGuardDescriptors: GuardDescriptor[];
 	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
-	private _manifestMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	private _manifestMeta: Map<string, Readonly<Record<string, unknown>>>;
 	private _runtimeMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	private _resolvedMetaCache = new Map<string, Readonly<Record<string, unknown>>>();
 	private _routeNames: string[] = [];
@@ -538,7 +131,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const { guardRouter, ...cleanConfig } = isRecordConfig ? config : {};
 		super(routes, isRecordConfig ? cleanConfig : config, owner, targetsConfig);
 		this._ownerComponent = owner;
-		this._options = normalizeGuardRouterOptions(guardRouter);
+		let componentNamespace = "";
+		const appConfig = owner?.getManifestEntry("sap.app") as unknown;
+		if (isRecord(appConfig) && typeof appConfig.id === "string") {
+			componentNamespace = appConfig.id;
+		}
+		const parsed = parseGuardRouterConfig(guardRouter, componentNamespace);
+		this._options = parsed.options;
+		this._manifestMeta = parsed.routeMeta;
+		this._pendingGuardDescriptors = parsed.guards;
 
 		// Collect route names from the constructor's routes parameter for pattern-tree traversal.
 		if (Array.isArray(routes)) {
@@ -549,45 +150,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._routeNames = Object.keys(routes);
 		}
 
-		if (isRecord(guardRouter) && guardRouter.routeMeta !== undefined) {
-			if (isRecord(guardRouter.routeMeta)) {
-				for (const [routeName, meta] of Object.entries(guardRouter.routeMeta)) {
-					if (isRecord(meta)) {
-						this._manifestMeta.set(routeName, Object.freeze({ ...meta }));
-					} else {
-						Log.warning(
-							`guardRouter.routeMeta["${routeName}"]: expected object, skipping`,
-							JSON.stringify(meta),
-							LOG_COMPONENT,
-						);
-					}
-				}
-			} else {
-				Log.warning(
-					"guardRouter.routeMeta: expected object, skipping",
-					JSON.stringify(guardRouter.routeMeta),
-					LOG_COMPONENT,
-				);
-			}
-		}
-
-		if (isRecord(guardRouter) && guardRouter.guards !== undefined) {
-			let componentNamespace = "";
-			if (owner) {
-				const appConfig = owner.getManifestEntry("sap.app") as Record<string, unknown> | undefined;
-				if (isRecord(appConfig) && typeof appConfig.id === "string") {
-					componentNamespace = appConfig.id;
-				}
-			}
-			this._pendingGuardDescriptors = parseGuardDescriptors(guardRouter.guards, componentNamespace);
-
-			// Fire-and-forget preload hint: a module cached by initialize()
-			// needs no async load on navigation (see _registerLazyGuards).
-			// Block mode loads modules itself in initialize().
-			if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
-				const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
-				sap.ui.require(uniquePaths);
-			}
+		// Fire-and-forget preload hint: a module cached by initialize()
+		// needs no async load on navigation (see _registerLazyGuards).
+		// Block mode loads modules itself in initialize().
+		if (this._pendingGuardDescriptors.length > 0 && this._options.guardLoading === "lazy") {
+			const uniquePaths = [...new Set(this._pendingGuardDescriptors.map((d) => d.modulePath))];
+			sap.ui.require(uniquePaths);
 		}
 	}
 
@@ -1907,13 +1475,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return Promise.all(promises).then((results) => {
 			for (const { descriptor, moduleExport } of results) {
 				if (moduleExport === null) continue;
-				const exports = resolveModuleExports(
-					moduleExport,
-					descriptor.modulePath,
-					descriptor.name,
-					descriptor.exportKey,
-				);
-				for (const { fn } of exports) {
+				for (const fn of resolveModuleExports(moduleExport, descriptor.modulePath, descriptor.exportKey)) {
 					try {
 						this._registerGuardFromDescriptor(descriptor, fn);
 					} catch (err: unknown) {
@@ -1953,14 +1515,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _registerLazyGuards(descriptors: GuardDescriptor[]): void {
 		for (const descriptor of descriptors) {
-			const { modulePath, exportKey, name } = descriptor;
+			const { modulePath, exportKey } = descriptor;
 
 			if (exportKey !== undefined) {
 				// Cherry-picked: one lazy wrapper, resolves to at most one guard.
 				// Resolved once, so a missing export warns once rather than on every navigation.
 				let picked: GuardFn[] | undefined;
 				const runPicked = (mod: unknown, context: GuardContext): GuardResult | Promise<GuardResult> => {
-					picked ??= resolveModuleExports(mod, modulePath, name, exportKey).map((exp) => exp.fn);
+					picked ??= resolveModuleExports(mod, modulePath, exportKey);
 					return runGuardsInOrder(picked, context);
 				};
 				const lazyGuard = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
@@ -1977,9 +1539,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			// Bare-path: try sync expansion from cache (preload likely finished)
 			const cached = sap.ui.require(modulePath) as unknown;
 			if (cached !== undefined) {
-				const exports = resolveModuleExports(cached, modulePath, name);
-				for (const exp of exports) {
-					this._registerGuardFromDescriptor(descriptor, exp.fn);
+				for (const fn of resolveModuleExports(cached, modulePath)) {
+					this._registerGuardFromDescriptor(descriptor, fn);
 				}
 				continue;
 			}
@@ -1991,7 +1552,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				if (loadedGuards) return runGuardsInOrder(loadedGuards, context);
 				return loadGuardModule(modulePath).then((mod) => {
 					if (context.signal.aborted) return false;
-					loadedGuards ??= resolveModuleExports(mod, modulePath, name).map((exp) => exp.fn);
+					loadedGuards ??= resolveModuleExports(mod, modulePath);
 					return runGuardsInOrder(loadedGuards, context);
 				});
 			};

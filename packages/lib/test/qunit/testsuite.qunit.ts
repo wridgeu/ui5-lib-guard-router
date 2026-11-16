@@ -31,6 +31,15 @@ export default {
 		GuardPipeline: {
 			title: "QUnit Tests for ui5.guard.router.GuardPipeline",
 		},
+		GuardConfig: {
+			title: "QUnit Tests for ui5.guard.router.GuardConfig",
+		},
+		GuardModules: {
+			title: "QUnit Tests for ui5.guard.router.GuardModules",
+		},
+		PatternTree: {
+			title: "QUnit Tests for ui5.guard.router.PatternTree",
+		},
 		Router: {
 			title: "QUnit Tests for ui5.guard.router.Router",
 		},

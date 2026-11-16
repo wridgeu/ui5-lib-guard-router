@@ -204,7 +204,7 @@ The `module:` prefix and `#` cherry-pick compose naturally. Parsing splits on `#
 
 ### Parsing
 
-`parseGuardDescriptors()` splits each entry on the first `#`:
+`parseGuardDescriptors()` in `GuardConfig.ts` splits each entry on the first `#`:
 
 ```typescript
 const [rawModulePath, exportKey] = entry.split("#", 2);

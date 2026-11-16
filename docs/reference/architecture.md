@@ -15,6 +15,9 @@ ui5-lib-guard-router/
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
+    |   |   |-- GuardConfig.ts      parses the guardRouter block (options, routeMeta, guards)
+    |   |   |-- GuardModules.ts     guard module export shapes, lazy loading, in-order runs
+    |   |   |-- PatternTree.ts      route pattern ancestry for pattern-tree inheritance
     |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
