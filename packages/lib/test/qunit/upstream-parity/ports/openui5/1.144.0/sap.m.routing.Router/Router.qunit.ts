@@ -59,20 +59,13 @@ function stubViewsByName(viewMap: Record<string, Page>) {
 function waitForRouteMatched(
 	router: ComparableRouter,
 	routeName: string,
-	timeout = 1000,
 ): Promise<ForwardNavigationResult["routeMatched"]> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			router.detachRouteMatched(handler, router);
-			reject(new Error(`Timed out waiting for routeMatched "${routeName}"`));
-		}, timeout);
-
+	return new Promise((resolve) => {
 		const handler = (event: Router$RouteMatchedEvent) => {
 			if (event.getParameter("name") !== routeName) {
 				return;
 			}
 
-			clearTimeout(timer);
 			router.detachRouteMatched(handler, router);
 			resolve({
 				name: event.getParameter("name"),

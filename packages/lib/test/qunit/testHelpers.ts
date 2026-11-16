@@ -104,9 +104,24 @@ export function createPromiseLike<T>(value: T): PromiseLike<T> {
 	return jQuery.Deferred<T>().resolve(value).promise();
 }
 
-/** Wait for a timer tick. */
-export function nextTick(ms = 50): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Resolve on the next task, after every promise reaction queued so far has run.
+ * Use it to let a just-resolved guard reach the router before asserting what it did.
+ */
+export function flushPromises(): Promise<void> {
+	return new Promise((resolve) => {
+		const { port1, port2 } = new MessageChannel();
+		port1.addEventListener(
+			"message",
+			() => {
+				port1.close();
+				resolve();
+			},
+			{ once: true },
+		);
+		port1.start();
+		port2.postMessage(undefined);
+	});
 }
 
 /**
@@ -118,28 +133,13 @@ export function nextTick(ms = 50): Promise<void> {
  * routing the event would fire inside `navTo()` before the listener is
  * attached, and these tests would hang.
  */
-export function waitForRoute(router: GuardRouter, routeName: string, timeout = 1000): Promise<void> {
-	return new Promise((resolve, reject) => {
-		const route = router.getRoute(routeName);
-		if (!route) {
-			reject(new Error(`Route "${routeName}" is not available`));
-			return;
-		}
-
-		const timer = setTimeout(() => {
-			route.detachPatternMatched(handler);
-			reject(
-				new Error(`Timed out waiting for route "${routeName}", hash="${HashChanger.getInstance().getHash()}"`),
-			);
-		}, timeout);
-
-		const handler = (): void => {
-			clearTimeout(timer);
-			route.detachPatternMatched(handler);
-			resolve();
-		};
-
-		route.attachPatternMatched(handler);
+export function waitForRoute(router: GuardRouter, routeName: string): Promise<void> {
+	const route = router.getRoute(routeName);
+	if (!route) {
+		return Promise.reject(new Error(`Route "${routeName}" is not available`));
+	}
+	return new Promise((resolve) => {
+		route.attachEventOnce("patternMatched", () => resolve());
 	});
 }
 

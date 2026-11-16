@@ -4,6 +4,8 @@ export default {
 		qunit: {
 			version: 2,
 			reorder: false,
+			// Fails a test whose awaited router event never comes; no test waits on time.
+			testTimeout: 10000,
 		},
 		sinon: {
 			version: 4,

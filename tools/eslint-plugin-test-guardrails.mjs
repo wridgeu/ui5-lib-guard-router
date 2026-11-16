@@ -104,11 +104,55 @@ const noHardWait = {
 	},
 };
 
+const TIMER_FUNCTIONS = new Set(["setTimeout", "setInterval"]);
+
+/**
+ * Reports any `setTimeout` / `setInterval` call, including `window.` and `globalThis.` forms.
+ *
+ * A timer in a unit test either sleeps until the code under test is "probably" done
+ * or races it, and both flake under load. Tests wait on what the code does instead.
+ *
+ * Scope: library QUnit test files (configured via oxlintrc overrides).
+ */
+const noTimers = {
+	meta: {
+		type: "problem",
+		docs: {
+			description: "Disallow timers in unit tests - wait on router events or test-controlled promises instead",
+		},
+		messages: {
+			noTimers:
+				"Do not use timers in unit tests. Await a router event or navigationSettled(), resolve a Promise.withResolvers() deferred, or use flushPromises().",
+		},
+		schema: [],
+	},
+	create(context) {
+		return {
+			CallExpression(node) {
+				const { callee } = node;
+				const name =
+					callee.type === "Identifier"
+						? callee.name
+						: callee.type === "MemberExpression" &&
+							  callee.object.type === "Identifier" &&
+							  (callee.object.name === "window" || callee.object.name === "globalThis") &&
+							  callee.property.type === "Identifier"
+							? callee.property.name
+							: undefined;
+				if (name && TIMER_FUNCTIONS.has(name)) {
+					context.report({ node, messageId: "noTimers" });
+				}
+			},
+		};
+	},
+};
+
 /** @type {import('eslint').ESLint.Plugin} */
 export default {
 	meta: { name: "test-guardrails" },
 	rules: {
 		"no-browser-pause": noBrowserPause,
 		"no-hard-wait": noHardWait,
+		"no-timers": noTimers,
 	},
 };

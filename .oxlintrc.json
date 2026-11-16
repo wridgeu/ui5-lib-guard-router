@@ -53,6 +53,12 @@
 			}
 		},
 		{
+			"files": ["packages/lib/test/qunit/**/*.ts"],
+			"rules": {
+				"test-guardrails/no-timers": "error"
+			}
+		},
+		{
 			"files": ["packages/*/test/e2e/**/*.ts", "packages/*/test/flp/**/*.ts"],
 			"rules": {
 				"test-guardrails/no-hard-wait": "error"

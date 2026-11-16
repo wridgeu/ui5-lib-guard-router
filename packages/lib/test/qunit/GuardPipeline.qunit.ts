@@ -79,6 +79,7 @@ QUnit.test("removeEnterGuard removes by reference", function (assert: Assert) {
 
 	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Enter guard removed");
+	assert.notOk(Reflect.get(pipeline, "_enterGuards").has("target"), "Route entry dropped with its last guard");
 });
 
 QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
@@ -89,6 +90,7 @@ QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
 
 	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "Leave guard removed");
+	assert.notOk(Reflect.get(pipeline, "_leaveGuards").has("current"), "Route entry dropped with its last guard");
 });
 
 QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) {
@@ -344,7 +346,33 @@ QUnit.test("invalid return values treated as block", function (this: SinonTestCo
 		"Leave guard non-boolean treated as block",
 	);
 
-	assert.strictEqual(warnStub.callCount, 3, "Warning logged for each invalid value");
+	const p4 = new GuardPipeline();
+	callUnsafe(p4, "addGlobalGuard", () => ({ route: "" }));
+	assert.deepEqual(p4.evaluate(createContext()), { action: "block" }, "Redirect object with empty route is a block");
+
+	const p5 = new GuardPipeline();
+	callUnsafe(p5, "addGlobalGuard", () => ({ route: ["home"] }));
+	assert.deepEqual(
+		p5.evaluate(createContext()),
+		{ action: "block" },
+		"Redirect object with non-string route is a block",
+	);
+
+	assert.deepEqual(
+		warnStub.getCalls().map((call) => call.args[0]),
+		[
+			"Guard returned invalid value, treating as block",
+			"Guard returned invalid value, treating as block",
+			"Leave guard returned non-boolean value, treating as block",
+			"Guard returned invalid value, treating as block",
+			"Guard returned invalid value, treating as block",
+		],
+		"Warning logged for each invalid value",
+	);
+	assert.ok(
+		warnStub.alwaysCalledWith(sinon.match.string, sinon.match.any, "ui5.guard.router.Router"),
+		"Warnings are logged under the router's log component",
+	);
 });
 
 // ============================================================
@@ -377,7 +405,14 @@ QUnit.test("throwing guards produce error decisions and log errors", function (t
 		"Leave guard throw → error decision",
 	);
 
-	assert.strictEqual(errorStub.callCount, 2, "Error logged for each throw");
+	assert.deepEqual(
+		errorStub.getCalls().map((call) => [call.args[0], call.args[2]]),
+		[
+			['Enter guard [0] on route "target" threw, navigation failed', "ui5.guard.router.Router"],
+			['Leave guard [0] on route "current" threw, navigation failed', "ui5.guard.router.Router"],
+		],
+		"Each throw is logged with the guard's route under the router's log component",
+	);
 });
 
 QUnit.test("async guard that rejects produces error decision", async function (this: SinonTestContext, assert: Assert) {
@@ -386,9 +421,13 @@ QUnit.test("async guard that rejects produces error decision", async function (t
 	const rejectedError = new Error("async boom");
 	pipeline.addGlobalGuard(() => Promise.reject(rejectedError));
 
-	const result = await pipeline.evaluate(createContext());
+	const result = await pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "error", error: rejectedError });
-	assert.ok(errorStub.calledOnce, "Error was logged");
+	assert.deepEqual(
+		errorStub.getCalls().map((call) => call.args[0]),
+		['Enter guard [0] on route "target" threw, navigation failed'],
+		"Logged once, naming the target route (not the route being left)",
+	);
 });
 
 QUnit.test(
@@ -415,6 +454,34 @@ QUnit.test(
 		const r2 = await p2.evaluate(createContext({ signal: c2.signal, fromRoute: "current" }));
 		assert.deepEqual(r2, { action: "block" }, "Aborted leave guard → block (not error)");
 		assert.ok(errorStub.notCalled, "Leave guard error suppressed when signal aborted");
+
+		const c5 = new AbortController();
+		const p5 = new GuardPipeline();
+		p5.addEnterGuard("target", () => {
+			c5.abort();
+			return Promise.reject(new Error("route aborted"));
+		});
+		const r5 = await p5.evaluate(createContext({ signal: c5.signal }));
+		assert.deepEqual(r5, { action: "block" }, "Aborted route guard rejection → block (not allow)");
+
+		const c3 = new AbortController();
+		const p3 = new GuardPipeline();
+		p3.addGlobalGuard(() => {
+			c3.abort();
+			throw new Error("sync aborted");
+		});
+		const r3 = p3.evaluate(createContext({ signal: c3.signal }));
+		assert.deepEqual(r3, { action: "block" }, "Sync enter guard throwing after abort → block (not error)");
+
+		const c4 = new AbortController();
+		const p4 = new GuardPipeline();
+		p4.addLeaveGuard("current", () => {
+			c4.abort();
+			throw new Error("sync leave aborted");
+		});
+		const r4 = p4.evaluate(createContext({ signal: c4.signal, fromRoute: "current" }));
+		assert.deepEqual(r4, { action: "block" }, "Sync leave guard throwing after abort → block (not error)");
+		assert.ok(errorStub.notCalled, "Sync guard errors suppressed when signal aborted");
 	},
 );
 
@@ -462,6 +529,52 @@ QUnit.test("mixed sync-async pipeline preserves order", async function (assert: 
 	const result = await pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" });
 	assert.deepEqual(order, [1, 2, 3], "All guards ran in order");
+});
+
+QUnit.test("async pipeline keeps running guards after each allow", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	pipeline.addGlobalGuard(() => Promise.resolve(true));
+	pipeline.addGlobalGuard(() => true);
+	pipeline.addGlobalGuard(() => false);
+
+	const result = await pipeline.evaluate(createContext());
+	assert.deepEqual(result, { action: "block" }, "The third guard's block is reached after two allows");
+});
+
+QUnit.test("abort between route guards blocks", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const controller = new AbortController();
+	let secondCalled = false;
+	pipeline.addEnterGuard("target", () => {
+		controller.abort();
+		return Promise.resolve(true);
+	});
+	pipeline.addEnterGuard("target", () => {
+		secondCalled = true;
+		return true;
+	});
+
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
+	assert.deepEqual(result, { action: "block" }, "Blocked due to abort");
+	assert.notOk(secondCalled, "Second route guard never called");
+});
+
+QUnit.test("abort after async global guards blocks before route guards", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const controller = new AbortController();
+	let routeGuardCalled = false;
+	pipeline.addGlobalGuard(() => {
+		controller.abort();
+		return Promise.resolve(true);
+	});
+	pipeline.addEnterGuard("target", () => {
+		routeGuardCalled = true;
+		return true;
+	});
+
+	const result = await pipeline.evaluate(createContext({ signal: controller.signal }));
+	assert.deepEqual(result, { action: "block" }, "Blocked due to abort");
+	assert.notOk(routeGuardCalled, "Route guard never called");
 });
 
 QUnit.test("async leave guard blocks before enter guards run", async function (assert: Assert) {
@@ -559,6 +672,24 @@ QUnit.test("guard can remove itself during iteration", function (assert: Assert)
 	const result2 = pipeline.evaluate(createContext());
 	assert.deepEqual(result2, { action: "allow" }, "Second call: one-shot removed, still allow");
 	assert.strictEqual(secondGuardCalls, 2, "Second call: remaining guard ran");
+});
+
+QUnit.test("leave guard can remove itself during iteration", function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const oneShotGuard: LeaveGuardFn = () => {
+		pipeline.removeLeaveGuard("current", oneShotGuard);
+		return true;
+	};
+	let secondGuardCalls = 0;
+	pipeline.addLeaveGuard("current", oneShotGuard);
+	pipeline.addLeaveGuard("current", () => {
+		secondGuardCalls++;
+		return true;
+	});
+
+	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
+	assert.deepEqual(result, { action: "allow" }, "Allow");
+	assert.strictEqual(secondGuardCalls, 1, "The leave guard after the self-removing one still ran");
 });
 
 // ============================================================

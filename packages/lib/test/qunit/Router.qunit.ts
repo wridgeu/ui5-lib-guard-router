@@ -58,6 +58,21 @@ QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: As
 	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
 });
 
+QUnit.test("NavigationOutcome values are the documented strings", function (assert: Assert) {
+	assert.deepEqual(
+		{ ...NavigationOutcome },
+		{
+			Committed: "committed",
+			Bypassed: "bypassed",
+			Blocked: "blocked",
+			Redirected: "redirected",
+			Cancelled: "cancelled",
+			Error: "error",
+		},
+		"Apps comparing against the string values keep working",
+	);
+});
+
 // ============================================================
 // Module: Drop-in replacement (no guards)
 // ============================================================

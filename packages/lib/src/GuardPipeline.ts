@@ -231,12 +231,12 @@ export default class GuardPipeline {
 				}
 				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
+				if (context.signal.aborted) return false;
 				Log.error(
 					`Leave guard [${i}] on route "${context.fromRoute}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
-				if (context.signal.aborted) return false;
 				throw error;
 			}
 		}
@@ -289,12 +289,12 @@ export default class GuardPipeline {
 				}
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
+				if (context.signal.aborted) return false;
 				Log.error(
 					`Enter guard [${i}] on route "${context.toRoute}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
-				if (context.signal.aborted) return false;
 				throw error;
 			}
 		}

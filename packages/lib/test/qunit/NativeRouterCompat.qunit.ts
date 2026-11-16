@@ -2,7 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import coreLibrary from "sap/ui/core/library";
 import type { GuardRouter } from "ui5/guard/router/types";
-import { GuardRouterClass, initHashChanger, nextTick } from "./testHelpers";
+import { flushPromises, GuardRouterClass, initHashChanger } from "./testHelpers";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -29,7 +29,7 @@ async function captureHashWrites(router: MobileRouter, navigate: () => void): Pr
 	const replaceHash = sinon.spy(hashChanger, "replaceHash");
 	try {
 		navigate();
-		await nextTick(50);
+		await flushPromises();
 	} finally {
 		setHash.restore();
 		replaceHash.restore();
@@ -168,7 +168,7 @@ QUnit.test("initialize/stop behavior matches", function (assert: Assert) {
 QUnit.test("stop + initialize fires routeMatched identically", async function (assert: Assert) {
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(100);
+	await flushPromises();
 
 	extRouter.stop();
 	nativeRouter.stop();
@@ -184,7 +184,7 @@ QUnit.test("stop + initialize fires routeMatched identically", async function (a
 
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(100);
+	await flushPromises();
 
 	assert.ok(nativeFired, "native router fires routeMatched on re-init");
 	assert.ok(extFired, "guard router fires routeMatched on re-init (native parity)");
@@ -383,16 +383,16 @@ QUnit.module("NativeCompat - navTo with replace", {
 QUnit.test("navTo with replace=true updates hash without history entry", async function (assert: Assert) {
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	// Each router navigates on its own: both share one HashChanger, so comparing
 	// the resulting hash would read the same value twice.
 	extRouter.navTo("page1");
-	await nextTick(50);
+	await flushPromises();
 	const extWrites = await captureHashWrites(extRouter, () => extRouter.navTo("detail", { id: "42" }, {}, true));
 
 	nativeRouter.navTo("page1");
-	await nextTick(50);
+	await flushPromises();
 	const nativeWrites = await captureHashWrites(nativeRouter, () =>
 		nativeRouter.navTo("detail", { id: "42" }, {}, true),
 	);
@@ -404,11 +404,11 @@ QUnit.test("navTo with replace=true updates hash without history entry", async f
 QUnit.test("navTo with replace=false creates history entry (default)", async function (assert: Assert) {
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	const extWrites = await captureHashWrites(extRouter, () => extRouter.navTo("detail", { id: "1" }));
 	HashChanger.getInstance().setHash("");
-	await nextTick(50);
+	await flushPromises();
 	const nativeWrites = await captureHashWrites(nativeRouter, () => nativeRouter.navTo("detail", { id: "1" }));
 
 	assert.deepEqual(extWrites, ["set:detail/1"], "ext router sets the hash (new history entry)");
@@ -449,7 +449,7 @@ QUnit.test("navTo fires routeMatched identically with replace=true", async funct
 
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	extRouter.navTo("detail", { id: "99" }, {}, true);
 	nativeRouter.navTo("detail", { id: "99" }, {}, true);
@@ -485,20 +485,20 @@ QUnit.test("Both routers handle forward navigation identically", async function 
 
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	// Sequential forward navigation
 	extRouter.navTo("page1");
 	nativeRouter.navTo("page1");
-	await nextTick(50);
+	await flushPromises();
 
 	extRouter.navTo("detail", { id: "1" });
 	nativeRouter.navTo("detail", { id: "1" });
-	await nextTick(50);
+	await flushPromises();
 
 	extRouter.navTo("nested", { catId: "2", prodId: "3" });
 	nativeRouter.navTo("nested", { catId: "2", prodId: "3" });
-	await nextTick(50);
+	await flushPromises();
 
 	assert.deepEqual(extEvents, nativeEvents, "Both routers fire same sequence of routeMatched events");
 });
@@ -536,7 +536,7 @@ QUnit.test("Direct hash changes fire events identically", async function (assert
 
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	// Simulate direct URL entry / browser navigation
 	HashChanger.getInstance().setHash("detail/direct-entry");
@@ -550,11 +550,11 @@ QUnit.test("replaceHash behaves identically", async function (assert: Assert) {
 
 	extRouter.initialize();
 	nativeRouter.initialize();
-	await nextTick(50);
+	await flushPromises();
 
 	// Use replaceHash directly
 	HashChanger.getInstance().replaceHash("page1", HistoryDirection.NewEntry);
-	await nextTick(50);
+	await flushPromises();
 
 	assert.deepEqual(extMatched, ["home", "page1"], "ext router matched the replaced hash");
 	assert.deepEqual(extMatched, nativeMatched, "replaceHash produces identical routeMatched sequence");

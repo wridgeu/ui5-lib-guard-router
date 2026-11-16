@@ -18,8 +18,8 @@ import {
 	assertBlocked,
 	createPromiseLike,
 	createRouter,
+	flushPromises,
 	initHashChanger,
-	nextTick,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -50,10 +50,7 @@ QUnit.test("Guard returning true allows navigation", async function (assert: Ass
 });
 
 QUnit.test("Async guard returning true allows navigation", async function (assert: Assert) {
-	router.addGuard(async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addGuard(async () => true);
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
@@ -98,10 +95,7 @@ QUnit.test("Guard returning false blocks navigation", async function (assert: As
 });
 
 QUnit.test("Async guard returning false blocks navigation", async function (assert: Assert) {
-	router.addGuard(async () => {
-		await nextTick(10);
-		return false;
-	});
+	router.addGuard(async () => false);
 	router.initialize();
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Async guard blocked navigation");
 });
@@ -150,10 +144,7 @@ QUnit.test("Guard returning string redirects to named route", async function (as
 });
 
 QUnit.test("Async guard returning string redirects", async function (assert: Assert) {
-	router.addRouteGuard("forbidden", async () => {
-		await nextTick(10);
-		return "home";
-	});
+	router.addRouteGuard("forbidden", async () => "home");
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -382,10 +373,7 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 });
 
 QUnit.test("Async guard returning GuardRedirect works", async function (assert: Assert) {
-	router.addRouteGuard("protected", async (): Promise<GuardRedirect> => {
-		await nextTick(10);
-		return { route: "home" };
-	});
+	router.addRouteGuard("protected", async (): Promise<GuardRedirect> => ({ route: "home" }));
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -439,10 +427,7 @@ QUnit.test("Leave guard returning false blocks navigation", async function (asse
 });
 
 QUnit.test("Async leave guard returning true allows navigation", async function (assert: Assert) {
-	const leaveGuard: LeaveGuardFn = async () => {
-		await nextTick(10);
-		return true;
-	};
+	const leaveGuard: LeaveGuardFn = async () => true;
 	router.addLeaveGuard("home", leaveGuard);
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -472,10 +457,7 @@ QUnit.test("Promise-like leave guard returning false blocks navigation", async f
 });
 
 QUnit.test("Async leave guard returning false blocks navigation", async function (assert: Assert) {
-	const leaveGuard: LeaveGuardFn = async () => {
-		await nextTick(10);
-		return false;
-	};
+	const leaveGuard: LeaveGuardFn = async () => false;
 	router.addLeaveGuard("home", leaveGuard);
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -631,12 +613,10 @@ QUnit.test(
 
 		// Navigate to "protected". Async leave guard is now pending.
 		router.navTo("protected");
-		await nextTick(10);
 
 		// Navigate to "forbidden" instead. This supersedes the first navigation.
 		// Both navigations leave "home", so the guard fires twice.
 		router.navTo("forbidden");
-		await nextTick(10);
 
 		// Allow the second (active) navigation to proceed
 		assert.strictEqual(resolvers.length, 2, "Both leave guard invocations captured");
@@ -646,7 +626,7 @@ QUnit.test(
 
 		// Now resolve the first stale guard. It should have no effect.
 		resolvers[0](true);
-		await nextTick(100);
+		await flushPromises();
 
 		assert.strictEqual(
 			HashChanger.getInstance().getHash(),

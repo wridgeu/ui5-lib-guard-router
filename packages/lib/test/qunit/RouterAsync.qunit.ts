@@ -2,7 +2,14 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
-import { addGuardUnsafe, assertBlocked, createRouter, initHashChanger, nextTick, waitForRoute } from "./testHelpers";
+import {
+	addGuardUnsafe,
+	assertBlocked,
+	createRouter,
+	flushPromises,
+	initHashChanger,
+	waitForRoute,
+} from "./testHelpers";
 
 let router: GuardRouter;
 
@@ -36,10 +43,7 @@ QUnit.module("Router - Mixed sync/async guard pipelines", standardHooks);
 
 QUnit.test("Sync global guard allows, async route guard allows", async function (assert: Assert) {
 	router.addGuard(() => true);
-	router.addRouteGuard("protected", async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addRouteGuard("protected", async () => true);
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
@@ -52,10 +56,7 @@ QUnit.test("Sync global guard allows, async route guard allows", async function 
 
 QUnit.test("Sync global guard allows, async route guard blocks", async function (assert: Assert) {
 	router.addGuard(() => true);
-	router.addRouteGuard("protected", async () => {
-		await nextTick(10);
-		return false;
-	});
+	router.addRouteGuard("protected", async () => false);
 	router.initialize();
 	await assertBlocked(
 		assert,
@@ -66,10 +67,7 @@ QUnit.test("Sync global guard allows, async route guard blocks", async function 
 });
 
 QUnit.test("Async global guard allows, sync route guard allows", async function (assert: Assert) {
-	router.addGuard(async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addGuard(async () => true);
 	router.addRouteGuard("protected", () => true);
 	router.initialize();
 	router.navTo("protected");
@@ -82,10 +80,7 @@ QUnit.test("Async global guard allows, sync route guard allows", async function 
 });
 
 QUnit.test("Async global guard allows, sync route guard blocks", async function (assert: Assert) {
-	router.addGuard(async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addGuard(async () => true);
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await assertBlocked(
@@ -97,10 +92,7 @@ QUnit.test("Async global guard allows, sync route guard blocks", async function 
 });
 
 QUnit.test("Async global guard allows, sync route guard redirects", async function (assert: Assert) {
-	router.addGuard(async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addGuard(async () => true);
 	router.addRouteGuard("forbidden", () => "home");
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -120,14 +112,9 @@ QUnit.test("Async global guard allows, sync route guard redirects", async functi
 QUnit.module("Router - Overlapping async navigations", standardHooks);
 
 QUnit.test("Slower first navigation is superseded by faster second navigation", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(200);
-		return true;
-	});
-	router.addRouteGuard("detail", async () => {
-		await nextTick(10);
-		return true;
-	});
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.addRouteGuard("detail", async () => true);
 	router.initialize();
 
 	let protectedMatched = false;
@@ -139,7 +126,8 @@ QUnit.test("Slower first navigation is superseded by faster second navigation", 
 	router.navTo("detail", { id: "1" });
 
 	await router.navigationSettled();
-	await nextTick(250); // let the stale 200ms guard resolve so a leaked commit would show
+	slowGuard.resolve(true);
+	await flushPromises();
 	assert.notOk(protectedMatched, "Slow first navigation was superseded");
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
@@ -149,23 +137,25 @@ QUnit.test("Slower first navigation is superseded by faster second navigation", 
 });
 
 QUnit.test("Superseded async guard result does not apply", async function (assert: Assert) {
-	const slowGuard: GuardFn = async () => {
-		await nextTick(200);
-		return "forbidden"; // This redirect should be discarded
+	const slowResult = Promise.withResolvers<string>();
+	let slowGuardCalled = false;
+	const slowGuard: GuardFn = () => {
+		slowGuardCalled = true;
+		return slowResult.promise;
 	};
-	router.addGuard(slowGuard);
 	router.initialize();
+	await waitForRoute(router, "home");
+	router.addGuard(slowGuard);
 
-	// First navigation triggers slow guard
 	router.navTo("protected");
+	assert.ok(slowGuardCalled, "Slow guard is pending for the first navigation");
 
-	// Remove guard and navigate again before first resolves
-	await nextTick(50);
 	router.removeGuard(slowGuard);
 	router.navTo("detail", { id: "2" });
 
 	await router.navigationSettled();
-	await nextTick(250); // let the stale 200ms guard resolve so a leaked redirect would show
+	slowResult.resolve("forbidden"); // This redirect should be discarded
+	await flushPromises();
 	assert.strictEqual(
 		HashChanger.getInstance().getHash(),
 		"detail/2",
@@ -223,7 +213,6 @@ QUnit.module("Router - Async guard edge cases", standardHooks);
 QUnit.test("Async route-specific guard throwing error produces Error settlement", async function (assert: Assert) {
 	const thrownError = new Error("Async route guard error");
 	router.addRouteGuard("protected", async () => {
-		await nextTick(10);
 		throw thrownError;
 	});
 	router.initialize();
@@ -252,17 +241,14 @@ QUnit.test("Multiple async guards - first rejection short-circuits remaining", a
 	await waitForRoute(router, "home");
 
 	router.addGuard(async () => {
-		await nextTick(10);
 		order.push(1);
 		return true;
 	});
 	router.addGuard(async () => {
-		await nextTick(10);
 		order.push(2);
 		return false;
 	});
 	router.addGuard(async () => {
-		await nextTick(10);
 		order.push(3);
 		return true;
 	});
@@ -273,10 +259,7 @@ QUnit.test("Multiple async guards - first rejection short-circuits remaining", a
 });
 
 QUnit.test("Async route guard redirects", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(10);
-		return "home";
-	});
+	router.addRouteGuard("protected", async () => "home");
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -298,19 +281,13 @@ QUnit.test("Guard returning undefined is treated as block", async function (asse
 });
 
 QUnit.test("Async guard returning invalid value treats as block", async function (assert: Assert) {
-	addGuardUnsafe(router, async () => {
-		await nextTick(10);
-		return 42;
-	});
+	addGuardUnsafe(router, async () => 42);
 	router.initialize();
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Async invalid guard return treated as block");
 });
 
 QUnit.test("Async guard returning invalid redirect object treats as block", async function (assert: Assert) {
-	addGuardUnsafe(router, async () => {
-		await nextTick(10);
-		return { route: "" };
-	});
+	addGuardUnsafe(router, async () => ({ route: "" }));
 	router.initialize();
 	await assertBlocked(
 		assert,
@@ -346,18 +323,14 @@ QUnit.test("Rapid sync navigations - last one wins", async function (assert: Ass
 
 QUnit.test("Rapid async navigations - only last navigation settles", async function (assert: Assert) {
 	const matchedRoutes: string[] = [];
-	router.addGuard(async () => {
-		await nextTick(50);
-		return true;
-	});
+	router.addGuard(async () => true);
 	router.initialize();
+	await waitForRoute(router, "home");
 
 	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
 		matchedRoutes.push(event.getParameter("name")!);
 	});
 
-	await nextTick(200);
-	matchedRoutes.length = 0;
 	router.navTo("protected");
 	router.navTo("forbidden");
 	router.navTo("detail", { id: "1" });
@@ -373,13 +346,8 @@ QUnit.test("Rapid async navigations - only last navigation settles", async funct
 QUnit.module("Router - Returning to current route during pending guard", standardHooks);
 
 QUnit.test("Navigating back to current route cancels a pending async guard", async function (assert: Assert) {
-	const guardDone = new Promise<void>((resolve) => {
-		router.addRouteGuard("protected", async () => {
-			await nextTick(200);
-			resolve();
-			return true;
-		});
-	});
+	const pendingGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => pendingGuard.promise);
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -395,15 +363,13 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 	// With navTo preflight, the hash never changed to "protected", so
 	// HashChanger.setHash("") would be a no-op. Use navTo("home") to
 	// exercise the same-hash dedup in the navTo override.
-	await nextTick(10);
 	router.navTo("home");
 
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Navigation was cancelled");
 
-	// Wait for the guard to actually finish its async work
-	await guardDone;
-	await nextTick(); // guardDone resolves before the router sees the guard result; let it run
+	pendingGuard.resolve(true);
+	await flushPromises();
 	assert.notOk(protectedMatched, "Stale async guard result was discarded after same-hash dedup");
 });
 
@@ -421,10 +387,10 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		router.addGuard(async (context: GuardContext) => {
+		const pendingGuard = Promise.withResolvers<boolean>();
+		router.addGuard((context: GuardContext) => {
 			capturedSignal = context.signal;
-			await nextTick(200);
-			return true;
+			return pendingGuard.promise;
 		});
 
 		router.getRoute("protected")!.attachPatternMatched(() => {
@@ -432,14 +398,14 @@ QUnit.test(
 		});
 
 		router.navTo("protected");
-		await nextTick(50);
 		router.stop();
 
 		assert.ok(capturedSignal, "Signal was captured");
 		assert.ok(capturedSignal!.aborted, "Signal was aborted on stop");
 		assert.notOk(router.isInitialized(), "Router stayed stopped");
 
-		await nextTick(250);
+		pendingGuard.resolve(true);
+		await flushPromises();
 		assert.notOk(routeMatched, "Navigation did not complete after stop");
 	},
 );
@@ -468,25 +434,22 @@ QUnit.test("Signal is aborted when a newer navigation supersedes", async functio
 	let secondSignal: AbortSignal | null = null;
 	let callCount = 0;
 
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.initialize();
+	await waitForRoute(router, "home");
 	router.addGuard(async (context: GuardContext) => {
 		callCount++;
 		if (callCount === 1) {
 			firstSignal = context.signal;
-			await nextTick(200); // slow guard
-		} else {
-			secondSignal = context.signal;
-			await nextTick(10); // fast guard
+			return slowGuard.promise;
 		}
+		secondSignal = context.signal;
 		return true;
 	});
-	router.initialize();
-	await waitForRoute(router, "home");
-	callCount = 0;
 
 	// First navigation (slow)
 	router.navTo("protected");
 	// Second navigation supersedes first
-	await nextTick(10);
 	router.navTo("detail", { id: "1" });
 
 	await router.navigationSettled();
@@ -498,17 +461,15 @@ QUnit.test("Signal is aborted when a newer navigation supersedes", async functio
 
 QUnit.test("Signal is aborted on router destroy", async function (assert: Assert) {
 	let capturedSignal: AbortSignal | null = null;
-	router.addGuard(async (context: GuardContext) => {
-		capturedSignal = context.signal;
-		await nextTick(200);
-		return true;
-	});
+	const pendingGuard = Promise.withResolvers<boolean>();
 	router.initialize();
 	await waitForRoute(router, "home");
-	capturedSignal = null;
+	router.addGuard((context: GuardContext) => {
+		capturedSignal = context.signal;
+		return pendingGuard.promise;
+	});
 
 	router.navTo("protected");
-	await nextTick(10);
 	assert.ok(capturedSignal, "Signal was captured");
 	assert.notOk(capturedSignal!.aborted, "Signal is not yet aborted");
 
@@ -518,17 +479,16 @@ QUnit.test("Signal is aborted on router destroy", async function (assert: Assert
 
 QUnit.test("Signal is aborted when navigating back to current route", async function (assert: Assert) {
 	let capturedSignal: AbortSignal | null = null;
-	router.addRouteGuard("protected", async (context: GuardContext) => {
+	const pendingGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", (context: GuardContext) => {
 		capturedSignal = context.signal;
-		await nextTick(200);
-		return true;
+		return pendingGuard.promise;
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
 
 	// Navigate to protected (triggers slow route guard)
 	router.navTo("protected");
-	await nextTick(10);
 	assert.ok(capturedSignal, "Signal was captured");
 
 	// Navigate back to current route while guard is pending.
@@ -548,15 +508,14 @@ QUnit.test("Guards for a superseded navigation stop executing", async function (
 	const executed: number[] = [];
 
 	// Use route-specific guards so they only run for "protected", not for "forbidden"
+	const slowGuard = Promise.withResolvers<boolean>();
 	router.addRouteGuard("protected", async () => {
 		executed.push(1);
-		await nextTick(10);
 		return true;
 	});
-	router.addRouteGuard("protected", async () => {
+	router.addRouteGuard("protected", () => {
 		executed.push(2);
-		await nextTick(100); // slow: will be superseded while waiting
-		return true;
+		return slowGuard.promise; // will be superseded while pending
 	});
 	router.addRouteGuard("protected", async () => {
 		executed.push(3); // should NOT run if superseded
@@ -567,13 +526,14 @@ QUnit.test("Guards for a superseded navigation stop executing", async function (
 
 	// Start navigation that will be superseded
 	router.navTo("protected");
-	// Wait for guard 1 to finish and guard 2 to start
-	await nextTick(30);
+	// Let guard 1 finish so guard 2 starts
+	await flushPromises();
 	// Supersede with a new navigation (no guards on "forbidden")
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
-	await nextTick(200); // let everything settle
+	slowGuard.resolve(true);
+	await flushPromises();
 	assert.ok(executed.includes(1), "Guard 1 ran");
 	assert.ok(executed.includes(2), "Guard 2 ran (was already started)");
 	assert.notOk(executed.includes(3), "Guard 3 was skipped (early bailout)");
@@ -584,25 +544,23 @@ QUnit.test(
 	async function (assert: Assert) {
 		let routeGuardCalled = false;
 
-		router.addGuard(async () => {
-			await nextTick(100); // slow global guard
-			return true;
-		});
+		const globalGuard = Promise.withResolvers<boolean>();
 		router.addRouteGuard("protected", () => {
 			routeGuardCalled = true;
 			return true;
 		});
 		router.initialize();
 		await waitForRoute(router, "home");
+		router.addGuard(() => globalGuard.promise);
 
 		// Start navigation to protected (triggers slow global guard)
 		router.navTo("protected");
 		// Supersede while global guard is pending
-		await nextTick(30);
 		router.navTo("forbidden");
-		await waitForRoute(router, "forbidden");
-
-		await nextTick(200);
+		const forbiddenMatched = waitForRoute(router, "forbidden");
+		globalGuard.resolve(true);
+		await forbiddenMatched;
+		await flushPromises();
 		assert.notOk(routeGuardCalled, "Route guard was not started after superseded global guard");
 	},
 );
@@ -616,10 +574,10 @@ QUnit.test(
 	"Repeated navTo to same destination during pending guard runs guard only once",
 	async function (assert: Assert) {
 		let guardCallCount = 0;
-		router.addRouteGuard("protected", async () => {
+		const pendingGuard = Promise.withResolvers<boolean>();
+		router.addRouteGuard("protected", () => {
 			guardCallCount++;
-			await nextTick(100);
-			return true;
+			return pendingGuard.promise;
 		});
 		router.initialize();
 		await waitForRoute(router, "home");
@@ -627,23 +585,19 @@ QUnit.test(
 		// First navTo triggers guard
 		router.navTo("protected");
 		// Second navTo to same destination while guard is pending, should be ignored
-		await nextTick(10);
 		router.navTo("protected");
 
-		await waitForRoute(router, "protected");
+		const protectedMatched = waitForRoute(router, "protected");
+		pendingGuard.resolve(true);
+		await protectedMatched;
 		assert.strictEqual(guardCallCount, 1, "Guard only ran once (duplicate was deduped)");
 	},
 );
 
 QUnit.test("navTo to different destination during pending guard supersedes the first", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(100);
-		return true;
-	});
-	router.addRouteGuard("detail", async () => {
-		await nextTick(10);
-		return true;
-	});
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.addRouteGuard("detail", async () => true);
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -655,11 +609,11 @@ QUnit.test("navTo to different destination during pending guard supersedes the f
 	// First navTo triggers protected guard (slow)
 	router.navTo("protected");
 	// Different destination supersedes
-	await nextTick(10);
 	router.navTo("detail", { id: "1" });
 
 	await waitForRoute(router, "detail");
-	await nextTick(150); // let the stale 100ms guard resolve so a leaked commit would show
+	slowGuard.resolve(true);
+	await flushPromises();
 	assert.notOk(protectedMatched, "First navigation was superseded");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/1", "Second navigation won");
 });
@@ -668,7 +622,6 @@ QUnit.test("Route is navigable again after a guarded navigation completes", asyn
 	let guardCallCount = 0;
 	router.addRouteGuard("protected", async () => {
 		guardCallCount++;
-		await nextTick(50);
 		return true;
 	});
 	router.initialize();
@@ -696,17 +649,12 @@ QUnit.test("AbortError from guard is silenced when navigation is superseded", as
 	};
 	window.addEventListener("unhandledrejection", rejectionHandler);
 
-	router.addGuard(async (context: GuardContext) => {
-		// Simulate a fetch that throws AbortError when signal is aborted
-		await new Promise<void>((resolve, reject) => {
-			if (context.signal.aborted) {
-				reject(new DOMException("The operation was aborted.", "AbortError"));
-				return;
-			}
+	router.addRouteGuard("protected", async (context: GuardContext) => {
+		// Simulate a fetch that only ends by throwing AbortError when the signal is aborted
+		await new Promise<void>((_resolve, reject) => {
 			context.signal.addEventListener("abort", () => {
 				reject(new DOMException("The operation was aborted.", "AbortError"));
 			});
-			setTimeout(resolve, 200);
 		});
 		return true;
 	});
@@ -715,13 +663,12 @@ QUnit.test("AbortError from guard is silenced when navigation is superseded", as
 
 	// Start navigation (triggers guard with simulated fetch)
 	router.navTo("protected");
-	// Supersede quickly
-	await nextTick(10);
+	// Supersede while the fetch is pending
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
-	// Wait for everything to settle; no unhandled errors should occur
-	await nextTick(300);
+	// Let any stale rejection surface
+	await flushPromises();
 	window.removeEventListener("unhandledrejection", rejectionHandler);
 	assert.strictEqual(unhandledRejections.length, 0, "No unhandled promise rejections from AbortError");
 });
@@ -778,7 +725,7 @@ QUnit.test(
 
 		// First navigation is blocked
 		router.navTo("protected");
-		await nextTick(150);
+		await router.navigationSettled();
 		assert.ok(blockedSignal, "Signal was captured from blocked navigation");
 		assert.notOk(blockedSignal!.aborted, "Blocked signal is not aborted (guard ran to completion)");
 
@@ -827,27 +774,25 @@ QUnit.test(
 		};
 		window.addEventListener("unhandledrejection", rejectionHandler);
 
-		router.addGuard(async (context: GuardContext) => {
-			await new Promise<void>((resolve, reject) => {
+		router.addRouteGuard("protected", async (context: GuardContext) => {
+			await new Promise<void>((_resolve, reject) => {
 				context.signal.addEventListener("abort", () => {
 					reject(new Error("Resource cleanup failed"));
 				});
-				setTimeout(resolve, 200);
 			});
 			return true;
 		});
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Start navigation (guard waits 200ms)
+		// Start navigation (guard stays pending)
 		router.navTo("protected");
-		// Supersede after 10ms. Aborts signal, guard rejects
-		await nextTick(10);
+		// Supersede: aborts the signal, guard rejects
 		router.navTo("forbidden");
 		await waitForRoute(router, "forbidden");
 
-		// Allow time for any stale rejection to surface
-		await nextTick(300);
+		// Let any stale rejection surface
+		await flushPromises();
 		window.removeEventListener("unhandledrejection", rejectionHandler);
 		assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from guard error after abort");
 	},
@@ -862,28 +807,29 @@ QUnit.test(
 		};
 		window.addEventListener("unhandledrejection", rejectionHandler);
 
-		router.addLeaveGuard(
-			"home",
-			async (context: GuardContext) =>
-				new Promise<boolean>((resolve, reject) => {
-					context.signal.addEventListener("abort", () => {
-						reject(new Error("Leave guard cleanup error"));
-					});
-					setTimeout(() => resolve(true), 200);
-				}),
-		);
+		let leaveGuardCalls = 0;
+		router.addLeaveGuard("home", (context: GuardContext) => {
+			leaveGuardCalls++;
+			if (leaveGuardCalls > 1) {
+				return true;
+			}
+			return new Promise<boolean>((_resolve, reject) => {
+				context.signal.addEventListener("abort", () => {
+					reject(new Error("Leave guard cleanup error"));
+				});
+			});
+		});
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Navigate to protected (triggers leave guard on home, waits 200ms)
+		// Navigate to protected (leave guard on home stays pending)
 		router.navTo("protected");
-		// Supersede after 10ms. Aborts signal, leave guard rejects
-		await nextTick(10);
+		// Supersede: aborts the signal, leave guard rejects
 		router.navTo("forbidden");
 
 		await router.navigationSettled();
-		// Allow the stale leave guard promise (200ms timeout) to reject
-		await nextTick(250);
+		// Let the stale leave guard rejection surface
+		await flushPromises();
 		window.removeEventListener("unhandledrejection", rejectionHandler);
 		assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from leave guard error after abort");
 	},
@@ -935,7 +881,7 @@ QUnit.test(
 		// Now resolve the FIRST (superseded) leave guard.
 		// The enter guard for "protected" should NOT fire because the signal is aborted.
 		leaveResolvers[0](true);
-		await nextTick();
+		await flushPromises();
 
 		assert.notOk(
 			enterGuardCalledWhileAborted,

@@ -14,8 +14,8 @@ import {
 	captureWarningsAsync,
 	createRouter,
 	getHash,
+	flushPromises,
 	initHashChanger,
-	nextTick,
 	recordHashChanges,
 	waitForRoute,
 } from "./testHelpers";
@@ -71,7 +71,7 @@ QUnit.test("Direct hash change with redirect restores correct hash", async funct
 
 	HashChanger.getInstance().setHash("forbidden");
 	await waitForRoute(router, "home");
-	await nextTick(50);
+	await flushPromises();
 
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored to home route");
 });
@@ -529,9 +529,9 @@ QUnit.test("async preflight superseded by second navTo cancels first", async fun
 
 QUnit.test("duplicate navTo to same pending hash is a no-op", async function (assert) {
 	let guardCallCount = 0;
-	router.addGuard(() => {
+	router.addGuard(async () => {
 		guardCallCount++;
-		return new Promise<boolean>((r) => setTimeout(() => r(true), 20));
+		return true;
 	});
 	router.initialize();
 	guardCallCount = 0;
@@ -613,10 +613,7 @@ QUnit.test(
 );
 
 QUnit.test("setHash during async preflight supersedes the preflight", async function (assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(200);
-		return true;
-	});
+	router.addRouteGuard("protected", async () => true);
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -625,7 +622,6 @@ QUnit.test("setHash during async preflight supersedes the preflight", async func
 
 	// Browser back / direct hash change while async preflight is pending.
 	// parse() bumps the generation counter, cancelling the preflight.
-	await nextTick(10);
 	HashChanger.getInstance().setHash("forbidden");
 
 	const result = await settledPromise;
@@ -738,7 +734,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	router.attachNavigationSettled(handler);
 
 	router.navTo("forbidden");
-	await nextTick();
+	await flushPromises();
 	await router.navigationSettled();
 
 	assert.ok(nestedNavFired, "Handler issued the nested navTo('protected')");
@@ -861,14 +857,8 @@ QUnit.test("Leave guards run only on first hop, not on redirect hops", async fun
 });
 
 QUnit.test("Async guards in redirect chain work correctly", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(10);
-		return "forbidden";
-	});
-	router.addRouteGuard("forbidden", async () => {
-		await nextTick(10);
-		return true;
-	});
+	router.addRouteGuard("protected", async () => "forbidden");
+	router.addRouteGuard("forbidden", async () => true);
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -878,10 +868,7 @@ QUnit.test("Async guards in redirect chain work correctly", async function (asse
 });
 
 QUnit.test("Superseding navigation during async redirect chain cancels the chain", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => {
-		await nextTick(50);
-		return "forbidden";
-	});
+	router.addRouteGuard("protected", async () => "forbidden");
 	router.initialize();
 	await waitForRoute(router, "home");
 
@@ -889,7 +876,7 @@ QUnit.test("Superseding navigation during async redirect chain cancels the chain
 	// Supersede before the async guard resolves
 	router.navTo("detail", { id: "1" });
 	await waitForRoute(router, "detail");
-	await nextTick(100); // let the stale 50ms guard resolve so a leaked redirect would show
+	await flushPromises();
 	assert.strictEqual(getHash(), "detail/1", "Superseding navigation won");
 });
 
@@ -941,7 +928,6 @@ QUnit.test("Guard on redirect target that throws settles as Error", async functi
 QUnit.test("Async guard rejecting during redirect chain settles as Error", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("forbidden", async () => {
-		await nextTick(10);
 		throw new Error("async guard explosion in redirect chain");
 	});
 	router.initialize();

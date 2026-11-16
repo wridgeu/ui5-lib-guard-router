@@ -9,10 +9,10 @@ import {
 	createRouterUnsafe,
 	createRouterWithOptions,
 	createRouterWithOptionsUnsafe,
+	flushPromises,
 	getComponentRouter,
 	GuardRouterClass,
 	initHashChanger,
-	nextTick,
 	setRouteMetaUnsafe,
 	getHash,
 	recordHashChanges,
@@ -444,7 +444,7 @@ QUnit.test("guards from config are registered and functional (block mode)", asyn
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -475,7 +475,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Probe: an imperative route guard sees what the manifest global guard wrote
 	let writerValue: unknown;
@@ -511,7 +511,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Arrange: add imperative guard that reads from context.bag.
 	// If the manifest guard ran first, "writer" will already be present.
@@ -552,7 +552,7 @@ QUnit.test("manifest guards share bag across pipeline (bagWriter → bagReader)"
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -582,8 +582,15 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	router.initialize();
 	router.destroy();
 
-	// Wait for sap.ui.require error callbacks + Promise.all to settle.
-	await nextTick(200);
+	// A second require of the failing module reports after the router's own; then let Promise.all settle.
+	await new Promise<void>((resolve) => {
+		sap.ui.require(
+			["nonexistent/guard/module"],
+			() => resolve(),
+			() => resolve(),
+		);
+	});
+	await flushPromises();
 
 	// UI5's destroy() resets _bIsInitialized to false. If the .then()
 	// callback ignored the _destroyed flag and called super.initialize(),
@@ -656,7 +663,7 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 	router.initialize();
 
 	// The guard should still work on first navigation (lazy loads it)
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
@@ -686,7 +693,7 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 		// If navToPreflight were "off" or "bypass", the hash would change despite the guard.
 		initHashChanger();
 		manifestRouter.initialize();
-		await waitForRoute(manifestRouter, "home", 5000);
+		await waitForRoute(manifestRouter, "home");
 
 		const recorder = recordHashChanges();
 		manifestRouter.navTo("protected");
@@ -719,7 +726,7 @@ QUnit.test("guard context exposes the owner component, including on redirect hop
 			return context.toRoute === "protected" ? "home" : true;
 		});
 		manifestRouter.initialize();
-		await waitForRoute(manifestRouter, "home", 5000);
+		await waitForRoute(manifestRouter, "home");
 
 		manifestRouter.navTo("protected");
 		await manifestRouter.navigationSettled();
@@ -762,7 +769,7 @@ QUnit.test("dot-notation guard paths resolve relative to component sap.app.id", 
 	try {
 		const manifestRouter = getComponentRouter(component);
 		manifestRouter.initialize();
-		await waitForRoute(manifestRouter, "home", 5000);
+		await waitForRoute(manifestRouter, "home");
 
 		manifestRouter.navTo("protected");
 		const result = await manifestRouter.navigationSettled();
@@ -797,7 +804,7 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -825,7 +832,7 @@ QUnit.test('"module:" prefix with slash notation (UI5 convention)', async functi
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -869,7 +876,7 @@ QUnit.test("cherry-pick by name from object module registers only that guard", a
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -900,7 +907,7 @@ QUnit.test("cherry-pick by name selects blocking guard", async function (assert:
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -931,7 +938,7 @@ QUnit.test("cherry-pick by index from array module", async function (assert: Ass
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -966,7 +973,7 @@ QUnit.test(
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 
 		router.navTo("protected");
 		const result = await router.navigationSettled();
@@ -1001,7 +1008,7 @@ QUnit.test("cherry-pick by numeric index 0 from object module resolves first ent
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 	assert.deepEqual(warnings, [], "export resolved without a load or lookup warning");
 
@@ -1034,7 +1041,7 @@ QUnit.test("cherry-pick from single-function module ignores # and still works", 
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1061,7 +1068,7 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1122,7 +1129,7 @@ QUnit.test("module: prefix with cherry-pick composes correctly", async function 
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 	assert.deepEqual(warnings, [], "export resolved without a load or lookup warning");
 
@@ -1164,7 +1171,7 @@ QUnit.test("object module: bare path registers all guards in key order", async f
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1195,7 +1202,7 @@ QUnit.test("array module: bare path registers all guards in index order", async 
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1227,7 +1234,7 @@ QUnit.test("empty object module warns and registers no guards", async function (
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1260,7 +1267,7 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1313,7 +1320,7 @@ QUnit.test("lazy mode: object module bare path registers all guards", async func
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1344,7 +1351,7 @@ QUnit.test("lazy mode: cherry-pick from object module", async function (assert: 
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1375,7 +1382,7 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -1420,7 +1427,7 @@ QUnit.test("empty array module warns and registers no guards", async function (a
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1450,7 +1457,7 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Try to leave "home". checkRole returns false, should block
 	router.navTo("protected");
@@ -1495,7 +1502,7 @@ QUnit.test("guards value is not a plain object (array) warns and registers no gu
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// No manifest guards registered, so navigation should be allowed
 	router.navTo("protected");
@@ -1547,7 +1554,7 @@ QUnit.test("'*' with object form warns about leave and still registers enter gua
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	let writerValue: unknown;
 	router.addRouteGuard("protected", (context: GuardContext) => {
@@ -1594,7 +1601,7 @@ QUnit.test("module exporting a primitive warns and is skipped", async function (
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1630,7 +1637,7 @@ QUnit.test(
 			);
 
 			router.initialize();
-			await waitForRoute(router, "home", 5000);
+			await waitForRoute(router, "home");
 		});
 
 		assert.ok(
@@ -1669,7 +1676,7 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 	});
 
 	assert.ok(
@@ -1718,9 +1725,7 @@ QUnit.test(
 			);
 
 			router.initialize();
-
-			// Wait for the async module loading to fail and the .then() handler to call super.initialize()
-			await nextTick(500);
+			await waitForRoute(router, "home");
 		});
 
 		assert.ok(
@@ -1732,7 +1737,7 @@ QUnit.test(
 
 		// Navigation should still work (no guards registered; the failed module was skipped)
 		router.navTo("protected");
-		await waitForRoute(router, "protected", 5000);
+		await waitForRoute(router, "protected");
 		assert.strictEqual(getHash(), "protected", "navigation works after load failure");
 	},
 );
@@ -2120,7 +2125,7 @@ QUnit.test(
 		});
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 
 		// Act: navigate to a child route
 		router.navTo("employee", { id: "42" });
@@ -2146,7 +2151,7 @@ QUnit.test("guard on parent does NOT run for child when inheritance is none", as
 	});
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Act: navigate to a child route
 	router.navTo("employee", { id: "42" });
@@ -2171,7 +2176,7 @@ QUnit.test("ancestor guards run before descendant guards (depth ordering)", asyn
 	});
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Act: navigate to the child route
 	router.navTo("employee", { id: "42" });
@@ -2201,7 +2206,7 @@ QUnit.test("global guards run before inherited route guards (pipeline separation
 	});
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Act: navigate to a child route that inherits the bagReaderGuard
 	router.navTo("employee", { id: "42" });
@@ -2226,7 +2231,7 @@ QUnit.test("guard on child does NOT propagate upward to parent", async function 
 	});
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Act: navigate to the parent route
 	router.navTo("employees");
@@ -2550,7 +2555,7 @@ QUnit.test("guard inheritance works with mixed parameter names", async function 
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.navTo("orderItems", { id: "99" });
 	const result = await router.navigationSettled();
@@ -2760,7 +2765,7 @@ QUnit.test(
 		});
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 
 		// Add an imperative bagReaderGuard on "employees". It blocks if "writer"
 		// key is NOT in the bag. If the inherited root guard wrote to the bag,
@@ -2884,7 +2889,7 @@ QUnit.test(
 		);
 
 		router.initialize();
-		await waitForRoute(router, "home", 5000);
+		await waitForRoute(router, "home");
 
 		// Dynamically add a child route after initialization
 		router.addRoute({ name: "employee", pattern: "employees/{id}" });
@@ -2915,7 +2920,7 @@ QUnit.test("addRoute() registers inherited manifest guards for new descendant ro
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Dynamically add a child route
 	router.addRoute({ name: "employee", pattern: "employees/{id}" });
@@ -2950,7 +2955,7 @@ QUnit.test("addRoute() with inheritance: none does not register inherited guards
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	router.addRoute({ name: "employee", pattern: "employees/{id}" });
 
@@ -2978,7 +2983,7 @@ QUnit.test("addRoute() clears metadata cache so inheritance updates", async func
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Resolve (and cache) the child's metadata while its ancestor route does not exist yet
 	assert.strictEqual(router.getRouteMeta("employee").section, undefined, "no ancestor before addRoute");
@@ -3013,7 +3018,7 @@ QUnit.test("addRoute() for already-known route is a no-op", async function (asse
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Re-add "employees" which already exists. Must not re-expand its guard onto descendants.
 	router.addRoute({ name: "employees", pattern: "employees" });
@@ -3045,7 +3050,7 @@ QUnit.test("setRouteMeta for unknown route becomes visible after addRoute()", as
 	);
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	// Set metadata for a route that doesn't exist yet
 	router.setRouteMeta("employee", { clearance: "manager" });
@@ -3071,7 +3076,7 @@ QUnit.test("setRouteMeta on unknown route with warn policy logs a warning", asyn
 	});
 
 	router.initialize();
-	await waitForRoute(router, "home", 5000);
+	await waitForRoute(router, "home");
 
 	const warnings = captureWarnings(() => {
 		router.setRouteMeta("nonexistent", { key: "value" });

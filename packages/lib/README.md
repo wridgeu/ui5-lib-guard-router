@@ -1072,6 +1072,16 @@ This library uses TypeScript `private` because UI5's `ManagedObject.extend()` cl
 
 Some tests pass values the types forbid, as an untyped JavaScript caller could (e.g. a guard returning `42`). Instead of casting, they go through the helpers in `test/qunit/testHelpers.ts`: `callUnsafe(target, method, ...args)`, the `*Unsafe` wrappers built on it, and `createRouterUnsafe(routes, config)`.
 
+### Testing async behavior without timers
+
+The QUnit tests never wait on time. A fixed sleep either waits longer than needed or races the router and flakes under load, so the `test-guardrails/no-timers` lint rule rejects `setTimeout` and `setInterval` in `test/qunit/`. Tests wait on what the router does instead:
+
+- **Router events:** `waitForRoute(router, name)` for a `patternMatched`, `router.navigationSettled()` for the outcome.
+- **Test-controlled guards:** a slow guard returns a `Promise.withResolvers()` promise that the test resolves at the exact point it wants, e.g. after a newer navigation has superseded it.
+- **Stale results:** after resolving a superseded guard, `flushPromises()` lets every queued promise reaction run, so a leaked commit or redirect shows up before the assertion.
+
+A test that waits for an event that never comes fails at the QUnit `testTimeout` set in `testsuite.qunit.ts`.
+
 ## Compatibility
 
 > [!IMPORTANT]
