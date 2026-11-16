@@ -38,7 +38,8 @@ Those remain covered by the local QUnit, E2E, and FLP suites.
 ```text
 packages/lib/test/qunit/upstream-parity/
   README.md
-  manifest.json
+  Current.qunit.ts
+  vendor-manifest.json
   adapters/
   ports/
   vendor/
@@ -46,9 +47,10 @@ packages/lib/test/qunit/upstream-parity/
 
 - `vendor/openui5/<tag>/raw/` keeps exact upstream snapshots
 - `ports/openui5/<tag>/` contains local executable ports/wrappers
+- `Current.qunit.ts` imports the ports for the active tag
 - `adapters/` contains shared local harness helpers
-- `manifest.json` records provenance and raw-to-port mapping
-- `manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
+- `vendor-manifest.json` records provenance and raw-to-port mapping
+- `vendor-manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
 - the custom verifier validates manifest structure as well as repo-state consistency
 
 ## Vendoring Rules

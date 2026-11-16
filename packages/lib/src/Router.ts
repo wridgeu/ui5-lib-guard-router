@@ -189,21 +189,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return super.initialize();
 		}
 
-		// "block" mode: load all modules, then initialize.
-		// Guard against destroy() being called while modules are still loading.
-		this._loadAndRegisterGuards(expandedDescriptors)
-			.then(() => {
-				if (!this._destroyed) super.initialize();
-			})
-			.catch((err: unknown) => {
-				if (this._destroyed) return;
-				Log.error(
-					"guardRouter.guards: module loading failed, initializing without manifest guards",
-					String(err),
-					LOG_COMPONENT,
-				);
-				super.initialize();
-			});
+		// "block" mode: load all modules, then register their guards in declaration order
+		// and initialize. Load and registration failures are logged per module and never
+		// reject. A router destroyed while modules load stays destroyed.
+		loadGuardModules(expandedDescriptors).then((results) => {
+			if (this._destroyed) return;
+			for (const { descriptor, guards } of results) {
+				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
+			}
+			super.initialize();
+		});
 		return this;
 	}
 
@@ -1281,15 +1276,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			}
 		}
 		return result;
-	}
-
-	/** Load all guard modules, then register their guards in declaration order. */
-	private _loadAndRegisterGuards(descriptors: GuardDescriptor[]): Promise<void> {
-		return loadGuardModules(descriptors).then((results) => {
-			for (const { descriptor, guards } of results) {
-				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
-			}
-		});
 	}
 
 	/**

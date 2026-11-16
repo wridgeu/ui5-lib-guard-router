@@ -30,7 +30,12 @@ const args = process.argv.slice(2);
 const force = args.includes("--force");
 const requested = args.filter((arg) => arg !== "--force").map((file) => path.normalize(file));
 const files = (requested.length > 0 ? requested : allFiles).map((file) => file.split(path.sep).join("/")).toSorted();
-const baseName = (file) => path.basename(file.split(":")[0], ".ts");
+// A run limited to line ranges gets its own name, so its results and report never replace the whole file's.
+function runName(file) {
+	const [source, ...ranges] = file.split(":");
+	const name = path.basename(source, ".ts");
+	return ranges.length > 0 ? `${name}.${ranges.join(":").replace(/[^\d-]+/g, "_")}` : name;
+}
 
 // Stryker sees the QUnit run as one test, so it cannot tell which kept results a test change
 // invalidates. Any change to the tests therefore discards the kept results.
@@ -47,9 +52,7 @@ mkdirSync(INCREMENTAL_DIR, { recursive: true });
 const failed = [];
 for (const file of files) {
 	console.log(`\n=== Mutating ${file} ===`);
-	// A run limited to line ranges keeps its own results, so it never replaces the whole file's.
-	const ranges = file.split(":").slice(1).join(":");
-	const key = ranges ? `${baseName(file)}.${ranges.replace(/[^\d-]+/g, "_")}` : baseName(file);
+	const key = runName(file);
 	const incrementalFile = `${INCREMENTAL_DIR}/${key}.json`;
 	const fingerprintFile = `${INCREMENTAL_DIR}/${key}.tests-sha256`;
 	const keptFingerprint = existsSync(fingerprintFile) ? readFileSync(fingerprintFile, "utf8") : "";
@@ -80,11 +83,11 @@ for (const file of files) {
 
 	for (const ext of ["html", "json"]) {
 		const report = `${REPORT_DIR}/mutation.${ext}`;
-		if (existsSync(report)) renameSync(report, `${REPORT_DIR}/${baseName(file)}.${ext}`);
+		if (existsSync(report)) renameSync(report, `${REPORT_DIR}/${key}.${ext}`);
 	}
 }
 
-console.log(`\nReports: ${files.map((file) => `${REPORT_DIR}/${baseName(file)}.html`).join(", ")}`);
+console.log(`\nReports: ${files.map((file) => `${REPORT_DIR}/${runName(file)}.html`).join(", ")}`);
 if (failed.length > 0) {
 	console.error(`Stryker failed for: ${failed.join(", ")}`);
 	process.exitCode = 1;

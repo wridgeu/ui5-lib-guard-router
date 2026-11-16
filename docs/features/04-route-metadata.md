@@ -64,7 +64,7 @@ Store default metadata in `manifest.json` under `sap.ui5.routing.config.guardRou
 ### Programmatic API
 
 ```typescript
-// Set metadata for a route (overwrites manifest defaults)
+// Set runtime metadata for a route (replaces earlier runtime metadata; its keys win over manifest defaults)
 router.setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 
 // Get metadata for a route (merged: manifest defaults + runtime overrides)
@@ -97,7 +97,6 @@ router.addGuard((context) => {
 
 	// Auth check
 	if (meta.requiresAuth && !authModel.getProperty("/isLoggedIn")) {
-		authModel.setProperty("/pendingTransition", context.transition);
 		return "login";
 	}
 
@@ -180,7 +179,7 @@ const context: GuardContext = {
 
 ## Types
 
-> **Implementation note**: The shipped types differ from this original proposal. `mergeRouteMeta` was dropped. `GuardContext` includes `signal`, `bag`, `toMeta`, `fromMeta` but not `transition` (feature 03 was not implemented). `toArguments` is `RouteInfo["arguments"]`, not `Record<string, string>`. The manifest and runtime maps live in `RouteMetaStore` (`RouteMeta.ts`), which also caches resolved metadata.
+> **Implementation note**: The shipped types differ from this original proposal. `mergeRouteMeta` was dropped. `GuardContext` includes `signal`, `bag`, `toMeta`, `fromMeta`, `ownerComponent` but not `transition` (feature 03 was not implemented). `toArguments` is `RouteInfo["arguments"]`, not `Record<string, string>`. The manifest and runtime maps live in `RouteMetaStore` (`RouteMeta.ts`), which also caches resolved metadata.
 
 ```typescript
 // RouterInstance additions
@@ -200,6 +199,7 @@ interface GuardContext {
     bag: Map<string, unknown>;
     toMeta: Readonly<Record<string, unknown>>;
     fromMeta: Readonly<Record<string, unknown>>;
+    ownerComponent?: UIComponent;
 }
 ```
 
@@ -238,5 +238,5 @@ interface GuardContext {
 ## Compatibility
 
 - Fully backward compatible (additive API and context properties)
-- Manifest section is ignored by UI5 framework (custom namespace)
+- The router removes `guardRouter` from the routing config before passing it to `sap.m.routing.Router`, so UI5 never sees it
 - Guards that don't read `toMeta`/`fromMeta` are unaffected

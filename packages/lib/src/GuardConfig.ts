@@ -2,13 +2,7 @@
  * Parsing and validation of the `guardRouter` config block.
  */
 import Log from "sap/base/Log";
-import type {
-	GuardLoading,
-	Inheritance,
-	ManifestRouteGuardConfig,
-	NavToPreflightMode,
-	UnknownRouteRegistrationPolicy,
-} from "./types";
+import type { GuardLoading, Inheritance, NavToPreflightMode, UnknownRouteRegistrationPolicy } from "./types";
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
@@ -111,9 +105,7 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 		if (Array.isArray(value)) {
 			pushEntries(value, key, "enter", `["${key}"]`);
 		} else if (isRecord(value)) {
-			const config = value as ManifestRouteGuardConfig;
-
-			if (key === "*" && config.leave !== undefined) {
+			if (key === "*" && value.leave !== undefined) {
 				Log.warning(
 					'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
 					undefined,
@@ -121,16 +113,16 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				);
 			}
 
-			if (key === "*" && config.enter !== undefined) {
+			if (key === "*" && value.enter !== undefined) {
 				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
 			}
 
-			if (Array.isArray(config.enter)) {
-				pushEntries(config.enter, key, "enter", `["${key}"].enter`);
+			if (Array.isArray(value.enter)) {
+				pushEntries(value.enter, key, "enter", `["${key}"].enter`);
 			}
 
-			if (key !== "*" && Array.isArray(config.leave)) {
-				pushEntries(config.leave, key, "leave", `["${key}"].leave`);
+			if (key !== "*" && Array.isArray(value.leave)) {
+				pushEntries(value.leave, key, "leave", `["${key}"].leave`);
 			}
 		} else {
 			Log.warning(
@@ -164,12 +156,12 @@ function applyOption<K extends keyof ResolvedGuardRouterOptions>(
 	guard: (v: unknown) => v is ResolvedGuardRouterOptions[K],
 	target: { -readonly [P in keyof ResolvedGuardRouterOptions]: ResolvedGuardRouterOptions[P] },
 ): void {
-	if (raw[key] !== undefined) {
-		if (guard(raw[key])) {
-			target[key] = raw[key] as ResolvedGuardRouterOptions[K];
-		} else {
-			Log.warning(`guardRouter.${key} has invalid value, using default`, JSON.stringify(raw[key]), LOG_COMPONENT);
-		}
+	const value = raw[key];
+	if (value === undefined) return;
+	if (guard(value)) {
+		target[key] = value;
+	} else {
+		Log.warning(`guardRouter.${key} has invalid value, using default`, JSON.stringify(value), LOG_COMPONENT);
 	}
 }
 

@@ -6,7 +6,7 @@
 > **Proposal-to-implementation differences:**
 >
 > - Leave guards use the shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
-> - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | Promise<boolean>` directly
+> - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | PromiseLike<boolean>` directly
 > - Public methods return `GuardRouter` (the proposed `RouterInstance` name was not shipped)
 > - `addRouteGuard` also accepts an object form `{ beforeEnter?, beforeLeave? }` for convenience
 > - The helper is named `isPromiseLike` (not `isThenable` as sketched below)

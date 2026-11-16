@@ -144,6 +144,8 @@ Add `case "error"` to the existing switch on `decision.action`:
 - `_applyDecision()`: calls `_errorNavigation(decision.error, hash)` (with default `restoreHash: true`)
 - `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, false)` (hash was never changed in preflight)
 
+Redirect chain hops (added later, see `11-guards-on-redirect-targets.md`) do the same in `_applyRedirectDecision()` and the `.catch()` in `_redirect()`, passing `chain.attemptedHash` and `chain.restoreHash`.
+
 ### `.catch()` handlers in `navTo()` and `parse()`
 
 These currently call `_blockNavigation()` when the pipeline promise fails. They change to call `_errorNavigation()` instead — a pipeline promise rejection is an error, not an intentional block.
@@ -184,7 +186,7 @@ switch (result.status) {
 
 ### Existing test updates
 
-Tests in `Router.qunit.ts` and `GuardPipeline.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
+Tests in the Router test files and `GuardPipeline.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
 
 ### New test cases
 
@@ -196,7 +198,7 @@ Tests in `Router.qunit.ts` and `GuardPipeline.qunit.ts` that currently assert `N
 4. Guard returning `false` → `{ action: "block" }` (regression — not Error)
 5. Guard error after signal abort → `{ action: "block" }` (unchanged behavior)
 
-**Router tests** (`packages/lib/test/qunit/Router.qunit.ts`):
+**Router tests** (`packages/lib/test/qunit/RouterGuards.qunit.ts`, `RouterAsync.qunit.ts`, `RouterNavigation.qunit.ts`, `RouterSettlement.qunit.ts`):
 
 6. Sync guard throw → `NavigationOutcome.Error` with error on result
 7. Async guard reject → `NavigationOutcome.Error` with error on result

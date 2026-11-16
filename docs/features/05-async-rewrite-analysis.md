@@ -125,7 +125,7 @@ HashChanger.fireHashChanged()
 **What you don't get**: No async in the route matching itself, no async between
 `beforeRouteMatched` and target loading, no native framework support.
 
-**Cost**: Already done. ~370 lines of library code.
+**Cost**: Already done. This library is that subclass.
 
 ---
 
@@ -302,11 +302,12 @@ The sync-first approach matches UI5's routing model well:
 
 ### Dual-Path Complexity
 
-The current code (`GuardPipeline.ts`) has four guard-running methods:
+The current code (`GuardPipeline.ts`) has five guard-running methods:
 
 - `_runLeaveGuards()` and `_runGuards()`: about 28 lines each (sync loops for leave and enter guards)
 - `_continueGuardsAsync()`: about 34 lines (async continuation, shared by leave and enter guards)
 - `_runEnterGuards()`: about 13 lines (coordinator for global, then route enter guards)
+- `_runRouteGuards()`: about 4 lines (route enter guards, if any are registered)
 
 Total: about 100 lines of dual-path logic, including error logging. This is not a maintenance burden.
 
@@ -363,7 +364,7 @@ Create a custom type that can be either sync or async:
 type MaybeAsync<T> = T | Promise<T>;
 ```
 
-This is essentially what the current code already does with the `isThenable()` check. The dual-path
+This is essentially what the current code already does with the `isPromiseLike()` check. The dual-path
 is already the minimal implementation of this pattern.
 
 ### Cost Summary

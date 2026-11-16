@@ -3,10 +3,11 @@ import type { GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureWarnings,
-	createHierarchicalRouter,
 	createRouter,
 	createRouterWithOptions,
+	createRouterUnsafe,
 	createRouterWithOptionsUnsafe,
+	HIERARCHICAL_ROUTES,
 	initHashChanger,
 	getHash,
 	recordHashChanges,
@@ -100,11 +101,9 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 
 	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
 	router.destroy();
-	router = createHierarchicalRouter({
-		inheritance: "invalid",
-		routeMeta: {
-			employees: { section: "hr" },
-		},
+	router = createRouterUnsafe(HIERARCHICAL_ROUTES, {
+		async: true,
+		guardRouter: { inheritance: "invalid", routeMeta: { employees: { section: "hr" } } },
 	});
 	const meta = router.getRouteMeta("employee");
 	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");

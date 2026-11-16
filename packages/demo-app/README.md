@@ -11,7 +11,7 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 | Route       | Pattern            | Guard behavior                                                                       |
 | ----------- | ------------------ | ------------------------------------------------------------------------------------ |
-| `home`      | `""`               | Open, no guard                                                                       |
+| `home`      | `""`               | Open. Leave: logs and allows (controller-level guard)                                |
 | `protected` | `"protected"`      | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty |
 | `blocked`   | `"blocked"`        | Enter: always blocks and stays on the current route                                  |
 | `forbidden` | `"forbidden"`      | Always redirects to `home`                                                           |
@@ -24,11 +24,11 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 Guard registration happens in three ways: declarative manifest guards, programmatic guards in `Component.ts`, and controller-level guards.
 
-Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file is structured with active runtime guards first and reference-only examples second.
+Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file has two sections: guard factories for the runtime first, reference-only examples second.
 
 Individual guard modules for declarative manifest registration live in `webapp/guards/` as standalone files.
 
-**Declarative** (manifest.json `guardRouter.guards`): Loaded automatically by the router during `initialize()`.
+**Declarative** (manifest.json `guardRouter.guards`): Registered by the router during `initialize()`. With the default `guardLoading: "lazy"`, a module that is not loaded yet is loaded on first navigation.
 
 | Guard module              | Type         | Route       | Description                                  |
 | ------------------------- | ------------ | ----------- | -------------------------------------------- |
@@ -50,7 +50,7 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | ------------------------- | ----------- | ------ | --------------------------------- |
 | `createHomeLeaveLogger()` | Route leave | `home` | Logs leaving home (always allows) |
 
-**Reference implementations** in the same `guards.ts` file (grouped below the active runtime guards, exported but not registered in the demo):
+**Not registered in the demo**: the first section of `guards.ts` also exports `createNavigationLogger()`, `blockedGuard`, `forbiddenGuard` and `createDirtyFormGuard()`; the demo registers the manifest modules in `webapp/guards/` instead. The reference section below them holds:
 
 | Function                          | Purpose                                                             |
 | --------------------------------- | ------------------------------------------------------------------- |

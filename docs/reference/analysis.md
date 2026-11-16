@@ -181,7 +181,7 @@ The navTo override concept was later adopted as one half of a two-entry-point de
 **Cons**:
 
 - `parse()` is not a public/documented-stable API. In theory, a future UI5 version could rename or refactor it. In practice, it has been stable since the router's inception and is fundamental to how `HashChanger` integration works.
-- Need to manually determine which route matches the hash (using `Route#match()`) to build guard context and run per-route guards.
+- Need to determine which route matches the hash (using `getRouteInfoByHash()`) to build guard context and run per-route guards.
 
 **Verdict**: **Chosen**. Best coverage, earliest interception, minimal code.
 
@@ -365,7 +365,7 @@ No application logic changes needed beyond the guard definitions themselves.
 
 ## 4. Test Coverage
 
-> **Note**: This table is a point-in-time snapshot from the initial implementation. The test suite has since expanded with additional suites (RouterOptions, RouterNavigation, RouterSettlement, GuardPipeline) and E2E files (navto-preflight, redirect-chain, route-metadata). See the actual test files for current coverage.
+> **Note**: This table is a point-in-time snapshot from the initial implementation. The test suite has since expanded with additional suites (RouterOptions, RouterNavigation, RouterSettlement, RouterManifestGuards, RouterRouteMeta, GuardPipeline, GuardConfig, GuardModules, PatternTree, RouteMeta, UpstreamParity) and E2E files (navto-preflight, redirect-chain, route-metadata). See the actual test files for current coverage.
 
 | Category                       | Count | What's Tested                                                                                                             |
 | ------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -447,7 +447,7 @@ Both safeguards log an error and settle the navigation as `Blocked`.
 
 ### 5.3 Async guard hash desync window
 
-During async guard evaluation, the browser's URL bar shows the target hash (e.g., `#/protected`) while the guard is still deciding. If the guard ultimately blocks, the hash is restored, but there's a brief visual inconsistency.
+During async guard evaluation of a browser-initiated navigation (back/forward, URL bar), the browser's URL bar shows the target hash (e.g., `#/protected`) while the guard is still deciding. If the guard ultimately blocks, the hash is restored, but there's a brief visual inconsistency. A programmatic `navTo()` does not have this window: its preflight runs the guards before the hash changes.
 
 **Mitigation**: Keep async guards fast. Use sync guards for instant decisions; reserve async for backend calls.
 

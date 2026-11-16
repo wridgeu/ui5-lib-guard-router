@@ -10,7 +10,7 @@ TanStack Router provides an `ignoreBlocker` option that allows specific navigati
 navigate({ to: '/dashboard', ignoreBlocker: true });
 ```
 
-Currently, `ui5.guard.router` has no way to bypass guards for a specific navigation. Every `navTo()` call goes through the full guard pipeline (except redirects from guards themselves, which bypass via the committing/redirect phase).
+When this was written, `ui5.guard.router` had no way to bypass guards for a specific navigation. Every `navTo()` call went through the full guard pipeline (except redirects from guards themselves, which bypass via the committing/redirect phase).
 
 ---
 

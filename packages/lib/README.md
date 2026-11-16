@@ -180,13 +180,13 @@ export default class Component extends UIComponent {
 The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
 
 - **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. If a guard blocks or redirects, the hash never changes, so no history entry is created.
-- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks or redirects, the router restores the previous hash via `replaceHash()`.
+- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks, the router restores the previous hash via `replaceHash()`. A redirect replaces the current history entry with the target.
 
 Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
 
 Because it extends the mobile router directly, all existing `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) works unchanged.
 
-The guard pipeline stays **synchronous when all guards return plain values** and only becomes async when a guard returns a Promise. A generation counter discards stale async results when navigations overlap, and an `AbortSignal` is passed to each guard so async work (like `fetch`) can be cancelled early.
+The guard pipeline stays **synchronous when all guards return plain values** and only becomes async when a guard returns a Promise. From that guard on, the rest of that navigation runs async; the next navigation starts synchronous again. A generation counter discards stale async results when navigations overlap, and an `AbortSignal` is passed to each guard so async work (like `fetch`) can be cancelled early.
 
 ## API
 
@@ -219,7 +219,7 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 ### Unknown routes during registration
 
-`addRouteGuard()` and `addLeaveGuard()` warn when the route name is unknown at registration time, but they still register the guard. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized.
+With the default `unknownRouteRegistration: "warn"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` warn when the route name is unknown at registration time, but they still register. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized. `"ignore"` registers without a warning. `"throw"` makes these calls throw and registers nothing; see [Router options](#router-options) for how manifest guards are handled.
 
 ### GuardContext
 
@@ -411,7 +411,7 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 
 | Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names. With `"throw"`, a manifest guard on an unknown route is skipped and an error is logged; the router still starts                                                                                                                                                                                                                                                        |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names. With `"throw"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` throw and register nothing. A manifest guard on an unknown route is skipped instead and logged as `guardRouter.guards: failed to register "<module path>"`; the router still starts                                                                                                          |
 | `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                                                                                                                                                                                                  |
 | `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: a preload hint in the constructor warms the module cache; `initialize()` registers cached modules directly and a lazy wrapper for the rest, which loads its module on first navigation (a failed load settles that navigation as `Error`); `initialize()` is synchronous. `"block"`: `initialize()` returns at once but starts the router only after all modules have loaded; a module that fails to load is skipped with a warning. |
 | `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                                                                                                                                                          |
@@ -683,7 +683,7 @@ Defaults to `"none"` for backward compatibility.
 
 Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care. Setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
 
-Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
+Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
 
 Runtime metadata set via `setRouteMeta()` participates in inheritance. Child routes see updated ancestor metadata after cache invalidation.
 
@@ -691,7 +691,7 @@ Runtime metadata set via `setRouteMeta()` participates in inheritance. Child rou
 
 Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
 
-**Execution order:** within each phase, guards run in registration order. Manifest guards are registered in declaration order when `initialize()` runs (in `"block"` mode, once all modules have loaded), so they run after programmatic guards added before `initialize()` and before guards added after it. For the same route, both sets execute. They are additive, not exclusive.
+**Execution order:** within each phase, guards run in registration order. Manifest guards are registered in declaration order when `initialize()` runs, so they run after programmatic guards added before `initialize()` and before guards added after it. In `"block"` mode they are registered only once all modules have loaded, so a guard added after `initialize()` but before loading finishes runs before them. For the same route, both sets execute. They are additive, not exclusive.
 
 A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
 
@@ -815,7 +815,7 @@ export default class HomeController extends BaseController {
 ```
 
 > [!TIP]
-> **User feedback on blocked navigation**: When a leave guard blocks, the router silently restores the previous hash. There is no built-in confirmation dialog. Show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) to make the block visible.
+> **User feedback on blocked navigation**: When a leave guard blocks, the router stays on the current route without any feedback to the user. There is no built-in confirmation dialog. Show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) to make the block visible.
 
 > [!NOTE]
 > **Guard cleanup and lifecycle**
@@ -1025,7 +1025,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks and logs the warning `Guard returned invalid value, treating as block`. A plain `false` is not logged, so add logging to your guards to find the one that returned it.
 
-**Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong, but a same-hash no-op can look similar. The router logs the target name so you can verify the route and parameters.
+**Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong. The router logs the target name so you can verify the route and parameters. A redirect to the current hash is not treated as blocked; it settles as `Redirected`.
 
 **Async guard hangs indefinitely**: `context.signal` only aborts on supersede or router stop/destroy, not on "too slow." If a guard's `fetch` targets a dead endpoint, the navigation stays in the evaluating phase forever. Combine `context.signal` with `AbortSignal.timeout()` to enforce a hard deadline: `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`. See the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout) for the full example and a compatibility fallback for older browsers.
 
@@ -1037,10 +1037,10 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Running tests
 
-The library ships nine QUnit test suites that run in headless Chrome via WebdriverIO:
+The library ships fifteen QUnit test suites that run in headless Chrome via WebdriverIO:
 
 ```bash
-# All suites (Router, RouterGuards, RouterAsync, RouterNavigation, RouterSettlement, RouterOptions, GuardPipeline, NativeRouterCompat, UpstreamParity)
+# All suites (GuardPipeline, GuardConfig, GuardModules, PatternTree, RouteMeta, Router, RouterGuards, RouterAsync, RouterNavigation, RouterSettlement, RouterOptions, RouterManifestGuards, RouterRouteMeta, NativeRouterCompat, UpstreamParity)
 npm run test:qunit
 
 # Full matrix including OpenUI5 1.120 compatibility lane and E2E

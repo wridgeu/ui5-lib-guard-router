@@ -1,14 +1,24 @@
 # Feature: Guard Bypass
 
-> **Status**: Deprioritized. Most use cases (save & navigate, logout, transition retry)
-> are better solved by updating application state so guards pass naturally — e.g., set
-> `isDirty = false` after saving, set `isLoggedIn = false` before navigating to login.
-> A `skipGuards` escape hatch adds API surface for edge cases that rarely arise in practice.
-> Revisit only if a concrete use case emerges that can't be handled by proper guard logic.
+> **Status**: Implemented (Option A) as `GuardNavToOptions.skipGuards` (since 1.5.0). This feature was
+> first deprioritized: most use cases (save & navigate, logout, transition retry) are better solved by
+> updating application state so guards pass naturally — e.g., set `isDirty = false` after saving, set
+> `isLoggedIn = false` before navigating to login. That is still the preferred approach.
+> See the [library README](../../packages/lib/README.md) for the shipped API.
+>
+> **Proposal-to-implementation differences:**
+>
+> - The options object is the last argument of either `navTo()` form: `navTo(name, params, replace, { skipGuards: true })` or `navTo(name, params, componentTargetInfo, replace, { skipGuards: true })`. The type is `GuardNavToOptions`, not `NavToOptions`, and `navTo()` returns `this`.
+> - There is no `_skipNextGuards` flag. `navTo()` sets the committing phase (origin `"preflight"`) and calls `super.navTo()`; `parse()` then commits without running guards. If the hash did not change, `navTo()` commits directly, so nothing leaks to the next navigation.
+> - Same-hash navigations are deduped before `skipGuards` is checked.
+> - Option B (`navToSkipGuards`) was not shipped.
+> - The router-wide `navToPreflight: "bypass"` option skips guards for every `navTo()` call.
+>
+> The sketches below are the original proposal. Refer to `Router.ts` (`navTo`) for the source of truth.
 
 ## Problem
 
-Every `navTo()` call goes through the full guard pipeline (except redirects via the committing/redirect phase). There is no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
+Before this feature, every `navTo()` call went through the full guard pipeline (except redirects via the committing/redirect phase). There was no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
 
 - **Save & Navigate**: User saves a form, then navigates away. The leave guard shouldn't fire because the data is already saved.
 - **Logout**: Navigate to login regardless of any guards. The user explicitly wants to leave.

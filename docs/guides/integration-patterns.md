@@ -16,14 +16,14 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | [Error handling](#error-handling-in-guards)                                 | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
 | [Guard factories](#guard-factories)                                         | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
 | [Controller-level lifecycle](#controller-level-guard-lifecycle)             | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
-| [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
+| [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | inline example                                                       |
 | [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
 | [Async guard timeout](#async-guard-timeout)                                 | Route enter          | Async        | inline example                                                       |
 | [Factory pattern for manifest guards](#factory-pattern-for-manifest-guards) | Any                  | Any          | inline example                                                       |
 | [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | inline example                                                       |
 | [Settlement for UI feedback](#settlement-for-ui-feedback)                   | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
-Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). Controller lifecycle and object-form examples also reference `Component.ts` and `Home.controller.ts` where noted in the table above.
+Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). The controller lifecycle example references `Home.controller.ts`.
 
 ## Authentication guard
 
@@ -187,7 +187,7 @@ When the timeout fires, `fetch` rejects with a `TimeoutError`. Since the guard's
 
 ## Always block
 
-Return `false` to block navigation unconditionally. The hash reverts to the previous route.
+Return `false` to block navigation unconditionally. A blocked `navTo()` never changes the hash; for browser-initiated navigation the hash reverts to the previous route.
 
 ```typescript
 router.addRouteGuard("maintenance", () => false);
@@ -377,7 +377,7 @@ router.addRouteGuard("protected", guardConfig);
 router.removeRouteGuard("protected", guardConfig);
 ```
 
-Reference: `Component.ts` guard registration.
+The demo app does not use the object form. See the [library README object form example](../../packages/lib/README.md#object-form-with-routeguardconfig).
 
 ## Chained authorization (redirect chain guards)
 

@@ -40,29 +40,22 @@ this._registerLazyGuards(descriptors);
 return super.initialize();
 ```
 
-**Lazy wrapper — cherry-picked entries** (one wrapper per descriptor, resolves to exactly one guard):
+**Lazy wrapper — cherry-picked entries** (one wrapper per descriptor, resolves to exactly one guard). Simplified from `createLazyGuards()` in `GuardModules.ts`:
 
 ```typescript
-function createLazyGuard(modulePath: string, exportKey?: string): GuardFn {
-	return (context: GuardContext) => {
-		const cached = sap.ui.require(modulePath);
-		if (cached) {
-			const fn = resolveExport(cached, exportKey);
-			return fn(context); // sync — preload won the race
-		}
-		return new Promise((resolve, reject) => {
-			sap.ui.require(
-				[modulePath],
-				(mod) => {
-					const fn = resolveExport(mod, exportKey);
-					resolve(fn(context));
-				},
-				reject,
-			);
-		});
-	};
-}
+let guards: GuardFn[] | undefined; // resolved once, so a missing export warns once
+const run = (mod: unknown, context: GuardContext) => {
+	guards ??= resolveModuleExports(mod, modulePath, exportKey).map((g) => g.fn);
+	return runGuardsInOrder(guards, context);
+};
+const wrapper = (context: GuardContext) => {
+	const mod = sap.ui.require(modulePath);
+	if (mod !== undefined) return run(mod, context); // sync — preload won the race
+	return loadGuardModule(modulePath).then((loaded) => (context.signal.aborted ? false : run(loaded, context)));
+};
 ```
+
+A module that fails to load rejects the wrapper's Promise, so the navigation settles as `error`.
 
 **Lazy wrapper — bare-path multi-guard modules:**
 
@@ -151,7 +144,7 @@ export default {
 ```
 typeof export === "function"           → Shape 1 (single guard)
 Array.isArray(export)                  → Shape 2 (array)
-typeof export === "object" && export   → Shape 3 (object)
+plain object (Object or null prototype) → Shape 3 (object)
 anything else                          → Log.warning, skip module
 ```
 
@@ -190,12 +183,12 @@ This registers all guards from `security` (including `checkAuth`), then register
 
 ### Rules
 
-| Syntax                        | Behavior                                                                                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                       |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                                  |
-| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                           |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug-level warning since this likely indicates a mistake (wrong module or expected an object export). |
+| Syntax                        | Behavior                                                                                                                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                  |
+| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                             |
+| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                      |
+| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message, since this likely indicates a mistake (wrong module or expected an object export). |
 
 The `#` separator is unambiguous — module paths use dots and slashes, never `#`.
 
@@ -204,12 +197,12 @@ The `module:` prefix and `#` cherry-pick compose naturally. Parsing splits on `#
 
 ### Parsing
 
-`parseGuardDescriptors()` in `GuardConfig.ts` splits each entry on the first `#`:
+`parseGuardEntry()` in `GuardConfig.ts` (called by `parseGuardDescriptors()`) splits each entry on the first `#`:
 
 ```typescript
-const [rawModulePath, exportKey] = entry.split("#", 2);
-// rawModulePath: "guards.security"
-// exportKey: "checkAuth" | "1" | undefined
+const hashIndex = entry.indexOf("#");
+const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex); // "guards.security"
+const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1); // "checkAuth" | "1" | undefined
 ```
 
 The `exportKey` is stored on the descriptor and used at registration time to select the appropriate export(s) from the loaded module.
@@ -220,7 +213,7 @@ When a module is loaded:
 
 1. Determine the export shape (function / array / object)
 2. If `exportKey` is defined:
-    - For objects: look up `module[exportKey]`
+    - For objects: look up `module[exportKey]`; if there is no such key and `exportKey` is a number, take the entry at that position in key order
     - For arrays: look up `module[parseInt(exportKey)]`
     - For functions: ignore `exportKey`
     - If the key doesn't exist or the value isn't a function: warn and skip
@@ -230,12 +223,12 @@ When a module is loaded:
 
 ### Every Guard Gets a Name
 
-| Export Shape  | Name Derivation                                                     |
-| ------------- | ------------------------------------------------------------------- |
-| Function      | Last segment of module path: `"guards.auth"` → `"auth"`             |
-| Array         | Module name + index: `"guards.checks"` → `"checks#0"`, `"checks#1"` |
-| Object        | Object key: `"guards.security"` → `"checkAuth"`, `"checkRole"`      |
-| Cherry-picked | Export key: `"guards.security#checkAuth"` → `"checkAuth"`           |
+| Export Shape  | Name Derivation                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Function      | Last segment of module path: `"guards.auth"` → `"auth"`                                                                                                          |
+| Array         | Module name + index: `"guards.checks"` → `"checks#0"`, `"checks#1"`                                                                                              |
+| Object        | Object key: `"guards.security"` → `"checkAuth"`, `"checkRole"`                                                                                                   |
+| Cherry-picked | Same as above for the picked export: `"guards.security#checkAuth"` → `"checkAuth"`, `"guards.checks#1"` → `"checks#1"`, `"guards.auth#key"` (function) → `"key"` |
 
 ### GuardDescriptor Type Change
 
@@ -244,10 +237,11 @@ interface GuardDescriptor {
 	readonly route: string;
 	readonly type: "enter" | "leave";
 	readonly modulePath: string;
-	readonly name: string; // NEW — derived or explicit
 	readonly exportKey?: string; // NEW — "checkAuth", "1", or undefined (without #)
 }
 ```
+
+The planned `name` field was not added; names come from the module's exports (see the implementation note below).
 
 ### Usage
 
@@ -332,7 +326,7 @@ The PR includes:
 
 - Default `guardLoading` value assertions: `"block"` → `"lazy"`
 - Guard module format validation messages: update to mention object/array shapes
-- GuardDescriptor type usage: add `name` and `exportKey` fields
+- GuardDescriptor type usage: add the `exportKey` field
 
 ### Interaction with Existing Features
 

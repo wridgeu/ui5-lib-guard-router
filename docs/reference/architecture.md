@@ -12,6 +12,7 @@ ui5-lib-guard-router/
     |-- lib/                        the core library
     |   |-- ui5.yaml                OpenUI5 1.144.0, specVersion 4.0
     |   |-- src/
+    |   |   |-- manifest.json       library manifest (minUI5Version 1.144.0)
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
@@ -351,17 +352,48 @@ navigation is blocked instead (the navigation was cancelled, the error is expect
 
 After guards complete, the result is applied inline:
 
-| Result                      | Action                                                      |
-| --------------------------- | ----------------------------------------------------------- |
-| `true`                      | `_commitNavigation()` → update state, call parent `parse()` |
-| `false`                     | `_blockNavigation()` → restore previous hash                |
-| `string` or `GuardRedirect` | `_redirect()` → `navTo()` with `replace=true`               |
+| Result                      | Action                                                                  |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `true`                      | `_commitNavigation()` → update state, call parent `parse()`             |
+| `false`                     | `_blockNavigation()` → restore previous hash (parse path)               |
+| `string` or `GuardRedirect` | `_startRedirectChain()` → `_redirect()` → `navTo()` with `replace=true` |
 
 Redirects evaluate the full guard pipeline on the target route before committing.
 Redirect chain hops pass `skipLeaveGuards: true` to `GuardPipeline.evaluate()` so
 that leave guards run only on the first hop (the initial navigation), not on each
 redirect target. Loop detection (visited-set + depth cap of 10 hops) prevents
 infinite chains.
+
+## Manifest Guards and Route Metadata
+
+`Router.ts` keeps the navigation logic and hands the rest to helper modules:
+
+| Step                         | Router code                                               | Helper                                                                                                 |
+| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read the `guardRouter` block | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
+| Lazy-mode preload hint       | constructor                                               | `sap.ui.require(paths)` without a callback, fire-and-forget                                            |
+| Pattern-tree expansion       | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
+| `guardLoading: "block"`      | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
+| `guardLoading: "lazy"`       | `initialize()` / `addRoute()` → `_registerLazyGuards()`   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
+| Export shapes and names      | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
+| Guard names in log messages  | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
+| Route metadata               | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
+
+Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
+`guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
+`guardRouter.<key> has invalid value, using default`.
+
+Every manifest guard is registered through `_registerManifestGuard()`, which calls
+`_registerGuardFromDescriptor()`. With `unknownRouteRegistration: "throw"`, imperative
+calls (`addRouteGuard`, `addLeaveGuard`, `setRouteMeta`) throw for an unknown route. A
+manifest guard on an unknown route has no caller that could catch the error, so
+`_registerManifestGuard()` logs `guardRouter.guards: failed to register "<modulePath>"`
+and skips that guard; the router still starts.
+
+Manifest guards get a name from their module (`moduleName`, `moduleName#index`, or the
+export key). Pipeline log messages show it, for example
+`Enter guard [0] "checks#0" on route "admin" threw, navigation failed`. Imperatively
+registered guards have no name and log as `Enter guard [0]`.
 
 ## Async Concurrency Control
 
@@ -557,25 +589,23 @@ navigation proceeds directly to Shell-home) in its own isolated session.
               |                             |
   packages/lib/test/qunit/    packages/demo-app/test/e2e/
               |                             |
-  +---------------------+     +---------------------------+
-  | Router.qunit.ts     |     | routing-basic.e2e.ts      |
-  | RouterGuards         |     | guard-allow.e2e.ts        |
-  |  .qunit.ts          |     | guard-block.e2e.ts        |
-  | RouterAsync          |     | guard-redirect-auth.e2e.ts |
-  |  .qunit.ts          |     | guard-redirect.e2e.ts     |
-  | RouterNavigation     |     | browser-back.e2e.ts       |
-  |  .qunit.ts          |     | direct-url.e2e.ts         |
-  | RouterSettlement     |     | multi-route.e2e.ts        |
-  |  .qunit.ts          |     | nav-button.e2e.ts         |
-  | RouterOptions        |     | leave-guard.e2e.ts        |
-  |  .qunit.ts          |     | navto-preflight.e2e.ts    |
-  | GuardPipeline        |     | redirect-chain.e2e.ts     |
-  |  .qunit.ts          |     | route-metadata.e2e.ts     |
-  | NativeRouterCompat   |     +---------------------------+
-  |  .qunit.ts          |
-  | UpstreamParity       |
-  |  .qunit.ts          |
-  +---------------------+
+  +-------------------------------+   +----------------------------+
+  | Router.qunit.ts               |   | routing-basic.e2e.ts       |
+  | RouterGuards.qunit.ts         |   | guard-allow.e2e.ts         |
+  | RouterAsync.qunit.ts          |   | guard-block.e2e.ts         |
+  | RouterNavigation.qunit.ts     |   | guard-redirect-auth.e2e.ts |
+  | RouterSettlement.qunit.ts     |   | guard-redirect.e2e.ts      |
+  | RouterOptions.qunit.ts        |   | browser-back.e2e.ts        |
+  | RouterManifestGuards.qunit.ts |   | direct-url.e2e.ts          |
+  | RouterRouteMeta.qunit.ts      |   | multi-route.e2e.ts         |
+  | GuardPipeline.qunit.ts        |   | nav-button.e2e.ts          |
+  | GuardConfig.qunit.ts          |   | leave-guard.e2e.ts         |
+  | GuardModules.qunit.ts         |   | navto-preflight.e2e.ts     |
+  | PatternTree.qunit.ts          |   | redirect-chain.e2e.ts      |
+  | RouteMeta.qunit.ts            |   | route-metadata.e2e.ts      |
+  | NativeRouterCompat.qunit.ts   |   +----------------------------+
+  | UpstreamParity.qunit.ts       |
+  +-------------------------------+
 
   Unit tests verify:            E2e tests verify:
   - Guard lifecycle             - Full browser navigation
@@ -589,6 +619,8 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   - Router options + config     - navTo preflight modes
   - Guard pipeline isolation    - Redirect chains
   - Manifest guard loading      - Route metadata in guards
+  - Config parsing, pattern
+    tree, route metadata
 
   Additional CI lanes (not part of `npm test`):
 
@@ -615,8 +647,9 @@ navigation proceeds directly to Shell-home) in its own isolated session.
   - windows-smoke: QUnit smoke on windows-latest
 
   Local only:
-  - test:mutation: Stryker mutates packages/lib/src and runs the
-    QUnit suite once per mutant (report: reports/mutation/)
+  - test:mutation: Stryker mutates packages/lib/src one file at a time
+    and runs the QUnit suite once per mutant; results are kept per file,
+    so a rerun only tests missing or changed files (report: reports/mutation/)
 ```
 
 QUnit tests run against the library in isolation using programmatic Router instances.
@@ -635,24 +668,30 @@ The demo app shows the minimal integration pattern:
    `initialize()`
 
 ```
-  manifest.json                          Component.ts
-  +----------------------------+         +----------------------------------+
-  | routing.config.routerClass |-------->| router = getRouter() as          |
-  | = "ui5.guard.router.Router" |         |            GuardRouter        |
-  |                            |         |                                  |
-  | guardRouter.guards:        |         | router.addRouteGuard("admin",    |
-  |   "*": [navigationLogger]  |         |   adminGuard)                    |
-  |   blocked: [blockedGuard]  |         |                                  |
-  |   forbidden: [forbiddenGd] |         | router.addRouteGuard("protected",|
-  |   protected: {leave: [...]}|         |   createAsyncPermissionGuard(    |
-  |                            |         |     authModel))                  |
-  | routes:                    |         |                                  |
-  |   home      -> ""          |         | router.initialize()              |
-  |   protected -> "protected" |         +----------------------------------+
-  |   blocked   -> "blocked"   |
-  |   forbidden -> "forbidden" |
-  |   admin     -> "admin"     |
-  +----------------------------+
+  manifest.json                        Component.ts
+  +--------------------------------+     +----------------------------------+
+  | routing.config.routerClass     |---->| router = getRouter() as          |
+  | = "ui5.guard.router.Router"    |     |            GuardRouter           |
+  |                                |     |                                  |
+  | guardRouter:                   |     | router.addRouteGuard("admin",    |
+  |   inheritance: "pattern-tree"  |     |   adminGuard)                    |
+  |   guards:                      |     |                                  |
+  |     "*": [navigationLogger]    |     | router.addRouteGuard("protected",|
+  |     blocked: [blockedGuard]    |     |   createAsyncPermissionGuard(    |
+  |     forbidden: [forbiddenGuard]|     |     authModel))                  |
+  |     protected: {leave: [...]}  |     |                                  |
+  |   routeMeta: employees,        |     | router.initialize()              |
+  |              employee          |     +----------------------------------+
+  |                                |
+  | routes:                        |
+  |   home      -> ""              |
+  |   protected -> "protected"     |
+  |   blocked   -> "blocked"       |
+  |   forbidden -> "forbidden"     |
+  |   admin     -> "admin"         |
+  |   employees -> "employees"     |
+  |   employee  -> "employees/{id}"|
+  +--------------------------------+
 ```
 
 The `IAsyncContentCreation` interface on the Component eliminates the need for

@@ -113,7 +113,7 @@ When the pipeline resolves inherited guards for a route and the ancestor walk pr
 
 When a guard descriptor references a route name that never gets added to the router:
 
-- **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient.
+- **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient. For a manifest guard, `"throw"` does not throw: the guard is logged (`guardRouter.guards: failed to register "<modulePath>"`) and skipped, and the router still starts.
 - The ancestor walk goes upward from the navigation target. A descriptor pointing at a non-existent route is never reached by any ancestor walk. It sits inert in the descriptor registry.
 - If someone navigates to a non-existent route, UI5's own router fails to match the route pattern before the guard pipeline is ever consulted.
 

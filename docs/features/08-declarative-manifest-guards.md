@@ -137,12 +137,12 @@ anything else                   → warning, module skipped
 
 Append `#exportKey` to a module path to select a single export instead of registering all exports from the module.
 
-| Syntax                        | Behavior                                                                                                   |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                                     |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                |
-| `"guards.checks#1"`           | Register only the export at index 1 (array index, or position in object key order)                         |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug-level warning. |
+| Syntax                        | Behavior                                                                                             |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `"guards.security"`           | Register **all** exports from module (key/array order)                                               |
+| `"guards.security#checkAuth"` | Register only the named export (object key)                                                          |
+| `"guards.checks#1"`           | Register only the export at index 1 (array index, or position in object key order)                   |
+| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message. |
 
 The `module:` prefix and `#` cherry-pick compose naturally: `"module:some.other.lib.guards#checkAuth"` resolves to module path `some/other/lib/guards` with export key `checkAuth`. Parsing splits on `#` first, then namespace resolution handles the `module:` prefix on the base path.
 
@@ -189,10 +189,13 @@ Constructor(routes, config, owner, ...)
 
 initialize()
   ├── If guardLoading === "block" and pending guards exist:
-  │     Load all guard modules via sap.ui.require (async, Promise-wrapped)
-  │     → Register resolved functions via addGuard / addRouteGuard / addLeaveGuard
+  │     Load all guard modules via sap.ui.require (GuardModules.loadGuardModules)
+  │     → Register resolved functions through _registerManifestGuard
+  │       (addGuard / addRouteGuard / leave guard registration)
   │     → Then call super.initialize()
   ├── If guardLoading === "lazy" (default) and pending guards exist:
+  │     Create guards per descriptor (GuardModules.createLazyGuards),
+  │     register them through _registerManifestGuard
   │     Bare-path descriptors: probe sap.ui.require(path)
   │     → Cache hit: register each guard of the module individually
   │     → Cache miss: register one wrapper that loads the module on first
@@ -264,6 +267,8 @@ navTo(routeName, parameters?, componentTargetInfoOrReplace?, replaceOrOptions?, 
 - `"warn"` — log warning, still register (default)
 - `"throw"` — throw synchronously, do not register (all-or-nothing for config objects)
 
+A manifest guard on an unknown route has no caller that could catch the throw. Under `"throw"`, `_registerManifestGuard` logs `guardRouter.guards: failed to register "<modulePath>"` and skips that guard; the other guards are registered and the router still starts. This holds in `"block"` and `"lazy"` mode. Before 1.7.0, lazy mode let the error escape `initialize()`, so the app did not start.
+
 ## New and Modified Types
 
 ```typescript
@@ -305,6 +310,7 @@ interface GuardContext {
 	bag: Map<string, unknown>; // added in v1.5.0
 	toMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
 	fromMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
+	ownerComponent?: UIComponent; // added in v1.7.0
 }
 
 // --- GuardRouter interface navTo overloads ---
@@ -391,6 +397,7 @@ Key properties:
 - Manifest-driven instantiation via UIComponent
 - Malformed/invalid config warns and falls back to defaults
 - `unknownRouteRegistration`: all three policies
+- `unknownRouteRegistration: "throw"` on a manifest guard: logged and skipped in `"lazy"` and `"block"` mode, other manifest guards still apply
 - `navToPreflight`: all three modes with correct settlement outcomes
 - `skipGuards` per-call override in both navTo overload positions
 - `"off"` mode defers to parse fallback, including async guard behavior

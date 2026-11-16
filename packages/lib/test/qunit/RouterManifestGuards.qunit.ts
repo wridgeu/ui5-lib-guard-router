@@ -1553,9 +1553,9 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 });
 
 // ============================================================
-// Module: Block mode catastrophic load failure
+// Module: Block mode module load failure
 // ============================================================
-QUnit.module("Router - Block mode catastrophic load failure", {
+QUnit.module("Router - Block mode module load failure", {
 	beforeEach: function () {
 		initHashChanger();
 	},
@@ -1926,6 +1926,20 @@ QUnit.test(
 		);
 	},
 );
+
+QUnit.test("block mode: modules that load after destroy() register no guards", async function (assert: Assert) {
+	const block = `${FIXTURES}/blockGuard`;
+	const destroyed = createBlockRouter({ nope: [block] }, "throw");
+	const errors = await captureErrorsAsync(async () => {
+		destroyed.initialize();
+		destroyed.destroy();
+		await loadModule(block);
+		await flushPromises();
+	});
+	assert.deepEqual(errors, [], "no guard was registered, so none failed to register");
+	assert.notOk(destroyed.isInitialized(), "the router was not initialized");
+	router = createRouter();
+});
 
 QUnit.test(
 	'unknownRouteRegistration "warn" registers a manifest guard for an unknown route with one warning',

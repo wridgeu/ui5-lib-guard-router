@@ -114,15 +114,11 @@ Same pattern, adapted for our use case:
 
 ```typescript
 // Router.ts — initialize() in "block" mode
-this._loadAndRegisterGuards(expandedDescriptors)
-    .then(() => {
-        if (!this._destroyed) super.initialize();  // ◄── sentinel check
-    })
-    .catch((err: unknown) => {
-        if (this._destroyed) return;               // ◄── sentinel check
-        Log.error(/* ... */);
-        super.initialize();
-    });
+loadGuardModules(expandedDescriptors).then((results) => {
+    if (this._destroyed) return;  // ◄── sentinel check
+    // register each module's guards, then:
+    super.initialize();
+});
 
 // Router.ts — destroy()
 override destroy(): this {
@@ -156,7 +152,9 @@ JavaScript closures keep the enclosing scope alive:
 └───────────────────────────────────────────────────────────┘
 ```
 
-`destroy()` clears the router's internal state (pipeline, descriptors, metadata, settlement resolvers) but the JavaScript object stays in memory. It has no event listeners, no registered guards, and `_destroyed === true` but it's still a valid object with callable methods. Without the sentinel check, `super.initialize()` would succeed and re-attach hash listeners on a "zombie" router that nobody holds a reference to (except the closure).
+`destroy()` clears the router's internal state (pipeline, descriptors, metadata, settlement resolvers) but the JavaScript object stays in memory. It has no event listeners and `_destroyed === true` but it's still a valid object with callable methods. Without the sentinel check, `super.initialize()` would succeed and re-attach hash listeners on a "zombie" router that nobody holds a reference to (except the closure).
+
+The sentinel check runs before anything else in the callback, so modules that arrive after `destroy()` register no guards and `super.initialize()` never runs. `loadGuardModules()` never rejects: a module that fails to load is logged and skipped, so no `.catch()` is needed.
 
 Once the Promise resolves, the closure releases `this`, and the router becomes eligible for garbage collection.
 
@@ -168,7 +166,7 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 
 1. The generation counter increments, causing the in-flight pipeline to discard its result.
 2. The `AbortController` fires, signalling guards to cancel async work (e.g. `fetch`).
-3. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazily loaded multi-guard module checks it after each of its guards that returns a Promise.
+3. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazy wrapper whose module was not cached checks it once the module has loaded and returns `false` instead of running the guards. A lazily loaded multi-guard module also checks it after each of its guards that returns a Promise.
 
 ## Summary
 

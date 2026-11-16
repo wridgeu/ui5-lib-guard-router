@@ -371,6 +371,7 @@ README's limitations section has been restructured accordingly.
 ## Opt-In Configuration (Deferred)
 
 The initial implementation is always-on (no opt-in flag). The opt-in configuration
-(e.g., `evaluateRedirectGuards`) will be added once PR #49 (declarative manifest guard
-configuration) is merged, since #49 introduces the declarative config surface where
-this option naturally belongs.
+(e.g., `evaluateRedirectGuards`) was planned for after PR #49 (declarative manifest guard
+configuration), since #49 introduces the declarative config surface where this option
+naturally belongs. #49 has merged, but the option has not been added: guards on
+redirect targets always run.
