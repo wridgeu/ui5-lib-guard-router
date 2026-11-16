@@ -1,14 +1,17 @@
 // Runs Stryker once per source file, each against a fresh UI5 server, so one run never holds
 // more than one file's mutants and a crash loses at most that file.
-// Usage: npm run test:mutation [-- <file>...]
+// Results are kept per file, so a stopped or repeated run only tests what is missing or changed.
+// Usage: npm run test:mutation [-- [--force] <file>...]
 import { spawnSync } from "node:child_process";
-import { existsSync, globSync, readdirSync, renameSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import strykerConfig from "../stryker.config.mjs";
 
 const PORT = 8084;
 const REPORT_DIR = "reports/mutation";
+const INCREMENTAL_DIR = `${REPORT_DIR}/incremental`;
 
 if (existsSync(".stryker-tmp") && readdirSync(".stryker-tmp").some((name) => name.startsWith("backup-"))) {
 	console.error(
@@ -23,12 +26,35 @@ const exclude = new Set(
 	strykerConfig.mutate.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => globSync(pattern.slice(1))),
 );
 const allFiles = include.flatMap((pattern) => globSync(pattern)).filter((file) => !exclude.has(file));
-const requested = process.argv.slice(2).map((file) => path.normalize(file));
+const args = process.argv.slice(2);
+const force = args.includes("--force");
+const requested = args.filter((arg) => arg !== "--force").map((file) => path.normalize(file));
 const files = (requested.length > 0 ? requested : allFiles).map((file) => file.split(path.sep).join("/")).toSorted();
+const baseName = (file) => path.basename(file.split(":")[0], ".ts");
+
+// Stryker sees the QUnit run as one test, so it cannot tell which kept results a test change
+// invalidates. Any change to the tests therefore discards the kept results.
+const testsHash = createHash("sha256");
+const testFiles = globSync("packages/lib/test/**/*", { withFileTypes: true })
+	.filter((entry) => entry.isFile())
+	.map((entry) => path.join(entry.parentPath, entry.name).split(path.sep).join("/"));
+for (const file of testFiles.toSorted()) {
+	testsHash.update(file).update(readFileSync(file));
+}
+const testsFingerprint = testsHash.digest("hex");
+mkdirSync(INCREMENTAL_DIR, { recursive: true });
 
 const failed = [];
 for (const file of files) {
 	console.log(`\n=== Mutating ${file} ===`);
+	// A run limited to line ranges keeps its own results, so it never replaces the whole file's.
+	const ranges = file.split(":").slice(1).join(":");
+	const key = ranges ? `${baseName(file)}.${ranges.replace(/[^\d-]+/g, "_")}` : baseName(file);
+	const incrementalFile = `${INCREMENTAL_DIR}/${key}.json`;
+	const fingerprintFile = `${INCREMENTAL_DIR}/${key}.tests-sha256`;
+	const keptFingerprint = existsSync(fingerprintFile) ? readFileSync(fingerprintFile, "utf8") : "";
+	if (force || keptFingerprint !== testsFingerprint) rmSync(incrementalFile, { force: true });
+	writeFileSync(fingerprintFile, testsFingerprint);
 	const result = spawnSync(
 		process.execPath,
 		[
@@ -44,21 +70,21 @@ for (const file of files) {
 			"--",
 			"--mutate",
 			file,
+			"--incremental",
+			"--incrementalFile",
+			incrementalFile,
 		],
 		{ stdio: "inherit" },
 	);
 	if (result.status !== 0) failed.push(file);
 
-	const name = path.basename(file, path.extname(file));
 	for (const ext of ["html", "json"]) {
 		const report = `${REPORT_DIR}/mutation.${ext}`;
-		if (existsSync(report)) renameSync(report, `${REPORT_DIR}/${name}.${ext}`);
+		if (existsSync(report)) renameSync(report, `${REPORT_DIR}/${baseName(file)}.${ext}`);
 	}
 }
 
-console.log(
-	`\nReports: ${files.map((file) => `${REPORT_DIR}/${path.basename(file, path.extname(file))}.html`).join(", ")}`,
-);
+console.log(`\nReports: ${files.map((file) => `${REPORT_DIR}/${baseName(file)}.html`).join(", ")}`);
 if (failed.length > 0) {
 	console.error(`Stryker failed for: ${failed.join(", ")}`);
 	process.exitCode = 1;

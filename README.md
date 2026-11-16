@@ -174,9 +174,9 @@ npm run test:mutation # Stryker mutation testing of packages/lib, one file at a 
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
 
-`test:mutation` runs Stryker once per source file, each against a fresh server, with two workers (one headless Chrome each), so memory stays bounded. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`. Each run edits the sources in place; if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do). Mutants that loop without end are stopped by Stryker's hit limit and count as killed.
+`test:mutation` runs Stryker once per source file, each against a fresh server, with two workers (one headless Chrome each), so memory stays bounded. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`.
 
-`test:mutation` always runs every mutant. To reuse results from the last run (`reports/stryker-incremental.json`) while iterating on library source, start the library server with `npm run start:lib` and run `npx stryker run --incremental`. Do not reuse results after changing tests: Stryker sees the QUnit run as a single test, so it cannot tell which results a test change invalidates.
+Results are kept per file (and per line range) in `reports/mutation/incremental/`, so a repeated run only tests mutants that are new or whose code changed, and a run stopped with Ctrl+C resumes where it stopped. Stryker sees the whole QUnit run as one test and cannot tell which results a test change invalidates, so any change under `packages/lib/test/` discards the kept results. Pass `--force` to discard them yourself, e.g. after changing source code that other code depends on. Each run edits the sources in place; if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do). Mutants that loop without end are stopped by Stryker's hit limit and count as killed.
 
 The vendored parity sources themselves are maintained with:
 
