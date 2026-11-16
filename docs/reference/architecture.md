@@ -179,9 +179,9 @@ directly on the class as typed fields; no separate internal interface is needed.
 
 Browser-initiated navigation (back/forward, URL bar, direct hash changes) flows through
 `parse()`. The override intercepts it to run guards before the parent router processes
-the hash. Programmatic `navTo()` calls run the guards in the preflight path (see below); the
-hash change they cause re-enters `parse()` in the committing phase, which commits without
-running the guards again.
+the hash. With the default `navToPreflight: "guard"`, programmatic `navTo()` calls run the
+guards in the preflight path (see below); the hash change they cause re-enters `parse()` in
+the committing phase, which commits without running the guards again.
 
 ```mermaid
 flowchart TD
@@ -202,9 +202,9 @@ flowchart TD
     stale -- "stale" --> discard(["discard result"])
 
     apply -- "allow" --> commit(["_commitNavigation()"])
-    apply -- "block" --> block(["_blockNavigation()"])
+    apply -- "block" --> block(["_blockNavigation()<br/>restores previous hash"])
     apply -- "redirect" --> redirect(["_startRedirectChain()"])
-    apply -- "error" --> errornav(["_errorNavigation()"])
+    apply -- "error" --> errornav(["_errorNavigation()<br/>restores previous hash"])
 ```
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
@@ -334,9 +334,13 @@ flowchart TD
     lrun -- "non-true" --> block(["block"])
     lfin -- "non-true or aborted" --> block
     gsync -- "first non-true" --> result(["block or redirect"])
-    gfin -- "first non-true" --> result
+    gfin -- "first non-true or aborted" --> result
     rsync -- "first non-true" --> result
-    rfin -- "first non-true" --> result
+    rfin -- "first non-true or aborted" --> result
+
+    phase1 -- "throws" --> error(["error<br/>(block if aborted)"])
+    phase2 -- "throws" --> error
+    phase3 -- "throws" --> error
 ```
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
@@ -407,7 +411,8 @@ sequenceDiagram
 
     Nav1->>Router: gen = 1
     Nav1->>Nav1: await guard...
-    Nav2->>Router: gen = 2
+    Nav2->>Router: _cancelPendingNavigation(): gen = 2
+    Router-->>Nav1: abort signal, settle Cancelled
     Nav2->>Nav2: await guard...
     Nav1->>Router: check: gen(1) != current(2)
     Note over Nav1: DISCARD (stale)
@@ -436,11 +441,12 @@ flowchart TD
     pending -- "no (idle or committing)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
     pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
 
-    subgraph "Guard pipeline terminal actions"
+    subgraph "Terminal actions"
         commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
         redirect["_redirect() / _applyRedirectDecision()"] -- "loop, depth cap, or no navigation:<br/>_blockNavigation()" --> fredirect["Blocked"]
+        redirect -- "no navigation, target is current hash:<br/>_commitNavigation()" --> fredirected["Redirected"]
         errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
     end
 
@@ -528,23 +534,24 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                      | Type                                | Purpose                                                                        |
-| -------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
-| `_options`                 | `ResolvedGuardRouterOptions`        | Resolved manifest options with defaults applied                                |
-| `_pipeline`                | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)               |
-| `_currentRoute`            | `string`                            | Name of the currently active route                                             |
-| `_currentHash`             | `string \| null`                    | Hash of the active route, `null` before first                                  |
-| `_phase`                   | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below)          |
-| `_parseGeneration`         | `number`                            | Monotonic counter for async invalidation                                       |
-| `_suppressedHash`          | `string \| null`                    | Hash to suppress in the next `parse()` call                                    |
-| `_settlementResolvers`     | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                                        |
-| `_lastSettlement`          | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                           |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                 | Parsed manifest guard descriptors, registered and cleared by `initialize()`    |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                 | Original manifest descriptors (for inheritance expansion on addRoute)          |
-| `_destroyed`               | `boolean`                           | Set by `destroy()`; stops block-mode loading from calling `super.initialize()` |
-| `_meta`                    | `RouteMetaStore`                    | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)  |
-| `_routeNames`              | `string[]`                          | Known route names, collected for inheritance lookups                           |
-| `_ownerComponent`          | `UIComponent \| undefined`          | Owner component from the constructor, exposed as `GuardContext.ownerComponent` |
+| Field                      | Type                                | Purpose                                                                                                                                   |
+| -------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `_options`                 | `ResolvedGuardRouterOptions`        | Resolved manifest options with defaults applied                                                                                           |
+| `_pipeline`                | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)                                                                          |
+| `_currentRoute`            | `string`                            | Name of the currently active route                                                                                                        |
+| `_currentHash`             | `string \| null`                    | Hash of the active route, `null` before first                                                                                             |
+| `_phase`                   | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below)                                                                     |
+| `_parseGeneration`         | `number`                            | Monotonic counter for async invalidation                                                                                                  |
+| `_suppressedHash`          | `string \| null`                    | Hash to suppress in the next `parse()` call                                                                                               |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                                                                                                   |
+| `_lastSettlement`          | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                                                                                      |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                 | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                               |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                 | Original manifest descriptors (for inheritance expansion on addRoute)                                                                     |
+| `_destroyed`               | `boolean`                           | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op |
+| `_blockLoad`               | `{ start: boolean } \| null`        | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`                                               |
+| `_meta`                    | `RouteMetaStore`                    | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                             |
+| `_routeNames`              | `string[]`                          | Known route names, collected for inheritance lookups                                                                                      |
+| `_ownerComponent`          | `UIComponent \| undefined`          | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                            |
 
 `RouterPhase` is a discriminated union with three variants:
 

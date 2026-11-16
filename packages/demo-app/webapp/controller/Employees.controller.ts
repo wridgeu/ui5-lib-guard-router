@@ -12,11 +12,16 @@ import BaseController from "./BaseController";
  */
 export default class EmployeesController extends BaseController {
 	override onInit(): void {
-		const router = this.getRouter<GuardRouter>();
-		router.getRoute("employees")?.attachPatternMatched(() => {
-			const meta = router.getRouteMeta("employees");
-			(this.byId("employeesMeta") as Text).setText(JSON.stringify(meta));
-		});
+		this.getRouter<GuardRouter>().getRoute("employees")?.attachPatternMatched(this._showMeta, this);
+	}
+
+	override onExit(): void {
+		this.getRouter<GuardRouter>().getRoute("employees")?.detachPatternMatched(this._showMeta, this);
+	}
+
+	private _showMeta(): void {
+		const meta = this.getRouter<GuardRouter>().getRouteMeta("employees");
+		(this.byId("employeesMeta") as Text).setText(JSON.stringify(meta));
 	}
 
 	/** Navigate to the Employee detail view for a demo employee. */

@@ -32,18 +32,6 @@ const standardHooks = {
 	},
 };
 
-const safeDestroyHooks = {
-	beforeEach: standardHooks.beforeEach,
-	afterEach: function () {
-		try {
-			router.destroy();
-		} catch {
-			/* already destroyed */
-		}
-		HashChanger.getInstance().setHash("");
-	},
-};
-
 // ============================================================
 // Module: Library integration
 // ============================================================
@@ -148,7 +136,7 @@ QUnit.test("getRoute returns undefined for unknown route", function (assert: Ass
 // ============================================================
 // Module: Guard API
 // ============================================================
-QUnit.module("Router - Guard API", safeDestroyHooks);
+QUnit.module("Router - Guard API", standardHooks);
 
 QUnit.test("addGuard / removeGuard affect navigation behavior", async function (assert: Assert) {
 	router.initialize();
@@ -509,6 +497,13 @@ QUnit.test("Double initialize is safe and guards still work", async function (as
 	await waitForRoute(router, "home");
 
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks after double initialize");
+});
+
+QUnit.test("destroy() twice does nothing the second time, like the base router", function (assert: Assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	router.destroy();
+	assert.strictEqual(router.destroy(), router, "the second call returns the router and does not throw");
 });
 
 QUnit.test("Re-initialize after stop fires routeMatched like native router", async function (assert: Assert) {

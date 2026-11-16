@@ -44,8 +44,8 @@ export default class Component extends UIComponent {
 		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
-		// Programmatic guards: these need component context (model access)
-		// that declarative manifest guards don't have via closure.
+		// Programmatic guards that close over component models. Manifest guards
+		// reach the component through context.ownerComponent instead.
 		router.addRouteGuard("admin", adminGuard);
 		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
 		router.addRouteGuard("protected", this._permissionGuard);

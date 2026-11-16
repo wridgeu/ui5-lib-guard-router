@@ -7,7 +7,6 @@ import {
 	captureWarnings,
 	captureErrorsAsync,
 	captureWarningsAsync,
-	createRouter,
 	createRouterUnsafe,
 	flushPromises,
 	getComponentRouter,
@@ -272,9 +271,6 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	// callback ignored the _destroyed flag and called super.initialize(),
 	// _bIsInitialized would be true again.
 	assert.notOk(router.isInitialized(), "Router was not re-initialized after destroy() during block loading");
-
-	// Re-assign so afterEach doesn't double-destroy (MobileRouter.destroy is not idempotent).
-	router = createRouter();
 });
 
 // ============================================================
@@ -1862,17 +1858,16 @@ QUnit.test("lazy mode: modules with no usable guards warn and allow", async func
 QUnit.test("lazy mode: destroy() while a module loads runs none of its guards", async function (assert: Assert) {
 	const path = `${FIXTURES}/lazyUncachedDestroyGuard`;
 	const probe = await loadProbe();
-	const destroyed = createLazyRouter({ protected: [path] });
-	destroyed.initialize();
+	router = createLazyRouter({ protected: [path] });
+	router.initialize();
 	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached when the guard was registered");
-	await waitForRoute(destroyed, "home");
+	await waitForRoute(router, "home");
 
-	destroyed.navTo("protected");
-	destroyed.destroy();
+	router.navTo("protected");
+	router.destroy();
 	await loadModule(path);
 	await flushPromises();
 	assert.deepEqual(probe.calls, [], "the guard did not run after destroy()");
-	router = createRouter();
 });
 
 QUnit.test(
@@ -1927,18 +1922,53 @@ QUnit.test(
 	},
 );
 
+QUnit.test("block mode: stop() while modules load keeps the router stopped", async function (assert: Assert) {
+	const block = `${FIXTURES}/blockGuard`;
+	router = createBlockRouter({ protected: [block] });
+	router.initialize();
+	captureWarnings(() => router.stop());
+	await loadModule(block);
+	await flushPromises();
+	assert.notOk(router.isInitialized(), "loading finished, but the router did not start");
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Blocked,
+		"after initialize(), the manifest guards apply",
+	);
+});
+
+QUnit.test(
+	"block mode: initialize() again while modules load does not start the router early",
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		HashChanger.getInstance().setHash("protected");
+		router = createBlockRouter({ protected: [block] });
+		const first = firstSettlement(router);
+		router.initialize();
+		const warnings = captureWarnings(() => router.initialize());
+		assert.notOk(router.isInitialized(), "not started before the guards are registered");
+		assert.deepEqual(warnings, [], "the second call is not reported as a double initialize");
+
+		assert.strictEqual(await first, NavigationOutcome.Blocked, "the start hash was guarded");
+		assert.ok(router.isInitialized());
+	},
+);
+
 QUnit.test("block mode: modules that load after destroy() register no guards", async function (assert: Assert) {
 	const block = `${FIXTURES}/blockGuard`;
-	const destroyed = createBlockRouter({ nope: [block] }, "throw");
+	router = createBlockRouter({ nope: [block] }, "throw");
 	const errors = await captureErrorsAsync(async () => {
-		destroyed.initialize();
-		destroyed.destroy();
+		router.initialize();
+		router.destroy();
 		await loadModule(block);
 		await flushPromises();
 	});
 	assert.deepEqual(errors, [], "no guard was registered, so none failed to register");
-	assert.notOk(destroyed.isInitialized(), "the router was not initialized");
-	router = createRouter();
+	assert.notOk(router.isInitialized(), "the router was not initialized");
 });
 
 QUnit.test(

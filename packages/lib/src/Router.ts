@@ -120,6 +120,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pendingGuardDescriptors: GuardDescriptor[];
 	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
+	/** Set while block-mode guard modules load; `start` says whether to initialize once they have. */
+	private _blockLoad: { start: boolean } | null = null;
 	private _meta: RouteMetaStore;
 	private _routeNames: string[] = [];
 	private readonly _ownerComponent: UIComponent | undefined;
@@ -167,10 +169,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * In `"lazy"` mode, lazy wrappers are registered synchronously
 	 * and `super.initialize()` is called immediately.
 	 *
+	 * While block-mode modules load, the router is not initialized yet:
+	 * calling `initialize()` again changes nothing, and `stop()` cancels
+	 * the pending start until `initialize()` is called again.
+	 *
 	 * @override sap.ui.core.routing.Router#initialize
 	 * @since 1.0.1
 	 */
 	override initialize(): this {
+		if (this._blockLoad) {
+			this._blockLoad.start = true;
+			return this;
+		}
 		if (this._pendingGuardDescriptors.length === 0) {
 			return super.initialize();
 		}
@@ -192,12 +202,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// "block" mode: load all modules, then register their guards in declaration order
 		// and initialize. Load and registration failures are logged per module and never
 		// reject. A router destroyed while modules load stays destroyed.
+		const blockLoad = { start: true };
+		this._blockLoad = blockLoad;
 		loadGuardModules(expandedDescriptors).then((results) => {
+			this._blockLoad = null;
 			if (this._destroyed) return;
 			for (const { descriptor, guards } of results) {
 				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
 			}
-			super.initialize();
+			if (blockLoad.start) super.initialize();
 		});
 		return this;
 	}
@@ -884,6 +897,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.0.1
 	 */
 	override stop(): this {
+		if (this._blockLoad) this._blockLoad.start = false;
 		// Cancel first so in-flight navigationSettled() resolvers receive the
 		// Cancelled result before _lastSettlement is cleared below.
 		this._cancelPendingNavigation();
@@ -1314,10 +1328,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Clean up guards on destroy. Bumps generation to discard pending async results.
+	 * A second call does nothing, like `sap.ui.core.routing.Router#destroy`.
 	 *
 	 * @since 1.0.1
 	 */
 	override destroy(): this {
+		if (this._destroyed) return this;
 		this._destroyed = true;
 		this._pipeline.clear();
 		this._pendingGuardDescriptors = [];

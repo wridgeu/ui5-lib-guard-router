@@ -270,10 +270,12 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 
 ### Lifecycle
 
-| Method      | Behavior                                                                                                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `stop()`    | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
-| `destroy()` | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`                                                                                                                                              |
+| Method                   | Behavior                                                                                                                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stop()`                 | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
+| `initialize()`           | With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded; until then `isInitialized()` is `false`, and calling `initialize()` again changes nothing                                                                       |
+| `stop()` (while loading) | With `guardLoading: "block"`, `stop()` before the modules have loaded cancels the start. The guards are still registered when loading finishes; the router starts on the next `initialize()`                                                                 |
+| `destroy()`              | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`. Guard modules that finish loading afterwards register nothing. A second call does nothing, like the base `sap.ui.core.routing.Router`       |
 
 ### Navigation settlement
 

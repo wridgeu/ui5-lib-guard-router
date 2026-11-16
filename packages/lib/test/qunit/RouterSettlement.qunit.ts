@@ -23,18 +23,6 @@ const standardHooks = {
 	},
 };
 
-const safeDestroyHooks = {
-	beforeEach: standardHooks.beforeEach,
-	afterEach: function () {
-		try {
-			router.destroy();
-		} catch {
-			/* already destroyed */
-		}
-		HashChanger.getInstance().setHash("");
-	},
-};
-
 // ============================================================
 // Module: navigationSettled()
 // ============================================================
@@ -492,7 +480,7 @@ QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async 
 // ============================================================
 // Module: Destroy during redirect
 // ============================================================
-QUnit.module("Router - Destroy during redirect", safeDestroyHooks);
+QUnit.module("Router - Destroy during redirect", standardHooks);
 
 QUnit.test("Destroy during redirect settles pending navigationSettled as cancelled", async function (assert: Assert) {
 	const redirectGuard = Promise.withResolvers<string>();
@@ -518,7 +506,7 @@ QUnit.test("Destroy during redirect settles pending navigationSettled as cancell
 // ============================================================
 // Module: navigationSettled after destroy
 // ============================================================
-QUnit.module("Router - navigationSettled after destroy", safeDestroyHooks);
+QUnit.module("Router - navigationSettled after destroy", standardHooks);
 
 QUnit.test("navigationSettled called after destroy resolves immediately", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => true);

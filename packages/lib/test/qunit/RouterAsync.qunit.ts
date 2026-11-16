@@ -25,18 +25,6 @@ const standardHooks = {
 	},
 };
 
-const safeDestroyHooks = {
-	beforeEach: standardHooks.beforeEach,
-	afterEach: function () {
-		try {
-			router.destroy();
-		} catch {
-			/* already destroyed */
-		}
-		HashChanger.getInstance().setHash("");
-	},
-};
-
 // ============================================================
 // Module: Sync until a guard returns a Promise
 // ============================================================
@@ -621,7 +609,7 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 // ============================================================
 // Module: Stop during pending async guard
 // ============================================================
-QUnit.module("Router - Stop during pending async guard", safeDestroyHooks);
+QUnit.module("Router - Stop during pending async guard", standardHooks);
 
 QUnit.test(
 	"Stopping router while async guard is pending aborts and prevents navigation",
@@ -658,7 +646,7 @@ QUnit.test(
 // ============================================================
 // Module: AbortSignal on GuardContext
 // ============================================================
-QUnit.module("Router - AbortSignal on GuardContext", safeDestroyHooks);
+QUnit.module("Router - AbortSignal on GuardContext", standardHooks);
 
 QUnit.test("Guard context includes an AbortSignal", async function (assert: Assert) {
 	let capturedSignal: AbortSignal | null = null;

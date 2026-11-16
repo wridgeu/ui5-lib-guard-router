@@ -158,6 +158,17 @@ The sentinel check runs before anything else in the callback, so modules that ar
 
 Once the Promise resolves, the closure releases `this`, and the router becomes eligible for garbage collection.
 
+### stop() and initialize() while modules load
+
+UI5's router stays stopped after `stop()` until `initialize()` is called again, and treats a second `initialize()` as a no-op. Block mode keeps both rules while modules load. `_blockLoad` is set for the duration of the load, and its `start` flag decides whether the load callback calls `super.initialize()`:
+
+- `stop()` clears `start`. The guards are still registered when loading finishes, but the router does not start.
+- `initialize()` sets `start` and returns. A second call while loading therefore does not start the router before its manifest guards exist, and a call after `stop()` restores the pending start.
+
+### destroy() twice
+
+`sap.ui.core.routing.Router#destroy` returns early when the router is already destroyed, but `sap.m.routing.Router#destroy` does not and fails on its cleared target handler. The guard router returns early on `_destroyed`, so destroying it twice (e.g. by the app and later by its component) is safe.
+
 ## Lazy mode and destroy safety
 
 In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` is synchronous -- there is no async module load before `super.initialize()`, so the destroy-during-init race window does not exist. The `_destroyed` sentinel check is only needed for block mode, where `initialize()` defers `super.initialize()` until modules have loaded.
