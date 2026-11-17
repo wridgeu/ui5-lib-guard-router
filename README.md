@@ -174,7 +174,7 @@ npm run test:mutation # Stryker mutation testing of packages/lib, one file at a 
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
 
-`test:mutation` runs Stryker once per source file, each against a fresh server, with two workers (one headless Chrome each), so memory stays bounded. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`.
+`test:mutation` runs Stryker once per source file, each against a fresh server, with two workers (one headless Chrome each), so memory stays bounded. Each test page is limited to a 1 GB JavaScript heap, and every run gets its own Chrome profile folder, which is deleted afterwards. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`.
 
 Results are kept per file (and per line range) in `reports/mutation/incremental/`, so a repeated run only tests mutants that are new or whose code changed, and a run stopped with Ctrl+C resumes where it stopped. Stryker sees the whole QUnit run as one test and cannot tell which results a test change invalidates, so any change under `packages/lib/test/` discards the kept results. Pass `--force` to discard them yourself, e.g. after changing source code that other code depends on. Each run edits the sources in place; if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do). Mutants that loop without end are stopped by Stryker's hit limit and count as killed.
 

@@ -4,7 +4,18 @@
 // Usage: npm run test:mutation [-- [--force] <file>...]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	globSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import strykerConfig from "../stryker.config.mjs";
@@ -58,6 +69,8 @@ for (const file of files) {
 	const keptFingerprint = existsSync(fingerprintFile) ? readFileSync(fingerprintFile, "utf8") : "";
 	if (force || keptFingerprint !== testsFingerprint) rmSync(incrementalFile, { force: true });
 	writeFileSync(fingerprintFile, testsFingerprint);
+	// Each wdio run deletes its own Chrome profile, but a run Stryker kills on timeout cannot.
+	const chromeProfiles = mkdtempSync(path.join(tmpdir(), "ui5-guard-mutation-"));
 	const result = spawnSync(
 		process.execPath,
 		[
@@ -77,8 +90,9 @@ for (const file of files) {
 			"--incrementalFile",
 			incrementalFile,
 		],
-		{ stdio: "inherit" },
+		{ stdio: "inherit", env: { ...process.env, MUTATION_CHROME_PROFILES: chromeProfiles } },
 	);
+	rmSync(chromeProfiles, { recursive: true, force: true, maxRetries: 5 });
 	if (result.status !== 0) failed.push(file);
 
 	for (const ext of ["html", "json"]) {
