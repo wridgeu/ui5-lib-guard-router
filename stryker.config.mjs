@@ -15,4 +15,8 @@ export default {
 	reporters: ["clear-text", "progress", "html", "json"],
 	// Each worker runs its own wdio + headless Chrome; a core-based share starts too many on large machines.
 	concurrency: 2,
+	// A suite run varies by up to 15 s between runs, and a hung QUnit test fails after its own 10 s
+	// testTimeout. The allowance must cover both, so a run is only marked Timeout when it truly
+	// never finishes, not when the machine was slow or a few tests timed out and failed.
+	timeoutMS: 60000,
 };

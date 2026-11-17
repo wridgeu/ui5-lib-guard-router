@@ -143,8 +143,8 @@ QUnit.test('"throw" prevents registration and throws', function (assert: Assert)
 	// Act & Assert: both registration methods throw
 	assert.throws(
 		() => router.addRouteGuard("nonexistent", () => true),
-		/unknown route/i,
-		"addRouteGuard throws for unknown route",
+		/^Error: addRouteGuard called for unknown route "nonexistent"\. Set guardRouter\.unknownRouteRegistration to "warn" or "ignore" to allow this\.$/,
+		"addRouteGuard throws for unknown route and says how to allow it",
 	);
 
 	assert.throws(
@@ -269,4 +269,14 @@ QUnit.test("skipGuards does not affect subsequent navTo calls", async function (
 	router.navTo("forbidden");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "next navTo without skipGuards is still guarded");
+});
+
+QUnit.test("skipGuards navTo settles exactly once", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+	const statuses: string[] = [];
+	router.attachNavigationSettled((event) => statuses.push(event.getParameter("status") as string));
+
+	router.navTo("protected", {}, false, { skipGuards: true });
+
+	assert.deepEqual(statuses, [NavigationOutcome.Committed], "one settlement, in the same tick");
 });

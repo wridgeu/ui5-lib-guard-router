@@ -172,12 +172,17 @@ empty `fromRoute`; that would hide context from guard functions.
 private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
     // 1. Resolve target route and hash
     const targetName = typeof target === "string" ? target : target.route;
-    const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
     const targetRoute = this.getRoute(targetName);
-    // ... resolve targetHash via targetRoute.getURL(targetParameters) ...
+    if (!targetRoute) {
+        // Unknown route: log a warning and block the chain
+        this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+        return;
+    }
+    // Throws for missing mandatory parameters, like the native navTo()
+    const targetHash = targetRoute.getURL(typeof target === "string" ? {} : (target.parameters ?? {}));
 
     // 2. Loop detection (two separate checks)
-    if (targetHash !== null && chain.visited.has(targetHash)) {
+    if (chain.visited.has(targetHash)) {
         Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
@@ -187,17 +192,9 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
     }
-    if (targetHash !== null) {
-        chain.visited.add(targetHash);
-    }
+    chain.visited.add(targetHash);
 
-    // 3. Unknown route / unresolvable hash: attempt navTo, fall back to blocked
-    if (targetHash === null) {
-        // ... enter committing/redirect, call navTo, check if settlement occurred ...
-        return;
-    }
-
-    // 4. Build guard context for the redirect target
+    // 3. Build guard context for the redirect target
     const routeInfo = this.getRouteInfoByHash(targetHash);
     const context: GuardContext = {
         toRoute: routeInfo?.name ?? "",
@@ -212,7 +209,7 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         ownerComponent: this._ownerComponent,
     };
 
-    // 5. Evaluate guards (skip leave guards -- they already ran on first hop)
+    // 4. Evaluate guards (skip leave guards -- they already ran on first hop)
     const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
     // 6. Handle sync result
@@ -247,16 +244,15 @@ private _applyRedirectDecision(
             // directly (existing bypass), which changes the hash and triggers parse(),
             // which sees committing and calls _commitNavigation().
             const targetName = typeof target === "string" ? target : target.route;
-            this._phase = { kind: "committing", hash: targetHash, route: targetName, origin: "redirect" };
+            this._phase = { kind: "committing", route: targetName, origin: "redirect" };
             if (typeof target === "string") {
                 this.navTo(target, {}, {}, true);
             } else {
                 this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
             }
-            // Safety net: if navTo didn't produce a settlement (e.g. unknown route
-            // or redirect to current hash where HashChanger doesn't fire), handle it.
-            // The redirectsToCurrentHash path is kept because the HashChanger does
-            // not fire hashChanged for a same-hash navTo.
+            // If parse() was not reached (the hash already is the target, or component
+            // targets change it later), commit the target directly:
+            // this._commitNavigation(targetHash, targetName)
             break;
         }
         case "block":
@@ -289,10 +285,12 @@ and discards the stale result.
 
 When a redirect target's hash equals `_currentHash` (the user is already on the
 target), the redirect target's guards are evaluated normally. If they allow, the
-chain commits with `NavigationOutcome.Redirected`. The `redirectsToCurrentHash`
-safety net in `_applyRedirectDecision` is kept because UI5's `HashChanger` does
+chain commits with `NavigationOutcome.Redirected`. UI5's `HashChanger` does
 not fire `hashChanged` for a same-hash `navTo()`, so the normal commit path
-(parse → commitNavigation) would not trigger without it.
+(parse → commitNavigation) does not trigger; `_applyRedirectDecision` then commits
+the target directly. The same direct commit covers a redirect with non-empty
+`componentTargetInfo`, whose hash change arrives later, and a redirect to the hash
+the URL already shows.
 
 ### Settlement
 
@@ -324,13 +322,13 @@ Both `_applyPreflightDecision` and `_applyDecision` call `_startRedirectChain()`
 guard decision is "redirect". It creates the initial chain context:
 
 ```typescript
-private _startRedirectChain(target: string | GuardRedirect, hash: string, restoreHash: boolean, bag: Map<string, unknown>, attempt: NavigationAttempt): void {
+private _startRedirectChain(target: string | GuardRedirect, hash: string, bag: Map<string, unknown>, attempt: NavigationAttempt): void {
     const visited = new Set<string>();
     visited.add(hash); // hash of the route whose guard redirected
     this._redirect(target, {
         visited,
         attemptedHash: hash,
-        restoreHash, // false for preflight (hash never changed), true for parse
+        restoreHash: attempt.restoreHash, // true for parse, and for a navTo that superseded a pending hash change
         fromRoute: this._currentRoute,
         fromHash: this._currentHash ?? "",
         signal: attempt.controller.signal,
@@ -365,7 +363,7 @@ README's limitations section has been restructured accordingly.
 11. Leave guards run only on first hop, not on each redirect hop
 12. Redirect to current hash: guards evaluate, chain commits with `Redirected`
 13. Guard on redirect target throws -> entire chain settles as `Error` (pipeline error handling)
-14. Redirect target is unknown route -> chain blocked with warning (existing safety net)
+14. Redirect target is unknown route -> chain blocked with warning
 15. Self-redirect (A -> A with same hash) detected as loop immediately
 
 ## Opt-In Configuration (Deferred)

@@ -69,6 +69,14 @@ QUnit.test("merges ancestors shallowest-first, manifest then runtime at each lev
 	assert.deepEqual(store.get("employee"), { root: true, section: "staff", tab: "list", level: "employee" });
 });
 
+QUnit.test("merges by pattern depth, not by the order routes are declared in", function (assert) {
+	const store = new RouteMetaStore(
+		manifest({ employee: { level: "employee" }, employees: { level: "employees" }, home: { level: "home" } }),
+		() => ROUTES.toReversed(),
+	);
+	assert.deepEqual(store.get("resume"), { level: "employee" });
+});
+
 QUnit.test("a route without a pattern only sees its own metadata", function (assert) {
 	const store = new RouteMetaStore(manifest({ home: { root: true }, loose: { own: 1 } }), () => ROUTES);
 	assert.deepEqual(store.get("loose"), { own: 1 });

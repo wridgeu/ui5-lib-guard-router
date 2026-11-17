@@ -8,6 +8,7 @@ import {
 	createRouterWithOptionsUnsafe,
 	createHierarchicalRouter,
 	GuardRouterClass,
+	HIERARCHICAL_ROUTES,
 	initHashChanger,
 	setRouteMetaUnsafe,
 	getHash,
@@ -487,6 +488,14 @@ QUnit.test("merged manifest+runtime metadata result is frozen", function (assert
 	assert.strictEqual(meta.level, 1, "manifest keys preserved");
 });
 
+QUnit.test('setRouteMeta("") is not subject to the unknown-route policy', function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
+
+	router.setRouteMeta("", { landing: true });
+
+	assert.deepEqual(router.getRouteMeta(""), { landing: true }, "metadata for the root state is stored");
+});
+
 // ============================================================
 // Module: Router - Guard and metadata inheritance
 // ============================================================
@@ -774,6 +783,48 @@ QUnit.test("guard inheritance works in lazy loading mode", async function (asser
 		NavigationOutcome.Blocked,
 		"ancestor guard propagated to child in lazy loading mode",
 	);
+});
+
+QUnit.test("routes declared as an object map inherit under the names UI5 gives them", async function (assert: Assert) {
+	// UI5 names a route after its key unless the entry has a name of its own.
+	router = new GuardRouterClass(
+		{
+			home: { pattern: "" },
+			employees: { pattern: "employees" },
+			item: { name: "employee", pattern: "employees/{id}" },
+		},
+		{
+			async: true,
+			guardRouter: {
+				guardLoading: "block",
+				inheritance: "pattern-tree",
+				routeMeta: { employees: { section: "hr" } },
+				guards: { employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"] },
+			},
+		},
+	);
+
+	assert.deepEqual(router.getRouteMeta("employee"), { section: "hr" }, "child inherits its ancestor's metadata");
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("employee", { id: "1" });
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Blocked,
+		"child inherits its ancestor's manifest guard",
+	);
+});
+
+QUnit.test("metadata propagates when all routes are added after construction", function (assert: Assert) {
+	router = new GuardRouterClass(undefined, {
+		async: true,
+		guardRouter: { inheritance: "pattern-tree", routeMeta: { employees: { section: "hr" } } },
+	});
+	router.addRoute({ name: "employees", pattern: "employees" });
+	router.addRoute({ name: "employee", pattern: "employees/{id}" });
+
+	assert.deepEqual(router.getRouteMeta("employee"), { section: "hr" }, "child inherits from its ancestor");
 });
 
 // ============================================================
@@ -1094,6 +1145,19 @@ QUnit.module("Router - Root-pattern route as universal ancestor", {
 		router.destroy();
 		HashChanger.getInstance().setHash("");
 	},
+});
+
+QUnit.test("a route without a pattern is left out of pattern-tree inheritance", function (assert: Assert) {
+	router = new GuardRouterClass([...HIERARCHICAL_ROUTES, { name: "loose" }], {
+		async: true,
+		guardRouter: {
+			inheritance: "pattern-tree",
+			routeMeta: { home: { requiresAuth: true }, loose: { own: 1 } },
+		},
+	});
+
+	assert.deepEqual(router.getRouteMeta("loose"), { own: 1 }, "it sees only its own metadata");
+	assert.strictEqual(router.getRouteMeta("employee").requiresAuth, true, "other routes still inherit");
 });
 
 QUnit.test(

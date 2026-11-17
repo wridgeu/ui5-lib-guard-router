@@ -180,6 +180,14 @@ export function getHash(): string {
 }
 
 /**
+ * A captured log call. UI5 passes objects such as the router itself as details; keeping them
+ * would hand a cyclic value to a failing assertion, which wdio cannot transfer out of the browser.
+ */
+function toLogEntry(message: string, details: unknown): CapturedLogEntry {
+	return { message, details: details === undefined ? undefined : String(details) };
+}
+
+/**
  * Capture `Log.warning` calls during `fn` using a Sinon stub.
  * The stub is restored automatically via `finally` to prevent leaks.
  */
@@ -190,10 +198,7 @@ export function captureWarnings(fn: () => void): CapturedWarning[] {
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => ({
-		message: call.args[0] as string,
-		details: call.args[1] as string | undefined,
-	}));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
 }
 
 /**
@@ -207,10 +212,7 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => ({
-		message: call.args[0] as string,
-		details: call.args[1] as string | undefined,
-	}));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
 }
 
 /**
@@ -220,8 +222,8 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 export function captureErrors(fn: () => void): CapturedLogEntry[] {
 	const errors: CapturedLogEntry[] = [];
 	const original = Log.error;
-	Log.error = (message: string, details?: string) => {
-		errors.push({ message, details });
+	Log.error = (message: string, details?: unknown) => {
+		errors.push(toLogEntry(message, details));
 	};
 	try {
 		fn();
@@ -238,8 +240,8 @@ export function captureErrors(fn: () => void): CapturedLogEntry[] {
 export async function captureErrorsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
 	const errors: CapturedLogEntry[] = [];
 	const original = Log.error;
-	Log.error = (message: string, details?: string) => {
-		errors.push({ message, details });
+	Log.error = (message: string, details?: unknown) => {
+		errors.push(toLogEntry(message, details));
 	};
 	try {
 		await fn();

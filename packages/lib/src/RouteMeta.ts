@@ -66,12 +66,8 @@ export default class RouteMetaStore {
 		if (!own) return this._resolveOwn(routeName);
 
 		const levels = routes
-			.filter(
-				(r) =>
-					r.name !== routeName &&
-					(this._manifest.has(r.name) || this._runtime.has(r.name)) &&
-					isPatternAncestor(r.pattern, own.pattern),
-			)
+			// Only the empty pattern counts as its own ancestor; merging a level twice changes nothing.
+			.filter((r) => isPatternAncestor(r.pattern, own.pattern))
 			.toSorted((a, b) => patternSegments(a.pattern).length - patternSegments(b.pattern).length)
 			.map((r) => r.name);
 		levels.push(routeName);

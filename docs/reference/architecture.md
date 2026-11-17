@@ -185,11 +185,11 @@ the committing phase, which commits without running the guards again.
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> suppress{_suppressedHash set?}
-    suppress -- "yes" --> smatch{hash matches?}
-    smatch -- "yes" --> sclear["clear _suppressedHash"] --> ret(["return"])
-    smatch -- "no" --> sclear2["clear _suppressedHash"] --> redir
-    suppress -- "no" --> redir{committing phase?}
+    start(["parse(newHash)"]) --> destroyed{"router destroyed?"}
+    destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
+    destroyed -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
+    suppress -- "yes" --> sclear["clear _suppressedHash"] --> ret(["return"])
+    suppress -- "no" --> sclear2["clear _suppressedHash"] --> redir{committing phase?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
@@ -197,7 +197,7 @@ flowchart TD
 
     setup --> evaluate["_pipeline.evaluate(context)"]
     evaluate -- "decision" --> apply{"_applyDecision()"}
-    evaluate -- "Promise" --> stale{"same generation and<br/>still evaluating?"}
+    evaluate -- "Promise" --> stale{"same generation?"}
     stale -- "current" --> apply
     stale -- "stale" --> discard(["discard result"])
 
@@ -214,8 +214,9 @@ chain after another abort-signal check, so they are async as well; they just don
 `await` per guard unless one of their guards returns a Promise. `evaluate()` returns a
 Promise, so the navigation as a whole is async. Async-ness is per navigation: the next
 navigation starts synchronously again.
-When the decision arrives, `parse()` and `navTo()` discard it if `_parseGeneration` changed or
-the router left the evaluating phase; redirect hops check only `_parseGeneration`.
+When the decision arrives, `parse()`, `navTo()` and redirect hops discard it if
+`_parseGeneration` changed. Everything that ends an evaluating phase from outside the attempt
+goes through `_cancelPendingNavigation()`, which bumps the counter.
 
 A lazily loaded guard module that is not in the module cache yet returns a Promise while it
 loads, so it makes its navigation async from that guard on. Once loaded, its guards run
@@ -232,9 +233,12 @@ synchronously again, unless they return Promises themselves.
 2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressedHash` mechanism
    depends on this: `_restoreHash()` stores the hash to suppress, calls `replaceHash`,
    and the resulting synchronous `parse()` sees the stored hash and returns immediately.
-   If UI5 ever changes `replaceHash` to fire `hashChanged` asynchronously, the stored
-   hash would be cleared before `parse()` can check it, causing a double navigation.
-   A QUnit test validates this assumption.
+   Without the suppression the restore would reach the same-hash check, which cancels the
+   pending navigation: a navigation that a `navigationSettled` listener started for the
+   Blocked or Error settlement, before the restore, would be lost. If UI5 ever changes
+   `replaceHash` to fire `hashChanged` asynchronously, the stored hash would be cleared
+   before `parse()` can check it, with the same effect. A QUnit test covers this
+   ("Async navTo started from a Blocked settlement handler survives the hash restore").
 
 3. **Redirect targets are evaluated by the guard pipeline with loop detection.**
    When a guard redirects from route A to route B, the router evaluates route B's
@@ -255,10 +259,10 @@ Programmatic navigation:
   navTo(route, params)
     → _pipeline.evaluate(context)
         → allow  → enter committing/preflight phase, call super.navTo()
-        → block  → _blockNavigation(hash, restoreHash=false), flush Blocked settlement
+        → block  → _blockNavigation(hash, attempt.restoreHash), flush Blocked settlement
         → redirect → _startRedirectChain() → _redirect(target): evaluates the target's guards,
                      then on allow enters committing/redirect phase and calls this.navTo(target, replace=true)
-        → error  → _errorNavigation(error, hash, restoreHash=false), flush Error settlement
+        → error  → _errorNavigation(error, hash, attempt.restoreHash), flush Error settlement
 
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
@@ -273,13 +277,32 @@ Browser-initiated navigation (back/forward, URL bar, direct hash change):
 ### The preflight handshake
 
 When `navTo()` runs guards and they allow navigation, the router enters the
-committing/preflight phase (which records the approved hash and route) before calling
+committing/preflight phase (which records the approved route) before calling
 `super.navTo()`. The parent router triggers a hash change, which re-enters through
 `parse()`. On entry, `parse()` sees the committing phase and calls `_commitNavigation()`
 with the incoming hash, which transitions to idle and commits without re-running guards.
 If `super.navTo()` does not change the hash, `parse()` is not called and `navTo()` commits
 directly. This avoids double evaluation while keeping `parse()` as the authoritative
 commit path.
+
+A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
+phase and calls `navTo(target, replace=true)`. If `parse()` is not reached, because the hash
+already is the target or because component targets change it later, it commits the target
+directly. The navigation settles once, as `Redirected`, and the target's guards do not run
+again when the hash change arrives.
+
+### navTo() superseding a pending hash change
+
+A hash change whose guards are still pending has already moved the URL. A `navTo()` that
+supersedes it takes over the duty to put the URL back (`NavigationAttempt.restoreHash`,
+`false` for a `navTo()` that superseded nothing):
+
+- Blocked, failed, or blocked in its redirect chain: the hash is restored to `_currentHash`,
+  as on the `parse()` path.
+- `navTo()` to the current route or to an unknown route: `_cancelPendingNavigation(true)`
+  restores the hash right away, because no navigation follows.
+- Allowed or redirected: the navigation moves the URL itself and nothing is restored. The
+  superseded hash stays in the browser history, as with the base router.
 
 ### Why parse() remains authoritative
 
@@ -359,7 +382,7 @@ After guards complete, the result is applied inline:
 | Result                      | Action                                                                  |
 | --------------------------- | ----------------------------------------------------------------------- |
 | `true`                      | `_commitNavigation()` → update state, call parent `parse()`             |
-| `false`                     | `_blockNavigation()` → restore previous hash (parse path)               |
+| `false`                     | `_blockNavigation()` → restore previous hash (if the URL was moved)     |
 | `string` or `GuardRedirect` | `_startRedirectChain()` → `_redirect()` → `navTo()` with `replace=true` |
 
 Redirects evaluate the full guard pipeline on the target route before committing.
@@ -375,7 +398,7 @@ infinite chains.
 | Step                         | Router code                                               | Helper                                                                                                 |
 | ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Read the `guardRouter` block | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
-| Lazy-mode preload hint       | constructor                                               | `sap.ui.require(paths)` without a callback, fire-and-forget                                            |
+| Lazy-mode preload hint       | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
 | Pattern-tree expansion       | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
 | `guardLoading: "block"`      | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
 | `guardLoading: "lazy"`       | `initialize()` / `addRoute()` → `_registerLazyGuards()`   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
@@ -445,8 +468,7 @@ flowchart TD
         commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
         block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
-        redirect["_redirect() / _applyRedirectDecision()"] -- "loop, depth cap, or no navigation:<br/>_blockNavigation()" --> fredirect["Blocked"]
-        redirect -- "no navigation, target is current hash:<br/>_commitNavigation()" --> fredirected["Redirected"]
+        redirect["_redirect()"] -- "unknown target, loop, or depth cap:<br/>_blockNavigation()" --> fredirect["Blocked"]
         errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
     end
 
@@ -460,11 +482,11 @@ flowchart TD
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
 `_errorNavigation`, `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
 with the same `NavigationResult` and fires the `navigationSettled` event via
-`EventProvider.fireEvent()`. `_redirect()` and `_applyRedirectDecision()` include a safety net that
-calls `_blockNavigation()` when `navTo()` produces no settlement (e.g. redirect to a
-nonexistent route when the hash is already empty), because the observable
-outcome is that the user stays on the current route. A redirect to the current hash
-settles as `Redirected` instead. This ensures:
+`EventProvider.fireEvent()`. `_redirect()` calls `_blockNavigation()` when the redirect target
+route does not exist, because the observable outcome is that the user stays on the current
+route. An allowed redirect always ends in `_commitNavigation()`, through `parse()` or
+directly (redirect to the hash the URL already shows, component targets), and settles as
+`Redirected`. This ensures:
 
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
@@ -555,11 +577,11 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 `RouterPhase` is a discriminated union with three variants:
 
-| Phase        | Shape                                                                                               | Description                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `idle`       | `{ kind: "idle" }`                                                                                  | No navigation in progress                                                                |
-| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt }`                                                | Guards are running; attempt carries hash, route, AbortController, and generation counter |
-| `committing` | `{ kind: "committing", hash: string, route: string, origin: "preflight" \| "redirect" \| "parse" }` | Navigation is being committed; `origin` distinguishes the entry path                     |
+| Phase        | Shape                                                                                 | Description                                                                              |
+| ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `idle`       | `{ kind: "idle" }`                                                                    | No navigation in progress                                                                |
+| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt }`                                  | Guards are running; attempt carries hash, route, AbortController, and generation counter |
+| `committing` | `{ kind: "committing", route: string, origin: "preflight" \| "redirect" \| "parse" }` | Navigation is being committed; `origin` distinguishes the entry path                     |
 
 ## Monorepo Tooling
 

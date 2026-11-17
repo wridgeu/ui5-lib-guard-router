@@ -1217,6 +1217,52 @@ QUnit.test("lazy mode: a module that fails to load fails the navigation", async 
 	);
 });
 
+QUnit.test("lazy mode: a failed preload is not an uncaught error", async function (assert: Assert) {
+	const path = `${FIXTURES}/preloadDoesNotExist`;
+	// Unhandled rejections are reported in order, so everything the preload causes is
+	// reported before the marker this test rejects after the load has failed.
+	const marker = new Error("marker");
+	const unhandled: string[] = [];
+	const markerReported = new Promise<void>((resolve) => {
+		const onUnhandled = (event: PromiseRejectionEvent): void => {
+			if (event.reason !== marker) {
+				unhandled.push(String(event.reason));
+				return;
+			}
+			event.preventDefault();
+			window.removeEventListener("unhandledrejection", onUnhandled);
+			resolve();
+		};
+		window.addEventListener("unhandledrejection", onUnhandled);
+	});
+	const preloadWarnings = await captureWarningsAsync(async () => {
+		router = createLazyRouter({ protected: [path] });
+		await loadModule(path).catch(() => undefined);
+		void Promise.reject(marker);
+		await markerReported;
+	});
+	assert.deepEqual(unhandled, [], "the failed preload rejects no promise without a handler");
+	assert.deepEqual(
+		preloadWarnings.map((w) => w.message).filter((message) => message.startsWith("guardRouter.")),
+		[],
+		"the preload itself reports nothing",
+	);
+
+	router.initialize();
+	await waitForRoute(router, "home");
+	const warnings = await captureWarningsAsync(async () => {
+		await captureErrorsAsync(async () => {
+			router.navTo("protected");
+			assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Error, "navigation fails");
+		});
+	});
+	assert.deepEqual(
+		warnings.map((w) => w.message).filter((message) => message.startsWith("guardRouter.")),
+		[`guardRouter.guards: lazy load of "${path}" failed`],
+		"the failure is reported once, when the guard runs",
+	);
+});
+
 QUnit.test("lazy mode: cached module registers its guards at initialize", async function (assert: Assert) {
 	const path = `${FIXTURES}/lazyCachedGuard`;
 	await loadModule(path);
@@ -2000,6 +2046,27 @@ QUnit.test(
 );
 
 QUnit.test(
+	'unknownRouteRegistration "warn" reports a manifest leave guard for an unknown route as addLeaveGuard',
+	async function (assert: Assert) {
+		const leave = `${FIXTURES}/leaveGuard`;
+		await loadModule(leave);
+		router = createRouterUnsafe(ROUTES, {
+			async: true,
+			guardRouter: {
+				guardLoading: "lazy",
+				unknownRouteRegistration: "warn",
+				guards: { nope: { leave: [leave] } },
+			},
+		});
+		const warnings = captureWarnings(() => router.initialize());
+		assert.deepEqual(
+			warnings.map((w) => [w.message, w.details]),
+			[["addLeaveGuard: unknown route, guard registered anyway", "nope"]],
+		);
+	},
+);
+
+QUnit.test(
 	"addRoute() registers an inherited guard whose module is not cached yet (lazy mode)",
 	async function (assert: Assert) {
 		const path = `${FIXTURES}/lazyUncachedInheritedGuard`;
@@ -2026,3 +2093,28 @@ QUnit.test(
 		);
 	},
 );
+
+QUnit.test(
+	"lazy mode preloads each guard module once in the constructor, block mode does not",
+	function (assert: Assert) {
+		const path = `${FIXTURES}/allowGuard`;
+		const requireSpy = sinon.spy(sap.ui, "require");
+		try {
+			router = createLazyRouter({ protected: [path, `${path}#0`], forbidden: [path] });
+			assert.ok(requireSpy.calledWith([path]), "lazy: one preload request with the unique module paths");
+			router.destroy();
+
+			requireSpy.resetHistory();
+			router = createBlockRouter({ protected: [path] });
+			assert.notOk(requireSpy.calledWith([path]), "block: nothing is requested before initialize()");
+		} finally {
+			requireSpy.restore();
+		}
+	},
+);
+
+QUnit.test("block mode without manifest guards starts the router within initialize()", function (assert: Assert) {
+	router = createBlockRouter({});
+	router.initialize();
+	assert.ok(router.isInitialized(), "nothing to load, so the start is not deferred");
+});

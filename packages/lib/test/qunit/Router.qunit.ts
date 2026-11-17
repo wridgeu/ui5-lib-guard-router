@@ -1,3 +1,5 @@
+import sinon from "sinon";
+import Log from "sap/base/Log";
 import DataType from "sap/ui/base/DataType";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardFn, GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
@@ -9,9 +11,11 @@ import {
 	addLeaveGuardUnsafe,
 	addRouteGuardUnsafe,
 	assertBlocked,
+	callUnsafe,
 	captureWarnings,
 	captureWarningsAsync,
 	createRouter,
+	flushPromises,
 	initHashChanger,
 	removeGuardUnsafe,
 	removeLeaveGuardUnsafe,
@@ -232,7 +236,11 @@ QUnit.test(
 			router.addRouteGuard("missing", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
 		});
 
-		assert.strictEqual(warnings.length, 1, "Object form logs only one warning");
+		assert.deepEqual(
+			warnings.map((w) => [w.message, w.details]),
+			[["addRouteGuard: unknown route, guard registered anyway", "missing"]],
+			"Object form logs only one warning, naming addRouteGuard and the route",
+		);
 
 		router.addRoute({ name: "missing", pattern: "missing" });
 		router.initialize();
@@ -462,6 +470,62 @@ QUnit.test(
 	},
 );
 
+QUnit.test("each guard API method warns under its own name for non-function input", function (assert: Assert) {
+	const warnings = captureWarnings(() => {
+		addGuardUnsafe(router, null);
+		removeGuardUnsafe(router, null);
+		addRouteGuardUnsafe(router, "home", null);
+		addRouteGuardUnsafe(router, "home", { beforeEnter: "nope" });
+		removeRouteGuardUnsafe(router, "home", null);
+		addLeaveGuardUnsafe(router, "home", null);
+		removeLeaveGuardUnsafe(router, "home", null);
+	});
+
+	assert.deepEqual(
+		warnings.map((w) => [w.message, w.details]),
+		[
+			["addGuard: not a function, ignoring", undefined],
+			["removeGuard: not a function, ignoring", undefined],
+			["addRouteGuard: not a function, ignoring", "home"],
+			["addRouteGuard: not a function, ignoring", "home"],
+			["removeRouteGuard: not a function, ignoring", "home"],
+			["addLeaveGuard: not a function, ignoring", "home"],
+			["removeLeaveGuard: not a function, ignoring", "home"],
+		],
+		"One warning per call, naming the method and the route",
+	);
+});
+
+QUnit.test("addRouteGuard object form ignores invalid enter guard input", async function (assert: Assert) {
+	captureWarnings(() => addRouteGuardUnsafe(router, "protected", { beforeEnter: "nope" }));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Committed,
+		"Invalid enter guard input was not registered",
+	);
+});
+
+QUnit.test("addRouteGuard logs an info only for a config without handlers", function (assert: Assert) {
+	const info = sinon.stub(Log, "info");
+	try {
+		addRouteGuardUnsafe(router, "home", {});
+		router.addRouteGuard("home", { beforeEnter: () => true });
+		router.addRouteGuard("home", { beforeLeave: () => true });
+	} finally {
+		info.restore();
+	}
+
+	assert.deepEqual(
+		info.args,
+		[["addRouteGuard: config has no beforeEnter or beforeLeave", "home", "ui5.guard.router.Router"]],
+		"One info for the empty config, under the router's log component",
+	);
+});
+
 // ============================================================
 // Module: Router lifecycle
 // ============================================================
@@ -504,6 +568,55 @@ QUnit.test("destroy() twice does nothing the second time, like the base router",
 	router.initialize();
 	router.destroy();
 	assert.strictEqual(router.destroy(), router, "the second call returns the router and does not throw");
+});
+
+QUnit.test("destroy() destroys the base router and detaches it from hash changes", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	let protectedMatched = false;
+	router.getRoute("protected")!.attachPatternMatched(() => {
+		protectedMatched = true;
+	});
+
+	router.destroy();
+	assert.notOk(router.isInitialized(), "the base router is no longer initialized");
+
+	HashChanger.getInstance().setHash("protected");
+	await flushPromises();
+	assert.notOk(protectedMatched, "a hash change no longer reaches the router");
+});
+
+QUnit.test(
+	"a hash change delivered to a destroyed router only warns, like the base router",
+	async function (assert: Assert) {
+		let guardCalls = 0;
+		router.addGuard(() => {
+			guardCalls++;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		let settlements = 0;
+		router.attachNavigationSettled(() => {
+			settlements++;
+		});
+		guardCalls = 0;
+		router.destroy();
+
+		// UI5 can deliver a hash change to a router destroyed earlier in the same event.
+		const warnings = captureWarnings(() => callUnsafe(router, "parse", "protected"));
+
+		assert.strictEqual(warnings.length, 1, "one warning");
+		assert.ok(/destroyed while the hash changed/.test(warnings[0].message), "the base router's warning");
+		assert.strictEqual(guardCalls, 0, "no guard ran");
+		assert.strictEqual(settlements, 0, "nothing settled");
+	},
+);
+
+QUnit.test("destroy() clears route metadata", function (assert: Assert) {
+	router.setRouteMeta("", { root: true });
+	router.destroy();
+	assert.deepEqual(router.getRouteMeta(""), {}, "metadata set before destroy() is gone");
 });
 
 QUnit.test("Re-initialize after stop fires routeMatched like native router", async function (assert: Assert) {

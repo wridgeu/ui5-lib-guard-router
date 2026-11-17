@@ -1,3 +1,5 @@
+import sinon from "sinon";
+import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -396,6 +398,91 @@ QUnit.test("Superseded async redirect-chain result does not settle", async funct
 	await assertStaleResultIgnored(assert, () => slowTargetGuard.resolve(true));
 });
 
+/** What the router logs at debug level while `fn` runs, as [message, details] pairs. */
+async function captureRouterDebugLogs(fn: () => Promise<void>): Promise<unknown[][]> {
+	const stub = sinon.stub(Log, "debug");
+	try {
+		await fn();
+	} finally {
+		stub.restore();
+	}
+	return stub
+		.getCalls()
+		.filter((call) => call.args[2] === "ui5.guard.router.Router")
+		.map((call) => [call.args[0], call.args[1]]);
+}
+
+QUnit.test("Superseded async preflight result is reported in the debug log", async function (assert: Assert) {
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	router.navTo("detail", { id: "1" });
+	const logs = await captureRouterDebugLogs(async () => {
+		slowGuard.resolve(true);
+		await flushPromises();
+	});
+
+	assert.deepEqual(logs, [["Async preflight result discarded (superseded by newer navigation)", "protected"]]);
+});
+
+QUnit.test("Superseded async hash-change result is reported in the debug log", async function (assert: Assert) {
+	const slowGuard = Promise.withResolvers<boolean>();
+	router.addRouteGuard("protected", () => slowGuard.promise);
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	HashChanger.getInstance().setHash("protected");
+	HashChanger.getInstance().setHash("detail/1");
+	const logs = await captureRouterDebugLogs(async () => {
+		slowGuard.resolve(true);
+		await flushPromises();
+	});
+
+	assert.deepEqual(logs, [["Async guard result discarded (superseded by newer navigation)", "protected"]]);
+});
+
+/**
+ * A navigationSettled listener supersedes the navigation that is committing and then throws.
+ * The failure belongs to the superseded navigation and must not settle.
+ */
+async function assertSupersededFailureIgnored(assert: Assert, navigate: () => void): Promise<void> {
+	router.addRouteGuard("protected", () => Promise.resolve(true));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	const statuses: string[] = [];
+	router.attachNavigationSettled((event) => {
+		statuses.push(event.getParameter("status") as string);
+		if (statuses.length > 1) return;
+		router.navTo("forbidden");
+		throw new Error("listener failed after superseding");
+	});
+
+	navigate();
+	await flushPromises();
+
+	assert.deepEqual(
+		statuses,
+		[NavigationOutcome.Committed, NavigationOutcome.Committed],
+		"no Error settlement for the superseded navigation",
+	);
+	const last = await router.navigationSettled();
+	assert.strictEqual(last.status, NavigationOutcome.Committed, "last settlement is the newer navigation");
+	assert.strictEqual(last.route, "forbidden");
+	assert.strictEqual(getHash(), "forbidden");
+}
+
+QUnit.test("Failure of a superseded async preflight does not settle", async function (assert: Assert) {
+	await assertSupersededFailureIgnored(assert, () => router.navTo("protected"));
+});
+
+QUnit.test("Failure of a superseded async hash change does not settle", async function (assert: Assert) {
+	await assertSupersededFailureIgnored(assert, () => HashChanger.getInstance().setHash("protected"));
+});
+
 // ============================================================
 // Module: Guard context across navigations
 // ============================================================
@@ -604,6 +691,33 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 	pendingGuard.resolve(true);
 	await flushPromises();
 	assert.notOk(protectedMatched, "Stale async guard result was discarded after same-hash dedup");
+});
+
+QUnit.test("Hash change back to the current hash cancels a pending hash-change guard", async function (assert: Assert) {
+	const pendingGuard = Promise.withResolvers<boolean>();
+	let homeGuardCalls = 0;
+	router.addRouteGuard("protected", () => pendingGuard.promise);
+	router.addRouteGuard("home", () => {
+		homeGuardCalls++;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	homeGuardCalls = 0;
+	const settled = recordSettlements();
+
+	// Browser navigation: the hash changes first, then the guard runs.
+	HashChanger.getInstance().setHash("protected");
+	// Browser back while the guard is pending.
+	HashChanger.getInstance().setHash("");
+
+	assert.deepEqual(settled, [NavigationOutcome.Cancelled], "pending navigation cancelled, nothing else settled");
+	assert.strictEqual(homeGuardCalls, 0, "no guards run for the route the router is already on");
+
+	pendingGuard.resolve(true);
+	await flushPromises();
+	assert.deepEqual(settled, [NavigationOutcome.Cancelled], "stale guard result is discarded");
+	assert.strictEqual(getHash(), "");
 });
 
 // ============================================================

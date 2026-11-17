@@ -432,6 +432,45 @@ QUnit.test("Blocked default route on initial navigation stays blocked", async fu
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash stays on the default target");
 });
 
+QUnit.test("Blocked default route can be entered once its guard allows", async function (assert: Assert) {
+	let allow = false;
+	router.addRouteGuard("home", () => allow);
+	router.initialize();
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Blocked,
+		"initial navigation blocked",
+	);
+
+	// The hash already is the default hash, so navTo() cannot cause a hash change.
+	allow = true;
+	const homeMatched = waitForRoute(router, "home");
+	router.navTo("home");
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "navigation committed without a hash change");
+	assert.strictEqual(result.route, "home");
+	await homeMatched;
+});
+
+QUnit.test("Blocked default route can be entered with skipGuards", async function (assert: Assert) {
+	router.addRouteGuard("home", () => false);
+	router.initialize();
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Blocked,
+		"initial navigation blocked",
+	);
+
+	const homeMatched = waitForRoute(router, "home");
+	router.navTo("home", {}, false, { skipGuards: true });
+	const result = await router.navigationSettled();
+
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "navigation committed without a hash change");
+	assert.strictEqual(result.route, "home");
+	await homeMatched;
+});
+
 // ============================================================
 // Module: Leave Guards
 // ============================================================

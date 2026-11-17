@@ -184,8 +184,9 @@ Constructor(routes, config, owner, ...)
   │   │   → store as _options
   │   ├── routeMeta → RouteMetaStore (_meta, RouteMeta.ts)
   │   └── guards block → store as _pendingGuardDescriptors
-  └── If guardLoading === "lazy" and pending guards exist:
-        Fire preload hint: sap.ui.require(uniqueModulePaths) — no callback
+  └── If guardLoading === "lazy":
+        Fire preload hint: sap.ui.require(uniqueModulePaths) — no success callback;
+        a failed load is reported when the guard runs
 
 initialize()
   ├── If guardLoading === "block" and pending guards exist:
@@ -369,7 +370,8 @@ The default strategy. Router fires a **preload hint** in the constructor for all
 ```typescript
 // Constructor: fire-and-forget preload (cache warming)
 const uniquePaths = [...new Set(descriptors.map((d) => d.modulePath))];
-sap.ui.require(uniquePaths); // no callback, no promise — purely a hint
+// Purely a hint: a failed load is reported when the guard runs.
+sap.ui.require(uniquePaths, undefined, () => {});
 
 // initialize(): synchronous, always
 this._registerLazyGuards(descriptors);

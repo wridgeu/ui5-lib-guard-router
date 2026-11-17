@@ -388,6 +388,21 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
 });
 
+QUnit.test("Cancelling the initial navigation reports empty route and hash", async function (assert: Assert) {
+	const pendingGuard = Promise.withResolvers<boolean>();
+	router.addGuard(() => pendingGuard.promise);
+	router.initialize();
+
+	const settledPromise = router.navigationSettled();
+	router.stop();
+
+	const result = await settledPromise;
+	assert.deepEqual(
+		{ status: result.status, route: result.route, hash: result.hash },
+		{ status: NavigationOutcome.Cancelled, route: "", hash: "" },
+	);
+});
+
 QUnit.test("Redirect to nonexistent route settles as blocked", async function (assert: Assert) {
 	router.addGuard((context: GuardContext) => {
 		if (context.toRoute === "home") {
@@ -400,6 +415,7 @@ QUnit.test("Redirect to nonexistent route settles as blocked", async function (a
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed redirect settles as blocked");
 	assert.strictEqual(result.route, "", "Route reflects where the router stayed");
+	assert.strictEqual(result.hash, "", "Hash is empty before the first navigation committed");
 });
 
 QUnit.test("Async redirect to nonexistent route settles as blocked", async function (assert: Assert) {
@@ -476,6 +492,34 @@ QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async 
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
 	assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
 });
+
+QUnit.test(
+	"Async navTo started from a Blocked settlement handler survives the hash restore",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => false);
+		router.addRouteGuard("forbidden", () => Promise.resolve(true));
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.attachNavigationSettled(function handler(event: Router$NavigationSettledEvent) {
+			if (event.getParameter("status") !== NavigationOutcome.Blocked) return;
+			router.detachNavigationSettled(handler);
+			// Runs before the router restores the hash of the blocked navigation.
+			router.navTo("forbidden");
+		});
+
+		HashChanger.getInstance().setHash("protected");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Committed,
+			"the restore did not cancel the handler's navigation",
+		);
+		assert.strictEqual(result.route, "forbidden");
+		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden");
+	},
+);
 
 // ============================================================
 // Module: Destroy during redirect
@@ -813,6 +857,11 @@ QUnit.test("router recovers when redirect target throws", async function (assert
 		threw = true;
 	}
 	assert.ok(threw, "navTo threw when redirect target has missing mandatory parameters");
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Committed,
+		"the failed redirect left no navigation pending",
+	);
 
 	// Verify guards still work on subsequent navigation (not permanently bypassed)
 	router.removeRouteGuard("protected", redirectGuard);
@@ -900,4 +949,19 @@ QUnit.test("idle replay after error returns Error status with error", async func
 	const replay = await router.navigationSettled();
 	assert.strictEqual(replay.status, NavigationOutcome.Error, "Replay returns Error");
 	assert.strictEqual(replay.error, thrownError, "Replay includes the error");
+});
+
+QUnit.test("guard error on the initial navigation settles with empty route and hash", async function (assert: Assert) {
+	const thrownError = new Error("initial failure");
+	router.addGuard(() => {
+		throw thrownError;
+	});
+	router.initialize();
+
+	const result = await router.navigationSettled();
+	assert.deepEqual(
+		{ status: result.status, route: result.route, hash: result.hash },
+		{ status: NavigationOutcome.Error, route: "", hash: "" },
+	);
+	assert.strictEqual(result.error, thrownError);
 });

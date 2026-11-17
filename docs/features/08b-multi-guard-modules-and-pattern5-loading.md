@@ -24,11 +24,11 @@ Default `guardLoading` flips from `"block"` to `"lazy"`. The `"lazy"` mode gains
 **Constructor** (after parsing descriptors):
 
 ```typescript
-// Fire-and-forget preload — no callback, no promise
+// Fire-and-forget preload — a failed load is reported when the guard runs
 // Deduplicate module paths (same module may appear in multiple cherry-pick entries)
 // Always use base module path without # fragment
 const uniquePaths = [...new Set(descriptors.map((d) => d.modulePath))];
-sap.ui.require(uniquePaths);
+sap.ui.require(uniquePaths, undefined, () => {});
 ```
 
 **`initialize()`** (lazy mode):

@@ -259,6 +259,8 @@ Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only str
 
 On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
 
+A `navTo()` issued while a browser-initiated navigation is still waiting for an async guard supersedes that navigation. If the `navTo()` is then blocked, fails, or targets the current route, the router also restores the previous hash, so the URL does not stay on a hash that never committed.
+
 **Leave guards** (`addLeaveGuard`) return `boolean` only:
 
 | Return                            | Effect                          |
@@ -270,12 +272,12 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 
 ### Lifecycle
 
-| Method                   | Behavior                                                                                                                                                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `stop()`                 | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior |
-| `initialize()`           | With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded; until then `isInitialized()` is `false`, and calling `initialize()` again changes nothing                                                                       |
-| `stop()` (while loading) | With `guardLoading: "block"`, `stop()` before the modules have loaded cancels the start. The guards are still registered when loading finishes; the router starts on the next `initialize()`                                                                 |
-| `destroy()`              | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`. Guard modules that finish loading afterwards register nothing. A second call does nothing, like the base `sap.ui.core.routing.Router`       |
+| Method                   | Behavior                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stop()`                 | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior                                                                                                         |
+| `initialize()`           | With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded; until then `isInitialized()` is `false`, and calling `initialize()` again changes nothing                                                                                                                                                                               |
+| `stop()` (while loading) | With `guardLoading: "block"`, `stop()` before the modules have loaded cancels the start. The guards are still registered when loading finishes; the router starts on the next `initialize()`                                                                                                                                                                         |
+| `destroy()`              | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`. Guard modules that finish loading afterwards register nothing. A hash change that still reaches the destroyed router runs no guards and only logs the base router's warning. A second call does nothing, like the base `sap.ui.core.routing.Router` |
 
 ### Navigation settlement
 
@@ -1027,7 +1029,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks and logs the warning `Guard returned invalid value, treating as block`. A plain `false` is not logged, so add logging to your guards to find the one that returned it.
 
-**Redirect treated as blocked**: The redirect did not trigger a follow-up navigation. Most often the target route name is wrong. The router logs the target name so you can verify the route and parameters. A redirect to the current hash is not treated as blocked; it settles as `Redirected`.
+**Redirect treated as blocked**: The redirect target route does not exist. The router logs the target name (`Guard redirect target "<name>" is not a known route, treating as blocked`) so you can verify it. A redirect to the current hash is not treated as blocked; it settles as `Redirected`.
 
 **Async guard hangs indefinitely**: `context.signal` only aborts on supersede or router stop/destroy, not on "too slow." If a guard's `fetch` targets a dead endpoint, the navigation stays in the evaluating phase forever. Combine `context.signal` with `AbortSignal.timeout()` to enforce a hard deadline: `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`. See the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout) for the full example and a compatibility fallback for older browsers.
 

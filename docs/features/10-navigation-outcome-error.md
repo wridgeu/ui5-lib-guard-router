@@ -142,7 +142,7 @@ Parallel to `_blockNavigation()`. Same structure:
 Add `case "error"` to the existing switch on `decision.action`:
 
 - `_applyDecision()`: calls `_errorNavigation(decision.error, hash)` (with default `restoreHash: true`)
-- `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, false)` (hash was never changed in preflight)
+- `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, attempt.restoreHash)` (the preflight never changes the hash; it only restores it after superseding a pending hash change)
 
 Redirect chain hops (added later, see `11-guards-on-redirect-targets.md`) do the same in `_applyRedirectDecision()` and the `.catch()` in `_redirect()`, passing `chain.attemptedHash` and `chain.restoreHash`.
 
