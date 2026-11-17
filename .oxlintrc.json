@@ -22,6 +22,7 @@
 	],
 	"rules": {
 		"no-console": "off",
+		"no-underscore-dangle": "off",
 		"no-await-in-loop": "off",
 		"import/no-unassigned-import": "off",
 		"unicorn/no-null": "off",
