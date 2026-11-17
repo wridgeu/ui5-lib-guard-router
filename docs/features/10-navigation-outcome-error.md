@@ -150,6 +150,8 @@ Redirect chain hops (added later, see `11-guards-on-redirect-targets.md`) do the
 
 These currently call `_blockNavigation()` when the pipeline promise fails. They change to call `_errorNavigation()` instead — a pipeline promise rejection is an error, not an intentional block.
 
+> **As implemented:** the pipeline turns every guard failure into an `error` decision, so its Promise does not reject and there are no `.catch()` handlers for it. `_applyWhenDecided()` wraps the application of an async decision instead: an error thrown there is logged (`Navigation failed after its guards had settled`) and settles the navigation as `Error` only if it had not settled yet. A redirect target without a valid hash is reported by `_redirect()` itself, through `_errorNavigation()`.
+
 ### Unchanged
 
 - `navigationSettled()` — already passes through the full `NavigationResult`, the new `error` field flows naturally

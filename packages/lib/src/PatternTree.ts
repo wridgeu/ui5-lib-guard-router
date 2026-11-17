@@ -74,9 +74,21 @@ function depthOf(route: string, patternByName: ReadonlyMap<string, string>): num
 }
 
 /**
+ * Entries ordered by the pattern depth of their own route, declaration order within one depth.
+ * Expanding them in this order puts an ancestor's entries before a descendant's on every route.
+ */
+function byRouteDepth<T extends { readonly route: string }>(
+	entries: T[],
+	patternByName: ReadonlyMap<string, string>,
+): T[] {
+	return entries.toSorted((a, b) => depthOf(a.route, patternByName) - depthOf(b.route, patternByName));
+}
+
+/**
  * Copy each route-specific entry to every descendant route (`inheritance: "pattern-tree"`).
  * Global (`"*"`) entries and entries for routes without a known pattern are kept as-is.
- * Sorted by pattern depth, so ancestor guards run before descendant guards. Where global
+ * Ordered by the pattern depth of the route an entry was declared for, so on every route
+ * ancestor guards run before descendant guards, whatever the declaration order. Where global
  * entries end up does not matter: the pipeline runs global guards separately.
  * A route named `"*"` does not pass its entries on, because a `"*"` entry is a global one.
  */
@@ -85,7 +97,7 @@ export function expandToDescendants<T extends { readonly route: string }>(entrie
 	const patternByName = new Map(routes.map((r) => [r.name, r.pattern]));
 
 	const expanded: T[] = [];
-	for (const entry of entries) {
+	for (const entry of byRouteDepth(entries, patternByName)) {
 		expanded.push(entry);
 		if (entry.route === "*") continue;
 		const ancestorPattern = patternByName.get(entry.route);
@@ -97,13 +109,13 @@ export function expandToDescendants<T extends { readonly route: string }>(entrie
 		}
 	}
 
-	return expanded.toSorted((a, b) => depthOf(a.route, patternByName) - depthOf(b.route, patternByName));
+	return expanded;
 }
 
 /**
  * Entries a newly added route inherits (`inheritance: "pattern-tree"`): copies of its
  * ancestors' entries for the new route, and copies of its own entries for its existing
- * descendants. `routes` must include the new route. Sorted by pattern depth.
+ * descendants. `routes` must include the new route. Ordered like {@link expandToDescendants}.
  */
 export function expandForNewRoute<T extends { readonly route: string }>(
 	entries: T[],
@@ -115,7 +127,7 @@ export function expandForNewRoute<T extends { readonly route: string }>(
 	if (newPattern === undefined) return [];
 
 	const result: T[] = [];
-	for (const entry of entries) {
+	for (const entry of byRouteDepth(entries, patternByName)) {
 		if (entry.route === "*") continue;
 		if (entry.route !== newName) {
 			const ancestorPattern = patternByName.get(entry.route);
@@ -131,5 +143,5 @@ export function expandForNewRoute<T extends { readonly route: string }>(
 		}
 	}
 
-	return result.toSorted((a, b) => depthOf(a.route, patternByName) - depthOf(b.route, patternByName));
+	return result;
 }

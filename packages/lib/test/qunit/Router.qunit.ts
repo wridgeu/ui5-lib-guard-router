@@ -16,7 +16,10 @@ import {
 	captureWarningsAsync,
 	createRouter,
 	flushPromises,
+	getHash,
+	GuardRouterClass,
 	initHashChanger,
+	recordSettlements,
 	removeGuardUnsafe,
 	removeLeaveGuardUnsafe,
 	removeRouteGuardUnsafe,
@@ -636,4 +639,105 @@ QUnit.test("Re-initialize after stop fires routeMatched like native router", asy
 		"",
 		"Re-initialize fires routeMatched for current hash (native parity)",
 	);
+});
+
+QUnit.test("the hash changer UI5 passes to the router of a nested component is used", async function (assert: Assert) {
+	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child") as object;
+	router.destroy();
+	try {
+		// UIComponent passes it as fifth argument when the component is loaded as a routing target.
+		router = Reflect.construct(GuardRouterClass, [
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{ async: true },
+			undefined,
+			undefined,
+			subHashChanger,
+		]);
+		assert.ok(router.getHashChanger() === subHashChanger, "the router uses the hash changer it was given");
+
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+
+		assert.strictEqual(callUnsafe(subHashChanger, "getHash"), "protected", "the route's hash is the nested one");
+		assert.ok(
+			getHash().endsWith("&/child/protected"),
+			`the browser hash carries it under the prefix: "${getHash()}"`,
+		);
+	} finally {
+		router.destroy();
+		callUnsafe(subHashChanger, "destroy");
+	}
+});
+
+QUnit.test("initialize(true) does not parse the current hash", async function (assert: Assert) {
+	let guardCalls = 0;
+	router.addGuard(() => {
+		guardCalls++;
+		return true;
+	});
+	HashChanger.getInstance().setHash("protected");
+	const statuses = recordSettlements(router);
+
+	router.initialize(true);
+	await flushPromises();
+
+	assert.ok(router.isInitialized(), "the router is initialized");
+	assert.strictEqual(guardCalls, 0, "no guard ran for the initial hash");
+	assert.deepEqual(statuses, [], "nothing settled");
+
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(guardCalls, 1, "the router handles navigation from then on");
+});
+
+QUnit.test(
+	"navTo() before initialize() only sets the hash, and its guards run when the router starts",
+	async function (assert: Assert) {
+		let matched = false;
+		router.getRoute("protected")!.attachMatched(() => {
+			matched = true;
+		});
+		const statuses = recordSettlements(router);
+
+		router.navTo("protected");
+		assert.strictEqual(getHash(), "protected", "the hash is set, as the native router does");
+		assert.deepEqual(statuses, [], "nothing settled: the router does not handle navigation yet");
+
+		// Registered after the navTo(), like a manifest guard that initialize() registers.
+		router.addRouteGuard("protected", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Blocked, NavigationOutcome.Committed],
+			"the guard blocked the hash, then the router fell back to the empty hash",
+		);
+		assert.notOk(matched, "the guarded route was never displayed");
+		assert.strictEqual(getHash(), "");
+	},
+);
+
+QUnit.test("navTo() on a stopped router does nothing, like the native router", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.stop();
+
+	let matched = false;
+	router.getRoute("protected")!.attachMatched(() => {
+		matched = true;
+	});
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected");
+	await flushPromises();
+
+	assert.deepEqual(statuses, [], "nothing settled");
+	assert.notOk(matched, "the route was not displayed");
+	assert.strictEqual(getHash(), "", "the hash is unchanged");
 });

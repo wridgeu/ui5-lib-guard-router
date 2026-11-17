@@ -192,13 +192,12 @@ flowchart TD
     suppress -- "no" --> sclear2["clear _suppressedHash"] --> redir{committing phase?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
-    samehash -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
-    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>enter evaluating phase"]
+    samehash -- "yes" --> canceldup["cancel a pending navigation<br/>that had moved the URL"] --> ret
+    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>_startAttempt(): evaluating phase"]
 
     setup --> evaluate["_pipeline.evaluate(context)"]
-    evaluate -- "decision" --> apply{"_applyDecision()"}
-    evaluate -- "Promise" --> stale{"same generation?"}
-    stale -- "current" --> apply
+    evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
+    stale -- "current" --> apply{"_applyDecision()"}
     stale -- "stale" --> discard(["discard result"])
 
     apply -- "allow" --> commit(["_commitNavigation()"])
@@ -216,7 +215,22 @@ Promise, so the navigation as a whole is async. Async-ness is per navigation: th
 navigation starts synchronously again.
 When the decision arrives, `parse()`, `navTo()` and redirect hops discard it if
 `_parseGeneration` changed. Everything that ends an evaluating phase from outside the attempt
-goes through `_cancelPendingNavigation()`, which bumps the counter.
+goes through `_cancelPendingNavigation()`, which bumps the counter, and every attempt takes a
+generation of its own in `_startAttempt()`. The sync path checks the generation too
+(`_applyPreflightDecision()`, `_applyDecision()`, `_applyRedirectDecision()`): a guard that
+calls `navTo()` itself supersedes the navigation it guards, and whatever it returns afterwards
+is dropped. The navigation it started is the one that settles.
+
+The same-hash branch handles a hash change back to the committed hash. It cancels a pending
+navigation only if that navigation had moved the URL away (`NavigationAttempt.restoreHash`):
+the user went back while the guards of a hash change were pending. A pending `navTo()` that
+has not touched the URL stays. This matters for component targets, where UI5 changes the hash
+after the navigation has committed: that late hash change must not cancel a `navTo()` that
+started in between.
+
+`_cancelPendingNavigation()` fires the `Cancelled` settlement, and a `navigationSettled`
+handler may navigate from it. If that navigation committed, the URL has moved on and `parse()`
+drops the hash change it was called for.
 
 A lazily loaded guard module that is not in the module cache yet returns a Promise while it
 loads, so it makes its navigation async from that guard on. Once loaded, its guards run
@@ -232,13 +246,16 @@ synchronously again, unless they return Promises themselves.
 
 2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressedHash` mechanism
    depends on this: `_restoreHash()` stores the hash to suppress, calls `replaceHash`,
-   and the resulting synchronous `parse()` sees the stored hash and returns immediately.
-   Without the suppression the restore would reach the same-hash check, which cancels the
-   pending navigation: a navigation that a `navigationSettled` listener started for the
-   Blocked or Error settlement, before the restore, would be lost. If UI5 ever changes
-   `replaceHash` to fire `hashChanged` asynchronously, the stored hash would be cleared
-   before `parse()` can check it, with the same effect. A QUnit test covers this
-   ("Async navTo started from a Blocked settlement handler survives the hash restore").
+   and the resulting synchronous `parse()` sees the stored hash and returns immediately,
+   so a restore is never taken for a navigation. A restore to the committed hash would also
+   stop at the same-hash check. The suppression is needed when nothing has committed yet
+   (`_currentHash` is `null`) and the blocked target is the empty hash itself: a `navTo()` to
+   the empty-pattern route supersedes the pending first hash change and is blocked. Restoring
+   the URL to `""` would otherwise be parsed as a new navigation and run the guard that just
+   blocked it a second time. If UI5 ever changes `replaceHash` to fire `hashChanged`
+   asynchronously, the stored hash would be cleared before `parse()` can check it, with that
+   effect. A QUnit test covers this ("a blocked navTo() to the empty hash that superseded the
+   first hash change does not evaluate that hash again").
 
 3. **Redirect targets are evaluated by the guard pipeline with loop detection.**
    When a guard redirects from route A to route B, the router evaluates route B's
@@ -291,6 +308,13 @@ reset to idle, so the next hash change runs its guards instead of being committe
 already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` in the idle
 phase and `parse()` evaluates the guards.
 
+The preflight needs a router that listens to hash changes. While `isInitialized()` is false
+(before `initialize()`, while block-mode guard modules load, after `stop()`), `navTo()` only
+calls `super.navTo()`: the native router sets the hash, or does nothing when stopped. No guard
+runs and nothing commits, because the manifest guards may not be registered yet and the
+router would not see the hash change. `initialize()` parses the hash later, through the
+guards.
+
 A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
 phase and calls `navTo(target, replace=true)`. If `parse()` is not reached, because the hash
 already is the target or because component targets change it later, it commits the target
@@ -298,10 +322,23 @@ directly. The navigation settles once, as `Redirected`, and the target's guards 
 again when the hash change arrives.
 
 A redirect target whose hash cannot be built (`Route#getURL()` throws for a missing
-mandatory parameter) fails like the native `navTo()`: `_redirect()` resets the phase to idle
-and rethrows. In a synchronous chain the error reaches the caller of `navTo()` or `parse()`
-and nothing settles. After an async guard the `.catch()` of that navigation or hop turns it
-into `_errorNavigation()`, so it settles as `Error`.
+mandatory parameter) is a failure of the guard that returned it, not of the caller:
+`_redirect()` logs it and calls `_errorNavigation()`, so the navigation settles as `Error`
+and a changed hash is restored. This is the same in sync and async chains and on both entry
+points; nothing is thrown to the caller of `navTo()` or into the `hashChanged` event.
+
+A hop's guard can also end the chain by navigating itself. `_applyRedirectDecision()`
+therefore checks the generation before it applies a hop's decision, sync or async.
+
+### Errors while a decision is applied
+
+The pipeline turns a throwing or rejecting guard into an `error` decision, so its Promise
+does not reject. What can still throw is applying the decision: `super.navTo()`, or
+`super.parse()` when a `beforeRouteMatched` handler throws after the navigation settled as
+`Committed`. In the sync path such an error reaches the caller. In the async path
+`_applyWhenDecided()` catches it and logs it. It then settles the navigation as `Error` only
+if no settlement happened while the decision was applied (`_lastSettlement` is unchanged), so
+a committed navigation is not reported a second time as failed.
 
 ### navTo() superseding a pending hash change
 
@@ -444,26 +481,35 @@ sequenceDiagram
     participant Router as Router State
     participant Nav2 as Nav 2: parse("b")
 
-    Nav1->>Router: gen = 1
+    Nav1->>Router: _startAttempt(): gen = 1
     Nav1->>Nav1: await guard...
     Nav2->>Router: _cancelPendingNavigation(): gen = 2
     Router-->>Nav1: abort signal, settle Cancelled
+    Nav2->>Router: _startAttempt(): gen = 3
     Nav2->>Nav2: await guard...
-    Nav1->>Router: check: gen(1) != current(2)
+    Nav1->>Router: check: gen(1) != current(3)
     Note over Nav1: DISCARD (stale)
-    Nav2->>Router: check: gen(2) == current(2)
+    Nav2->>Router: check: gen(3) == current(3)
     Note over Nav2: APPLY result
 ```
 
 Every `parse()` or `navTo()` that enters the guard pipeline first calls
 `_cancelPendingNavigation()`, which bumps the generation and aborts the pending
-navigation's `AbortSignal`. Inside the pipeline, the aborted signal stops the remaining
+navigation's `AbortSignal`, and then `_startAttempt()`, which gives the new attempt a
+generation of its own. Inside the pipeline, the aborted signal stops the remaining
 guards between awaits. The generation is checked once, when the async decision settles:
 if a newer navigation started in the meantime, the stale result is discarded with a
 debug log. This ensures only the latest navigation wins.
 
 The generation is also bumped on same-hash dedup, invalidating any pending async guard
 that was running when the user navigated back to the original hash.
+
+The own generation matters when a `navigationSettled` handler navigates on the `Cancelled`
+settlement. The handler runs inside `_cancelPendingNavigation()`, before the superseding
+navigation has started its attempt. If the handler's navigation is still pending when the
+superseding navigation continues, `_startAttempt()` aborts its signal and replaces it; its
+result is stale and it does not settle. Firing `Cancelled` for it would call the handler
+again, which would navigate again.
 
 ## Settlement Signal
 
@@ -482,6 +528,7 @@ flowchart TD
         cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
         redirect["_redirect()"] -- "unknown target, loop, or depth cap:<br/>_blockNavigation()" --> fredirect["Blocked"]
         errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
+        redirect -- "target without valid hash:<br/>_errorNavigation()" --> ferror
     end
 
     push -.-> commit
@@ -505,6 +552,19 @@ directly (redirect to the hash the URL already shows, component targets), and se
 - `_commitNavigation` uses the phase origin (committing/redirect vs. other) and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
 - `_cancelPendingNavigation` only flushes when the router is in the evaluating phase, avoiding
   spurious settlement signals during initialization or when no navigation is in flight
+- A navigation that did not commit (`Blocked`, `Error`, `Cancelled` with a restore) goes through
+  `_settleUncommitted()`, which restores the hash before it flushes. Handlers run on the final
+  URL, and a hash that a handler sets is not overwritten by the restore. The one exception is
+  a first navigation (`_currentHash` is `null`) that is blocked on a non-empty hash: the
+  settlement fires first, then the empty hash is restored and parsed as a navigation of its
+  own, so the order stays `Blocked`, then the default route's settlement
+- Every terminal action leaves the evaluating phase before it flushes, so a handler that calls
+  `navTo()` starts a regular navigation and `navigationSettled()` called from a handler
+  resolves with the settlement that is being fired
+- `_commitNavigation` flushes before `super.parse()`, so the settlements of navigations that
+  `beforeRouteMatched` or `routeMatched` handlers start come after it. If a settlement handler
+  itself navigated on and committed, `_currentHash` is no longer the committed hash and
+  `super.parse()` is skipped: the route that was left again is not displayed over the newer one
 - `_lastSettlement` caches the most recent result so that `navigationSettled()` called
   after a synchronous navigation still returns the correct outcome. This handles the
   common case where sync guards settle within the same tick as `navTo()`, leaving
@@ -568,24 +628,24 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 
 ## Internal State
 
-| Field                      | Type                                | Purpose                                                                                                                                   |
-| -------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `_options`                 | `ResolvedGuardRouterOptions`        | Resolved manifest options with defaults applied                                                                                           |
-| `_pipeline`                | `GuardPipeline`                     | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)                                                                          |
-| `_currentRoute`            | `string`                            | Name of the currently active route                                                                                                        |
-| `_currentHash`             | `string \| null`                    | Hash of the active route, `null` before first                                                                                             |
-| `_phase`                   | `RouterPhase`                       | Discriminated union tracking the router's lifecycle phase (see below)                                                                     |
-| `_parseGeneration`         | `number`                            | Monotonic counter for async invalidation                                                                                                  |
-| `_suppressedHash`          | `string \| null`                    | Hash to suppress in the next `parse()` call                                                                                               |
-| `_settlementResolvers`     | `((r: NavigationResult) => void)[]` | Pending `navigationSettled()` callbacks                                                                                                   |
-| `_lastSettlement`          | `NavigationResult \| null`          | Most recent settlement result (for post-hoc queries)                                                                                      |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                 | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                               |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                 | Original manifest descriptors (for inheritance expansion on addRoute)                                                                     |
-| `_destroyed`               | `boolean`                           | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op |
-| `_blockLoad`               | `{ start: boolean } \| null`        | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`                                               |
-| `_meta`                    | `RouteMetaStore`                    | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                             |
-| `_routeNames`              | `string[]`                          | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                        |
-| `_ownerComponent`          | `UIComponent \| undefined`          | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                            |
+| Field                      | Type                                   | Purpose                                                                                                                                          |
+| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `_options`                 | `ResolvedGuardRouterOptions`           | Resolved manifest options with defaults applied                                                                                                  |
+| `_pipeline`                | `GuardPipeline`                        | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)                                                                                 |
+| `_currentRoute`            | `string`                               | Name of the currently active route                                                                                                               |
+| `_currentHash`             | `string \| null`                       | Hash of the active route, `null` before first                                                                                                    |
+| `_phase`                   | `RouterPhase`                          | Discriminated union tracking the router's lifecycle phase (see below)                                                                            |
+| `_parseGeneration`         | `number`                               | Monotonic counter for async invalidation                                                                                                         |
+| `_suppressedHash`          | `string \| null`                       | Hash to suppress in the next `parse()` call                                                                                                      |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                          |
+| `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                             |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                      |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                    | Original manifest descriptors (for inheritance expansion on addRoute)                                                                            |
+| `_destroyed`               | `boolean`                              | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op        |
+| `_blockLoad`               | `{ start, ignoreInitialHash } \| null` | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`, which also stores its `bIgnoreInitialHash` argument |
+| `_meta`                    | `RouteMetaStore`                       | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                                    |
+| `_routeNames`              | `string[]`                             | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                               |
+| `_ownerComponent`          | `UIComponent \| undefined`             | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                                   |
 
 `RouterPhase` is a discriminated union with three variants:
 

@@ -121,16 +121,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pendingGuardDescriptors: GuardDescriptor[];
 	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
-	/** Set while block-mode guard modules load; `start` says whether to initialize once they have. */
-	private _blockLoad: { start: boolean } | null = null;
+	/**
+	 * Set while block-mode guard modules load; `start` says whether to initialize once they have,
+	 * `ignoreInitialHash` is the argument of the `initialize()` call that asked for it.
+	 */
+	private _blockLoad: { start: boolean; ignoreInitialHash?: boolean } | null = null;
 	private _meta: RouteMetaStore;
 	private _routeNames: string[];
 	private readonly _ownerComponent: UIComponent | undefined;
 
-	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object) {
+	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object);
+	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, ...rest: unknown[]) {
 		const isRecordConfig = isRecord(config);
 		const { guardRouter, ...cleanConfig } = isRecordConfig ? config : {};
-		super(routes, isRecordConfig ? cleanConfig : config, owner, targetsConfig);
+		// UI5 passes more than its types declare: after the targets config comes the
+		// hash changer of a component that is loaded as a routing target.
+		super(routes, isRecordConfig ? cleanConfig : config, owner, ...(rest as [object?]));
 		this._ownerComponent = owner;
 		let componentNamespace = "";
 		const appConfig = owner?.getManifestEntry("sap.app") as unknown;
@@ -173,16 +179,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * calling `initialize()` again changes nothing, and `stop()` cancels
 	 * the pending start until `initialize()` is called again.
 	 *
+	 * @param bIgnoreInitialHash - Whether the current hash is left unparsed, as in the native router.
 	 * @override sap.ui.core.routing.Router#initialize
 	 * @since 1.0.1
 	 */
-	override initialize(): this {
+	override initialize(bIgnoreInitialHash?: boolean): this {
 		if (this._blockLoad) {
-			this._blockLoad.start = true;
+			if (!this._blockLoad.start) {
+				this._blockLoad.start = true;
+				this._blockLoad.ignoreInitialHash = bIgnoreInitialHash;
+			}
 			return this;
 		}
 		if (this._pendingGuardDescriptors.length === 0) {
-			return super.initialize();
+			return super.initialize(bIgnoreInitialHash);
 		}
 
 		const descriptors = this._pendingGuardDescriptors;
@@ -196,13 +206,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		if (this._options.guardLoading === "lazy") {
 			this._registerLazyGuards(expandedDescriptors);
-			return super.initialize();
+			return super.initialize(bIgnoreInitialHash);
 		}
 
 		// "block" mode: load all modules, then register their guards in declaration order
 		// and initialize. Load and registration failures are logged per module and never
 		// reject. A router destroyed while modules load stays destroyed.
-		const blockLoad = { start: true };
+		const blockLoad = { start: true, ignoreInitialHash: bIgnoreInitialHash };
 		this._blockLoad = blockLoad;
 		loadGuardModules(expandedDescriptors).then((results) => {
 			this._blockLoad = null;
@@ -210,7 +220,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			for (const { descriptor, guards } of results) {
 				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
 			}
-			if (blockLoad.start) super.initialize();
+			if (blockLoad.start) super.initialize(blockLoad.ignoreInitialHash);
 		});
 		return this;
 	}
@@ -370,6 +380,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * UI5's native `navTo` has two signatures where the third parameter is either
 	 * `componentTargetInfo` (object) or `bReplace` (boolean). This method normalizes
 	 * both forms so the rest of `navTo` can work with a single set of variables.
+	 * The options follow `bReplace`, or take its place when it is left out.
 	 */
 	private _resolveNavToArgs(
 		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
@@ -391,7 +402,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return {
 			componentTargetInfo: componentTargetInfoOrReplace,
 			replace: typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined,
-			guardOptions: options,
+			guardOptions: typeof replaceOrOptions === "object" ? replaceOrOptions : options,
 		};
 	}
 
@@ -403,7 +414,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/** Apply the `unknownRouteRegistration` policy: warn or throw when the route is unknown. */
-	private _handleUnknownRouteRegistration(routeName: string, methodName: string): void {
+	private _handleUnknownRouteRegistration(routeName: string, methodName: string, kept = "guard registered"): void {
 		if (this.getRoute(routeName)) return;
 
 		switch (this._options.unknownRouteRegistration) {
@@ -416,7 +427,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 				);
 			case "warn":
 			default:
-				Log.warning(`${methodName}: unknown route, guard registered anyway`, routeName, LOG_COMPONENT);
+				Log.warning(`${methodName}: unknown route, ${kept} anyway`, routeName, LOG_COMPONENT);
 		}
 	}
 
@@ -477,7 +488,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("setRouteMeta: expected object, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		if (routeName !== "") this._handleUnknownRouteRegistration(routeName, "setRouteMeta");
+		if (routeName !== "") this._handleUnknownRouteRegistration(routeName, "setRouteMeta", "metadata stored");
 		this._meta.set(routeName, meta);
 		return this;
 	}
@@ -590,6 +601,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * `hashChanged` synchronously, causing `parse()` to re-enter in the
 	 * same call stack (validated by test).
 	 *
+	 * On a router that is not initialized (before `initialize()`, while
+	 * block-mode guard modules load, after `stop()`) the call goes straight
+	 * to the native `navTo()`, which only sets the hash or does nothing when
+	 * stopped. The guards run when the router starts and parses the hash.
+	 *
 	 * @override sap.ui.core.routing.Router#navTo
 	 * @since 1.0.1
 	 */
@@ -628,6 +644,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 
+		// A router that does not listen to hash changes (not initialized, loading block-mode
+		// guards, or stopped) navigates like the native one: the guards run once it parses the hash.
+		if (!this.isInitialized()) {
+			super.navTo(routeName, parameters, componentTargetInfo, replace);
+			return this;
+		}
+
 		// Resolve the target hash so we can build a guard context.
 		// getURL() returns the hash pattern with parameters substituted.
 		const route = this.getRoute(routeName);
@@ -650,9 +673,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 
+		const skipGuards = guardOptions?.skipGuards === true || this._options.navToPreflight === "bypass";
+
 		// Pending-hash dedup: if an async preflight for this exact hash is
-		// already running, don't cancel and restart it.
-		if (this._phase.kind === "evaluating" && targetHash === this._phase.attempt.hash) {
+		// already running, don't cancel and restart it. A navigation that skips
+		// the guards does not wait for them.
+		if (!skipGuards && this._phase.kind === "evaluating" && targetHash === this._phase.attempt.hash) {
 			return this;
 		}
 
@@ -662,10 +688,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const restoreHash = this._phase.kind === "evaluating" && this._phase.attempt.restoreHash;
 		this._cancelPendingNavigation();
 
-		const skipGuards = guardOptions?.skipGuards === true;
-
 		// Bypass mode: skip guards for programmatic navTo() -- commit directly.
-		if (skipGuards || this._options.navToPreflight === "bypass") {
+		if (skipGuards) {
 			this._navigateAllowed(routeName, parameters, componentTargetInfo, replace, targetHash, toRoute);
 			return this;
 		}
@@ -677,19 +701,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 
 		// Default "guard" mode: evaluate guards before hash change.
-		const controller = new AbortController();
-		const generation = this._parseGeneration;
+		const attempt = this._startAttempt(targetHash, toRoute, restoreHash);
+		const { generation } = attempt;
 
-		const attempt: NavigationAttempt = { hash: targetHash, route: toRoute, controller, generation, restoreHash };
-		this._phase = { kind: "evaluating", attempt };
-
-		const context = this._createGuardContext(toRoute, targetHash, routeInfo, controller.signal);
+		const context = this._createGuardContext(toRoute, targetHash, routeInfo, attempt.controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
 		if (isPromiseLike(decision)) {
-			decision
-				.then((d: GuardDecision) => {
+			this._applyWhenDecided(
+				decision,
+				(d) => {
 					if (generation !== this._parseGeneration) {
 						Log.debug(
 							"Async preflight result discarded (superseded by newer navigation)",
@@ -709,16 +731,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 						context.bag,
 						attempt,
 					);
-				})
-				.catch((error: unknown) => {
-					if (generation !== this._parseGeneration) return;
-					Log.error(
-						`Async preflight guard failed for route "${routeName}", navigation failed`,
-						String(error),
-						LOG_COMPONENT,
-					);
-					this._errorNavigation(error, targetHash, restoreHash);
-				});
+				},
+				targetHash,
+				restoreHash,
+			);
 			return this;
 		}
 
@@ -788,6 +804,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bag: Map<string, unknown>,
 		attempt: NavigationAttempt,
 	): void {
+		// A guard that navigated itself has superseded the navigation it was guarding.
+		if (attempt.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow":
 				this._navigateAllowed(routeName, parameters, componentTargetInfo, bReplace, targetHash, toRoute);
@@ -834,8 +852,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		if (newHash === this._currentHash) {
-			this._cancelPendingNavigation();
+		const currentHash = this._currentHash;
+		if (newHash === currentHash) {
+			// The URL is back on the committed hash. That ends a navigation that had moved it away,
+			// but not a navTo() that started while the hash change of a committed navigation was
+			// still on its way (component targets).
+			if (this._phase.kind === "evaluating" && this._phase.attempt.restoreHash) {
+				this._cancelPendingNavigation();
+			}
 			return;
 		}
 
@@ -843,20 +867,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const toRoute = routeInfo?.name ?? "";
 
 		this._cancelPendingNavigation();
+		// A navigationSettled handler that navigated on the cancellation has moved the URL on.
+		if (this._currentHash !== currentHash) return;
 
-		const controller = new AbortController();
-		const generation = this._parseGeneration;
+		const attempt = this._startAttempt(newHash, toRoute, true);
+		const { generation } = attempt;
 
-		const attempt: NavigationAttempt = { hash: newHash, route: toRoute, controller, generation, restoreHash: true };
-		this._phase = { kind: "evaluating", attempt };
-
-		const context = this._createGuardContext(toRoute, newHash, routeInfo, controller.signal);
+		const context = this._createGuardContext(toRoute, newHash, routeInfo, attempt.controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
 		if (isPromiseLike(decision)) {
-			decision
-				.then((d: GuardDecision) => {
+			this._applyWhenDecided(
+				decision,
+				(d) => {
 					if (generation !== this._parseGeneration) {
 						Log.debug(
 							"Async guard result discarded (superseded by newer navigation)",
@@ -866,16 +890,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 						return;
 					}
 					this._applyDecision(d, newHash, toRoute, context.bag, attempt);
-				})
-				.catch((error: unknown) => {
-					if (generation !== this._parseGeneration) return;
-					Log.error(
-						`Guard pipeline failed for "${newHash}", navigation failed`,
-						String(error),
-						LOG_COMPONENT,
-					);
-					this._errorNavigation(error, newHash);
-				});
+				},
+				newHash,
+				true,
+			);
 			return;
 		}
 
@@ -915,18 +933,57 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _cancelPendingNavigation(restoreHash = false): void {
 		++this._parseGeneration;
 		const phase = this._phase;
-		if (phase.kind === "evaluating") {
-			phase.attempt.controller.abort();
-			this._flushSettlement({
-				status: NavigationOutcome.Cancelled,
-				route: this._currentRoute,
-				hash: this._currentHash ?? "",
-			});
-		}
+		// Idle before the settlement fires, so that a handler can navigate.
 		this._phase = IDLE;
-		if (restoreHash && phase.kind === "evaluating") {
-			this._restoreHashIfNeeded(phase.attempt.hash, phase.attempt.restoreHash);
-		}
+		if (phase.kind !== "evaluating") return;
+		phase.attempt.controller.abort();
+		this._settleUncommitted(
+			{ status: NavigationOutcome.Cancelled, route: this._currentRoute, hash: this._currentHash ?? "" },
+			phase.attempt.hash,
+			restoreHash && phase.attempt.restoreHash,
+		);
+	}
+
+	/**
+	 * Start evaluating a navigation. Its generation is its own, so the result of any earlier
+	 * attempt is stale: also one that a navigationSettled handler started while this
+	 * navigation cancelled its predecessor, which is aborted here without a settlement.
+	 */
+	private _startAttempt(hash: string, route: string, restoreHash: boolean): NavigationAttempt {
+		if (this._phase.kind === "evaluating") this._phase.attempt.controller.abort();
+		const attempt: NavigationAttempt = {
+			hash,
+			route,
+			controller: new AbortController(),
+			generation: ++this._parseGeneration,
+			restoreHash,
+		};
+		this._phase = { kind: "evaluating", attempt };
+		return attempt;
+	}
+
+	/**
+	 * Apply the decision of async guards once it is there. The pipeline turns a failing guard
+	 * into an error decision, so an error thrown here comes from applying the decision, which
+	 * has no caller to throw to: it is logged, and fails the navigation unless that has settled.
+	 */
+	private _applyWhenDecided(
+		decision: PromiseLike<GuardDecision>,
+		apply: (decision: GuardDecision) => void,
+		attemptedHash: string | undefined,
+		restoreHash: boolean,
+	): void {
+		decision.then((d) => {
+			const lastSettlement = this._lastSettlement;
+			try {
+				apply(d);
+			} catch (error) {
+				Log.error("Navigation failed after its guards had settled", String(error), LOG_COMPONENT);
+				if (this._lastSettlement === lastSettlement) {
+					this._errorNavigation(error, attemptedHash, restoreHash);
+				}
+			}
+		});
 	}
 
 	/**
@@ -939,6 +996,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bag: Map<string, unknown>,
 		attempt: NavigationAttempt,
 	): void {
+		// A guard that navigated itself has superseded the navigation it was guarding.
+		if (attempt.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow":
 				this._phase = { kind: "committing", route, origin: "parse" };
@@ -961,7 +1020,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * State is updated BEFORE calling parse to ensure that if event handlers
 	 * (e.g., routeMatched) trigger nested navigation, the leave guards will
-	 * run for the correct (new) route rather than the old one.
+	 * run for the correct (new) route rather than the old one. The settlement
+	 * fires before parse as well, so the settlements of such nested navigations
+	 * follow it.
 	 */
 	private _commitNavigation(hash: string, route: string): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
@@ -979,7 +1040,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			route: this._currentRoute,
 			hash,
 		});
-		super.parse(hash);
+		// A navigationSettled handler that navigated on has committed its own hash.
+		if (this._currentHash === hash) super.parse(hash);
 	}
 
 	/**
@@ -1011,9 +1073,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		try {
 			targetHash = targetRoute.getURL(typeof target === "string" ? {} : (target.parameters ?? {}));
 		} catch (error) {
-			// Missing mandatory parameters fail like the native navTo(), and leave no navigation pending.
-			this._phase = IDLE;
-			throw error;
+			Log.error(
+				`Guard redirect target "${targetName}" has no valid hash, navigation failed`,
+				String(error),
+				LOG_COMPONENT,
+			);
+			this._errorNavigation(error, chain.attemptedHash, chain.restoreHash);
+			return;
 		}
 
 		// Loop detection: visited set (exact hash match) + depth cap.
@@ -1055,20 +1121,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
 		if (isPromiseLike(decision)) {
-			decision
-				.then((d: GuardDecision) => {
-					if (chain.generation !== this._parseGeneration) return;
-					this._applyRedirectDecision(d, target, targetHash, chain);
-				})
-				.catch((error: unknown) => {
-					if (chain.generation !== this._parseGeneration) return;
-					Log.error(
-						`Guard pipeline failed during redirect chain for "${targetName}", navigation failed`,
-						String(error),
-						LOG_COMPONENT,
-					);
-					this._errorNavigation(error, chain.attemptedHash, chain.restoreHash);
-				});
+			this._applyWhenDecided(
+				decision,
+				(d) => this._applyRedirectDecision(d, target, targetHash, chain),
+				chain.attemptedHash,
+				chain.restoreHash,
+			);
 			return;
 		}
 
@@ -1092,6 +1150,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		targetHash: string,
 		chain: RedirectChainContext,
 	): void {
+		// Superseded while the hop's guards ran: by a newer navigation, or by a guard that navigated.
+		if (chain.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow": {
 				const targetName = typeof target === "string" ? target : target.route;
@@ -1184,12 +1244,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _blockNavigation(attemptedHash?: string, restoreHash = true): void {
 		this._phase = IDLE;
-		this._flushSettlement({
-			status: NavigationOutcome.Blocked,
-			route: this._currentRoute,
-			hash: this._currentHash ?? "",
-		});
-		this._restoreHashIfNeeded(attemptedHash, restoreHash);
+		this._settleUncommitted(
+			{ status: NavigationOutcome.Blocked, route: this._currentRoute, hash: this._currentHash ?? "" },
+			attemptedHash,
+			restoreHash,
+		);
 	}
 
 	/**
@@ -1199,23 +1258,29 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void {
 		this._phase = IDLE;
-		this._flushSettlement({
-			status: NavigationOutcome.Error,
-			route: this._currentRoute,
-			hash: this._currentHash ?? "",
-			error,
-		});
-		this._restoreHashIfNeeded(attemptedHash, restoreHash);
+		this._settleUncommitted(
+			{ status: NavigationOutcome.Error, route: this._currentRoute, hash: this._currentHash ?? "", error },
+			attemptedHash,
+			restoreHash,
+		);
 	}
 
-	/** Conditionally restore the browser hash after a blocked or errored navigation. */
-	private _restoreHashIfNeeded(attemptedHash: string | undefined, restoreHash: boolean): void {
-		if (!restoreHash) return;
-		if (this._currentHash === null && attemptedHash) {
-			this._restoreHash("", false);
-			return;
-		}
-		this._restoreHash(this._currentHash ?? "");
+	/**
+	 * Settle a navigation that did not commit. With `restoreHash`, the hash it left in the URL
+	 * is restored first, so that settlement handlers run on the final URL and a hash they set
+	 * is not overwritten. The exception is a first navigation: nothing is committed yet, so the
+	 * empty hash is restored after the settlement and parsed as a navigation of its own.
+	 */
+	private _settleUncommitted(
+		result: NavigationResult,
+		attemptedHash: string | undefined,
+		restoreHash: boolean,
+	): void {
+		const loadDefaultRoute = restoreHash && this._currentHash === null && !!attemptedHash;
+		if (restoreHash && !loadDefaultRoute) this._restoreHash(this._currentHash ?? "");
+		this._flushSettlement(result);
+		// Unless a handler navigated and committed in the meantime.
+		if (loadDefaultRoute && this._currentHash === null) this._restoreHash("", false);
 	}
 
 	/**

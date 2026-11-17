@@ -114,13 +114,13 @@ Same pattern, adapted for our use case:
 
 ```typescript
 // Router.ts — initialize() in "block" mode
-const blockLoad = { start: true };
+const blockLoad = { start: true, ignoreInitialHash: bIgnoreInitialHash };
 this._blockLoad = blockLoad;
 loadGuardModules(expandedDescriptors).then((results) => {
     this._blockLoad = null;
     if (this._destroyed) return;  // ◄── sentinel check
     // register each module's guards, then:
-    if (blockLoad.start) super.initialize();
+    if (blockLoad.start) super.initialize(blockLoad.ignoreInitialHash);
 });
 
 // Router.ts — destroy()
@@ -167,7 +167,8 @@ Once the Promise resolves, the closure releases `this`, and the router becomes e
 UI5's router stays stopped after `stop()` until `initialize()` is called again, and treats a second `initialize()` as a no-op. Block mode keeps both rules while modules load. `_blockLoad` is set for the duration of the load, and its `start` flag decides whether the load callback calls `super.initialize()`:
 
 - `stop()` clears `start`. The guards are still registered when loading finishes, but the router does not start.
-- `initialize()` sets `start` and returns. A second call while loading therefore does not start the router before its manifest guards exist, and a call after `stop()` restores the pending start.
+- `initialize()` sets `start` and returns. A second call while loading therefore does not start the router before its manifest guards exist, and a call after `stop()` restores the pending start. The call that sets `start` also decides `bIgnoreInitialHash` for the deferred `super.initialize()`.
+- `navTo()` while loading only sets the hash, like the native router before `initialize()`. The guards, including the manifest guards, run when the load callback initializes the router and it parses that hash.
 
 ### destroy() twice
 

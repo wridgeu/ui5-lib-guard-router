@@ -213,8 +213,8 @@ When a module is loaded:
 
 1. Determine the export shape (function / array / object)
 2. If `exportKey` is defined:
-    - For objects: look up `module[exportKey]`; if there is no such key and `exportKey` is a number, take the entry at that position in key order
-    - For arrays: look up `module[parseInt(exportKey)]`
+    - For objects: look up `module[exportKey]`; if there is no such key and `exportKey` is a plain non-negative integer, take the entry at that position in key order
+    - For arrays: `exportKey` must be a plain non-negative integer; look up the entry at that index
     - For functions: ignore `exportKey`
     - If the key doesn't exist or the value isn't a function: warn and skip
 3. If `exportKey` is undefined: register all exports in order

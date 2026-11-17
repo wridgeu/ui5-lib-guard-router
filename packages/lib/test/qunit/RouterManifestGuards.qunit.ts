@@ -14,6 +14,7 @@ import {
 	initHashChanger,
 	getHash,
 	recordHashChanges,
+	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -2114,3 +2115,70 @@ QUnit.test("block mode without manifest guards starts the router within initiali
 	router.initialize();
 	assert.ok(router.isInitialized(), "nothing to load, so the start is not deferred");
 });
+
+QUnit.test("block mode: navTo() while modules load is guarded once the router starts", async function (assert: Assert) {
+	router = createBlockRouter({ protected: [`${FIXTURES}/blockGuard`] });
+	let matched = false;
+	router.getRoute("protected")!.attachMatched(() => {
+		matched = true;
+	});
+	const statuses = recordSettlements(router);
+
+	router.initialize();
+	assert.notOk(router.isInitialized(), "the modules are still loading");
+	router.navTo("protected");
+	assert.deepEqual(statuses, [], "nothing settled: the router does not handle navigation yet");
+
+	await waitForRoute(router, "home");
+	assert.deepEqual(
+		statuses,
+		[NavigationOutcome.Blocked, NavigationOutcome.Committed],
+		"the manifest guard blocked the hash, then the router fell back to the empty hash",
+	);
+	assert.notOk(matched, "the guarded route was never displayed");
+	assert.strictEqual(getHash(), "");
+});
+
+QUnit.test(
+	"block mode: initialize(true) leaves the current hash unparsed once the modules are loaded",
+	async function (assert: Assert) {
+		HashChanger.getInstance().setHash("protected");
+		router = createBlockRouter({ protected: [`${FIXTURES}/blockGuard`] });
+		const statuses = recordSettlements(router);
+
+		router.initialize(true);
+		while (!router.isInitialized()) await flushPromises();
+		await flushPromises();
+
+		assert.deepEqual(statuses, [], "the initial hash was not parsed, so nothing settled");
+		assert.strictEqual(getHash(), "protected", "the hash is untouched");
+	},
+);
+
+QUnit.test(
+	"pattern-tree: an ancestor's guard runs first even when the descendant is declared first",
+	async function (assert: Assert) {
+		const path = `${FIXTURES}/lazyCachedGuard`;
+		const probe = await loadProbe();
+		router = createRouterUnsafe(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "employees", pattern: "employees" },
+				{ name: "employee", pattern: "employees/{id}" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					inheritance: "pattern-tree",
+					guards: { employee: [`${path}#1`], employees: [`${path}#0`] },
+				},
+			},
+		);
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.navTo("employee", { id: "1" });
+		await router.navigationSettled();
+		assert.deepEqual(probe.calls, ["cachedFirst", "cachedSecond"], "inherited guard first, own guard second");
+	},
+);

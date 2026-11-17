@@ -280,3 +280,31 @@ QUnit.test("skipGuards navTo settles exactly once", async function (assert: Asse
 
 	assert.deepEqual(statuses, [NavigationOutcome.Committed], "one settlement, in the same tick");
 });
+
+QUnit.test("skipGuards is honored when bReplace is left out", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => false);
+
+	router.navTo("protected", {}, undefined, { skipGuards: true });
+	const result = await router.navigationSettled();
+	assert.strictEqual(result.status, NavigationOutcome.Committed, "options in place of bReplace are read");
+	assert.strictEqual(result.route, "protected", "reached target route");
+});
+
+QUnit.test("skipGuards does not wait for the pending guards of the same target", async function (assert: Assert) {
+	await waitForRoute(router, "home");
+
+	router.addGuard(() => new Promise<boolean>(() => {}));
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected");
+	router.navTo("protected", {}, false, { skipGuards: true });
+
+	assert.deepEqual(
+		statuses,
+		[NavigationOutcome.Cancelled, NavigationOutcome.Committed],
+		"the guarded navigation is cancelled, the unguarded one commits",
+	);
+	assert.strictEqual(getHash(), "protected");
+});

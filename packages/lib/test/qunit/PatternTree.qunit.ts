@@ -57,7 +57,7 @@ const ROUTES = [
 
 QUnit.module("PatternTree - expandToDescendants");
 
-QUnit.test("copies route entries to descendants, sorted by depth", function (assert) {
+QUnit.test("copies route entries to descendants, ancestors' entries first", function (assert) {
 	const entries = [
 		{ route: "employee", id: "e" },
 		{ route: "employees", id: "s" },
@@ -66,11 +66,26 @@ QUnit.test("copies route entries to descendants, sorted by depth", function (ass
 	assert.deepEqual(expandToDescendants(entries, ROUTES), [
 		{ route: "unknown", id: "u" },
 		{ route: "employees", id: "s" },
-		{ route: "employee", id: "e" },
 		{ route: "employee", id: "s" },
-		{ route: "resume", id: "e" },
 		{ route: "resume", id: "s" },
+		{ route: "employee", id: "e" },
+		{ route: "resume", id: "e" },
 	]);
+});
+
+QUnit.test("entries of routes at the same depth keep their declaration order", function (assert) {
+	const entries = [
+		{ route: "other", id: "o" },
+		{ route: "employees", id: "s2" },
+		{ route: "employees", id: "s1" },
+	];
+	assert.deepEqual(
+		expandToDescendants(entries, ROUTES).filter((entry) => entry.route === "employee"),
+		[
+			{ route: "employee", id: "s2" },
+			{ route: "employee", id: "s1" },
+		],
+	);
 });
 
 QUnit.test("keeps global entries without copying them", function (assert) {
@@ -83,13 +98,10 @@ QUnit.test("keeps global entries without copying them", function (assert) {
 });
 
 QUnit.test("an entry of the empty-pattern route is not copied to that route again", function (assert) {
-	assert.deepEqual(expandToDescendants([{ route: "home" }], ROUTES), [
-		{ route: "home" },
-		{ route: "employees" },
-		{ route: "other" },
-		{ route: "employee" },
-		{ route: "resume" },
-	]);
+	assert.deepEqual(
+		expandToDescendants([{ route: "home" }], ROUTES),
+		ROUTES.map(({ name }) => ({ route: name })),
+	);
 });
 
 QUnit.test('global entries are not copied even when a route is named "*"', function (assert) {
@@ -108,7 +120,7 @@ QUnit.test("without known routes the entries are returned as they are", function
 
 QUnit.module("PatternTree - expandForNewRoute");
 
-QUnit.test("a new route inherits its ancestors' entries, sorted by depth", function (assert) {
+QUnit.test("a new route inherits its ancestors' entries, the shallowest ancestor's first", function (assert) {
 	const entries = [
 		{ route: "employee", id: "e" },
 		{ route: "*", id: "g" },
@@ -116,12 +128,12 @@ QUnit.test("a new route inherits its ancestors' entries, sorted by depth", funct
 		{ route: "other", id: "o" },
 	];
 	assert.deepEqual(expandForNewRoute(entries, "resume", ROUTES), [
-		{ route: "resume", id: "e" },
 		{ route: "resume", id: "s" },
+		{ route: "resume", id: "e" },
 	]);
 });
 
-QUnit.test("a new route's own entries go to its existing descendants, sorted by depth", function (assert) {
+QUnit.test("a new route's own entries go to its existing descendants", function (assert) {
 	assert.deepEqual(expandForNewRoute([{ route: "employees" }], "employees", ROUTES), [
 		{ route: "employee" },
 		{ route: "resume" },
@@ -129,12 +141,11 @@ QUnit.test("a new route's own entries go to its existing descendants, sorted by 
 });
 
 QUnit.test("a new empty-pattern route's entries go to every other route, not to itself", function (assert) {
-	assert.deepEqual(expandForNewRoute([{ route: "home" }], "home", ROUTES.toReversed()), [
-		{ route: "other" },
-		{ route: "employees" },
-		{ route: "employee" },
-		{ route: "resume" },
-	]);
+	const routes = ROUTES.toReversed();
+	assert.deepEqual(
+		expandForNewRoute([{ route: "home" }], "home", routes),
+		routes.filter(({ name }) => name !== "home").map(({ name }) => ({ route: name })),
+	);
 });
 
 QUnit.test("a new route without a known pattern inherits nothing", function (assert) {

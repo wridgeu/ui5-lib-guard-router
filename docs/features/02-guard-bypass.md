@@ -10,7 +10,8 @@
 >
 > - The options object is the last argument of either `navTo()` form: `navTo(name, params, replace, { skipGuards: true })` or `navTo(name, params, componentTargetInfo, replace, { skipGuards: true })`. The type is `GuardNavToOptions`, not `NavToOptions`, and `navTo()` returns `this`.
 > - There is no `_skipNextGuards` flag. `navTo()` sets the committing phase (origin `"preflight"`) and calls `super.navTo()`; `parse()` then commits without running guards. If the hash did not change, `navTo()` commits directly, so nothing leaks to the next navigation.
-> - Same-hash navigations are deduped before `skipGuards` is checked.
+> - The options may also take the place of a `bReplace` that is left out: `navTo(name, params, undefined, { skipGuards: true })`.
+> - A navigation to the hash the router is already on is deduped before `skipGuards` is checked. A `skipGuards` navigation to a target whose guards are still pending cancels that navigation and commits.
 > - Option B (`navToSkipGuards`) was not shipped.
 > - The router-wide `navToPreflight: "bypass"` option skips guards for every `navTo()` call.
 >

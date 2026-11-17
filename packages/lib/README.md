@@ -275,8 +275,9 @@ Leave guards answer "can I leave?" and cannot redirect. For redirection logic, u
 | Method                   | Behavior                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `stop()`                 | Cancels pending async guards (aborts the `AbortSignal`) and resets the current route, hash and last settlement; registered guards are kept. A subsequent `initialize()` re-parses the current hash and fires `routeMatched`, matching native router behavior                                                                                                         |
-| `initialize()`           | With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded; until then `isInitialized()` is `false`, and calling `initialize()` again changes nothing                                                                                                                                                                               |
+| `initialize()`           | With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded; until then `isInitialized()` is `false`, and calling `initialize()` again changes nothing. `initialize(true)` leaves the current hash unparsed, as in the native router, also when the start is deferred                                                                |
 | `stop()` (while loading) | With `guardLoading: "block"`, `stop()` before the modules have loaded cancels the start. The guards are still registered when loading finishes; the router starts on the next `initialize()`                                                                                                                                                                         |
+| `navTo()` (not started)  | Before `initialize()`, while `guardLoading: "block"` modules load, and after `stop()`, `navTo()` behaves like the native router: it only sets the hash, or does nothing on a stopped router. No guard runs and nothing settles at that point; the guards run when the router starts and parses the hash                                                              |
 | `destroy()`              | Clears all registered guards (global, enter, leave), cancels pending async guards, then calls `super.destroy()`. Guard modules that finish loading afterwards register nothing. A hash change that still reaches the destroyed router runs no guards and only logs the base router's warning. A second call does nothing, like the base `sap.ui.core.routing.Router` |
 
 ### Navigation settlement
@@ -299,7 +300,7 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
 | `NavigationOutcome.Error`      | A guard threw or rejected; previous route stays active. `result.error` holds the thrown value           |
 
-A guard redirect to a route that does not exist settles as `Blocked` because no route change commits; the router logs the target name to help diagnose it. A redirect whose target hash cannot be built (a mandatory route parameter is missing) fails like the native `navTo()`: after an async guard the navigation settles as `Error`; from a synchronous guard the error is thrown to the caller and no settlement is reported.
+A guard redirect to a route that does not exist settles as `Blocked` because no route change commits; the router logs the target name to help diagnose it. A redirect whose target hash cannot be built (a mandatory route parameter is missing) is a guard failure: the navigation settles as `Error` with the error in `result.error`, whether the guard is sync or async and whether the navigation came from `navTo()` or from a hash change. `navTo()` does not throw for it, and a hash change is restored. The router logs the target name.
 
 An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
 
@@ -363,11 +364,20 @@ router.attachNavigationSettled((event) => {
 });
 ```
 
+A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL has already been restored when the event fires, so a handler sees the hash of the route the user is on, and a navigation or hash change it starts is not undone by the restore. (On first load, a blocked non-empty hash settles before the router falls back to the default route.) Two things follow from navigating inside the event:
+
+- A navigation that is left again while it commits (the handler navigates on synchronously for a `Committed` or `Redirected` settlement) is not displayed and fires no `routeMatched`; only the handler's target is.
+- When a navigation is `Cancelled` because another one supersedes it, the event fires before the superseding navigation starts. That navigation continues after the handler returns and supersedes what the handler started: a navigation that already committed is navigated away from, one whose guards are still pending is dropped without a settlement of its own. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
+
 Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works.
 
 ### Error handling
 
 When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. `Error` indicates an unexpected failure, as opposed to `Blocked` which signals intentional denial.
+
+A guard that calls `navTo()` itself supersedes the navigation it is guarding: that navigation settles as `Cancelled`, and what the guard returns afterwards (`true`, `false` or a redirect) is ignored, for sync and async guards alike. The navigation the guard started decides where the router ends up. To send the user elsewhere from a guard, return a redirect instead.
+
+An error thrown while an allowed navigation is carried out, for example by a `beforeRouteMatched` handler, is not a guard failure. With sync guards it reaches the caller of `navTo()`. After async guards there is no caller, so the router logs it (`Navigation failed after its guards had settled`); a navigation that had already settled as `Committed` keeps that result, one that had not settled yet settles as `Error`.
 
 ### Execution order
 
@@ -580,6 +590,8 @@ When a module exports multiple guards, you can register a subset using `#` to se
 | `"guards.security#1"`                | Register by index (array or object key order) |
 | `"module:some.lib.guards#checkAuth"` | `module:` prefix composes with `#`            |
 
+Only a plain non-negative integer (`#0`, `#12`) selects by index. Every other key is a name: `#2faGuard` selects the export named `2faGuard` and is skipped with a warning if the module has none.
+
 When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
 
 ### Guard context `bag`
@@ -637,11 +649,15 @@ router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
 
 ### `skipGuards` option
 
-Pass `{ skipGuards: true }` as the fourth argument to `navTo()` to bypass all guards for a single call. Use this for internal redirects or navigations that should not be subject to guard logic:
+Pass `{ skipGuards: true }` as the options argument of `navTo()` to bypass all guards for a single call. The options follow `bReplace`, or take its place when `bReplace` is left out. Use this for internal redirects or navigations that should not be subject to guard logic:
 
 ```typescript
 router.navTo("settings", {}, false, { skipGuards: true });
+router.navTo("settings", {}, undefined, { skipGuards: true });
+router.navTo("settings", {}, componentTargetInfo, false, { skipGuards: true });
 ```
+
+A `skipGuards` navigation does not wait for guards that are still pending for the same target: it cancels that navigation and commits.
 
 ### Guard and metadata inheritance
 
@@ -656,7 +672,7 @@ When `inheritance` is set to `"pattern-tree"`, guards declared on a route automa
 }
 ```
 
-With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards.
+With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards, in whatever order the routes appear under `guards`; guards of the same route keep their declared order.
 
 With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Inheritance is determined by URL patterns. Assuming the route-to-pattern mapping `"employees"` -> `employees`, `"employee"` -> `employees/{id}`, `"employeeResume"` -> `employees/{id}/resume`:
 

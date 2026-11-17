@@ -132,8 +132,8 @@ QUnit.test(
 			assert.ok(result.error instanceof Error, "the redirect's error is on the result");
 		});
 		assert.ok(
-			errors.some((e) => e.message === 'Guard pipeline failed for "protected", navigation failed'),
-			"failure is logged with the attempted hash",
+			errors.some((e) => e.message === 'Guard redirect target "detail" has no valid hash, navigation failed'),
+			"failure is logged with the redirect target",
 		);
 		assert.strictEqual(getHash(), "", "hash restored to the previous route");
 	},
@@ -1062,8 +1062,8 @@ QUnit.test("preflight that blocks or fails never writes to the HashChanger", asy
 			NavigationOutcome.Blocked,
 		]);
 		assert.ok(
-			errors.some((e) => e.message === 'Async preflight guard failed for route "detail", navigation failed'),
-			"failed redirect is logged with the route name",
+			errors.some((e) => e.message === 'Guard redirect target "detail" has no valid hash, navigation failed'),
+			"failed redirect is logged with the redirect target",
 		);
 		assert.strictEqual(setHash.callCount, 0, "no history entry added");
 		assert.deepEqual(restores, [0, 0, 0, 0, 0], "no hash restore after any of them: the hash never changed");
@@ -1426,7 +1426,7 @@ QUnit.test("A redirect hop that fails after an async guard settles as Error", as
 
 	assert.deepEqual(
 		errors.map((e) => e.message),
-		['Guard pipeline failed during redirect chain for "forbidden", navigation failed'],
+		['Guard redirect target "detail" has no valid hash, navigation failed'],
 	);
 	assert.deepEqual(recorder.hashes, [], "hash unchanged (preflight)");
 });
@@ -1590,3 +1590,43 @@ QUnit.test("GuardRedirect object without a mandatory parameter settles as Error"
 		assert.ok(result.error instanceof Error, "the UI5 error is on the result");
 	});
 });
+
+// ============================================================
+// Module: Deferred hash change of component targets
+// ============================================================
+QUnit.module("Router - Deferred hash change of component targets", standardHooks);
+
+QUnit.test(
+	"the deferred hash change of a committed navigation does not cancel a navTo() started meanwhile",
+	async function (assert: Assert) {
+		let allow!: (allowed: boolean) => void;
+		router.addRouteGuard(
+			"protected",
+			() =>
+				new Promise<boolean>((resolve) => {
+					allow = resolve;
+				}),
+		);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		// With component target info, UI5 changes the hash only after the component targets resolved.
+		router.navTo("detail", { id: "1" }, { detail: { route: "sub", parameters: { subId: "x" } } });
+		assert.strictEqual(getHash(), "", "the hash change is still on its way");
+		router.navTo("protected");
+		await flushPromises();
+		await flushPromises();
+		assert.strictEqual(getHash(), "detail/1", "the deferred hash change arrived");
+
+		allow(true);
+		await flushPromises();
+
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Committed, NavigationOutcome.Committed],
+			"the pending navigation was not cancelled",
+		);
+		assert.strictEqual(getHash(), "protected");
+	},
+);

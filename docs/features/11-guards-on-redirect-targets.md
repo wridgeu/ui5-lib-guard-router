@@ -176,8 +176,8 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
     }
-    // Throws for missing mandatory parameters, like the native navTo().
-    // The real method catches the error, resets the phase to idle and rethrows.
+    // Throws for missing mandatory parameters. The real method catches the error,
+    // logs it and fails the navigation: _errorNavigation(error, chain.attemptedHash, chain.restoreHash).
     const targetHash = targetRoute.getURL(typeof target === "string" ? {} : (target.parameters ?? {}));
 
     // 2. Loop detection (two separate checks)
@@ -217,17 +217,15 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         return;
     }
 
-    // 7. Handle async result with generation check
-    decision
-        .then((d: GuardDecision) => {
-            if (chain.generation !== this._parseGeneration) return; // superseded
-            this._applyRedirectDecision(d, target, targetHash, chain);
-        })
-        .catch((error: unknown) => {
-            if (chain.generation !== this._parseGeneration) return;
-            Log.error(`Guard pipeline failed during redirect chain for "${targetName}", navigation failed`, String(error), ...);
-            this._errorNavigation(error, chain.attemptedHash, chain.restoreHash);
-        });
+    // 7. Handle async result. _applyRedirectDecision() checks the generation (superseded chains
+    //    do nothing); _applyWhenDecided() logs an error thrown while the decision is applied and
+    //    settles the navigation as Error if it had not settled yet.
+    this._applyWhenDecided(
+        decision,
+        (d) => this._applyRedirectDecision(d, target, targetHash, chain),
+        chain.attemptedHash,
+        chain.restoreHash,
+    );
 }
 
 private _applyRedirectDecision(
@@ -303,10 +301,11 @@ The entire chain is one logical navigation. Only one settlement is flushed:
 | Loop detected       | `NavigationOutcome.Blocked` + `Log.error` with chain path |
 | Depth cap exceeded  | `NavigationOutcome.Blocked` + `Log.error` with chain path |
 | Unknown target      | `NavigationOutcome.Blocked` + `Log.warning` with the name |
+| Target without hash | `NavigationOutcome.Error` + `Log.error` with the name     |
 
-A target whose hash cannot be built (missing mandatory parameter) is not a chain
-outcome: the error is rethrown. A synchronous chain throws to the caller of `navTo()` or
-`parse()` without a settlement; after an async guard the navigation settles as `Error`.
+A target whose hash cannot be built (missing mandatory parameter) fails the chain like a
+throwing guard: it settles as `Error` in sync and async chains, from `navTo()` and from a
+hash change. Nothing is thrown to the caller.
 
 No intermediate settlements for redirect hops.
 

@@ -62,11 +62,11 @@ When `setRouteMeta` is called with a route name that does not exist:
 - **Policy values**: `"ignore"` | `"warn"` | `"throw"`: Same semantics as `unknownRouteRegistration`.
 - **Default**: `"warn"`.
 
-| Policy     | Behavior                                                                            |
-| ---------- | ----------------------------------------------------------------------------------- |
-| `"ignore"` | Store the metadata silently. No warning logged.                                     |
-| `"warn"`   | Log a warning (`setRouteMeta: unknown route, guard registered anyway`), then store. |
-| `"throw"`  | Throw an `Error` synchronously. Metadata is not stored.                             |
+| Policy     | Behavior                                                                           |
+| ---------- | ---------------------------------------------------------------------------------- |
+| `"ignore"` | Store the metadata silently. No warning logged.                                    |
+| `"warn"`   | Log a warning (`setRouteMeta: unknown route, metadata stored anyway`), then store. |
+| `"throw"`  | Throw an `Error` synchronously. Metadata is not stored.                            |
 
 **Rationale**: `setRouteMeta` is a write/registration operation, same category as `addRouteGuard` / `addLeaveGuard`. The policy pattern is already established for guard registration (`unknownRouteRegistration`). Metadata registration deserves the same configurability because developers may intentionally set metadata before calling `addRoute()` (dynamic routes) or may have a typo that should be caught early.
 

@@ -1537,9 +1537,10 @@ QUnit.test("setRouteMeta on unknown route with warn policy logs a warning", asyn
 		router.setRouteMeta("nonexistent", { key: "value" });
 	});
 
-	assert.ok(
-		warnings.some((w) => w.message.includes("unknown route")),
-		"warning logged for setRouteMeta on unknown route with warn policy",
+	assert.deepEqual(
+		warnings.map((w) => [w.message, w.details]),
+		[["setRouteMeta: unknown route, metadata stored anyway", "nonexistent"]],
+		"the warning says what was kept: metadata, not a guard",
 	);
 
 	// Despite the warning, the data is stored

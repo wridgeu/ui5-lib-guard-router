@@ -39,7 +39,7 @@ QUnit.test("array export picked by index", function (this: SinonTestContext, ass
 	assert.deepEqual(resolveModuleExports([a, b], PATH, "0"), [{ name: "auth#0", fn: a }]);
 	assert.deepEqual(resolveModuleExports([a, b], PATH, "1"), [{ name: "auth#1", fn: b }]);
 	assert.strictEqual(warning.callCount, 0);
-	for (const key of ["2", "-1", "x"]) {
+	for (const key of ["2", "-1", "x", "1x", "1.0", " 1"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports([a, b], PATH, key), [], `#${key}`);
 		assert.deepEqual(logMessages(warning), warned(`#${key} - index out of range, skipping`));
@@ -70,7 +70,7 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 		"a key wins over an index",
 	);
 	assert.strictEqual(warning.callCount, 0);
-	for (const key of ["2", "-1", "missing"]) {
+	for (const key of ["2", "-1", "missing", "1faGuard", "1.5", " 1"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports(mod, PATH, key), [], `#${key}`);
 		assert.deepEqual(logMessages(warning), warned(`#${key} - key not found, skipping`));

@@ -31,6 +31,11 @@ function guardWarning(modulePath: string, detail: string): void {
  * When `exportKey` is set, only the matching export is returned.
  * When `exportKey` is set on a function export, the key is ignored with a debug log.
  */
+/** The position an export key selects: a plain non-negative integer, otherwise `NaN`. */
+function positionOf(exportKey: string): number {
+	return /^\d+$/.test(exportKey) ? Number(exportKey) : NaN;
+}
+
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
 	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
 
@@ -54,8 +59,8 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		}
 
 		if (exportKey !== undefined) {
-			const index = parseInt(exportKey, 10);
-			if (Number.isNaN(index) || index < 0 || index >= moduleExport.length) {
+			const index = positionOf(exportKey);
+			if (Number.isNaN(index) || index >= moduleExport.length) {
 				guardWarning(modulePath, `#${exportKey} - index out of range, skipping`);
 				return [];
 			}
@@ -91,7 +96,7 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 			// A key wins over a position. A position that is not a number or out of range finds no entry.
 			const entry: [string, unknown] | undefined =
 				moduleExport[exportKey] === undefined
-					? entries[parseInt(exportKey, 10)]
+					? entries[positionOf(exportKey)]
 					: [exportKey, moduleExport[exportKey]];
 			if (entry === undefined) {
 				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
