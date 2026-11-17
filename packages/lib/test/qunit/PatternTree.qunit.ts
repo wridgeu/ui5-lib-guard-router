@@ -128,6 +128,15 @@ QUnit.test("a new route's own entries go to its existing descendants, sorted by 
 	]);
 });
 
+QUnit.test("a new empty-pattern route's entries go to every other route, not to itself", function (assert) {
+	assert.deepEqual(expandForNewRoute([{ route: "home" }], "home", ROUTES.toReversed()), [
+		{ route: "other" },
+		{ route: "employees" },
+		{ route: "employee" },
+		{ route: "resume" },
+	]);
+});
+
 QUnit.test("a new route without a known pattern inherits nothing", function (assert) {
 	assert.deepEqual(expandForNewRoute([{ route: "employees" }], "missing", ROUTES), []);
 });

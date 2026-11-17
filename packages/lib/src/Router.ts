@@ -1227,9 +1227,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _restoreHash(hash: string, suppressParse = true): void {
 		this._suppressedHash = suppressParse ? hash : null;
 		this.getHashChanger().replaceHash(hash, HistoryDirection.Unknown);
-		if (this._suppressedHash === hash) {
-			this._suppressedHash = null;
-		}
+		this._suppressedHash = null;
 	}
 
 	/**

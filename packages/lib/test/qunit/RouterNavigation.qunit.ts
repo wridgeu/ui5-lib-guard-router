@@ -528,6 +528,57 @@ QUnit.test("navTo from routeMatched handler runs leave guards for the NEW route"
 	);
 });
 
+QUnit.test("an async navTo started while a route is matched can still be cancelled", async function (assert: Assert) {
+	router.addRouteGuard("detail", () => Promise.resolve(true));
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	// beforeRouteMatched fires while the hash change is matched; patternMatched waits for the views.
+	let started = false;
+	router.attachBeforeRouteMatched(() => {
+		if (started) return;
+		started = true;
+		router.navTo("detail", { id: "1" });
+	});
+	const statuses: string[] = [];
+	router.attachNavigationSettled((event) => {
+		statuses.push(event.getParameter("status") as string);
+	});
+
+	router.navTo("protected");
+	router.navTo("forbidden");
+
+	assert.deepEqual(
+		statuses,
+		[NavigationOutcome.Committed, NavigationOutcome.Cancelled, NavigationOutcome.Committed],
+		"the pending navigation started by the handler is cancelled by the next navTo",
+	);
+	assert.strictEqual(getHash(), "forbidden");
+});
+
+QUnit.test("an allowed navTo matches its route while the hash change is dispatched", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	let matched = false;
+	router.attachBeforeRouteMatched(() => {
+		matched = true;
+	});
+	const matchedDuringHashChange: boolean[] = [];
+	const listener = (): void => {
+		matchedDuringHashChange.push(matched);
+	};
+	const hashChanger = HashChanger.getInstance();
+	hashChanger.attachEvent("hashChanged", listener);
+	try {
+		router.navTo("protected");
+	} finally {
+		hashChanger.detachEvent("hashChanged", listener);
+	}
+
+	assert.deepEqual(matchedDuringHashChange, [true], "like the native router, later listeners see the matched route");
+});
+
 // ============================================================
 // Module: navTo preflight
 // ============================================================
