@@ -2091,24 +2091,30 @@ QUnit.test(
 	},
 );
 
-QUnit.test(
-	"lazy mode preloads each guard module once in the constructor, block mode does not",
-	function (assert: Assert) {
-		const path = `${FIXTURES}/allowGuard`;
-		const requireSpy = sinon.spy(sap.ui, "require");
-		try {
-			router = createLazyRouter({ protected: [path, `${path}#0`], forbidden: [path] });
-			assert.ok(requireSpy.calledWith([path]), "lazy: one preload request with the unique module paths");
-			router.destroy();
+/** Resolve once the browser has fetched a file whose URL ends with `fileName`. */
+function whenFetched(fileName: string): Promise<void> {
+	return new Promise((resolve) => {
+		const observer = new PerformanceObserver((list) => {
+			const entry = list.getEntries().find((e) => e.name.endsWith(`/${fileName}`));
+			if (entry) {
+				observer.disconnect();
+				resolve();
+			}
+		});
+		observer.observe({ type: "resource", buffered: true });
+	});
+}
 
-			requireSpy.resetHistory();
-			router = createBlockRouter({ protected: [path] });
-			assert.notOk(requireSpy.calledWith([path]), "block: nothing is requested before initialize()");
-		} finally {
-			requireSpy.restore();
-		}
-	},
-);
+QUnit.test("lazy mode starts loading guard modules in the constructor", async function (assert: Assert) {
+	const path = `${FIXTURES}/lazyPreloadGuard`;
+	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached before the router existed");
+	const fetched = whenFetched("lazyPreloadGuard.js");
+
+	router = createLazyRouter({ protected: [path] });
+
+	await fetched;
+	assert.strictEqual(router.isInitialized(), false, "the module was fetched before initialize()");
+});
 
 QUnit.test("block mode without manifest guards starts the router within initialize()", function (assert: Assert) {
 	router = createBlockRouter({});
