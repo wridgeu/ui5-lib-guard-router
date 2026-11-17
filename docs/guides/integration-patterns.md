@@ -20,7 +20,7 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
 | [Async guard timeout](#async-guard-timeout)                                 | Route enter          | Async        | inline example                                                       |
 | [Factory pattern for manifest guards](#factory-pattern-for-manifest-guards) | Any                  | Any          | inline example                                                       |
-| [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | inline example                                                       |
+| [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | `webapp/reporting/` -- nested component with manifest guards         |
 | [Settlement for UI feedback](#settlement-for-ui-feedback)                   | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
 Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). The controller lifecycle example references `Home.controller.ts`.
@@ -438,6 +438,27 @@ router.addRouteGuard("orderDetail", orderAccessGuard); // protects individual or
 ```
 
 The parent guard runs first (protecting access to the child component), and the child's guards run within the child's own routing scope. Guards are cleaned up automatically when each component's router is destroyed.
+
+The demo app contains a runnable version of this pattern with manifest guards: its `reports` route displays the nested component [`demo.app.reporting`](../../packages/demo-app/webapp/reporting/), which declares its own `routerClass` and `guardRouter` block.
+
+```json
+// Parent manifest.json (sap.ui5)
+"componentUsages": {
+	"reports": { "name": "demo.app.reporting", "lazy": true }
+},
+"routing": {
+	"routes": [{ "name": "reports", "pattern": "reports", "target": { "name": "reports", "prefix": "reports" } }],
+	"targets": {
+		"reports": { "type": "Component", "usage": "reports", "id": "reportsComponent" }
+	}
+}
+```
+
+- The nested router writes its hash under the prefix of the parent route, for example `#/reports&/reports/sales`, and behind the shell intent in the Fiori launchpad (`#app-preview&/reports&/reports/sales` in the demo's FLP preview).
+- A manifest guard of the nested component receives the nested component as `context.ownerComponent`. The demo's [`confidentialGuard`](../../packages/demo-app/webapp/reporting/guards/confidentialGuard.ts) reads a model of the nested component and redirects within the nested router.
+- The parent route waits for the nested router's first navigation, also when a guard redirects it. If a guard blocks that first navigation, the parent route is displayed and the nested component shows no view, so prefer a redirect for routes that can be reached by deep link. See [UI5 Internals the Router Relies On](../reference/architecture.md#ui5-internals-the-router-relies-on).
+
+See the [demo app README](../../packages/demo-app/README.md#nested-component-reports) for the hashes to try.
 
 ## Settlement for UI feedback
 

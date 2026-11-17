@@ -1,0 +1,26 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.reporting.controller.Report">
+	<Page
+		id="confidentialPage"
+		title="{i18n>confidentialTitle}"
+		titleAlignment="Center"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<VBox id="confidentialContent" class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
+				<MessageStrip
+					id="confidentialInfo"
+					text="{i18n>confidentialInfo}"
+					type="Success"
+					showIcon="true"
+					class="sapUiSmallMarginBottom" />
+				<List id="salaryList" headerText="{i18n>confidentialListTitle}" width="22rem">
+					<StandardListItem id="salaryEngineering" title="{i18n>departmentEngineering}" info="4.8M EUR" />
+					<StandardListItem id="salarySales" title="{i18n>departmentSales}" info="2.9M EUR" />
+				</List>
+			</VBox>
+		</content>
+	</Page>
+</mvc:View>

@@ -73,7 +73,7 @@ export async function waitForPage(
 	const timeout = typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeout ?? 10000);
 	const afterRevision = typeof timeoutOrOptions === "number" ? undefined : timeoutOrOptions.afterRevision;
 	const pageName = `${page.viewId}/${page.id}`;
-	const componentId = await getAppComponentId();
+	const componentId = await getAppComponentId(page.appId);
 
 	// Phase 1: Wait for the guard pipeline to settle.
 	const settlement = (await browser.executeAsync(
@@ -225,7 +225,7 @@ export async function fireEvent(control: ControlRef, eventName: string): Promise
 			const Component = sap.ui.require("sap/ui/core/Component");
 			Component?.getComponentById(compId)?.byId(viewId)?.byId(id)?.fireEvent(evt);
 		},
-		await getAppComponentId(),
+		await getAppComponentId(control.appId),
 		control.viewId,
 		control.id,
 		eventName,
@@ -235,7 +235,7 @@ export async function fireEvent(control: ControlRef, eventName: string): Promise
 /**
  * Reset the auth model to logged-out state.
  *
- * browser.goTo({ sHash: "" }) only performs a hash navigation and does NOT
+ * browser.url("#") only performs a hash navigation and does NOT
  * reload the page, so in-memory JSONModel state persists across tests within
  * the same spec file. Call this at the start of any test that requires a
  * known auth state.

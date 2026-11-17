@@ -9,16 +9,17 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-| Route       | Pattern            | Guard behavior                                                                       |
-| ----------- | ------------------ | ------------------------------------------------------------------------------------ |
-| `home`      | `""`               | Open. Leave: logs and allows (controller-level guard)                                |
-| `protected` | `"protected"`      | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty |
-| `blocked`   | `"blocked"`        | Enter: always blocks and stays on the current route                                  |
-| `forbidden` | `"forbidden"`      | Always redirects to `home`                                                           |
-| `admin`     | `"admin"`          | Enter: always redirects to `protected` (demonstrates redirect chains)                |
-| `employees` | `"employees"`      | Open, no guard. Displays route metadata and supports runtime metadata updates        |
-| `employee`  | `"employees/{id}"` | Open, no guard. Displays inherited metadata via `pattern-tree` inheritance           |
-| (bypassed)  | no match           | Shows the Not Found page with a button to return home                                |
+| Route       | Pattern            | Guard behavior                                                                                   |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| `home`      | `""`               | Open. Leave: logs and allows (controller-level guard)                                            |
+| `protected` | `"protected"`      | Enter: commits when logged in, otherwise redirects to `home`. Leave: blocks if dirty             |
+| `blocked`   | `"blocked"`        | Enter: always blocks and stays on the current route                                              |
+| `forbidden` | `"forbidden"`      | Always redirects to `home`                                                                       |
+| `admin`     | `"admin"`          | Enter: always redirects to `protected` (demonstrates redirect chains)                            |
+| `employees` | `"employees"`      | Open, no guard. Displays route metadata and supports runtime metadata updates                    |
+| `employee`  | `"employees/{id}"` | Open, no guard. Displays inherited metadata via `pattern-tree` inheritance                       |
+| `reports`   | `"reports"`        | Open. Displays the nested reporting component, see [Nested component](#nested-component-reports) |
+| (bypassed)  | no match           | Shows the Not Found page with a button to return home                                            |
 
 ## Guards
 
@@ -58,6 +59,52 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | `createRedirectWithParamsGuard()` | Redirect preserving route parameters                                |
 | `createErrorDemoGuard()`          | Sync error handling behavior                                        |
 | `createAsyncErrorDemoGuard()`     | Async error handling behavior                                       |
+
+## Nested component (Reports)
+
+The `reports` route displays a second component, `demo.app.reporting` (`webapp/reporting/`), through a routing target of type `Component`. The nested component has its own manifest, its own `ui5.guard.router.Router` and its own manifest guards. Use it to try nested routing with guards, standalone and in the FLP preview.
+
+**Wiring**
+
+| Where                                      | What                                                                                                                 |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `manifest.json`, `sap.ui5/componentUsages` | Usage `reports` for `demo.app.reporting`, loaded lazily                                                              |
+| `manifest.json`, route `reports`           | `"target": { "name": "reports", "prefix": "reports" }`: the nested router writes its hash under the prefix `reports` |
+| `manifest.json`, target `reports`          | `"type": "Component", "usage": "reports", "id": "reportsComponent"`                                                  |
+| `reporting/manifest.json`                  | `sap.app/type: "component"`, `embeddedBy: "../"`, own `routing` section with `routerClass` and a `guardRouter` block |
+| `reporting/Component.ts`                   | Creates the `access` model and initializes the nested router                                                         |
+
+**Routes of the nested router**
+
+| Route          | Pattern          | Guard behavior                                                                            |
+| -------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `overview`     | `""`             | Open. Checkbox that unlocks the confidential report                                       |
+| `sales`        | `"sales"`        | Open                                                                                      |
+| `confidential` | `"confidential"` | Enter: commits when unlocked, otherwise shows a message toast and redirects to `overview` |
+| (bypassed)     | no match         | Shows the nested component's own Not Found page with a button back to `overview`          |
+
+The guard `reporting/guards/confidentialGuard.ts` is declared in the nested component's manifest. It reads the `access` model from `context.ownerComponent`, which is the nested component, not the demo app. It is async: for the toast it awaits the resource bundle of the component's `i18n` model, which the manifest loads asynchronously. The texts of the nested component are in `reporting/i18n/i18n.properties`.
+
+**How to try it**
+
+Press "Reports (nested component)" on Home, or open one of these hashes directly:
+
+| Standalone (`index.html`)         | FLP preview (`test/flp.html`)                 | Result                                                                                          |
+| --------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `#/reports`                       | `#app-preview&/reports`                       | Report overview (nested route `overview`)                                                       |
+| `#/reports&/reports/sales`        | `#app-preview&/reports&/reports/sales`        | Sales report                                                                                    |
+| `#/reports&/reports/confidential` | `#app-preview&/reports&/reports/confidential` | Locked: redirected to the overview, the hash becomes `#/reports`. Unlocked: confidential report |
+
+The lock lives in the nested component and is locked again after a page reload, so a bookmarked confidential report always redirects on a fresh load.
+
+**What to observe**
+
+- The parent router only sees `reports`. Navigations inside the nested component are settled by the nested router; the settlement panel on Home shows the parent router only.
+- A redirect by the nested guard does not add a browser history entry, as with the parent router.
+- When the parent leaves the `reports` route, UI5 stops the nested router and removes its part of the hash. Displaying the route again starts it on `overview`.
+- The nav button of the overview leaves the nested component: it calls `navTo("home")` on the parent's router, which it reaches through `Component.getOwnerComponentFor()`.
+
+See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on) for how the parent route waits for the nested router's guarded first navigation.
 
 ## Architecture
 
@@ -187,33 +234,35 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                         | Coverage                                                                |
-| ---------------------------- | ----------------------------------------------------------------------- |
-| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                  |
-| `guard-allow.e2e.ts`         | Navigation allowed after login                                          |
-| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                         |
-| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                   |
-| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                       |
-| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                                 |
-| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                |
-| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                           |
-| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                |
-| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back          |
-| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect        |
-| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points |
-| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates       |
+| File                         | Coverage                                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                                              |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                                                      |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                                                     |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                                               |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                                                   |
+| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                                                             |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                                            |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                                                       |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                            |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back                                      |
+| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                    |
+| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                             |
+| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                   |
+| `nested-component.e2e.ts`    | Nested component: prefixed hash, guarded nested route, back navigation, deep links, fresh page load |
 
 Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 
-Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, `waitForRuntimeSettlement`, `getRuntimeSettlementRevision`, and `getHistoryLength` helpers.
+Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashToBe`, `setDirtyState`, `fireEvent`, `waitForRuntimeSettlement`, `getRuntimeSettlementRevision`, and `getHistoryLength` helpers. `test/shared/reports.ts` holds the helpers for the nested component (`waitForReportsComponent`, `setConfidentialUnlocked`, `settleReportsNavigation`); both suites use them.
 
-FLP-specific coverage lives in `test/flp/` and is split across three spec files:
+FLP-specific coverage lives in `test/flp/` and is split across four spec files:
 
-| File                         | Purpose                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, dirty-state separation, browser history, independence |
-| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()`: user confirms, navigation completes                   |
-| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()`: no dirty prompt, navigation completes                 |
+| File                         | Purpose                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, dirty-state separation, browser history, independence                   |
+| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()`: user confirms, navigation completes                                     |
+| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()`: no dirty prompt, navigation completes                                   |
+| `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display |
 
 The cross-app specs are isolated because `toExternal()` navigates to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
 

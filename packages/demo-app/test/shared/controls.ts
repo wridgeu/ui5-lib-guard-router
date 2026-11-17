@@ -10,7 +10,12 @@ import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 /** `sap.app/id` of the demo app: the component's canonical, host-independent ID. */
 const APP_ID = "demo.app";
 
+/** `sap.app/id` of the nested reporting component that the "reports" route displays. */
+export const REPORTS_APP_ID = "demo.app.reporting";
+
 export type ControlRef = {
+	/** `sap.app/id` of the component that owns the view. */
+	readonly appId: string;
 	/** Full view name, used by wdi5 selectors. */
 	readonly viewName: string;
 	/** View ID declared in the manifest routing target. */
@@ -25,8 +30,9 @@ function viewControls<const Ids extends readonly string[]>(
 	viewName: string,
 	viewId: string,
 	ids: Ids,
+	appId = APP_ID,
 ): ViewControls<Ids> {
-	return Object.fromEntries(ids.map((id) => [id, { viewName, viewId, id }])) as ViewControls<Ids>;
+	return Object.fromEntries(ids.map((id) => [id, { appId, viewName, viewId, id }])) as ViewControls<Ids>;
 }
 
 const SETTLEMENT_PANEL = [
@@ -49,6 +55,7 @@ export const CONTROLS = {
 		"navForbiddenBtn",
 		"navAdminBtn",
 		"navToEmployees",
+		"navReportsBtn",
 		...SETTLEMENT_PANEL,
 	]),
 	protected: viewControls("demo.app.view.Protected", "protectedView", [
@@ -66,6 +73,20 @@ export const CONTROLS = {
 		"updateMeta",
 	]),
 	employee: viewControls("demo.app.view.Employee", "employeeView", ["employeePage", "employeeMeta"]),
+	reportsOverview: viewControls(
+		"demo.app.reporting.view.Overview",
+		"overviewView",
+		["overviewPage", "unlockCheckbox", "accessStatus", "navSalesBtn", "navConfidentialBtn"],
+		REPORTS_APP_ID,
+	),
+	reportsSales: viewControls("demo.app.reporting.view.Sales", "salesView", ["salesPage"], REPORTS_APP_ID),
+	reportsNotFound: viewControls("demo.app.reporting.view.NotFound", "notFoundView", ["notFoundPage"], REPORTS_APP_ID),
+	reportsConfidential: viewControls(
+		"demo.app.reporting.view.Confidential",
+		"confidentialView",
+		["confidentialPage"],
+		REPORTS_APP_ID,
+	),
 } as const;
 
 /**
@@ -80,31 +101,31 @@ export function selectorFor(ref: ControlRef, extra: Partial<wdi5Selector["select
 }
 
 /**
- * Resolve the runtime ID of the demo component by its `sap.app/id`.
- * Fails if the app is not mounted or mounted more than once, instead of
+ * Resolve the runtime ID of a component by its `sap.app/id` (the demo app by default).
+ * Fails if the component is not mounted or mounted more than once, instead of
  * silently picking one instance.
  */
-export async function getAppComponentId(): Promise<string> {
+export async function getAppComponentId(appId = APP_ID): Promise<string> {
 	const ids = await browser.execute(
-		(appId: string) =>
+		(id: string) =>
 			new Promise<string[]>((resolve, reject) => {
 				sap.ui.require(
 					["sap/ui/core/ComponentRegistry"],
 					(registry: typeof ComponentRegistry) => {
 						resolve(
 							registry
-								.filter((component) => component.getManifestEntry("/sap.app/id") === appId)
+								.filter((component) => component.getManifestEntry("/sap.app/id") === id)
 								.map((component) => component.getId()),
 						);
 					},
 					reject,
 				);
 			}),
-		APP_ID,
+		appId,
 	);
 
 	if (ids.length !== 1) {
-		throw new Error(`Expected exactly one "${APP_ID}" component, found ${ids.length}`);
+		throw new Error(`Expected exactly one "${appId}" component, found ${ids.length}`);
 	}
 	return ids[0];
 }

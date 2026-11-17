@@ -43,7 +43,11 @@ export async function getRuntimeSettlementRevisionInFlp(): Promise<number> {
 	);
 }
 
-async function waitForPage(page: ControlRef, expectedTitle: string, options: PageWaitOptions = {}): Promise<void> {
+export async function waitForPageInFlp(
+	page: ControlRef,
+	expectedTitle: string,
+	options: PageWaitOptions = {},
+): Promise<void> {
 	const { timeout = 30000, afterRevision } = options;
 	const name = `${page.viewId}/${page.id}`;
 
@@ -73,7 +77,7 @@ async function waitForPage(page: ControlRef, expectedTitle: string, options: Pag
 						const style = window.getComputedStyle(domRef);
 						return style.display !== "none" && style.visibility !== "hidden";
 					},
-					await getAppComponentId(),
+					await getAppComponentId(page.appId),
 					page.viewId,
 					page.id,
 				);
@@ -110,7 +114,7 @@ export async function launchFlpApp(): Promise<void> {
 	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
 	await resetDirtyState();
 	await navigateToRouteInFlp("home");
-	await waitForPage(CONTROLS.home.homePage, "Home");
+	await waitForPageInFlp(CONTROLS.home.homePage, "Home");
 }
 
 export async function resetFlpDemo(): Promise<void> {
@@ -132,7 +136,7 @@ export async function loginAndGoToProtectedInFlp(): Promise<void> {
 	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 	const navigateProtectedButton = await getControl(CONTROLS.home.navProtectedBtn);
 	await navigateProtectedButton.press();
-	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
+	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 }
 
 export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
@@ -257,11 +261,11 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 }
 
 export async function waitForProtectedPageInFlp(options?: PageWaitOptions): Promise<void> {
-	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", options);
+	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", options);
 }
 
 export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<void> {
-	await waitForPage(CONTROLS.home.homePage, "Home", options);
+	await waitForPageInFlp(CONTROLS.home.homePage, "Home", options);
 }
 
 /**

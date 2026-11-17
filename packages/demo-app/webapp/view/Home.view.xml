@@ -99,6 +99,12 @@
 								text="Employees (metadata)"
 								press=".onNavToEmployees"
 								type="Emphasized"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
+								id="navReportsBtn"
+								text="Reports (nested component)"
+								press=".onNavToReports"
 								width="100%" />
 						</content>
 					</Panel>

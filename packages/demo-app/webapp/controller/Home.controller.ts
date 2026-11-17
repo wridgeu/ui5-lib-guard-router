@@ -59,6 +59,12 @@ export default class HomeController extends BaseController {
 		this.getRouter<GuardRouter>().navTo("employees");
 	}
 
+	/** "reports" displays the nested reporting component, which has its own guard router. */
+	onNavToReports(): void {
+		this.createScenarioRunner().recordAction('Triggered router.navTo("reports")');
+		this.getRouter().navTo("reports");
+	}
+
 	onDirectHashToProtected(): void {
 		this.createScenarioRunner().goToProtectedByHash();
 	}

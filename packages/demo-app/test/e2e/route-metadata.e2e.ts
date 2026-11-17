@@ -3,7 +3,7 @@ import { waitForPage, expectHashToBe, resetAuth, fireEvent } from "./helpers";
 
 describe("Route metadata and inheritance", () => {
 	before(async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 	});

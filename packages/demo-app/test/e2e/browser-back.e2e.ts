@@ -9,7 +9,7 @@ import {
 
 describe("Browser back navigation with guards", () => {
 	it("should handle back navigation cleanly after login flow", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login
@@ -31,7 +31,7 @@ describe("Browser back navigation with guards", () => {
 	});
 
 	it("should not show protected page on browser back after logout", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login
@@ -80,7 +80,7 @@ describe("Browser back navigation with guards", () => {
 	});
 
 	it("should handle multiple back/forward cycles", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login

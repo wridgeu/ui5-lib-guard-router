@@ -9,7 +9,7 @@ import {
 
 describe("Guard blocks enter navigation", () => {
 	it("should stay on Home and report Blocked when navigating to Blocked", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 

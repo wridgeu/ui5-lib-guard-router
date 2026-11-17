@@ -3,7 +3,7 @@ import { getRuntimeSettlementRevision, waitForPage, resetAuth, waitForRuntimeSet
 
 describe("Guard allows navigation when logged in", () => {
 	it("should allow navigation to Protected after login", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Toggle login

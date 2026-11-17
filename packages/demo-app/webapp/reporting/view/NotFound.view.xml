@@ -1,0 +1,23 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.reporting.controller.Report">
+	<Page
+		id="notFoundPage"
+		title="{i18n>notFoundTitle}"
+		titleAlignment="Center"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<IllustratedMessage
+				id="notFoundMessage"
+				illustrationType="PageNotFound"
+				title="{i18n>notFoundTitle}"
+				description="{i18n>notFoundDescription}">
+				<additionalContent>
+					<Button id="backToOverviewBtn" text="{i18n>backToOverview}" type="Emphasized" press=".onNavBack" />
+				</additionalContent>
+			</IllustratedMessage>
+		</content>
+	</Page>
+</mvc:View>

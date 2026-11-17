@@ -1,0 +1,113 @@
+{
+	"_version": "2.0.0",
+	"sap.app": {
+		"id": "demo.app.reporting",
+		"type": "component",
+		"i18n": {
+			"bundleName": "demo.app.reporting.i18n.i18n",
+			"supportedLocales": [""],
+			"fallbackLocale": ""
+		},
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
+		"embeddedBy": "../",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.ui": {
+		"technology": "UI5",
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
+	"sap.ui5": {
+		"contentDensities": {
+			"compact": true,
+			"cozy": true
+		},
+		"dependencies": {
+			"minUI5Version": "1.144.0",
+			"libs": {
+				"sap.m": {},
+				"sap.ui.core": {},
+				"ui5.guard.router": {}
+			}
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": {
+					"bundleName": "demo.app.reporting.i18n.i18n",
+					"async": true,
+					"supportedLocales": [""],
+					"fallbackLocale": ""
+				}
+			}
+		},
+		"rootView": {
+			"viewName": "demo.app.reporting.view.App",
+			"type": "XML",
+			"id": "appView"
+		},
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"type": "View",
+				"viewType": "XML",
+				"path": "demo.app.reporting.view",
+				"controlId": "reportsContainer",
+				"controlAggregation": "pages",
+				"bypassed": {
+					"target": "notFound"
+				},
+				"guardRouter": {
+					"guards": {
+						"confidential": ["guards.confidentialGuard"]
+					}
+				}
+			},
+			"routes": [
+				{
+					"name": "overview",
+					"pattern": "",
+					"target": "overview"
+				},
+				{
+					"name": "sales",
+					"pattern": "sales",
+					"target": "sales"
+				},
+				{
+					"name": "confidential",
+					"pattern": "confidential",
+					"target": "confidential"
+				}
+			],
+			"targets": {
+				"overview": {
+					"name": "Overview",
+					"id": "overviewView",
+					"level": 1
+				},
+				"sales": {
+					"name": "Sales",
+					"id": "salesView",
+					"level": 2
+				},
+				"confidential": {
+					"name": "Confidential",
+					"id": "confidentialView",
+					"level": 2
+				},
+				"notFound": {
+					"name": "NotFound",
+					"id": "notFoundView",
+					"level": 2
+				}
+			}
+		}
+	}
+}

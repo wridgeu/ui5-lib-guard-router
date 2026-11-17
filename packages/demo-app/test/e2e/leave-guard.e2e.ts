@@ -19,7 +19,7 @@ describe("Leave Guard - Dirty Form", () => {
 	beforeEach(async () => {
 		await resetAuth();
 		await setDirtyState(false); // Ensure clean state before each test
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await waitForPage(CONTROLS.home.homePage, "Home");
 	});
 

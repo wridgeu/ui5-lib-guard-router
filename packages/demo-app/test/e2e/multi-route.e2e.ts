@@ -10,7 +10,7 @@ import {
 
 describe("Multi-route navigation sequences", () => {
 	it("should handle Home -> Protected -> Home -> Forbidden (redirected) -> Home sequence", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login
@@ -50,7 +50,7 @@ describe("Multi-route navigation sequences", () => {
 	});
 
 	it("should redirect protected to Home after mid-session logout", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login
@@ -96,7 +96,7 @@ describe("Multi-route navigation sequences", () => {
 	});
 
 	it("should handle login -> protected -> logout -> protected (redirected) -> login -> protected (allowed)", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Login

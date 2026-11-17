@@ -1,0 +1,19 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.reporting.controller.Report">
+	<Page
+		id="salesPage"
+		title="{i18n>salesTitle}"
+		titleAlignment="Center"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<List id="salesList" headerText="{i18n>salesListTitle}" width="22rem" class="sapUiMediumMargin">
+				<StandardListItem id="salesQ1" title="Q1" info="1.2M EUR" />
+				<StandardListItem id="salesQ2" title="Q2" info="1.4M EUR" />
+				<StandardListItem id="salesQ3" title="Q3" info="1.1M EUR" />
+			</List>
+		</content>
+	</Page>
+</mvc:View>

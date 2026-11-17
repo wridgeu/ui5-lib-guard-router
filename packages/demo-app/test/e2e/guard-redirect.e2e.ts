@@ -3,7 +3,7 @@ import { getRuntimeSettlementRevision, waitForPage, expectHashToBe, waitForRunti
 
 describe("Guard redirects to Home", () => {
 	it("should redirect from Forbidden to Home", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 
 		// Try to navigate to forbidden
 		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navForbiddenBtn));

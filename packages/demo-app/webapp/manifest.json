@@ -48,6 +48,12 @@
 				"ui5.guard.router": {}
 			}
 		},
+		"componentUsages": {
+			"reports": {
+				"name": "demo.app.reporting",
+				"lazy": true
+			}
+		},
 		"models": {
 			"auth": {
 				"type": "sap.ui.model.json.JSONModel",
@@ -122,6 +128,14 @@
 					"name": "employee",
 					"pattern": "employees/{id}",
 					"target": "employee"
+				},
+				{
+					"name": "reports",
+					"pattern": "reports",
+					"target": {
+						"name": "reports",
+						"prefix": "reports"
+					}
 				}
 			],
 			"targets": {
@@ -166,6 +180,12 @@
 					"id": "employeeView",
 					"level": 3,
 					"transition": "show"
+				},
+				"reports": {
+					"type": "Component",
+					"usage": "reports",
+					"id": "reportsComponent",
+					"level": 2
 				}
 			}
 		}

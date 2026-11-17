@@ -9,7 +9,7 @@ import {
 
 describe("Direct URL navigation with guards", () => {
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
@@ -39,7 +39,7 @@ describe("Direct URL navigation with guards", () => {
 	});
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.execute(() => {
@@ -68,7 +68,7 @@ describe("Direct URL navigation with guards", () => {
 	});
 
 	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
@@ -98,7 +98,7 @@ describe("Direct URL navigation with guards", () => {
 	});
 
 	it("should load Protected page when accessing #/protected directly while logged in", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
@@ -113,7 +113,7 @@ describe("Direct URL navigation with guards", () => {
 	});
 
 	it("should show Not Found page for a nonexistent route hash", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 
@@ -149,7 +149,7 @@ describe("Direct URL navigation with guards", () => {
 	});
 
 	it("should handle rapid hash changes in the address bar", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();

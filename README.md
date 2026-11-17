@@ -131,7 +131,7 @@ For the full API reference, usage examples, limitations, and FLP integration gui
 docs/           Docs index plus reference, research, explorations, and feature notes
 packages/
   lib/          ui5.guard.router library (Router + types)
-  demo-app/     Demo app with auth guards, FLP preview, and guided scenarios
+  demo-app/     Demo app with auth guards, a nested component, FLP preview, and guided scenarios
 scripts/        CI helpers, pack smoke test, release plan, and vendored parity tooling
 tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-guardrails)
 ```

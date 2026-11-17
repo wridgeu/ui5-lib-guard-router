@@ -3,7 +3,7 @@ import { waitForPage, resetAuth } from "./helpers";
 
 describe("Basic routing (no guard interaction)", () => {
 	it("should load Home view at root hash with default auth state", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 		await waitForPage(CONTROLS.home.homePage, "Home");
 

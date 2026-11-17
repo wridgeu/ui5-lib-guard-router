@@ -9,7 +9,7 @@ import {
 
 describe("Guard redirects unauthenticated navigation", () => {
 	it("should redirect to Home when navigating to Protected while logged out", async () => {
-		await browser.goTo({ sHash: "" });
+		await browser.url("#");
 		await resetAuth();
 
 		// Verify we start on Home and are logged out
