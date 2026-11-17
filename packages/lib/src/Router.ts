@@ -1,7 +1,7 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
-import type { ComponentTargetParameters } from "sap/ui/core/routing/Router";
+import type { ComponentTargetParameters, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type UIComponent from "sap/ui/core/UIComponent";
@@ -18,7 +18,7 @@ import type {
 	RouteGuardConfig,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
-import GuardPipeline, { type GuardDecision, isPromiseLike } from "./GuardPipeline";
+import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
 import { createLazyGuards, loadGuardModules } from "./GuardModules";
 import { expandForNewRoute, expandToDescendants, type RoutePattern } from "./PatternTree";
@@ -49,6 +49,8 @@ interface PhaseIdle {
 interface PhaseEvaluating {
 	readonly kind: "evaluating";
 	readonly attempt: NavigationAttempt;
+	/** Whether the navigation waits for async guards: the native router would be matching its route by now. */
+	readonly postponed?: true;
 }
 
 interface PhaseCommitting {
@@ -121,6 +123,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _pendingGuardDescriptors: GuardDescriptor[];
 	private _sourceDescriptors: GuardDescriptor[] = [];
 	private _destroyed = false;
+	/** What UI5 itself wrote to `_bMatchingProcessStarted` (see {@link _mirrorMatchingProcess}). */
+	private _nativeMatching = false;
+	/** Promises that wait for the `routeMatched` of a match that has not started (see {@link attachRouteMatched}). */
+	private _matchWaiters: (() => void)[] = [];
 	/**
 	 * Set while block-mode guard modules load; `start` says whether to initialize once they have,
 	 * `ignoreInitialHash` is the argument of the `initialize()` call that asked for it.
@@ -138,6 +144,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// hash changer of a component that is loaded as a routing target.
 		super(routes, isRecordConfig ? cleanConfig : config, owner, ...(rest as [object?]));
 		this._ownerComponent = owner;
+		this._mirrorMatchingProcess();
 		let componentNamespace = "";
 		const appConfig = owner?.getManifestEntry("sap.app") as unknown;
 		if (isRecord(appConfig) && typeof appConfig.id === "string") {
@@ -166,6 +173,164 @@ export default class Router extends MobileRouter implements GuardRouter {
 			// and the navigation settles as Error.
 			sap.ui.require(uniquePaths, undefined, () => {});
 		}
+	}
+
+	/**
+	 * Report a navigation that waits for async guards as a route match in progress, through the
+	 * UI5-private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`.
+	 *
+	 * This is one of two places where the router depends on UI5 behavior that no public contract
+	 * covers. The other is {@link attachRouteMatched}.
+	 *
+	 * What UI5 does with the member. The native router sets it to `true` inside `parse()`, as soon
+	 * as a route matches (`Route#_routeMatched`), and back to `false` once the targets of the route
+	 * are displayed, right before it fires `routeMatched`. UI5 reads it in three places:
+	 * - `Target#waitForComponentTarget` (nested component readiness): a component target counts as
+	 *   displayed only after the next `routeMatched` of the nested component's router, if that
+	 *   router is not initialized or is matching.
+	 * - The `display` handler that the `Router` constructor attaches to its targets: a target
+	 *   displayed outside of a route match resets the router's hash changer (`resetHash`), so that
+	 *   the route that matched before can match again. Not during a match.
+	 * - `Router#fireTitleChanged`: a `titleChanged` during a match is fired after `routeMatched`.
+	 *
+	 * Why the router is involved. It postpones `super.parse()` while guards are async, such as on
+	 * the first navigation in lazy mode while a guard module loads. If the member stayed `false` in
+	 * that time, a parent route would count the nested component as displayed, and fire its own
+	 * `routeMatched`, before the first route of the nested component matched.
+	 *
+	 * What the router does. It does not write the member. It replaces it with an accessor on the
+	 * instance, which keeps the value UI5 writes in {@link _nativeMatching} and reads `true`
+	 * - while the value UI5 wrote is `true`, and
+	 * - from the moment a navigation (initial hash, hash change, `navTo()` preflight or redirect
+	 *   hop) starts to wait for async guards, until that navigation settles.
+	 *
+	 * A navigation that commits calls `super.parse()` in the call that settles it, where UI5 sets
+	 * the member and later clears it as it does natively. A navigation that is blocked, fails, is
+	 * cancelled or superseded, or ends with `stop()` or `destroy()`, reads `false` from its
+	 * settlement on. Guards that decide synchronously never make it read `true`.
+	 *
+	 * All three readers see the same value. While a navigation waits for async guards, UI5
+	 * therefore also defers a `titleChanged` to the next `routeMatched` and skips `resetHash`, as
+	 * during a native match.
+	 *
+	 * Assumptions about UI5 that no public contract covers:
+	 * - The member exists under this name, and `Route#_routeMatched` is its only writer.
+	 * - `true` means to UI5 that a `routeMatched` follows. A navigation that guards veto breaks
+	 *   that, which {@link attachRouteMatched} makes up for.
+	 *
+	 * Verified against OpenUI5 1.144.0 (`sap/ui/core/routing/Route.js` lines 745 and 831,
+	 * `Target.js` 819, `Router.js` 289 and 1527) and OpenUI5 1.120.0 (`sap/ui/core/routing/async/Route.js`
+	 * lines 49 and 135, `async/Target.js` 275, `Router.js` 264 and 1495). Pinned by the QUnit module
+	 * "Router - Native matching flag" (`RouterAsync.qunit.ts`) and the nested component tests of
+	 * "Router - Manifest-driven instantiation" (`RouterManifestGuards.qunit.ts`): they fail on both
+	 * UI5 lanes if UI5 renames the member, stops writing it, or stops reading it. See
+	 * docs/reference/upstream-parity.md for what to do then.
+	 */
+	private _mirrorMatchingProcess(): void {
+		Object.defineProperty(this, "_bMatchingProcessStarted", {
+			get: () => this._isMatching(),
+			set: (matching: boolean) => {
+				this._nativeMatching = matching;
+			},
+		});
+	}
+
+	/** Whether a route match is in progress: in UI5, or postponed until async guards have decided. */
+	private _isMatching(): boolean {
+		return this._nativeMatching || (this._phase.kind === "evaluating" && this._phase.postponed === true);
+	}
+
+	/**
+	 * Attach an event handler for the `routeMatched` event, as the native router does. In addition,
+	 * remember a Promise by which a UI5 component target waits for this router, so that a
+	 * navigation that ends without a route match does not leave it waiting forever.
+	 *
+	 * What UI5 does. A component target (`"type": "Component"`) of a parent router that displays
+	 * the component of this router waits for the next `routeMatched` of this router, if the router
+	 * is not initialized or reports a match in progress (see {@link _mirrorMatchingProcess}), a
+	 * route with targets matches the router's current hash, and the parent route did not ask to
+	 * ignore that hash. It waits with
+	 * `oRouter.attachRouteMatched(resolve)`, where `resolve` is the bare resolve function of a
+	 * Promise that only the target holds. The Promise is never rejected and nothing else releases
+	 * it: UI5 relies on a match in progress always ending in `routeMatched`. A stopped router is
+	 * initialized by the target right after.
+	 *
+	 * Why the router is involved. A navigation that guards block, fail or cancel never fires
+	 * `routeMatched`. The parent route would then never fire its own `routeMatched`, and in
+	 * `sap.m.routing.Router` later target placements of the parent queue behind the one that
+	 * waits (`TargetHandler#_chainNavigation`). This does not depend on the mirrored member alone.
+	 * UI5 also waits when the router is not initialized: when a parent route displays the
+	 * component again and starts its stopped router, and while guard modules load in block mode.
+	 *
+	 * What the router does. A listener that is subscribed while UI5 would wait (the router is not
+	 * initialized, or a match is in progress) and that is a Promise resolve function
+	 * ({@link isPromiseResolver}) is remembered. {@link _settleMatchWaiters} resolves it when a
+	 * navigation ends without a route match. The parent route then displays the component, in
+	 * which no route matched. The listener is subscribed as usual in any case, so a `routeMatched`
+	 * resolves it as in UI5.
+	 *
+	 * Assumptions about UI5 that no public contract covers:
+	 * - The component target subscribes through `attachRouteMatched()`, with the resolve function
+	 *   itself as the only argument, under the condition above.
+	 * - A second call of the resolve function has no effect, so the `routeMatched` of a later
+	 *   navigation may still call it.
+	 *
+	 * False positives. The router cannot see who subscribes. Application code that subscribes a
+	 * Promise resolve function (or another anonymous built-in with one parameter, such as a Promise
+	 * reject function) under the same condition is treated in the same way: its Promise settles
+	 * without an event when the navigation ends without a match. Handler functions written in
+	 * JavaScript are never remembered and are only ever called by the `routeMatched` event.
+	 *
+	 * Verified against OpenUI5 1.144.0 (`sap/ui/core/routing/Target.js` line 786 for the Promise,
+	 * 819 for the condition, 821 for the subscription, 823 to 826 for the start of a stopped router,
+	 * 619 for the stop; `sap/m/routing/Target.js` line 61 for the queue) and OpenUI5 1.120.0
+	 * (`sap/ui/core/routing/async/Target.js` lines 245, 275, 277, 279 to 282 and 81;
+	 * `sap/m/routing/async/Target.js` line 25). Pinned by the QUnit module "GuardPipeline - Promise
+	 * resolve functions" (`GuardPipeline.qunit.ts`), by the Promise tests of "Router - Native
+	 * matching flag" (`RouterAsync.qunit.ts`) and by the nested component tests of "Router -
+	 * Manifest-driven instantiation" (`RouterManifestGuards.qunit.ts`), which time out on both UI5
+	 * lanes if the component target waits in another way. See docs/reference/upstream-parity.md.
+	 *
+	 * @override sap.ui.core.routing.Router#attachRouteMatched
+	 * @since 1.7.0
+	 */
+	override attachRouteMatched(
+		oData: object,
+		fnFunction: (evt: Router$RouteMatchedEvent) => void,
+		oListener?: object,
+	): this;
+	override attachRouteMatched(fnFunction: (evt: Router$RouteMatchedEvent) => void, oListener?: object): this;
+	override attachRouteMatched(oData: unknown, fnFunction?: unknown, oListener?: unknown): this {
+		if (isPromiseResolver(oData) && (!this.isInitialized() || this._isMatching())) {
+			this._matchWaiters.push(oData);
+		}
+		return super.attachRouteMatched(
+			oData as object,
+			fnFunction as (evt: Router$RouteMatchedEvent) => void,
+			oListener as object,
+		);
+	}
+
+	/**
+	 * Decide what becomes of the Promises that wait for a `routeMatched`
+	 * (see {@link attachRouteMatched}). Runs in a microtask after a settlement, so that a commit
+	 * has reached `super.parse()` and a navigation that supersedes the settled one has started:
+	 * - A navigation waits for async guards: the Promises keep waiting, for its settlement.
+	 * - UI5 is matching a route: the Promises are forgotten, the `routeMatched` of that match
+	 *   resolves them. If UI5 never fires it, because the display of a target fails, they wait
+	 *   forever, as with the native router.
+	 * - Otherwise no match is coming, and the Promises are resolved.
+	 *
+	 * A navigation that starts after this microtask is not waited for. A Promise that is resolved
+	 * here stays subscribed, and UI5 calls it again with the next `routeMatched`, which has no
+	 * effect on a Promise.
+	 */
+	private _settleMatchWaiters(): void {
+		if (this._phase.kind === "evaluating" && this._phase.postponed) return;
+		const waiters = this._matchWaiters;
+		this._matchWaiters = [];
+		if (this._nativeMatching) return;
+		for (const resolve of waiters) resolve();
 	}
 
 	/**
@@ -571,6 +736,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _flushSettlement(result: NavigationResult): void {
 		this._lastSettlement = result;
+		// After the call that settled: by then a commit has reached super.parse(), and a navigation
+		// that supersedes this one has started.
+		if (this._matchWaiters.length > 0) queueMicrotask(() => this._settleMatchWaiters());
 		const resolvers = this._settlementResolvers;
 		this._settlementResolvers = [];
 		for (const resolve of resolvers) {
@@ -963,9 +1131,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Apply the decision of async guards once it is there. The pipeline turns a failing guard
-	 * into an error decision, so an error thrown here comes from applying the decision, which
-	 * has no caller to throw to: it is logged, and fails the navigation unless that has settled.
+	 * Apply the decision of async guards once it is there. Until then the navigation is postponed,
+	 * which UI5 sees as a route match in progress (see {@link _mirrorMatchingProcess}). The pipeline
+	 * turns a failing guard into an error decision, so an error thrown here comes from applying the
+	 * decision, which has no caller to throw to: it is logged, and fails the navigation unless that
+	 * has settled.
 	 */
 	private _applyWhenDecided(
 		decision: PromiseLike<GuardDecision>,
@@ -973,6 +1143,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		attemptedHash: string | undefined,
 		restoreHash: boolean,
 	): void {
+		if (this._phase.kind === "evaluating") this._phase = { ...this._phase, postponed: true };
 		decision.then((d) => {
 			const lastSettlement = this._lastSettlement;
 			try {
@@ -1288,10 +1459,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Assumes replaceHash fires hashChanged synchronously (validated by test).
 	 * `_currentRoute` stays unchanged because the navigation never
 	 * committed. The user remains on the same logical route.
+	 *
+	 * A hash that the hash changer already shows is not written again: the navigation never
+	 * moved it. For a nested router, writing its empty hash would add its prefix to the browser
+	 * hash (`shell` becomes `shell&/child/`).
 	 */
 	private _restoreHash(hash: string, suppressParse = true): void {
+		const hashChanger = this.getHashChanger();
+		if (hashChanger.getHash() === hash) return;
 		this._suppressedHash = suppressParse ? hash : null;
-		this.getHashChanger().replaceHash(hash, HistoryDirection.Unknown);
+		hashChanger.replaceHash(hash, HistoryDirection.Unknown);
 		this._suppressedHash = null;
 	}
 

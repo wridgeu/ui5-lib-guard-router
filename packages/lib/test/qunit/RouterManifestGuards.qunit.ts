@@ -1,6 +1,8 @@
 import Component from "sap/ui/core/Component";
+import ComponentContainer from "sap/ui/core/ComponentContainer";
+import UIComponent from "sap/ui/core/UIComponent";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
+import type { GuardContext, GuardFn, GuardResult, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureErrors,
@@ -420,6 +422,250 @@ QUnit.test("guard context exposes the owner component, including on redirect hop
 		component.destroy();
 	}
 });
+
+interface OwnerProbe {
+	owners: unknown[];
+	decide: GuardFn | undefined;
+}
+
+/**
+ * Run `test` on the nested fixture app, started as a page does: the parent component initializes
+ * its router in init(). Its "shell" route displays the child component under the prefix "child".
+ */
+async function withNestedApp(test: (parent: UIComponent, probe: OwnerProbe) => Promise<void>): Promise<void> {
+	const probe = await loadModule<OwnerProbe>("ui5/guard/router/qunit/fixtures/nested/child/guards/ownerProbe");
+	probe.owners.length = 0;
+	initHashChanger();
+	const parent = await Component.create({
+		name: "ui5.guard.router.qunit.fixtures.nested",
+		manifest: true,
+	});
+	if (!(parent instanceof UIComponent)) {
+		throw new Error("The parent is not a UIComponent");
+	}
+	const container = new ComponentContainer({ component: parent }).placeAt("qunit-fixture");
+
+	try {
+		await test(parent, probe);
+	} finally {
+		probe.decide = undefined;
+		container.destroy();
+		for (const component of [...probe.owners, parent]) {
+			if (component instanceof UIComponent && !component.isDestroyed()) {
+				component.destroy();
+			}
+		}
+		HashChanger.getInstance().setHash("");
+	}
+}
+
+/** The child component, as the owner that its manifest guard saw first. */
+function getChild(probe: OwnerProbe): UIComponent {
+	const owner = probe.owners[0];
+	if (!(owner instanceof UIComponent)) {
+		throw new Error("No guard of the child component ran");
+	}
+	return owner;
+}
+
+/** What a test sees of a child whose guard is pending on its first navigation. */
+interface PendingChild {
+	childRouter: GuardRouter;
+	/** Settle the pending guard of the child. */
+	decide: (result: GuardResult) => void;
+	/** The routes that the parent and the child router matched since, in order. */
+	matches: string[];
+	/** Resolves when the parent route that displays the child has matched. */
+	shellMatched: Promise<void>;
+}
+
+/**
+ * Navigate the parent to the route that displays the child, whose guard waits for `decide` on the
+ * child's first navigation. Resolves once the parent's component target has asked the child router
+ * whether a match is in progress.
+ */
+async function displayChildWithPendingGuard(parentRouter: GuardRouter, probe: OwnerProbe): Promise<PendingChild> {
+	let decide: (result: GuardResult) => void = () => {};
+	const guardCalled = new Promise<void>((called) => {
+		probe.decide = () => {
+			probe.decide = undefined;
+			called();
+			return new Promise<GuardResult>((resolve) => {
+				decide = resolve;
+			});
+		};
+	});
+	const matches: string[] = [];
+	parentRouter.getRoute("shell")?.attachMatched(() => {
+		matches.push("parent:shell");
+	});
+	const shellMatched = waitForRoute(parentRouter, "shell");
+	parentRouter.navTo("shell");
+	await guardCalled;
+	const child = getChild(probe);
+	const childRouter = getComponentRouter(child);
+	childRouter.attachRouteMatched((event) => {
+		matches.push(`child:${event.getParameter("name")}`);
+	});
+	// The component target asks the child router once the child is created.
+	await child.rootControlLoaded();
+	await flushPromises();
+	return { childRouter, decide: (result) => decide(result), matches, shellMatched };
+}
+
+QUnit.test("a component loaded as a routing target navigates under its prefix", async function (assert: Assert) {
+	await withNestedApp(async (parent, probe) => {
+		const parentRouter = getComponentRouter(parent);
+		assert.strictEqual(
+			(await parentRouter.navigationSettled()).route,
+			"home",
+			"the parent starts on its home route",
+		);
+
+		// The "shell" route displays the child component and gives its router the prefix "child".
+		parentRouter.navTo("shell");
+		await waitForRoute(parentRouter, "shell");
+
+		// A component target counts as displayed only once the child router matched its first route,
+		// so the child's manifest guard has already seen its owner component.
+		const child = getChild(probe);
+		assert.notStrictEqual(child, parent, "the guard's owner component is not the parent");
+		assert.strictEqual(
+			child.getManifestEntry("/sap.app/id"),
+			"ui5.guard.router.qunit.fixtures.nested.child",
+			"the guard's owner component is the nested component",
+		);
+		const childRouter = getComponentRouter(child);
+		assert.ok(child.getRouter() === childRouter, "its router is the guard router that ran the guard");
+		const initial = await childRouter.navigationSettled();
+		assert.strictEqual(initial.route, "list", "the child router matched its own initial route");
+		assert.strictEqual(getHash(), "shell", "the child's empty hash leaves the parent's hash as it is");
+
+		const parentStatuses = recordSettlements(parentRouter);
+		const childStatuses = recordSettlements(childRouter);
+
+		childRouter.navTo("detail");
+		await waitForRoute(childRouter, "detail");
+		assert.strictEqual(getHash(), "shell&/child/detail", "the child's hash is written under its prefix");
+
+		const recorder = recordHashChanges();
+		childRouter.navTo("locked");
+		const blocked = await childRouter.navigationSettled();
+		recorder.stop();
+		assert.strictEqual(blocked.status, NavigationOutcome.Blocked, "the child's manifest guard blocks navTo");
+		assert.strictEqual(blocked.route, "detail", "the child stays on its route");
+		assert.deepEqual(recorder.hashes, [], "the browser hash never changed");
+
+		// The same navigation from the address bar.
+		HashChanger.getInstance().setHash("shell&/child/locked");
+		await flushPromises();
+		assert.deepEqual(
+			childStatuses,
+			[NavigationOutcome.Committed, NavigationOutcome.Blocked, NavigationOutcome.Blocked],
+			"the child settled the allowed navigation and both blocked ones",
+		);
+		assert.strictEqual(getHash(), "shell&/child/detail", "the blocked browser hash is restored under the prefix");
+		assert.strictEqual((await childRouter.navigationSettled()).route, "detail", "the child is still on its route");
+
+		assert.ok(
+			probe.owners.length === 4 && probe.owners.every((seen) => seen === child),
+			"every navigation of the child passed the nested component as owner",
+		);
+
+		assert.deepEqual(parentStatuses, [], "the parent router saw no navigation");
+		assert.strictEqual((await parentRouter.navigationSettled()).route, "shell", "the parent route stays matched");
+	});
+});
+
+QUnit.test(
+	"a parent route waits for the route that a nested component's first navigation is redirected to",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const child = await displayChildWithPendingGuard(getComponentRouter(parent), probe);
+
+			child.decide("detail");
+			await child.shellMatched;
+
+			assert.deepEqual(
+				child.matches,
+				["child:detail", "parent:shell"],
+				"the parent route matched after the route the child was redirected to",
+			);
+			const settled = await child.childRouter.navigationSettled();
+			assert.strictEqual(
+				settled.status,
+				NavigationOutcome.Redirected,
+				"the child's first navigation was redirected",
+			);
+			assert.strictEqual(getHash(), "shell&/child/detail", "the redirect target is written under the prefix");
+		});
+	},
+);
+
+QUnit.test(
+	"a parent route matches although an async guard blocks a nested component's first navigation",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const parentRouter = getComponentRouter(parent);
+			const child = await displayChildWithPendingGuard(parentRouter, probe);
+			assert.deepEqual(child.matches, [], "the parent route waits for the child's guard");
+
+			child.decide(false);
+			const settled = await child.childRouter.navigationSettled();
+			assert.strictEqual(settled.status, NavigationOutcome.Blocked, "the child's first navigation is blocked");
+
+			// UI5 only waits for a routeMatched of the child, which a blocked navigation never fires.
+			await child.shellMatched;
+			assert.deepEqual(child.matches, ["parent:shell"], "the parent route matched, the child matched no route");
+			assert.strictEqual(
+				(await parentRouter.navigationSettled()).route,
+				"shell",
+				"the parent stays on its route",
+			);
+		});
+	},
+);
+
+QUnit.test(
+	"a blocked first navigation of a nested component leaves the browser hash as the parent set it",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const child = await displayChildWithPendingGuard(getComponentRouter(parent), probe);
+
+			child.decide(false);
+			const settled = await child.childRouter.navigationSettled();
+			await child.shellMatched;
+
+			assert.strictEqual(settled.status, NavigationOutcome.Blocked, "the child's first navigation is blocked");
+			assert.strictEqual(getHash(), "shell", "the child's prefix is not added for its empty hash");
+		});
+	},
+);
+
+QUnit.test(
+	"a parent route matches although a guard blocks a nested component that is displayed again",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const parentRouter = getComponentRouter(parent);
+			parentRouter.navTo("shell");
+			await waitForRoute(parentRouter, "shell");
+			const childRouter = getComponentRouter(getChild(probe));
+
+			parentRouter.navTo("home");
+			await waitForRoute(parentRouter, "home");
+			assert.ok(childRouter.isStopped(), "leaving the parent route stops the child router");
+
+			// UI5 starts the child router again and waits for its routeMatched.
+			probe.decide = () => false;
+			parentRouter.navTo("shell");
+			await waitForRoute(parentRouter, "shell");
+
+			const settled = await childRouter.navigationSettled();
+			assert.strictEqual(settled.status, NavigationOutcome.Blocked, "the child's navigation is blocked");
+			assert.strictEqual(probe.owners.length, 2, "the child's guard ran for both displays");
+		});
+	},
+);
 
 // ============================================================
 // Module: Manifest guard module path resolution

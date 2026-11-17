@@ -183,6 +183,14 @@ export function recordSettlements(router: GuardRouter): string[] {
 	return statuses;
 }
 
+/**
+ * The UI5-private member by which a router reports a route match in progress. The guard router
+ * also reports one while a navigation waits for async guards (see `Router._mirrorMatchingProcess`).
+ */
+export function isMatching(router: GuardRouter): unknown {
+	return Reflect.get(router, "_bMatchingProcessStarted");
+}
+
 /** Return the current hash from the HashChanger. */
 export function getHash(): string {
 	return HashChanger.getInstance().getHash();

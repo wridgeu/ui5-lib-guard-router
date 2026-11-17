@@ -1,0 +1,56 @@
+{
+	"_version": "2.0.0",
+	"sap.app": {
+		"id": "ui5.guard.router.qunit.fixtures.nested.child",
+		"type": "component",
+		"title": "Nested component child",
+		"embeddedBy": "../",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.ui": {
+		"technology": "UI5"
+	},
+	"sap.ui5": {
+		"dependencies": {
+			"minUI5Version": "1.136.0",
+			"libs": {
+				"sap.m": {},
+				"sap.ui.core": {},
+				"ui5.guard.router": {}
+			}
+		},
+		"rootView": {
+			"viewName": "ui5.guard.router.qunit.fixtures.nested.child.view.App",
+			"type": "XML",
+			"id": "appView"
+		},
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"type": "View",
+				"viewType": "XML",
+				"path": "ui5.guard.router.qunit.fixtures.nested.child.view",
+				"controlId": "app",
+				"controlAggregation": "pages",
+				"guardRouter": {
+					"guards": {
+						"*": ["guards.ownerGuard"],
+						"locked": ["guards.blockGuard"]
+					}
+				}
+			},
+			"routes": [
+				{ "name": "list", "pattern": "", "target": "list" },
+				{ "name": "detail", "pattern": "detail", "target": "detail" },
+				{ "name": "locked", "pattern": "locked", "target": "locked" }
+			],
+			"targets": {
+				"list": { "name": "List", "id": "list" },
+				"detail": { "name": "Detail", "id": "detail" },
+				"locked": { "name": "Locked", "id": "locked" }
+			}
+		}
+	}
+}

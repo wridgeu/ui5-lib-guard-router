@@ -11,6 +11,7 @@ import {
 	flushPromises,
 	getHash,
 	initHashChanger,
+	isMatching,
 	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
@@ -1226,5 +1227,129 @@ QUnit.test(
 			enterGuardCalledWhileAborted,
 			"Enter guard was not called with an aborted signal for the superseded navigation",
 		);
+	},
+);
+
+// ============================================================
+// Module: Native matching flag
+// ============================================================
+QUnit.module("Router - Native matching flag", standardHooks);
+
+QUnit.test("UI5 sets the flag for the time of a route match", async function (assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	assert.strictEqual(isMatching(router), false, "no match is in progress");
+
+	router.navTo("protected");
+	assert.strictEqual(isMatching(router), true, "UI5 set the flag within navTo");
+
+	await waitForRoute(router, "protected");
+	assert.strictEqual(isMatching(router), false, "UI5 cleared the flag before the route events");
+});
+
+QUnit.test(
+	"the flag is set while a navigation waits for async guards, until it ends without a match",
+	async function (assert) {
+		let decision: { resolve: (allowed: boolean) => void; reject: (error: Error) => void } | undefined;
+		router.addRouteGuard(
+			"protected",
+			() =>
+				new Promise<boolean>((resolve, reject) => {
+					decision = { resolve, reject };
+				}),
+		);
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		const endings: [status: string, end: () => void][] = [
+			[NavigationOutcome.Blocked, () => decision?.resolve(false)],
+			[NavigationOutcome.Error, () => decision?.reject(new Error("guard failed"))],
+			[NavigationOutcome.Cancelled, () => router.navTo("home")],
+		];
+		const errorStub = sinon.stub(Log, "error");
+		try {
+			for (const [status, end] of endings) {
+				router.navTo("protected");
+				assert.strictEqual(isMatching(router), true, `set while navTo waits for the guard (${status})`);
+				end();
+				const settled = await router.navigationSettled();
+				assert.strictEqual(settled.status, status, `the navigation settles as ${status}`);
+				assert.strictEqual(isMatching(router), false, `cleared by the ${status} settlement`);
+			}
+		} finally {
+			errorStub.restore();
+		}
+
+		HashChanger.getInstance().setHash("protected");
+		assert.strictEqual(isMatching(router), true, "set while a hash change waits for the guard");
+		router.stop();
+		assert.strictEqual(isMatching(router), false, "cleared by stop()");
+	},
+);
+
+QUnit.test("guards that decide synchronously do not set the flag", async function (assert) {
+	let duringGuard: unknown;
+	router.addRouteGuard("forbidden", () => {
+		duringGuard = isMatching(router);
+		return false;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("forbidden");
+
+	assert.strictEqual(duringGuard, false, "not set while the guard runs: UI5 has not matched a route yet");
+	assert.strictEqual(isMatching(router), false, "not set after the block");
+});
+
+QUnit.test(
+	"a Promise that waits for routeMatched during pending guards resolves when the navigation is blocked",
+	async function (assert) {
+		let allow: (allowed: boolean) => void = () => {};
+		router.addRouteGuard(
+			"protected",
+			() =>
+				new Promise<boolean>((resolve) => {
+					allow = resolve;
+				}),
+		);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const handler = sinon.spy();
+
+		router.navTo("protected");
+		router.attachRouteMatched(handler);
+		// A component target waits for a nested router like this.
+		const matched = new Promise((resolve) => {
+			router.attachRouteMatched(resolve);
+		});
+		allow(false);
+		await router.navigationSettled();
+
+		assert.strictEqual(await matched, undefined, "the Promise resolved without a routeMatched event");
+		assert.strictEqual(handler.callCount, 0, "the handler was not called: no route matched");
+	},
+);
+
+QUnit.test(
+	"a Promise that waits for routeMatched while no match is pending resolves with the next match",
+	async function (assert) {
+		router.addRouteGuard("forbidden", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const resolved: (Router$RouteMatchedEvent | undefined)[] = [];
+		const matched = new Promise<Router$RouteMatchedEvent | undefined>((resolve) => {
+			router.attachRouteMatched(resolve);
+		}).then((event) => {
+			resolved.push(event);
+		});
+
+		router.navTo("forbidden");
+		await flushPromises();
+		assert.strictEqual(resolved.length, 0, "a blocked navigation does not resolve it");
+
+		router.navTo("protected");
+		await matched;
+		assert.strictEqual(resolved[0]?.getParameter("name"), "protected", "the next routeMatched does");
 	},
 );

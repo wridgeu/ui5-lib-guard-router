@@ -26,6 +26,44 @@ export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	return typeof (value as PromiseLike<T>).then === "function";
 }
 
+/** How this engine prints the resolve function of a Promise: `function () { [native code] }` in V8. */
+let resolverSource = "";
+void new Promise((resolve) => {
+	resolverSource = Function.prototype.toString.call(resolve);
+});
+
+/**
+ * Whether `value` looks exactly like the resolve function of a native Promise: a function with
+ * the name `""`, the length `1` and the source text that this engine prints for such a function.
+ *
+ * The router needs this for one subscriber that nothing else identifies. A UI5 component target
+ * waits for a nested router by subscribing the bare resolve function of a Promise to
+ * `routeMatched`: `oRouter.attachRouteMatched(resolve)` in `Target#waitForComponentTarget`
+ * (`sap/ui/core/routing/Target.js` line 821 in OpenUI5 1.144.0,
+ * `sap/ui/core/routing/async/Target.js` line 277 in OpenUI5 1.120.0). See
+ * `Router#attachRouteMatched` for what the router does with it.
+ *
+ * Assumptions about UI5 that no public contract covers: the component target subscribes the
+ * resolve function itself and not a function that wraps it, and it uses the Promise of the engine.
+ *
+ * A function written in JavaScript never matches, because its source text is its own code. Bound
+ * functions and named built-ins such as `Math.max` differ in the name, `Function.prototype` in the
+ * length. Other anonymous built-ins with one parameter do match, above all the reject function of
+ * a Promise. Calling a match runs no application code: at worst it settles a Promise that
+ * something else created.
+ *
+ * Pinned by the QUnit module "GuardPipeline - Promise resolve functions"
+ * (`GuardPipeline.qunit.ts`).
+ */
+export function isPromiseResolver(value: unknown): value is () => void {
+	return (
+		typeof value === "function" &&
+		value.name === "" &&
+		value.length === 1 &&
+		Function.prototype.toString.call(value) === resolverSource
+	);
+}
+
 /** Names of manifest guards, derived from their module, for log output. */
 const guardNames = new WeakMap<GuardFn, string>();
 
