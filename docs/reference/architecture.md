@@ -316,7 +316,10 @@ router would not see the hash change. `initialize()` parses the hash later, thro
 guards.
 
 A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
-phase and calls `navTo(target, replace=true)`. If `parse()` is not reached, because the hash
+phase and calls `navTo(target, replace=true)`. A target whose hash the hash changer already
+shows is not written again, unless it passes `componentTargetInfo`: the write would change
+nothing, except that a nested router adds its prefix for an empty hash (`shell` would become
+`shell&/child/`, as for `_restoreHash()` below). If `parse()` is not reached, because the hash
 already is the target or because component targets change it later, it commits the target
 directly. The navigation settles once, as `Redirected`, and the target's guards do not run
 again when the hash change arrives.

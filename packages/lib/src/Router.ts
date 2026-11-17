@@ -1328,9 +1328,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 				const targetName = typeof target === "string" ? target : target.route;
 				this._phase = { kind: "committing", route: targetName, origin: "redirect" };
 				try {
+					// Writing the hash the URL already shows changes nothing, except that a nested
+					// router would add its prefix for an empty hash (see _restoreHash).
+					const hashShown = this.getHashChanger().getHash() === targetHash;
 					if (typeof target === "string") {
-						this.navTo(target, {}, {}, true);
-					} else {
+						if (!hashShown) this.navTo(target, {}, {}, true);
+					} else if (!hashShown || target.componentTargetInfo) {
 						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
 					}
 					// parse() has not run: the hash is already the target, or changes later

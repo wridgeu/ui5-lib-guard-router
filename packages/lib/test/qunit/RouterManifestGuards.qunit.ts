@@ -643,6 +643,27 @@ QUnit.test(
 );
 
 QUnit.test(
+	"a redirect of a nested component to the route it shows leaves the browser hash as it is",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const parentRouter = getComponentRouter(parent);
+			parentRouter.navTo("shell");
+			await waitForRoute(parentRouter, "shell");
+			const childRouter = getComponentRouter(getChild(probe));
+			assert.strictEqual((await childRouter.navigationSettled()).route, "list", "the child shows its empty hash");
+
+			probe.decide = (context) => (context.toRoute === "detail" ? "list" : true);
+			childRouter.navTo("detail");
+			const settled = await childRouter.navigationSettled();
+
+			assert.strictEqual(settled.status, NavigationOutcome.Redirected, "the child's guard redirected");
+			assert.strictEqual(settled.route, "list", "back to the route the child shows");
+			assert.strictEqual(getHash(), "shell", "the child's prefix is not added for its empty hash");
+		});
+	},
+);
+
+QUnit.test(
 	"a parent route matches although a guard blocks a nested component that is displayed again",
 	async function (assert: Assert) {
 		await withNestedApp(async (parent, probe) => {
