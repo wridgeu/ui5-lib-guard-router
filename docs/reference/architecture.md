@@ -285,11 +285,23 @@ If `super.navTo()` does not change the hash, `parse()` is not called and `navTo(
 directly. This avoids double evaluation while keeping `parse()` as the authoritative
 commit path.
 
+`skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
+guards. Both go through `_navigateAllowed()`. If `super.navTo()` throws there, the phase is
+reset to idle, so the next hash change runs its guards instead of being committed as
+already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` in the idle
+phase and `parse()` evaluates the guards.
+
 A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
 phase and calls `navTo(target, replace=true)`. If `parse()` is not reached, because the hash
 already is the target or because component targets change it later, it commits the target
 directly. The navigation settles once, as `Redirected`, and the target's guards do not run
 again when the hash change arrives.
+
+A redirect target whose hash cannot be built (`Route#getURL()` throws for a missing
+mandatory parameter) fails like the native `navTo()`: `_redirect()` resets the phase to idle
+and rethrows. In a synchronous chain the error reaches the caller of `navTo()` or `parse()`
+and nothing settles. After an async guard the `.catch()` of that navigation or hop turns it
+into `_errorNavigation()`, so it settles as `Error`.
 
 ### navTo() superseding a pending hash change
 
@@ -572,16 +584,16 @@ navigation proceeds directly to Shell-home) in its own isolated session.
 | `_destroyed`               | `boolean`                           | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op |
 | `_blockLoad`               | `{ start: boolean } \| null`        | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`                                               |
 | `_meta`                    | `RouteMetaStore`                    | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                             |
-| `_routeNames`              | `string[]`                          | Known route names, collected for inheritance lookups                                                                                      |
+| `_routeNames`              | `string[]`                          | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                        |
 | `_ownerComponent`          | `UIComponent \| undefined`          | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                            |
 
 `RouterPhase` is a discriminated union with three variants:
 
-| Phase        | Shape                                                                                 | Description                                                                              |
-| ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `idle`       | `{ kind: "idle" }`                                                                    | No navigation in progress                                                                |
-| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt }`                                  | Guards are running; attempt carries hash, route, AbortController, and generation counter |
-| `committing` | `{ kind: "committing", route: string, origin: "preflight" \| "redirect" \| "parse" }` | Navigation is being committed; `origin` distinguishes the entry path                     |
+| Phase        | Shape                                                                                 | Description                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `idle`       | `{ kind: "idle" }`                                                                    | No navigation in progress                                                                   |
+| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt }`                                  | Guards are running; attempt carries hash, route, AbortController, generation, `restoreHash` |
+| `committing` | `{ kind: "committing", route: string, origin: "preflight" \| "redirect" \| "parse" }` | Navigation is being committed; `origin` distinguishes the entry path                        |
 
 ## Monorepo Tooling
 
@@ -598,10 +610,10 @@ navigation proceeds directly to Shell-home) in its own isolated session.
                                + ui5-middleware-livereload
 ```
 
-- **TypeScript**: strict mode, ES2022 target, composite builds enabled
+- **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
-- **Type check**: `tsc --noEmit` against both package tsconfigs
+- **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
 
 ## Test Architecture

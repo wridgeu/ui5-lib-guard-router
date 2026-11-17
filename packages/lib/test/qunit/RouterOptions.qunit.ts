@@ -11,6 +11,7 @@ import {
 	initHashChanger,
 	getHash,
 	recordHashChanges,
+	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -273,8 +274,7 @@ QUnit.test("skipGuards does not affect subsequent navTo calls", async function (
 
 QUnit.test("skipGuards navTo settles exactly once", async function (assert: Assert) {
 	await waitForRoute(router, "home");
-	const statuses: string[] = [];
-	router.attachNavigationSettled((event) => statuses.push(event.getParameter("status") as string));
+	const statuses = recordSettlements(router);
 
 	router.navTo("protected", {}, false, { skipGuards: true });
 

@@ -2,7 +2,7 @@
 
 > **Date**: 2026-03-17
 > **UI5 version analyzed**: OpenUI5 1.144.0
-> **Context**: The guard router's lifecycle guidance (README line 434) states that "UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away." This document provides the source-level evidence behind that claim, documents what lifecycle hooks exist (and don't exist) for navigation-away scenarios, and clarifies common misconceptions around the `sap-ui-xx-viewCache` flag.
+> **Context**: The guard router's lifecycle guidance (the "Guard cleanup and lifecycle" note in the [library README](../../packages/lib/README.md#leave-guard-with-controller-lifecycle)) states that "UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away." This document provides the source-level evidence behind that claim, documents what lifecycle hooks exist (and don't exist) for navigation-away scenarios, and clarifies common misconceptions around the `sap-ui-xx-viewCache` flag.
 
 ## Summary
 

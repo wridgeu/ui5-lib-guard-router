@@ -80,7 +80,7 @@ Recommended process:
 2. review the upstream diff
 3. update or add local executable ports only where valuable
 4. for a version bump, migrate the versioned port paths before writing the new manifest version
-5. run the dedicated upstream parity lane
+5. run `npm run verify:openui5-router-vendor` and `npm run test:qunit` (the parity suite is part of the QUnit lane)
 
 ## Current Scope
 

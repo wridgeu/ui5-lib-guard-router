@@ -276,7 +276,7 @@ Within a single navigation pipeline:
 2. **Global enter guards** (`"*"`) — registration order
 3. **Route-specific enter guards** — registration order
 
-Manifest guards are registered in declaration order during `initialize()`, so they run after imperative guards added before `initialize()` and before imperative guards added after it.
+Manifest guards are registered in declaration order during `initialize()` (in `"block"` mode once all modules have loaded), so they run after imperative guards added before `initialize()` and before imperative guards added after it or, in `"block"` mode, after loading has finished.
 
 For multi-guard modules registered via bare path (no cherry-pick), all guards from the module are inserted at the position where the module appears in the manifest array, in their internal order (array index / object key order).
 

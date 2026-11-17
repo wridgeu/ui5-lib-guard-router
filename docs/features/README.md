@@ -65,6 +65,7 @@ The router provides:
 - `07` vendored upstream router parity is implemented with raw upstream snapshots, executable ports, and sync/verify scripts; the ports run in the `test:qunit` lane and CI runs the verify script
 - `09` guard pipeline extraction is implemented -- `GuardPipeline` class owns guard storage and evaluation, Router delegates
 - `10` NavigationOutcome.Error is implemented -- guard throws produce `Error` settlements distinct from intentional `Blocked`
+- `12` lazy resolution error handling is implemented for metadata (`getRouteMeta` warns for unknown routes, `setRouteMeta` follows `unknownRouteRegistration`); guard inheritance is expanded eagerly at `initialize()` / `addRoute()` instead of lazily
 - `11` guards on redirect targets is implemented -- redirect chain hops evaluate the full guard pipeline with visited-set + depth-cap loop detection
 
 ## Framework Comparison Summary

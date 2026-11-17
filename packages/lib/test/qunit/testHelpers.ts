@@ -174,6 +174,15 @@ export function recordHashChanges(): { hashes: string[]; stop: () => void } {
 	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };
 }
 
+/** Record each settlement's status as it fires, so a test can check what settled before navTo/setHash returned. */
+export function recordSettlements(router: GuardRouter): string[] {
+	const statuses: string[] = [];
+	router.attachNavigationSettled((event) => {
+		statuses.push(event.getParameter("status") as string);
+	});
+	return statuses;
+}
+
 /** Return the current hash from the HashChanger. */
 export function getHash(): string {
 	return HashChanger.getInstance().getHash();
@@ -185,6 +194,14 @@ export function getHash(): string {
  */
 function toLogEntry(message: string, details: unknown): CapturedLogEntry {
 	return { message, details: details === undefined ? undefined : String(details) };
+}
+
+/** Messages a stubbed `Log` method received; a message logged under another component says so. */
+export function logMessages(stub: sinon.SinonStub): string[] {
+	return stub.getCalls().map((call) => {
+		const [message, , component] = call.args as [string, unknown, string];
+		return component === "ui5.guard.router.Router" ? message : `${message} (component: ${component})`;
+	});
 }
 
 /**

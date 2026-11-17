@@ -232,7 +232,7 @@ router.addRouteGuard("old-detail", (context) => ({
 }));
 ```
 
-Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for the `componentTargetInfo` variant.
+Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for a typed `GuardRedirect` variant; add `componentTargetInfo` to the returned object to pass nested component targets.
 
 ## Error handling in guards
 

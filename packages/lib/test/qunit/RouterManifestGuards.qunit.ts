@@ -21,15 +21,17 @@ let router: GuardRouter;
 
 const FIXTURES = "ui5/guard/router/qunit/fixtures/guards";
 
+const ROUTES = [
+	{ name: "home", pattern: "" },
+	{ name: "protected", pattern: "protected" },
+	{ name: "forbidden", pattern: "forbidden" },
+];
+
 function createLazyRouter(guards: Record<string, string[]>): GuardRouter {
-	return new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-			{ name: "forbidden", pattern: "forbidden" },
-		],
-		{ async: true, guardRouter: { guardLoading: "lazy", unknownRouteRegistration: "ignore", guards } },
-	);
+	return new GuardRouterClass(ROUTES, {
+		async: true,
+		guardRouter: { guardLoading: "lazy", unknownRouteRegistration: "ignore", guards },
+	});
 }
 
 // Load fixtures by the module name the router uses: the test page loads test files under
@@ -1669,12 +1671,6 @@ QUnit.module("Router - Manifest guard order, shapes and lifecycle", {
 		HashChanger.getInstance().setHash("");
 	},
 });
-
-const ROUTES = [
-	{ name: "home", pattern: "" },
-	{ name: "protected", pattern: "protected" },
-	{ name: "forbidden", pattern: "forbidden" },
-];
 
 function createBlockRouter(guards: Record<string, string[]>, unknownRouteRegistration = "ignore"): GuardRouter {
 	return createRouterUnsafe(ROUTES, {

@@ -299,7 +299,7 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
 | `NavigationOutcome.Error`      | A guard threw or rejected; previous route stays active. `result.error` holds the thrown value           |
 
-A guard redirect that fails to trigger a follow-up navigation settles as `Blocked` because no route change commits. A nonexistent route name is the most common cause, and the router logs the target name to help diagnose it.
+A guard redirect to a route that does not exist settles as `Blocked` because no route change commits; the router logs the target name to help diagnose it. A redirect whose target hash cannot be built (a mandatory route parameter is missing) fails like the native `navTo()`: after an async guard the navigation settles as `Error`; from a synchronous guard the error is thrown to the caller and no settlement is reported.
 
 An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
 
@@ -1035,7 +1035,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Async guard result discarded**: A newer navigation started before the async guard resolved. The router uses a generation counter to discard stale results. This is expected behavior during rapid sequential navigations. The debug log confirms when this occurs.
 
-**URL bar shows target hash, then reverts**: This is expected for async guards. The `HashChanger` updates the URL before `parse()` runs. See [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards) for the architectural explanation and the busy-indicator pattern.
+**URL bar shows target hash, then reverts**: This is expected for async guards. The `HashChanger` updates the URL before `parse()` runs. See [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards-browser-initiated-only) for the architectural explanation and the busy-indicator pattern.
 
 ## Testing
 
@@ -1053,11 +1053,10 @@ npm run test:full
 
 ### Accessing private members in tests
 
-The router's internal state (phase model, guard registries, generation counter) uses TypeScript's `private` keyword for encapsulation. Tests inspect these internals via [`Reflect.get`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect/get):
+The internal state of the router and the guard pipeline (phase model, guard registries, generation counter) uses TypeScript's `private` keyword for encapsulation. Tests assert on observable behavior; the few that inspect internals, such as the pipeline's guard registries, read them via [`Reflect.get`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect/get):
 
 ```typescript
-const phase = Reflect.get(router, "_phase");
-const generation = Reflect.get(router, "_parseGeneration");
+const enterGuards = Reflect.get(pipeline, "_enterGuards");
 ```
 
 This works because TypeScript `private` is a [compile-time-only constraint](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-8.html). The property exists as a regular enumerable property at runtime, so `Reflect.get` reads it without any cast or `as any`. The alternative -- ECMAScript `#private` fields -- enforces privacy at runtime via `WeakMap`-backed storage. Properties declared with `#` are invisible to `Reflect.get`, bracket notation, and any other external access. The trade-off:
@@ -1070,7 +1069,7 @@ This works because TypeScript `private` is a [compile-time-only constraint](http
 | Test inspection                  | Straightforward                     | Requires dedicated accessors                               |
 | UI5 compatibility                | Full (prototype-based class system) | Limited (UI5 metadata introspection cannot see `#` fields) |
 
-This library uses TypeScript `private` because UI5's `ManagedObject.extend()` class system relies on prototype-based inheritance and runtime metadata introspection, which is incompatible with ECMAScript `#private` fields. `Reflect.get` is the established pattern across the test suite for inspecting internal state without type-safety escape hatches.
+This library uses TypeScript `private` because UI5's `ManagedObject.extend()` class system relies on prototype-based inheritance and runtime metadata introspection, which is incompatible with ECMAScript `#private` fields. `Reflect.get` is the pattern the test suite uses where it has to inspect internal state, without type-safety escape hatches.
 
 ### Testing invalid input
 

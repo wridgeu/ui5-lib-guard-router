@@ -227,7 +227,7 @@ interface GuardContext {
 **Cons:**
 
 - Two sources of truth (manifest + runtime), which could be confusing
-- Manifest section (`ui5.guard.router`) is non-standard; UI5 tooling won't validate it
+- The `guardRouter` block in the routing config is non-standard; UI5 tooling won't validate it
 - Shallow merge may not handle nested objects well
 - Metadata is untyped (`Record<string, unknown>`), with no compile-time safety
 

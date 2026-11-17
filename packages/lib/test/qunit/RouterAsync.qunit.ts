@@ -11,6 +11,7 @@ import {
 	flushPromises,
 	getHash,
 	initHashChanger,
+	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -32,21 +33,12 @@ const standardHooks = {
 // ============================================================
 QUnit.module("Router - Sync until a guard returns a Promise", standardHooks);
 
-/** Record each settlement's status as it fires, so a test can check what settled before navTo/setHash returned. */
-function recordSettlements(): string[] {
-	const statuses: string[] = [];
-	router.attachNavigationSettled((event) => {
-		statuses.push(event.getParameter("status") as string);
-	});
-	return statuses;
-}
-
 QUnit.test("an all-sync navTo commits before navTo returns", async function (assert) {
 	router.addGuard(() => true);
 	router.addRouteGuard("protected", () => true);
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	router.navTo("protected");
 
@@ -58,7 +50,7 @@ QUnit.test("an all-sync hash change commits before setHash returns", async funct
 	router.addRouteGuard("protected", () => true);
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	HashChanger.getInstance().setHash("protected");
 
@@ -69,7 +61,7 @@ QUnit.test("a sync block settles before navTo returns", async function (assert) 
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	router.navTo("protected");
 
@@ -81,7 +73,7 @@ QUnit.test("a sync block on a hash change restores the hash before setHash retur
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	HashChanger.getInstance().setHash("protected");
 
@@ -102,7 +94,7 @@ QUnit.test("guards after one that returns a Promise wait for it", async function
 	router.initialize();
 	await waitForRoute(router, "home");
 	calls.length = 0;
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	router.navTo("protected");
 
@@ -145,7 +137,7 @@ QUnit.test("the next navigation starts sync again", async function (assert) {
 	assert.strictEqual(getHash(), "", "the async navigation has not committed yet");
 	await router.navigationSettled();
 
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 	router.navTo("forbidden");
 	assert.strictEqual(getHash(), "forbidden", "committed in the same tick");
 	assert.deepEqual(settled, [NavigationOutcome.Committed]);
@@ -156,7 +148,7 @@ QUnit.test("an all-sync redirect chain finishes before navTo returns, with one s
 	router.addRouteGuard("forbidden", () => ({ route: "detail", parameters: { id: "1" } }));
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	router.navTo("protected");
 
@@ -174,7 +166,7 @@ QUnit.test("an async redirect hop makes the remaining hops async", async functio
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	router.navTo("protected");
 
@@ -704,7 +696,7 @@ QUnit.test("Hash change back to the current hash cancels a pending hash-change g
 	router.initialize();
 	await waitForRoute(router, "home");
 	homeGuardCalls = 0;
-	const settled = recordSettlements();
+	const settled = recordSettlements(router);
 
 	// Browser navigation: the hash changes first, then the guard runs.
 	HashChanger.getInstance().setHash("protected");

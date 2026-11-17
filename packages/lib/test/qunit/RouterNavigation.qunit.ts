@@ -19,6 +19,7 @@ import {
 	flushPromises,
 	initHashChanger,
 	recordHashChanges,
+	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -196,10 +197,7 @@ async function supersedePendingHashChange(
 	router.addRouteGuard("forbidden", forbiddenGuard);
 	router.initialize();
 	await waitForRoute(router, "home");
-	const statuses: string[] = [];
-	router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
-		statuses.push(event.getParameter("status") as string);
-	});
+	const statuses = recordSettlements(router);
 	HashChanger.getInstance().setHash("forbidden");
 	supersede();
 	await flushPromises();
@@ -318,7 +316,6 @@ QUnit.test("a redirect to the superseded hash commits it", async function (asser
 });
 
 // ============================================================
-// Module: Sequential navigation with dynamic guard state// ============================================================
 // Module: Sequential navigation with dynamic guard state
 // ============================================================
 QUnit.module("Router - Sequential navigation with changing guards", standardHooks);
@@ -540,10 +537,7 @@ QUnit.test("an async navTo started while a route is matched can still be cancell
 		started = true;
 		router.navTo("detail", { id: "1" });
 	});
-	const statuses: string[] = [];
-	router.attachNavigationSettled((event) => {
-		statuses.push(event.getParameter("status") as string);
-	});
+	const statuses = recordSettlements(router);
 
 	router.navTo("protected");
 	router.navTo("forbidden");
@@ -1449,10 +1443,7 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		const statuses: string[] = [];
-		router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
-			statuses.push(event.getParameter("status") as string);
-		});
+		const statuses = recordSettlements(router);
 
 		const errors = await captureErrorsAsync(async () => {
 			router.navTo("protected");

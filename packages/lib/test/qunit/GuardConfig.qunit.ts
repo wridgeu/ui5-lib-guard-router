@@ -1,24 +1,17 @@
 import Log from "sap/base/Log";
 import { isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
+import { logMessages } from "./testHelpers";
 
 interface SinonTestContext {
 	stub: sinon.SinonStubStatic;
 }
 
-const COMPONENT = "ui5.guard.router.Router";
 const DEFAULTS: ResolvedGuardRouterOptions = {
 	unknownRouteRegistration: "warn",
 	navToPreflight: "guard",
 	guardLoading: "lazy",
 	inheritance: "none",
 };
-
-function messages(stub: sinon.SinonStub): string[] {
-	return stub.getCalls().map((call) => {
-		const [message, , component] = call.args as [string, unknown, string];
-		return component === COMPONENT ? message : `${message} (component: ${component})`;
-	});
-}
 
 QUnit.module("GuardConfig - isRecord");
 
@@ -46,7 +39,7 @@ QUnit.test("a config that is not a plain object uses the defaults", function (th
 	for (const raw of [null, "lazy", [], new Date()]) {
 		assert.deepEqual(parseGuardRouterConfig(raw, ""), { options: DEFAULTS, routeMeta: new Map(), guards: [] });
 	}
-	assert.deepEqual(messages(warning), Array(4).fill("guardRouter config is not a plain object, using defaults"));
+	assert.deepEqual(logMessages(warning), Array(4).fill("guardRouter config is not a plain object, using defaults"));
 });
 
 QUnit.test("valid options are applied", function (this: SinonTestContext, assert) {
@@ -68,7 +61,7 @@ QUnit.test("each invalid option falls back to its default", function (this: Sino
 		"",
 	);
 	assert.deepEqual(options, DEFAULTS);
-	assert.deepEqual(messages(warning), [
+	assert.deepEqual(logMessages(warning), [
 		"guardRouter.unknownRouteRegistration has invalid value, using default",
 		"guardRouter.navToPreflight has invalid value, using default",
 		"guardRouter.guardLoading has invalid value, using default",
@@ -86,13 +79,13 @@ QUnit.test("keeps a frozen copy per route and skips invalid entries", function (
 	assert.deepEqual(routeMeta.get("home"), home);
 	assert.notStrictEqual(routeMeta.get("home"), home, "a copy");
 	assert.strictEqual(Object.isFrozen(routeMeta.get("home")), true);
-	assert.deepEqual(messages(warning), ['guardRouter.routeMeta["bad"]: expected object, skipping']);
+	assert.deepEqual(logMessages(warning), ['guardRouter.routeMeta["bad"]: expected object, skipping']);
 });
 
 QUnit.test("a routeMeta block that is not an object is skipped", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
 	assert.strictEqual(parseGuardRouterConfig({ routeMeta: [] }, "").routeMeta.size, 0);
-	assert.deepEqual(messages(warning), ["guardRouter.routeMeta: expected object, skipping"]);
+	assert.deepEqual(logMessages(warning), ["guardRouter.routeMeta: expected object, skipping"]);
 });
 
 QUnit.module("GuardConfig - guards");
@@ -135,11 +128,11 @@ QUnit.test('the "*" object form keeps enter guards and drops leave guards', func
 	]);
 	assert.deepEqual(parseGuardRouterConfig({ guards: { "*": { leave: ["g.b"] } } }, "").guards, []);
 	assert.deepEqual(parseGuardRouterConfig({ guards: { "*": { enter: ["g.a"] } } }, "").guards.length, 1);
-	assert.deepEqual(messages(warning), [
+	assert.deepEqual(logMessages(warning), [
 		'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
 		'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
 	]);
-	assert.deepEqual(messages(info), [
+	assert.deepEqual(logMessages(info), [
 		'guardRouter.guards["*"]: object form; treating enter as global',
 		'guardRouter.guards["*"]: object form; treating enter as global',
 	]);
@@ -151,7 +144,7 @@ QUnit.test("invalid entries are skipped with a warning", function (this: SinonTe
 	assert.deepEqual(parseGuardRouterConfig({ guards }, "").guards, [
 		{ route: "home", type: "enter", modulePath: "g/a", exportKey: undefined },
 	]);
-	assert.deepEqual(messages(warning), [
+	assert.deepEqual(logMessages(warning), [
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["detail"].enter: invalid entry, skipping',
@@ -163,5 +156,5 @@ QUnit.test("invalid entries are skipped with a warning", function (this: SinonTe
 QUnit.test("a guards block that is not an object is skipped", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
 	assert.deepEqual(parseGuardRouterConfig({ guards: ["g.a"] }, "").guards, []);
-	assert.deepEqual(messages(warning), ["guardRouter.guards is not a plain object, skipping"]);
+	assert.deepEqual(logMessages(warning), ["guardRouter.guards is not a plain object, skipping"]);
 });

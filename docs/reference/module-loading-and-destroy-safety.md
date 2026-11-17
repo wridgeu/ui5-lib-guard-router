@@ -114,15 +114,19 @@ Same pattern, adapted for our use case:
 
 ```typescript
 // Router.ts — initialize() in "block" mode
+const blockLoad = { start: true };
+this._blockLoad = blockLoad;
 loadGuardModules(expandedDescriptors).then((results) => {
+    this._blockLoad = null;
     if (this._destroyed) return;  // ◄── sentinel check
     // register each module's guards, then:
-    super.initialize();
+    if (blockLoad.start) super.initialize();
 });
 
 // Router.ts — destroy()
 override destroy(): this {
-    this._destroyed = true;  // ◄── set sentinel FIRST
+    if (this._destroyed) return this;  // a second destroy() does nothing
+    this._destroyed = true;  // ◄── set sentinel before any cleanup
     this._pipeline.clear();
     this._pendingGuardDescriptors = [];
     this._sourceDescriptors = [];
@@ -133,7 +137,7 @@ override destroy(): this {
 }
 ```
 
-The sentinel is `_destroyed` (a boolean). It's set as the first statement in `destroy()` so that any callback firing after destroy — on the same tick or later — sees it immediately.
+The sentinel is `_destroyed` (a boolean). `destroy()` sets it before any cleanup so that any callback firing after destroy — on the same tick or later — sees it immediately.
 
 ## Why the object isn't garbage collected
 
@@ -154,7 +158,7 @@ JavaScript closures keep the enclosing scope alive:
 
 `destroy()` clears the router's internal state (pipeline, descriptors, metadata, settlement resolvers) but the JavaScript object stays in memory. It has no event listeners and `_destroyed === true` but it's still a valid object with callable methods. Without the sentinel check, `super.initialize()` would succeed and re-attach hash listeners on a "zombie" router that nobody holds a reference to (except the closure).
 
-The sentinel check runs before anything else in the callback, so modules that arrive after `destroy()` register no guards and `super.initialize()` never runs. `loadGuardModules()` never rejects: a module that fails to load is logged and skipped, so no `.catch()` is needed.
+The sentinel check runs before any guard is registered, so modules that arrive after `destroy()` register no guards and `super.initialize()` never runs. `loadGuardModules()` never rejects: a module that fails to load is logged and skipped, so no `.catch()` is needed.
 
 Once the Promise resolves, the closure releases `this`, and the router becomes eligible for garbage collection.
 
@@ -184,8 +188,8 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 | Concern              | UI5 TargetCache                              | Guard Router                                |
 | -------------------- | -------------------------------------------- | ------------------------------------------- |
 | Sentinel field       | `_oCache` (nulled to `undefined`)            | `_destroyed` (set to `true`)                |
-| Check location       | `afterLoaded` callback                       | `.then()` / `.catch()` in `initialize()`    |
+| Check location       | `afterLoaded` callback                       | `.then()` in `initialize()`                 |
 | Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions) |
-| Set order in destroy | After iterating cache, before `bIsDestroyed` | First statement, before clearing guards     |
+| Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)   |
 
 [targetcache-src]: https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/async/TargetCache.js

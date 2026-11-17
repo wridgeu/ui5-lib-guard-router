@@ -97,8 +97,8 @@ degenerate cases where parameters keep varying.
 ```typescript
 const MAX_REDIRECT_DEPTH = 10;
 
-// At the top of _redirect, two separate checks:
-if (targetHash !== null && chain.visited.has(targetHash)) {
+// In _redirect, once the target hash is resolved, two separate checks:
+if (chain.visited.has(targetHash)) {
     Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
     this._blockNavigation(chain.attemptedHash, chain.restoreHash);
     return;
@@ -108,9 +108,7 @@ if (chain.visited.size > MAX_REDIRECT_DEPTH) {
     this._blockNavigation(chain.attemptedHash, chain.restoreHash);
     return;
 }
-if (targetHash !== null) {
-    chain.visited.add(targetHash);
-}
+chain.visited.add(targetHash);
 ```
 
 ### Visited Set Lifecycle
@@ -178,7 +176,8 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
     }
-    // Throws for missing mandatory parameters, like the native navTo()
+    // Throws for missing mandatory parameters, like the native navTo().
+    // The real method catches the error, resets the phase to idle and rethrows.
     const targetHash = targetRoute.getURL(typeof target === "string" ? {} : (target.parameters ?? {}));
 
     // 2. Loop detection (two separate checks)
@@ -302,6 +301,12 @@ The entire chain is one logical navigation. Only one settlement is flushed:
 | Block (any hop)     | `NavigationOutcome.Blocked`                               |
 | Error (guard throw) | `NavigationOutcome.Error` + error on result               |
 | Loop detected       | `NavigationOutcome.Blocked` + `Log.error` with chain path |
+| Depth cap exceeded  | `NavigationOutcome.Blocked` + `Log.error` with chain path |
+| Unknown target      | `NavigationOutcome.Blocked` + `Log.warning` with the name |
+
+A target whose hash cannot be built (missing mandatory parameter) is not a chain
+outcome: the error is rethrown. A synchronous chain throws to the caller of `navTo()` or
+`parse()` without a settlement; after an async guard the navigation settles as `Error`.
 
 No intermediate settlements for redirect hops.
 

@@ -1,22 +1,15 @@
 import Log from "sap/base/Log";
 import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
 import type { GuardContext, GuardFn } from "ui5/guard/router/types";
+import { logMessages } from "./testHelpers";
 
 interface SinonTestContext {
 	stub: sinon.SinonStubStatic;
 }
 
-const COMPONENT = "ui5.guard.router.Router";
 const PATH = "app/guards/auth";
 const a: GuardFn = () => true;
 const b: GuardFn = () => true;
-
-function messages(stub: sinon.SinonStub): string[] {
-	return stub.getCalls().map((call) => {
-		const [message, , component] = call.args as [string, unknown, string];
-		return component === COMPONENT ? message : `${message} (component: ${component})`;
-	});
-}
 
 function warned(detail: string): string[] {
 	return [`guardRouter.guards: "${PATH}" ${detail}`];
@@ -29,7 +22,7 @@ QUnit.test("function export", function (this: SinonTestContext, assert) {
 	assert.deepEqual(resolveModuleExports(a, PATH), [{ name: "auth", fn: a }]);
 	assert.strictEqual(debug.callCount, 0, "no key, no debug log");
 	assert.deepEqual(resolveModuleExports(a, PATH, "x"), [{ name: "x", fn: a }], "the export key only names it");
-	assert.deepEqual(messages(debug), [`guardRouter.guards: "${PATH}#x" is a single function, ignoring export key`]);
+	assert.deepEqual(logMessages(debug), [`guardRouter.guards: "${PATH}#x" is a single function, ignoring export key`]);
 });
 
 QUnit.test("array export", function (this: SinonTestContext, assert) {
@@ -38,7 +31,7 @@ QUnit.test("array export", function (this: SinonTestContext, assert) {
 		{ name: "auth#0", fn: a },
 		{ name: "auth#2", fn: b },
 	]);
-	assert.deepEqual(messages(warning), warned("[1] is not a function, skipping"));
+	assert.deepEqual(logMessages(warning), warned("[1] is not a function, skipping"));
 });
 
 QUnit.test("array export picked by index", function (this: SinonTestContext, assert) {
@@ -49,11 +42,11 @@ QUnit.test("array export picked by index", function (this: SinonTestContext, ass
 	for (const key of ["2", "-1", "x"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports([a, b], PATH, key), [], `#${key}`);
-		assert.deepEqual(messages(warning), warned(`#${key} - index out of range, skipping`));
+		assert.deepEqual(logMessages(warning), warned(`#${key} - index out of range, skipping`));
 	}
 	warning.resetHistory();
 	assert.deepEqual(resolveModuleExports([a, "x"], PATH, "1"), []);
-	assert.deepEqual(messages(warning), warned("#1 is not a function, skipping"));
+	assert.deepEqual(logMessages(warning), warned("#1 is not a function, skipping"));
 });
 
 QUnit.test("object export", function (this: SinonTestContext, assert) {
@@ -62,7 +55,7 @@ QUnit.test("object export", function (this: SinonTestContext, assert) {
 		{ name: "first", fn: a },
 		{ name: "second", fn: b },
 	]);
-	assert.deepEqual(messages(warning), warned(".bad is not a function, skipping"));
+	assert.deepEqual(logMessages(warning), warned(".bad is not a function, skipping"));
 });
 
 QUnit.test("object export picked by key or index", function (this: SinonTestContext, assert) {
@@ -80,11 +73,11 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 	for (const key of ["2", "-1", "missing"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports(mod, PATH, key), [], `#${key}`);
-		assert.deepEqual(messages(warning), warned(`#${key} - key not found, skipping`));
+		assert.deepEqual(logMessages(warning), warned(`#${key} - key not found, skipping`));
 	}
 	warning.resetHistory();
 	assert.deepEqual(resolveModuleExports({ first: a, bad: 1 }, PATH, "bad"), []);
-	assert.deepEqual(messages(warning), warned("#bad is not a function, skipping"));
+	assert.deepEqual(logMessages(warning), warned("#bad is not a function, skipping"));
 });
 
 QUnit.test("empty and unsupported exports", function (this: SinonTestContext, assert) {
@@ -92,7 +85,7 @@ QUnit.test("empty and unsupported exports", function (this: SinonTestContext, as
 	assert.deepEqual(resolveModuleExports([], PATH), []);
 	assert.deepEqual(resolveModuleExports({}, PATH), []);
 	assert.deepEqual(resolveModuleExports("x", PATH), []);
-	assert.deepEqual(messages(warning), [
+	assert.deepEqual(logMessages(warning), [
 		...warned("exported an empty array, skipping"),
 		...warned("exported an empty object, skipping"),
 		...warned("did not export a function, array, or plain object, skipping"),

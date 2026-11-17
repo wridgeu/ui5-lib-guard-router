@@ -255,6 +255,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
                     ┌─────────────────────────────────────┐
                     │           parse(newHash)             │
                     │  ┌─────────────────────────────────┐ │
+                    │  │ destroyed?           → warn     │ │
                     │  │ _suppressedHash?     → return   │ │
                     │  │ committing phase?    → commit   │ │
                     │  │ same hash?           → return   │ │

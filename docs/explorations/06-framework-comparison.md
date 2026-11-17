@@ -92,7 +92,7 @@ Guards are resolved asynchronously, and the navigation is considered **pending**
 | In-component guards     | `beforeRouteEnter`, `beforeRouteUpdate`, `beforeRouteLeave` | Not supported                            |
 | Leave guards            | `beforeRouteLeave`                                          | `addLeaveGuard()`                        |
 | Async support           | Native                                                      | Native                                   |
-| Route metadata          | `to.meta`                                                   | Via `context.toRoute` + external lookup  |
+| Route metadata          | `to.meta`                                                   | `context.toMeta` / `context.fromMeta`    |
 | Return values           | `true`, `false`, route location, `undefined`                | `true`, `false`, string, `GuardRedirect` |
 | Concurrent nav handling | Auto-cancels pending navigation                             | Generation counter + AbortSignal         |
 
@@ -313,22 +313,22 @@ navigate({ to: '/dashboard', ignoreBlocker: true });
 - **AbortController per match**: Each route match gets its own `AbortController`. When a new navigation starts, `cancelMatches()` aborts all pending controllers. This is more granular than `ui5.guard.router`'s generation counter, but heavier. (Note: `ui5.guard.router` now also exposes an `AbortSignal` on `GuardContext`, used alongside the generation counter.)
 - **`beforeLoad` hooks**: Run parent-to-child, each contributing to accumulated context
 - **Context accumulation**: Parent route context flows to children (type-safe)
-- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`, analogous to `ui5.guard.router`'s committing/redirect phase.
+- **`ignoreBlocker`**: Specific navigations can bypass blockers (e.g., "Save & Navigate"). Redirects from guards automatically use `ignoreBlocker: true`. `ui5.guard.router` evaluates the redirect target's guards first and uses its committing/redirect phase only so that the final commit does not run them again.
 - **`cause` parameter**: `beforeLoad` receives `'preload' | 'enter' | 'stay'` to distinguish navigation reasons
 - **No generation counter**: Uses `latestLoadPromise` tracking + AbortController instead
 
 ### Comparison with ui5.guard.router
 
-| Feature             | TanStack Router              | ui5.guard.router                           |
-| ------------------- | ---------------------------- | ------------------------------------------ |
-| Async model         | Fully async                  | Sync-first, async fallback                 |
-| Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`            |
-| Leave guards        | `useBlocker` (history-level) | `addLeaveGuard()`                          |
-| Blocking layer      | History library              | Router `parse()`                           |
-| Context passing     | Parent-to-child accumulation | Via `GuardContext`                         |
-| Staleness detection | AbortController per match    | Generation counter + AbortSignal           |
-| Bypass mechanism    | `ignoreBlocker` option       | Committing/redirect phase (redirects only) |
-| Type safety         | Full route tree types        | Interface-based                            |
+| Feature             | TanStack Router              | ui5.guard.router                 |
+| ------------------- | ---------------------------- | -------------------------------- |
+| Async model         | Fully async                  | Sync-first, async fallback       |
+| Enter guards        | `beforeLoad` hook            | `addGuard()`, `addRouteGuard()`  |
+| Leave guards        | `useBlocker` (history-level) | `addLeaveGuard()`                |
+| Blocking layer      | History library              | Router `parse()`                 |
+| Context passing     | Parent-to-child accumulation | Via `GuardContext`               |
+| Staleness detection | AbortController per match    | Generation counter + AbortSignal |
+| Bypass mechanism    | `ignoreBlocker` option       | `skipGuards` option on `navTo()` |
+| Type safety         | Full route tree types        | Interface-based                  |
 
 For a detailed source code analysis, see [Alternative 12: TanStack Router Deep Dive](./12-tanstack-router-deep-dive.md).
 
@@ -605,9 +605,9 @@ export const reroute: Reroute = async ({ url }) => {
 | In-component guard  | Yes        | No              | No                        | No                  | No                | No                        | No              | No                 | No                    |
 | Leave guard         | Yes        | `canDeactivate` | `useBlocker` (**stable**) | `useBlocker` (exp.) | `routeWillChange` | Via Vue                   | No              | `beforeNavigate`   | **Yes**               |
 | Transition retry    | No         | No              | No                        | No                  | **Yes**           | No                        | No              | No                 | **No**                |
-| Bypass mechanism    | No         | No              | No                        | `ignoreBlocker`     | No                | No                        | No              | No                 | **No**                |
+| Bypass mechanism    | No         | No              | No                        | `ignoreBlocker`     | No                | No                        | No              | No                 | **`skipGuards`**      |
 | Async support       | Yes        | Observable      | Yes                       | Yes                 | Yes               | Yes                       | Yes             | Yes                | **Yes**               |
-| Route metadata      | `to.meta`  | `route.data`    | Loader                    | Context             | No                | `definePageMeta` + groups | Matcher         | Via layout data    | **No**                |
+| Route metadata      | `to.meta`  | `route.data`    | Loader                    | Context             | No                | `definePageMeta` + groups | Matcher         | Via layout data    | **`toMeta`**          |
 | Redirect            | Return loc | `navigate()`    | `throw redirect()`        | `throw redirect()`  | `transitionTo()`  | `navigateTo()`            | `redirect()`    | `throw redirect()` | **Return string/obj** |
 | History clean       | Yes        | Yes             | `replace`                 | Yes                 | Yes               | Yes                       | Server          | Yes                | **Yes**               |
 
@@ -622,12 +622,12 @@ export const reroute: Reroute = async ({ url }) => {
 - Centralized registration (matches Vue's `beforeEach`)
 - Concurrent navigation handling (matches Vue's pending navigation cancellation)
 - AbortSignal in guard context for cooperative cancellation of async operations (comparable to TanStack's per-match AbortController)
+- Route metadata: `guardRouter.routeMeta` in the manifest plus `setRouteMeta()`, read by guards as `context.toMeta` / `context.fromMeta` (matches Vue's `to.meta`). See [Alternative 10: Route Metadata](./10-route-metadata.md).
+- Bypass mechanism: `navTo(..., { skipGuards: true })` and `navToPreflight: "bypass"` (comparable to TanStack's `ignoreBlocker`). See [Alternative 11: Bypass Guards](./11-bypass-guards.md).
 
 **Not yet covered (potential future enhancements):**
 
 - **Transition object** (`transition.retry()`): Ember's unique pattern for storing and retrying aborted transitions. See [Alternative 9: Transition Object](./09-transition-object.md).
-- **Route metadata**: Declaring guard conditions in the route config itself (e.g., `{ meta: { requiresAuth: true } }`). See [Alternative 10: Route Metadata](./10-route-metadata.md).
-- **Bypass mechanism** (`ignoreBlocker`): Allowing specific navigations to skip guards. Useful for "Save & Navigate" patterns. See [Alternative 11: Bypass Guards](./11-bypass-guards.md).
 - **Code loading prevention**: Preventing lazy-loaded view code from being fetched until guards pass. UI5's view loading is tightly coupled to route matching, making this difficult.
 
 > **Note on client-side guards and security:** Client-side route guards are a UX feature, not a security feature. Server-side authorization is always required. [CVE-2025-29927](https://vercel.com/blog/postmortem-on-next-js-middleware-bypass) demonstrated that even framework-level guard mechanisms can have vulnerabilities — Next.js middleware could be bypassed entirely via header manipulation.
