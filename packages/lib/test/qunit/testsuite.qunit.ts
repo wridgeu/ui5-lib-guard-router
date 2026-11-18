@@ -1,3 +1,96 @@
+/**
+ * A test page: its files are loaded one after the other, in the listed order (see loadPage.ts).
+ * A file is named by its path below this folder, without ".qunit.ts".
+ */
+interface TestPage {
+	title: string;
+	files: string[];
+	qunit?: { testTimeout: number };
+}
+
+const tests: Record<string, TestPage> = {
+	GuardPipeline: {
+		title: "QUnit Tests for ui5.guard.router.GuardPipeline",
+		files: ["GuardPipeline"],
+	},
+	GuardConfig: {
+		title: "QUnit Tests for ui5.guard.router.GuardConfig",
+		files: ["GuardConfig"],
+	},
+	GuardModules: {
+		title: "QUnit Tests for ui5.guard.router.GuardModules",
+		files: ["GuardModules"],
+	},
+	PatternTree: {
+		title: "QUnit Tests for ui5.guard.router.PatternTree",
+		files: ["PatternTree"],
+	},
+	RouteMeta: {
+		title: "QUnit Tests for ui5.guard.router.RouteMeta",
+		files: ["RouteMeta"],
+	},
+	Router: {
+		title: "QUnit Tests for ui5.guard.router.Router",
+		files: ["Router"],
+	},
+	RouterGuards: {
+		title: "QUnit Tests for Router Guard Behavior",
+		files: ["RouterGuards"],
+	},
+	RouterAsync: {
+		title: "QUnit Tests for Router Async and Concurrency",
+		files: ["RouterAsync"],
+	},
+	RouterNavigation: {
+		title: "QUnit Tests for Router Navigation Paths",
+		files: ["RouterNavigation"],
+	},
+	RouterHistory: {
+		title: "QUnit Tests for Router and Browser History",
+		files: ["RouterHistory"],
+	},
+	RouterSettlement: {
+		title: "QUnit Tests for Router Settlement and Lifecycle",
+		files: ["RouterSettlement"],
+	},
+	RouterOptions: {
+		title: "QUnit Tests for Router Options",
+		files: ["RouterOptions"],
+	},
+	RouterManifestGuards: {
+		title: "QUnit Tests for Router Manifest Guards",
+		files: ["RouterManifestGuards"],
+	},
+	RouterRouteMeta: {
+		title: "QUnit Tests for Router Route Metadata and Inheritance",
+		files: ["RouterRouteMeta"],
+	},
+	NativeRouterCompat: {
+		title: "QUnit Tests for Native Router Compatibility",
+		files: ["NativeRouterCompat"],
+	},
+	NestedRouterParity: {
+		title: "QUnit Tests for Native Router Parity in Nested Components",
+		files: ["NestedRouterParity"],
+		// Each test starts the fixture app four times.
+		qunit: {
+			testTimeout: 30000,
+		},
+	},
+	GuardedNavigationParity: {
+		title: "QUnit Tests for Guard Decisions and their Native Equivalents",
+		files: ["GuardedNavigationParity"],
+		// Each test starts the fixture app three times.
+		qunit: {
+			testTimeout: 30000,
+		},
+	},
+	UpstreamParity: {
+		title: "QUnit Tests for Vendored OpenUI5 Router Parity",
+		files: ["upstream-parity/Current"],
+	},
+};
+
 export default {
 	name: "QUnit TestSuite for ui5.guard.router",
 	defaults: {
@@ -27,70 +120,7 @@ export default {
 				"ui5/guard/router/qunit/fixtures": "test-resources/ui5/guard/router/qunit/fixtures",
 			},
 		},
-		module: "./{name}.qunit",
+		module: "./loadPage",
 	},
-	tests: {
-		GuardPipeline: {
-			title: "QUnit Tests for ui5.guard.router.GuardPipeline",
-		},
-		GuardConfig: {
-			title: "QUnit Tests for ui5.guard.router.GuardConfig",
-		},
-		GuardModules: {
-			title: "QUnit Tests for ui5.guard.router.GuardModules",
-		},
-		PatternTree: {
-			title: "QUnit Tests for ui5.guard.router.PatternTree",
-		},
-		RouteMeta: {
-			title: "QUnit Tests for ui5.guard.router.RouteMeta",
-		},
-		Router: {
-			title: "QUnit Tests for ui5.guard.router.Router",
-		},
-		RouterGuards: {
-			title: "QUnit Tests for Router Guard Behavior",
-		},
-		RouterAsync: {
-			title: "QUnit Tests for Router Async and Concurrency",
-		},
-		RouterNavigation: {
-			title: "QUnit Tests for Router Navigation Paths",
-		},
-		RouterHistory: {
-			title: "QUnit Tests for Router and Browser History",
-		},
-		RouterSettlement: {
-			title: "QUnit Tests for Router Settlement and Lifecycle",
-		},
-		RouterOptions: {
-			title: "QUnit Tests for Router Options",
-		},
-		RouterManifestGuards: {
-			title: "QUnit Tests for Router Manifest Guards",
-		},
-		RouterRouteMeta: {
-			title: "QUnit Tests for Router Route Metadata and Inheritance",
-		},
-		NativeRouterCompat: {
-			title: "QUnit Tests for Native Router Compatibility",
-		},
-		NestedRouterParity: {
-			title: "QUnit Tests for Native Router Parity in Nested Components",
-			// Each test starts the fixture app four times.
-			qunit: {
-				testTimeout: 30000,
-			},
-		},
-		GuardedNavigationParity: {
-			title: "QUnit Tests for Guard Decisions and their Native Equivalents",
-			// Each test starts the fixture app three times.
-			qunit: {
-				testTimeout: 30000,
-			},
-		},
-		UpstreamParity: {
-			title: "QUnit Tests for Vendored OpenUI5 Router Parity",
-		},
-	},
+	tests,
 };
