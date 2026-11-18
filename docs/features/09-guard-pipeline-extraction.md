@@ -1,5 +1,7 @@
 # Guard Pipeline Extraction
 
+> **Status**: Implemented. `GuardPipeline` (`packages/lib/src/GuardPipeline.ts`) owns guard storage and evaluation; the router delegates to it.
+
 ## Context
 
 Issue #40: extract the guard evaluation logic from `Router.ts` into a standalone `GuardPipeline` class.

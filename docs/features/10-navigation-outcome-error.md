@@ -1,5 +1,7 @@
 # NavigationOutcome.Error
 
+> **Status**: Implemented. Guard errors settle as `NavigationOutcome.Error`, distinct from `Blocked`.
+
 ## Context
 
 Issue #50: distinguish guard errors from intentional blocks.
@@ -134,8 +136,10 @@ private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = t
 Parallel to `_blockNavigation()`. Same structure:
 
 - Clears phase to idle
+- Optionally restores the browser hash to the previous state
 - Flushes settlement with `{ status: NavigationOutcome.Error, route, hash, error }`
-- Optionally restores browser hash to previous state
+
+The hash is restored before the settlement fires, so handlers run on the final URL. The exception is a first navigation (nothing committed yet) on a non-empty hash: the settlement fires first, then the empty hash is restored and parsed as a navigation of its own.
 
 ### `_applyDecision()` and `_applyPreflightDecision()`
 
@@ -144,7 +148,7 @@ Add `case "error"` to the existing switch on `decision.action`:
 - `_applyDecision()`: calls `_errorNavigation(decision.error, hash)` (with default `restoreHash: true`)
 - `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, attempt.restoreHash)` (the preflight never changes the hash; it only restores it after superseding a pending hash change)
 
-Redirect chain hops (added later, see `11-guards-on-redirect-targets.md`) do the same in `_applyRedirectDecision()` and the `.catch()` in `_redirect()`, passing `chain.attemptedHash` and `chain.restoreHash`.
+Redirect chain hops (see [11](./11-guards-on-redirect-targets.md)) do the same in `_applyRedirectDecision()`, which `_applyWhenDecided()` calls for an async hop, passing `chain.attemptedHash` and `chain.restoreHash`.
 
 ### `.catch()` handlers in `navTo()` and `parse()`
 

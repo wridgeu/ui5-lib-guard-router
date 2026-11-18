@@ -56,12 +56,12 @@ Since the load can't be stopped, the standard approach is: let it complete, but 
 
 ### How UI5 does it: `TargetCache`
 
-Source: [`sap/ui/core/routing/async/TargetCache.js`][targetcache-src] (OpenUI5, Apache-2.0)
+Source: [`sap/ui/core/routing/TargetCache.js`][targetcache-src] (OpenUI5 1.144.0, Apache-2.0)
 
 When a view or component is loaded asynchronously, the result is chained through `afterLoaded`:
 
 ```javascript
-// async/TargetCache.js, lines 80-98
+// TargetCache.js, _getObjectWithGlobalId(): simplified
 function afterLoaded(oObject) {
 	if (that._oCache) {
 		// ◄── is the TargetCache still alive?
@@ -80,7 +80,7 @@ function afterLoaded(oObject) {
 The sentinel is `this._oCache`. It starts as `{ view: {}, component: {} }` in the constructor. On destroy:
 
 ```javascript
-// TargetCache.js, lines 166-199
+// TargetCache.js, destroy(): simplified
 destroy: function () {
     // For each cached promise: chain .then(destroyObject)
     // so loaded-but-uncached objects are destroyed on arrival
@@ -120,7 +120,7 @@ loadGuardModules(expandedDescriptors).then((results) => {
     this._blockLoad = null;
     if (this._destroyed) return;  // ◄── sentinel check
     // register each module's guards, then:
-    if (blockLoad.start) super.initialize(blockLoad.ignoreInitialHash);
+    if (blockLoad.start) this._start(blockLoad.ignoreInitialHash); // calls super.initialize()
 });
 
 // Router.ts — destroy()
@@ -193,4 +193,4 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 | Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions) |
 | Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)   |
 
-[targetcache-src]: https://github.com/UI5/openui5/blob/main/src/sap.ui.core/src/sap/ui/core/routing/async/TargetCache.js
+[targetcache-src]: https://github.com/UI5/openui5/blob/1.144.0/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js

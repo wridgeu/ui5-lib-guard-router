@@ -302,14 +302,14 @@ The sync-first approach matches UI5's routing model well:
 
 ### Dual-Path Complexity
 
-The current code (`GuardPipeline.ts`) has five guard-running methods:
+`GuardPipeline.ts` has five guard-running methods:
 
-- `_runLeaveGuards()` and `_runGuards()`: about 28 lines each (sync loops for leave and enter guards)
-- `_continueGuardsAsync()`: about 34 lines (async continuation, shared by leave and enter guards)
-- `_runEnterGuards()`: about 13 lines (coordinator for global, then route enter guards)
-- `_runRouteGuards()`: about 4 lines (route enter guards, if any are registered)
+- `_runLeaveGuards()` and `_runGuards()`: sync loops for leave and enter guards
+- `_continueGuardsAsync()`: async continuation, shared by leave and enter guards
+- `_runEnterGuards()`: coordinator for global, then route enter guards
+- `_runRouteGuards()`: route enter guards, if any are registered
 
-Total: about 100 lines of dual-path logic, including error logging. This is not a maintenance burden.
+Together they are a small amount of dual-path logic, including error logging. This is not a maintenance burden.
 
 ## Costs of a Fully Async Pipeline
 

@@ -93,7 +93,7 @@ Parent and child each have a `bypassed` target, as the demo app has.
 | Flavor   | Parent router                                      | Child component | Child router                                                      |
 | -------- | -------------------------------------------------- | --------------- | ----------------------------------------------------------------- |
 | `native` | `sap.m.routing.Router`                             | `childNative`   | `sap.m.routing.Router`                                            |
-| `guard`  | `ui5.guard.router.Router`, no guards               | `childGuard`    | `ui5.guard.router.Router`, no guards                              |
+| `guard`  | `ui5.guard.router.Router`, no guards               | `childNoGuards` | `ui5.guard.router.Router`, no guards                              |
 | `allow`  | `ui5.guard.router.Router`, guard `"*"` that allows | `childAllow`    | `ui5.guard.router.Router`, manifest guard `"*"` that allows, lazy |
 
 The test replaces the router class, the child and the guards in the parent's manifest and passes
@@ -127,21 +127,13 @@ parent route and displaying the child again, browser back and forward, the paren
 `componentTargetInfo`, `navTo` to the route already shown, and a target displayed without a
 route. Titles propagate from the child to the parent (`propagateTitle`) in every scenario.
 
-Three things about the scenarios are deliberate:
-
-- The two scenarios that change the URL as the browser does (address bar, back and forward)
-  come first in the file. Chrome ignores hash changes once a page has made about 200 of them
-  within ten seconds, and the tests of this page make more. UI5 does not notice, because it
-  reports its own hash changes itself. A real address bar change or a real back does.
-- The start on a hash the child does not know is compared without regard to order
-  (`anyOrder`). The parent does not wait for the child's `bypassed` target as it waits for a
-  route of the child, so the native router itself displays the two in either order.
-- The warning "Cannot navigate to page ... because this is the current page" has a test of its
-  own. `sap.m.NavContainer` logs it when a router navigates to the page that is already the
-  current one, which is the case for the first page of every `NavContainer`. The native
-  router causes it exactly as the guard router does, for the first page of the parent and of
-  the child. On a start on a hash the child does not know, it is also logged for the page of
-  the child component, depending on how fast the component loads, again with both routers.
+The scenarios that change the URL as the browser does (address bar, back and forward) come
+first in the file, because Chrome ignores hash changes once a page has made about 200 of them
+within ten seconds. The start on a hash the child does not know is compared without regard to
+order (`anyOrder`): the parent does not wait for the child's `bypassed` target, so the native
+router itself displays the two in either order. The `NavContainer` warning "Cannot navigate to
+page ... because this is the current page" has a test of its own, which pins only the warning
+for the child's first page; the one for the parent's first page depends on timing.
 
 ### What differs on purpose
 
@@ -165,18 +157,17 @@ events fire or in which order. The `allow` flavor asserts that.
 When a UI5 upgrade breaks a scenario, read the first differing trace line. A difference between
 the two `native` runs is a change in the test setup, not in the router.
 
-### Differences the comparison found
+### Native behaviors the comparison pins
 
-The first run of these tests found four differences between the guard router without guards
-and the native router. All four were bugs and are fixed in `packages/lib/src/Router.ts`. The
-tests named here fail without the fix.
+Each row is a native behavior that the router has to reproduce explicitly. The named tests fail
+without it.
 
-| Difference                                                                                                                                                                                                            | Cause                                                                                                                                                  | Fix                                                                                                                    | Test                                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| The router config lacked `targetParent`, the ID of the component's root view. It is part of the `config` of every routing event, and a route with its own target options finds its control through it                 | `UIComponent` adds `targetParent` to its config object after it has constructed the router. The router passed UI5 a copy without `guardRouter`         | UI5 gets a view of the caller's object that hides `guardRouter` (`withoutGuardRouter()`)                               | every scenario of `NestedRouterParity.qunit.ts`                                                |
-| `navTo()` to the route that is shown did nothing. Natively it sets the hashes of nested components (`componentTargetInfo`), or resets them: `navTo("shell")` on `shell&/child/detail/1` leads to `shell`              | The router returned early when the target hash was the committed one                                                                                   | It calls `super.navTo()` without running guards                                                                        | "navTo to the route that is already shown", "the parent navigates to a route of the child ..." |
-| After `Targets#display()` without a route, `navTo()` to the route shown before did not display that route again                                                                                                       | Same early return. UI5 resets the hash of the router's hash changer for this case and reports the hash again, and `parse()` ignored the committed hash | `parse()` lets the route match for the hash that such a `navTo()` awaits (`_awaitedHash`)                              | "a target displayed without a route"                                                           |
-| `navTo()` with `componentTargetInfo` matched the parent's route before UI5 had written the hash: `routeMatched` of the parent fired before the route of the child had matched, and before `titleChanged` of the child | UI5 writes that hash only once the nested components are loaded. The router did not wait for it and called `super.parse()` at once                     | The navigation commits and settles at once, the route matches when `parse()` receives the hash (`_commitAfterNavTo()`) | "the parent navigates to a route of the child with componentTargetInfo"                        |
+| Native behavior                                                                                                                                                                       | How the router reproduces it                                                                                           | Test                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The router config holds `targetParent`, the ID of the component's root view, which `UIComponent` adds to the config object after it has constructed the router                        | UI5 gets a view of the caller's config object that hides `guardRouter` (`withoutGuardRouter()`), not a copy            | every scenario of `NestedRouterParity.qunit.ts`                                                |
+| `navTo()` to the route that is shown sets the hashes of nested components (`componentTargetInfo`), or resets them: `navTo("shell")` on `shell&/child/detail/1` leads to `shell`       | `navTo()` to the committed hash calls `super.navTo()` without running guards                                           | "navTo to the route that is already shown", "the parent navigates to a route of the child ..." |
+| After `Targets#display()` without a route, `navTo()` to the route shown before displays that route again: UI5 resets the hash of the router's hash changer and reports the hash again | `parse()` lets the route match again when it receives the committed hash                                               | "a target displayed without a route"                                                           |
+| With `componentTargetInfo`, the parent's route matches only once UI5 has loaded the nested components and written the combined hash                                                   | The navigation commits and settles at once; the route matches when `parse()` receives the hash (`_commitAfterNavTo()`) | "the parent navigates to a route of the child with componentTargetInfo"                        |
 
 ## Private UI5 Coupling
 
@@ -206,6 +197,26 @@ What fails when UI5 or the browser changes:
 | The component target no longer subscribes the bare resolve function of a Promise with `attachRouteMatched()`, for example a function that wraps it | "a parent route matches although an async guard blocks a nested component's first navigation", "a parent route matches although a guard blocks a nested component that is displayed again" (both time out)                                                                                                                                                                                             |
 | The engine prints or shapes a Promise resolve function differently                                                                                 | "the resolve function of a Promise is recognized by its exact shape". The assertion on the text `function () { [native code] }` documents Chrome and fails alone if only the text changes: the router reads the text from a real Promise at load time and keeps working. If the name or the length changes, the function is no longer recognized and the nested component tests above time out as well |
 
+### UI5 source locations
+
+Where UI5 writes and reads `_bMatchingProcessStarted` and where the component target waits,
+verified against the sources of each version. OpenUI5 1.120.0 keeps the async variants in
+`sap/ui/core/routing/async/` and `sap/m/routing/async/`.
+
+| Location                                                       | OpenUI5 1.144.0                                   | OpenUI5 1.120.0                                     |
+| -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
+| `Route#_routeMatched` sets the member to `true`                | `sap/ui/core/routing/Route.js` line 745           | `sap/ui/core/routing/async/Route.js` line 49        |
+| `Route#_routeMatched` sets the member to `false`               | `sap/ui/core/routing/Route.js` line 831           | `sap/ui/core/routing/async/Route.js` line 135       |
+| Sync routers (`async: false`) set and clear it                 | `sap/ui/core/routing/sync/Route.js` lines 44, 128 | `sap/ui/core/routing/sync/Route.js` lines 44, 128   |
+| `Target#waitForComponentTarget` creates the Promise            | `sap/ui/core/routing/Target.js` line 786          | `sap/ui/core/routing/async/Target.js` line 245      |
+| Condition for waiting (reads the member)                       | `sap/ui/core/routing/Target.js` line 819          | `sap/ui/core/routing/async/Target.js` line 275      |
+| `oRouter.attachRouteMatched(resolve)`                          | `sap/ui/core/routing/Target.js` line 821          | `sap/ui/core/routing/async/Target.js` line 277      |
+| A stopped nested router is initialized                         | `sap/ui/core/routing/Target.js` lines 823-826     | `sap/ui/core/routing/async/Target.js` lines 279-282 |
+| `Target#suspend` stops the nested router                       | `sap/ui/core/routing/Target.js` line 619          | `sap/ui/core/routing/async/Target.js` line 81       |
+| `display` handler of the `Router` constructor reads the member | `sap/ui/core/routing/Router.js` line 289          | `sap/ui/core/routing/Router.js` line 264            |
+| `Router#fireTitleChanged` reads the member                     | `sap/ui/core/routing/Router.js` line 1527         | `sap/ui/core/routing/Router.js` line 1495           |
+| `TargetHandler#_chainNavigation` is called                     | `sap/m/routing/Target.js` line 61                 | `sap/m/routing/async/Target.js` line 25             |
+
 Procedure:
 
 1. Open the routing sources of the new UI5 version: `sap/ui/core/routing/Route.js` (`_routeMatched`),
@@ -221,8 +232,8 @@ Procedure:
    `packages/lib/src/Router.ts`, and `isPromiseResolver()` in `packages/lib/src/GuardPipeline.ts`,
    to what UI5 does now. If UI5 offers a way to release the wait, use it and remove the
    recognition by shape.
-6. Update the versions and line references in the JSDoc of these four functions, in the
-   architecture section and in the tables above.
+6. Update the versions and line references in the evidence table below and the versions in the
+   architecture section.
 7. Run both QUnit lanes.
 
 ## Current Scope

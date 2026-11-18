@@ -32,18 +32,22 @@ Guards are registered once in `Component.ts`. The router intercepts navigation b
 
 ```typescript
 // Component.ts
+import UIComponent from "sap/ui/core/UIComponent";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardRouter } from "ui5/guard/router/types";
 
-init() {
-    super.init();
-    const router = this.getRouter() as GuardRouter;
+export default class Component extends UIComponent {
+	init(): void {
+		super.init();
+		const router = this.getRouter() as GuardRouter;
 
-    router.addRouteGuard("protected", (context) => {
-        const authModel = this.getModel("auth") as JSONModel;
-        return authModel.getProperty("/isLoggedIn") === true ? true : "home";
-    });
+		router.addRouteGuard("protected", () => {
+			const authModel = this.getModel("auth") as JSONModel;
+			return authModel.getProperty("/isLoggedIn") === true ? true : "home";
+		});
 
-    router.initialize();
+		router.initialize();
+	}
 }
 ```
 

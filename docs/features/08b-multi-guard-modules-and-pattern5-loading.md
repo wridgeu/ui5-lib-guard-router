@@ -245,28 +245,13 @@ The planned `name` field was not added; names come from the module's exports (se
 
 ### Usage
 
-Names are used for **logging only** in this iteration:
-
-- `"guard 'checkAuth' (guards/security) blocked navigation to 'admin'"`
-- Pipeline trace in debug: `"checkAuth → checkRole → [blocked by checkRole]"`
-
-**Implementation note:** names are derived when a module's exports are resolved (`resolveModuleExports()` in `GuardModules.ts`), not stored on `GuardDescriptor`, and only error logs for a guard that throws show them. The block and debug-trace messages above are not implemented.
-
-Manifest guards are named after their module, and the name appears when the guard throws:
-`Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
-
-- Function export: the module's last path segment (`guards.auth` → `auth`); with `#key`, the key
-- Array export: `moduleName#index` (`checks#0`, `checks#1`), also when cherry-picked
-- Object export: the key (`checkAuth`); cherry-picked by index, the key at that index
-- A lazy wrapper whose module missed the cache is named after the module (or `module#key`) until it loads, then after the guard it resolved to. A bare-path module with several guards keeps the module name, because one wrapper runs them all.
-
-Guards registered with `addGuard()` and the other imperative methods have no name; their logs show phase and index only.
+Names are used for logging only. They are derived when a module's exports are resolved (`resolveModuleExports()` in `GuardModules.ts`), not stored on `GuardDescriptor`, and appear only in the error log of a guard that throws. The naming rules, including lazy wrappers, are listed under "Named guard logging" in [08](./08-declarative-manifest-guards.md#named-guard-logging).
 
 Future extensibility (not implemented now): disable by name, ordering hints, DevTools integration. The naming foundation makes these possible without retrofit.
 
 ## 5. Case Sensitivity
 
-No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce a per-option warning (`guardRouter.<option> has invalid value, using default`) and fall back to defaults. This is how `normalizeGuardRouterOptions()` already works.
+No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce a per-option warning (`guardRouter.<option> has invalid value, using default`) and fall back to defaults. `normalizeGuardRouterOptions()` implements this.
 
 ## 6. Execution Order
 
@@ -339,8 +324,8 @@ Cherry-picked and multi-guard module guards behave identically to single-functio
 | Object key order assumed stable                             | Guaranteed by ES2015+ spec. Document requirement for modern runtime (already a UI5 requirement).                                                                      |
 | Cherry-pick `#` conflicts with future path syntax           | `#` never appears in UI5 module paths (dots and slashes only). Safe separator.                                                                                        |
 | Array index cherry-pick is fragile                          | Document that object form is preferred for cherry-picking. Index-based is available but order-dependent.                                                              |
-| Default change from block to lazy                           | No functional difference for guards — they always run before navigation completes. Only timing changes. Document in migration guide.                                  |
-| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. Lazy wrapper handles the miss case identically to current lazy mode.                                                |
+| Default is lazy, not block                                  | No functional difference for guards — they always run before navigation completes. Only timing differs.                                                               |
+| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. On a miss the lazy wrapper loads the module on first navigation.                                                    |
 | Bare-path multi-guard + lazy mode needs module load at init | Partitioned: cherry-picked entries use lazy wrappers; bare-path entries expand at init from cache, or run from one module wrapper on a miss. Documented in Section 1. |
 
 ## 10. Out of Scope

@@ -240,13 +240,10 @@ export interface NavigationIntent {
     readonly id: number;
 }
 
-// Updated GuardContext
+// GuardContext gains one field; all existing fields (signal, bag, toMeta, fromMeta,
+// ownerComponent, ...) stay as they are
 export interface GuardContext {
-    toRoute: string;
-    toHash: string;
-    toArguments: Record<string, string | Record<string, string>>;
-    fromRoute: string;
-    fromHash: string;
+    // ...existing fields
     transition: NavigationIntent;
 }
 

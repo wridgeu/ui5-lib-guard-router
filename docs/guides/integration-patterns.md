@@ -344,11 +344,16 @@ This keeps guard logic in a single place while letting each route configure its 
 Register a leave guard in `onInit` and remove it in `onExit`. UI5 caches XMLViews by default, so `onInit` runs once but `onExit` runs on `destroy()`.
 
 ```typescript
+import type JSONModel from "sap/ui/model/json/JSONModel";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import BaseController from "./BaseController";
+import { createDirtyFormGuard } from "../guards";
+
 export default class EditorController extends BaseController {
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	onInit(): void {
-		this._leaveGuard = createDirtyFormGuard(this.getModel("form"));
+		this._leaveGuard = createDirtyFormGuard(this.getModel("form") as JSONModel);
 		(this.getRouter() as GuardRouter).addLeaveGuard("editor", this._leaveGuard);
 	}
 

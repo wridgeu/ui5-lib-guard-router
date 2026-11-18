@@ -134,9 +134,9 @@ When a guard descriptor references a route name that never gets added to the rou
 
 ## Impact on Existing Plans
 
-- **`04-route-metadata.plan.md` Task 1**: Done. The unified `unknownRouteRegistration` option (renamed from `unknownRouteGuardRegistration`) covers both guard and metadata registration. No separate option is needed.
-- **`04-route-metadata.plan.md` Task 3**: Done. `getRouteMeta` logs a warning for unknown routes. `setRouteMeta` checks the `unknownRouteRegistration` policy before storing.
-- **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` (now in `GuardConfig.ts`) use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
+- **[`04-route-metadata.md`](./04-route-metadata.md) Task 1**: Done. The unified `unknownRouteRegistration` option (renamed from `unknownRouteGuardRegistration`) covers both guard and metadata registration. No separate option is needed.
+- **`04-route-metadata.md` Task 3**: Done. `getRouteMeta` logs a warning for unknown routes. `setRouteMeta` checks the `unknownRouteRegistration` policy before storing.
+- **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` (in `GuardConfig.ts`) use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
 - **`Router.ts` implementation**: Done. `getRouteMeta` checks `this.getRoute()` with an empty-string carve-out. `setRouteMeta` delegates to the unified `_handleUnknownRouteRegistration` method.
 - **`packages/lib/README.md`**: Done. The options table documents `unknownRouteRegistration` and the unified `inheritance` option.
 - **Issue #62 Phase 1**: Done. The lazy resolver logs a warning for unknown routes and does not cache them; empty results for known routes are cached (see the Phase 1 note).

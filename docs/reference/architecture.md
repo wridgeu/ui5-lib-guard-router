@@ -35,16 +35,18 @@ ui5-lib-guard-router/
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
         |   |-- controller/         App, Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
         |   |-- view/               XML views + SettlementPanel fragment
-        |   |-- guards.ts           guard factories (auth, dirty form, blocked, forbidden)
-        |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, dirtyFormGuard, navigationLogger)
+        |   |-- i18n/               text bundle of the root component
+        |   |-- guards.ts           guard factories (runtime and reference-only)
+        |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, retiredPageGuard, dirtyFormGuard, navigationLogger)
         |   |-- demo/               RuntimeCoordinator, ScenarioRunner
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
-        |   |-- model/              runtime model factory
+        |   |-- model/              auth.json, runtime model factory
         |   |-- routing/            hashNavigation helpers
+        |   |-- reporting/          nested component with its own guard router (manifest, controller/, view/, guards/, i18n/, model/reports.json)
         |-- test/
             |-- e2e/                wdi5 e2e tests (standalone)
-            |-- flp/                wdi5 FLP preview smoke tests
-            |-- shared/controls.ts  control references (view ID + control ID) for both suites
+            |-- flp/                wdi5 FLP preview tests
+            |-- shared/             control references (view ID + control ID), model and nested-component helpers for both suites
             |-- wdio.conf.ts        standalone e2e config
             |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
@@ -150,7 +152,8 @@ GuardRouter (public interface)      Router (ES6 class)
   + 1 query + 2 event methods         + private _cancelPendingNavigation()
     addGuard / removeGuard             + private _flushSettlement()
     addRouteGuard / removeRouteGuard   + override initialize(), addRoute(),
-    addLeaveGuard / removeLeaveGuard     navTo(), parse(), stop(), destroy()
+    addLeaveGuard / removeLeaveGuard     navTo(), parse(), stop(), destroy(),
+                                         attachRouteMatched()
     getRouteMeta / setRouteMeta
     navigationSettled()
     attachNavigationSettled()
@@ -162,8 +165,9 @@ GuardRouter (public interface)      Router (ES6 class)
     - { beforeEnter?, beforeLeave? } (object form)
 ```
 
-Only strict `true` allows navigation. Truthy non-boolean values (numbers, objects, etc.)
-are treated as blocks. This prevents accidental allow from coercion.
+Only strict `true` allows navigation. A non-empty string or a `GuardRedirect` object
+redirects; every other value (numbers, other objects, `null`, `undefined`, the empty string)
+blocks with a warning. This prevents accidental allow from coercion.
 
 `NavigationOutcome` is registered as a UI5 enum in `library.ts` via `DataType.registerEnum`.
 The manifest dependency chain guarantees `library.ts` executes before `Router.ts` is loaded,
@@ -189,12 +193,12 @@ flowchart TD
     destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
     destroyed -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
     suppress -- "yes" --> sclear["clear _suppressedHash"] --> ret(["return"])
-    suppress -- "no" --> sclear2["clear _suppressedHash"] --> awaited{"hash equals<br/>_awaitedHash?"}
-    awaited -- "yes" --> match(["super.parse()<br/>the route matches"])
-    awaited -- "no" --> redir{committing phase?}
+    suppress -- "no" --> sclear2["clear _suppressedHash"] --> redir{committing phase?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
-    samehash -- "yes" --> canceldup["cancel a pending navigation<br/>that had moved the URL"] --> ret
+    samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
+    moved -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
+    moved -- "no" --> match(["super.parse()<br/>the route matches again"])
     samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>_startAttempt(): evaluating phase"]
 
     setup --> evaluate["_pipeline.evaluate(context)"]
@@ -223,12 +227,14 @@ generation of its own in `_startAttempt()`. The sync path checks the generation 
 calls `navTo()` itself supersedes the navigation it guards, and whatever it returns afterwards
 is dropped. The navigation it started is the one that settles.
 
-The same-hash branch handles a hash change back to the committed hash. It cancels a pending
-navigation only if that navigation had moved the URL away (`NavigationAttempt.restoreHash`):
-the user went back while the guards of a hash change were pending. A pending `navTo()` that
-has not touched the URL stays. This matters for component targets, where UI5 changes the hash
-after the navigation has committed: that late hash change must not cancel a `navTo()` that
-started in between.
+The same-hash branch handles the committed hash reaching `parse()` again. If a pending
+navigation had moved the URL away (`NavigationAttempt.restoreHash`), the user went back while
+its guards were pending, and the branch cancels it. Otherwise the route matches again through
+`super.parse()`, without guards, as it does natively: UI5 reports the hash of a navigation with
+component targets once it has written it, reports the hash again after it reset the hash
+changer for a target displayed without a route, or application code called `parse()` directly.
+A pending `navTo()` that has not touched the URL stays, so a late hash change of component
+targets does not cancel a `navTo()` that started in between.
 
 `_cancelPendingNavigation()` fires the `Cancelled` settlement, and a `navigationSettled`
 handler may navigate from it. If that navigation committed, the URL has moved on and `parse()`
@@ -309,17 +315,20 @@ navigation and settles it. There are two cases:
   `super.parse()` itself and the route matches.
 - UI5 writes the hash later. That is the case with `componentTargetInfo`: UI5 first loads
   the nested components, collects their hashes and then writes one combined hash. The router
-  stores the target in `_awaitedHash` and does not call `super.parse()`. The route matches
-  when `parse()` receives that hash, as it does natively. Matched earlier, the route would
-  display the nested component, and fire its own `routeMatched`, before UI5 has set the hash
-  of that component. Any other hash that reaches `parse()` first clears `_awaitedHash`.
+  commits and settles at once but does not call `super.parse()`. The route matches when
+  `parse()` receives that hash, which is the committed hash by then (same-hash branch), as it
+  does natively. Matched earlier, the route would display the nested component, and fire its
+  own `routeMatched`, before UI5 has set the hash of that component.
+- Neither: the hash changer refused the hash change. The Fiori launchpad does that while it
+  asks the user about unsaved data and the user cancels. Nothing changed, so the navigation
+  settles as `Blocked`.
 
 A `navTo()` to the hash that is committed changes no route of this router, so no guard runs.
 It cancels a pending navigation and then calls `super.navTo()`, because UI5 may still have
 work to do: it sets the hashes of nested components (`componentTargetInfo`), or resets them
 when none are given. If UI5 has reset the hash of the router's hash changer, which it does
 after a target was displayed without a route (`Targets#display()`), UI5 reports the hash
-again and the route matches again (`_awaitedHash`). The call is skipped when a
+again and the route matches again in the same-hash branch of `parse()`. The call is skipped when a
 `navigationSettled` handler of the cancelled navigation has moved the hash on.
 
 `skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
@@ -334,6 +343,23 @@ calls `super.navTo()`: the native router sets the hash, or does nothing when sto
 runs and nothing commits, because the manifest guards may not be registered yet and the
 router would not see the hash change. `initialize()` parses the hash later, through the
 guards.
+
+### stop() and initialize()
+
+`stop()` cancels a pending navigation (it settles as `Cancelled`), clears the current route,
+hash and last settlement, and remembers the route that was current (`_stoppedRoute`). Every
+start goes through `_start()`, which calls `super.initialize()`:
+
+- `initialize()` parses the current hash through the guards, as the native router parses it
+  and fires `routeMatched`.
+- `initialize(true)` parses nothing and resumes the remembered route, on the hash the URL
+  shows now, as the native router keeps its current route. Its leave guards run on the next
+  navigation, and a blocked hash change returns to it.
+
+The Fiori launchpad relies on the second form: with `sap-keep-alive` it stops the router of an
+app it leaves and calls `initialize(true)` when the user returns, also when the user cancels a
+cross-app navigation in the data-loss prompt. A router that has not committed a navigation
+before `stop()` remembers no route.
 
 A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
 phase and calls `navTo(target, replace=true)`. The route it commits is the one that matches
@@ -485,8 +511,7 @@ Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
 `guardRouter.<key> has invalid value, using default`.
 
-Every manifest guard is registered through `_registerManifestGuard()`, which calls
-`_registerGuardFromDescriptor()`. With `unknownRouteRegistration: "throw"`, imperative
+Every manifest guard is registered through `_registerManifestGuard()`. With `unknownRouteRegistration: "throw"`, imperative
 calls (`addRouteGuard`, `addLeaveGuard`, `setRouteMeta`) throw for an unknown route. A
 manifest guard on an unknown route has no caller that could catch the error, so
 `_registerManifestGuard()` logs `guardRouter.guards: failed to register "<modulePath>"`
@@ -610,50 +635,18 @@ mechanisms coexist:
 | Router leave guard           | In-app navigation | Silent block + hash restore   |
 | `registerDirtyStateProvider` | Cross-app (FLP)   | Native FLP confirmation popup |
 
-**Key design rule:** the leave guard and the dirty-state provider handle
-different scopes and do not need to coordinate in application code.
+The two handle different scopes and do not need to coordinate in application code.
+Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is
+handled by the shell, in production and in the `fiori-tools-preview` sandbox alike, so the
+app router's `parse()` never sees a cross-app hash. If the app is dirty, the shell asks the
+dirty-state provider and shows its own confirm dialog. While it asks, the shell refuses the
+hash change, so a `navTo()` in that moment settles as `Blocked`. If the user cancels, the
+shell restarts the app's router with `initialize(true)`, which resumes the current route
+(see [stop() and initialize()](#stop-and-initialize)).
 
-### Production FLP
-
-In production, `ShellNavigationHashChanger` intercepts cross-app navigation
-**before** it reaches the app router. The leave guard's `parse()` is never
-called for cross-app hashes, so no conflict arises. The dirty-state provider
-handles cross-app dirty UX, the leave guard handles in-app dirty UX, and
-the two never overlap:
-
-```ts
-// Leave guard: blocks in-app navigation when dirty
-const leaveGuard: LeaveGuardFn = (context) => {
-	return !formModel.getProperty("/isDirty");
-};
-
-// Dirty-state provider: tells FLP about unsaved changes for cross-app
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) return false;
-	return formModel.getProperty("/isDirty") === true;
-};
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-```
-
-No `toRoute` check, no flags, no FLP detection -- just a simple dirty check.
-
-### FLP sandbox/preview (development only)
-
-The `fiori-tools-preview` middleware creates a simplified FLP sandbox for local
-development. Cross-app navigation via `toExternal()` operates at the shell level
-in both sandbox and production: the leave guard does not interfere because the
-navigation bypasses the app router's `parse()`. The dirty-state provider fires
-and the FLP shows its own confirm dialog. If the user confirms, the shell
-completes the navigation. If the user cancels, the hash stays unchanged.
-
-The demo app's FLP E2E tests pin this behavior in three spec files:
-`flp-preview.e2e.ts` covers FLP runtime detection, in-app navigation inside the
-sandbox, dirty cross-app cancel flow, in-app dirty blocking, and browser
-history behavior under guards; `flp-cross-app.e2e.ts` covers the dirty
-cross-app confirm path (dirty + `confirm()` returns `true`, navigation
-completes to Shell-home) in an isolated browser session; and
-`flp-clean-cross-app.e2e.ts` covers the clean cross-app path (no dirty prompt,
-navigation proceeds directly to Shell-home) in its own isolated session.
+The application-side setup is in the library README, [Combining leave guards with FLP
+dirty-state protection](../../packages/lib/README.md#combining-leave-guards-with-flp-dirty-state-protection).
+The FLP spec files of the demo app are listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 
 ## UI5 Internals the Router Relies On
 
@@ -675,16 +668,16 @@ No other private UI5 member is read or written.
 as a route matches, and back to `false` once the targets of that route are displayed, right
 before it fires `routeMatched`. Three places read it:
 
-| Reader                                                 | Effect while the member is `true`                                                                                                                                                                 | OpenUI5 1.144.0                           | OpenUI5 1.120.0                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------- |
-| `Target#waitForComponentTarget`                        | Nested component readiness: a routing target of type `Component` counts as displayed only after the next `routeMatched` of the nested router. The same holds while that router is not initialized | `sap/ui/core/routing/Target.js` line 819  | `sap/ui/core/routing/async/Target.js` line 275 |
-| `display` handler attached by the `Router` constructor | A target displayed outside of a route match does not reset the router's hash changer (`resetHash`), which otherwise lets the route that matched before match again                                | `sap/ui/core/routing/Router.js` line 289  | `sap/ui/core/routing/Router.js` line 264       |
-| `Router#fireTitleChanged`                              | A `titleChanged` event is fired after the next `routeMatched` instead of immediately                                                                                                              | `sap/ui/core/routing/Router.js` line 1527 | `sap/ui/core/routing/Router.js` line 1495      |
+| Reader                                                 | Effect while the member is `true`                                                                                                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Target#waitForComponentTarget`                        | Nested component readiness: a routing target of type `Component` counts as displayed only after the next `routeMatched` of the nested router. The same holds while that router is not initialized |
+| `display` handler attached by the `Router` constructor | A target displayed outside of a route match does not reset the router's hash changer (`resetHash`), which otherwise lets the route that matched before match again                                |
+| `Router#fireTitleChanged`                              | A `titleChanged` event is fired after the next `routeMatched` instead of immediately                                                                                                              |
 
-The only writer is `Route#_routeMatched`: `sap/ui/core/routing/Route.js` lines 745 (`true`) and
-831 (`false`) in 1.144.0, `sap/ui/core/routing/async/Route.js` lines 49 and 135 in 1.120.0.
-Routers with `async: false` use `sap/ui/core/routing/sync/Route.js` (lines 44 and 128 in both
-versions), which sets and clears the member within `parse()`.
+The only writer is `Route#_routeMatched`. Routers with `async: false` use
+`sap/ui/core/routing/sync/Route.js`, which sets and clears the member within `parse()`. The
+source locations for each supported UI5 version are listed in
+[upstream-parity.md](./upstream-parity.md#ui5-source-locations).
 
 **Why the guard router is involved.** The router postpones `super.parse()` while guards are
 async. That is the normal case for the first navigation in lazy mode, because the guard module
@@ -730,18 +723,11 @@ reason in a comment above the condition: when a match is in progress, "we are su
 will be a "routeMatched" event fired". If the nested router is stopped, the target initializes
 it right after.
 
-| Step                                                                      | OpenUI5 1.144.0, `sap/ui/core/routing/Target.js` | OpenUI5 1.120.0, `sap/ui/core/routing/async/Target.js` |
-| ------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
-| The Promise is created                                                    | line 786                                         | line 245                                               |
-| Condition for waiting                                                     | line 819                                         | line 275                                               |
-| `oRouter.attachRouteMatched(resolve)`                                     | line 821                                         | line 277                                               |
-| A stopped router is initialized                                           | lines 823 to 826                                 | lines 279 to 282                                       |
-| `Target#suspend` stops the nested router when the parent leaves the route | line 619                                         | line 81                                                |
+When the parent leaves the route, `Target#suspend` stops the nested router.
 
 In `sap.m.routing.Router`, target placements are chained (`TargetHandler#_chainNavigation`,
-called in `sap/m/routing/Target.js` line 61 in 1.144.0 and `sap/m/routing/async/Target.js` line
-25 in 1.120.0). A placement that waits forever holds back every later placement of the parent
-router.
+called from `sap/m/routing/Target.js`). A placement that waits forever holds back every later
+placement of the parent router.
 
 **Why the guard router is involved.** A navigation that guards block or fail, or that is
 cancelled, never fires `routeMatched`. A component target that waits for it would wait forever:
@@ -809,24 +795,8 @@ instead, the parent route waits for the route that the redirect ends on.
 
 ### Tests that pin both dependencies
 
-They run on both UI5 lanes (1.144.0 and 1.120.0):
-
-- `RouterAsync.qunit.ts`, module "Router - Native matching flag": UI5 writes the member during
-  a route match; the member reads `true` while a navigation waits for async guards and `false`
-  after `Blocked`, `Error`, `Cancelled` and `stop()`; sync guards do not set it; a waiting
-  Promise is resolved by a blocked navigation, a handler function is not called; a Promise that
-  is subscribed while nothing is pending is left to the next `routeMatched`.
-- `GuardPipeline.qunit.ts`, module "GuardPipeline - Promise resolve functions": the resolve
-  function of a real Promise has the name `""`, the length `1` and the text
-  `function () { [native code] }` in Chrome, and is recognized; arrow functions, function
-  expressions, named and bound functions, handler methods, `Function.prototype`, `console.log`
-  and `Math.max` are not; the reject function of a Promise is, as documented above.
-- `RouterManifestGuards.qunit.ts`, module "Router - Manifest-driven instantiation": a parent
-  route waits for the first route of a nested component, also across a redirect, and still
-  matches when the nested component's navigation is blocked on first display or on a later one.
-
-See [Private UI5 Coupling](./upstream-parity.md#private-ui5-coupling) for what to do when a UI5
-upgrade breaks one of these tests.
+Both dependencies are pinned by tests on both UI5 lanes. The tests, what fails when UI5 changes,
+and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#private-ui5-coupling).
 
 ## Internal State
 
@@ -839,7 +809,7 @@ upgrade breaks one of these tests.
 | `_phase`                   | `RouterPhase`                          | Discriminated union tracking the router's lifecycle phase (see below)                                                                            |
 | `_parseGeneration`         | `number`                               | Monotonic counter for async invalidation                                                                                                         |
 | `_suppressedHash`          | `string \| null`                       | Hash to suppress in the next `parse()` call                                                                                                      |
-| `_awaitedHash`             | `string \| null`                       | Hash of a committed navigation that UI5 has not reported yet; the route matches when `parse()` receives it                                       |
+| `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                          |
 | `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                          |
 | `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                             |
 | `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                      |
@@ -894,60 +864,14 @@ upgrade breaks one of these tests.
   headless Chrome                  headless Chrome
               |                             |
   packages/lib/test/qunit/    packages/demo-app/test/e2e/
-              |                             |
-  +-------------------------------+   +----------------------------+
-  | Router.qunit.ts               |   | routing-basic.e2e.ts       |
-  | RouterGuards.qunit.ts         |   | guard-allow.e2e.ts         |
-  | RouterAsync.qunit.ts          |   | guard-block.e2e.ts         |
-  | RouterNavigation.qunit.ts     |   | guard-redirect-auth.e2e.ts |
-  | RouterSettlement.qunit.ts     |   | guard-redirect.e2e.ts      |
-  | RouterOptions.qunit.ts        |   | browser-back.e2e.ts        |
-  | RouterManifestGuards.qunit.ts |   | direct-url.e2e.ts          |
-  | RouterRouteMeta.qunit.ts      |   | multi-route.e2e.ts         |
-  | GuardPipeline.qunit.ts        |   | nav-button.e2e.ts          |
-  | GuardConfig.qunit.ts          |   | leave-guard.e2e.ts         |
-  | GuardModules.qunit.ts         |   | navto-preflight.e2e.ts     |
-  | PatternTree.qunit.ts          |   | redirect-chain.e2e.ts      |
-  | RouteMeta.qunit.ts            |   | route-metadata.e2e.ts      |
-  | NativeRouterCompat.qunit.ts   |   +----------------------------+
-  | NestedRouterParity.qunit.ts   |
-  | UpstreamParity.qunit.ts       |
-  +-------------------------------+
 
-  Unit tests verify:            E2e tests verify:
-  - Guard lifecycle             - Full browser navigation
-  - Sync/async pipelines        - Hash bar behavior
-  - Redirect mechanics          - Back/forward buttons
-  - Generation counter          - Guard block + redirect
-  - Error handling              - Rapid hash changes
-  - API parity with native      - Multi-step user flows
-  - Leave guard pipeline        - Leave guard dirty form
-  - Settlement outcomes         - Settlement-based wait
-  - Router options + config     - navTo preflight modes
-  - Guard pipeline isolation    - Redirect chains
-  - Manifest guard loading      - Route metadata in guards
-  - Config parsing, pattern
-    tree, route metadata
-
-  Additional CI lanes (not part of `npm test`):
+  Additional lanes (in test:full, not in npm test):
 
   test:e2e:flp                    test:qunit:compat:120
        |                               |
   packages/demo-app/test/flp/    packages/lib/test/qunit/
-       |                          (same suite, OpenUI5 1.120.0)
-  +------------------------------+   Verifies the core library's
-  | flp-preview.e2e.ts           |   guard pipeline works on
-  |   FLP runtime detection      |   the older UI5 runtime.
-  |   In-app nav inside FLP      |
-  |   Dirty cancel path          |
-  |   Browser history in FLP     |
-  | flp-cross-app.e2e.ts         |
-  |   Dirty confirm path         |
-  |   Isolated Shell-home exit   |
-  | flp-clean-cross-app.e2e.ts   |
-  |   Clean cross-app exit       |
-  |   No dirty prompt            |
-  +------------------------------+
+  (demo app in the FLP preview,  (same suite, OpenUI5 1.120.0)
+   SAPUI5 with sap.ushell)
 
   CI also runs:
   - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)
@@ -955,15 +879,21 @@ upgrade breaks one of these tests.
 
   Local only:
   - test:mutation: Stryker mutates packages/lib/src one file at a time
-    and runs the QUnit suite once per mutant; results are kept per file,
-    so a rerun only tests missing or changed files (report: reports/mutation/)
+    and runs the QUnit suite once per mutant (report: reports/mutation/)
 ```
 
-QUnit tests run against the library in isolation using programmatic Router instances.
-E2e tests run against the demo-app served by `ui5 serve`, exercising real browser
-navigation, hash changes, and the full UI5 component lifecycle.
-FLP preview tests run the demo-app under `ui5 serve --config ui5-flp.yaml` (SAPUI5),
-verifying that the ushell integration, dirty-state provider, and leave guard coexistence work.
+The QUnit suites are registered in `packages/lib/test/qunit/testsuite.qunit.ts`. They run
+against the library in isolation, with programmatic Router instances and fixture components:
+guard lifecycle, sync and async pipelines, redirects, settlement, options, manifest guards,
+the helper modules, and parity with the native router (`NativeRouterCompat`,
+`NestedRouterParity` and the vendored `UpstreamParity` lane, see
+[upstream-parity.md](./upstream-parity.md)).
+
+E2E tests run against the demo app served by `ui5 serve`, exercising real browser navigation,
+hash changes, and the full UI5 component lifecycle. FLP preview tests run the demo app under
+`ui5 serve --config ui5-flp.yaml` (SAPUI5) and verify the ushell integration, the dirty-state
+provider, leave guard coexistence and the nested component inside the shell. The spec files are
+listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 
 ## Demo App Integration
 
@@ -986,9 +916,10 @@ The demo app shows the minimal integration pattern:
   |     "*": [navigationLogger]    |     | router.addRouteGuard("protected",|
   |     blocked: [blockedGuard]    |     |   createAsyncPermissionGuard(    |
   |     forbidden: [forbiddenGuard]|     |     authModel))                  |
-  |     protected: {leave: [...]}  |     |                                  |
-  |   routeMeta: employees,        |     | router.initialize()              |
-  |              employee          |     +----------------------------------+
+  |     team: [retiredPageGuard]   |     |                                  |
+  |     protected: {leave: [...]}  |     | router.initialize()              |
+  |   routeMeta: employees,        |     +----------------------------------+
+  |              employee          |
   |                                |
   | routes:                        |
   |   home      -> ""              |
@@ -997,7 +928,12 @@ The demo app shows the minimal integration pattern:
   |   forbidden -> "forbidden"     |
   |   admin     -> "admin"         |
   |   employees -> "employees"     |
+  |   staff     -> "employees"     |
+  |   team      -> "team"          |
   |   employee  -> "employees/{id}"|
+  |   reports   -> "reports"       |
+  |     (Component target:         |
+  |      demo.app.reporting)       |
   +--------------------------------+
 ```
 

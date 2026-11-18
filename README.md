@@ -14,7 +14,7 @@ UI5 Router extension with async navigation guards. Drop-in replacement for <code
 
 > Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request since 2021 for native navigation guard support in UI5. Track the UI5 team's progress there.
 
-UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to guard logic in `attachPatternMatched` callbacks, which causes **flashes of unauthorized content**, **pollutes browser history**, and **scatters guard logic** across controllers. This library solves all three by extending `sap.m.routing.Router` and overriding `parse()`, the single entry point for all navigation, so guards run before any route matching or view creation begins.
+UI5's native router has no way to block or redirect navigation before views are displayed. Developers resort to guard logic in `attachPatternMatched` callbacks, which causes **flashes of unauthorized content**, **pollutes browser history**, and **scatters guard logic** across controllers. This library solves all three by extending `sap.m.routing.Router`: guards run in a `navTo()` preflight before the hash changes, and in `parse()` for browser back/forward and URL changes, before any route matching or view creation begins.
 
 > [!CAUTION]
 > Navigation guards are a UX layer only. Keep authorization, validation, and access control on the server.
@@ -174,9 +174,13 @@ npm run test:mutation # Stryker mutation testing of packages/lib, one file at a 
 
 Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
 
-`test:mutation` runs Stryker once per source file, each against a fresh server, with two workers (one headless Chrome each), so memory stays bounded. Each test page is limited to a 1 GB JavaScript heap, and every run gets its own Chrome profile folder, which is deleted afterwards. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`.
+`test:mutation` runs Stryker once per source file, each against a fresh server. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`. Results are kept per file in `reports/mutation/incremental/`, so a repeated run only tests new or changed mutants; any change under `packages/lib/test/` discards them, and `--force` discards them on demand. Stryker edits the sources in place: if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do).
 
-Results are kept per file (and per line range) in `reports/mutation/incremental/`, so a repeated run only tests mutants that are new or whose code changed, and a run stopped with Ctrl+C resumes where it stopped. Stryker sees the whole QUnit run as one test and cannot tell which results a test change invalidates, so any change under `packages/lib/test/` discards the kept results. Pass `--force` to discard them yourself, e.g. after changing source code that other code depends on. Each run edits the sources in place; if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do). Mutants that loop without end are stopped by Stryker's hit limit and count as killed.
+#### Test conventions
+
+- The QUnit tests never wait on time; the `test-guardrails/no-timers` lint rule rejects `setTimeout` and `setInterval` in `packages/lib/test/qunit/`. Tests wait on router events (`waitForRoute()`, `navigationSettled()`), resolve test-controlled guard Promises (`Promise.withResolvers()`) at the point they need, and call `flushPromises()` before asserting that a superseded result had no effect. A test that waits for an event that never comes fails at the QUnit `testTimeout` in `testsuite.qunit.ts`.
+- Tests pass values the types forbid (as an untyped JavaScript caller could) through the helpers in `packages/lib/test/qunit/testHelpers.ts` (`callUnsafe()`, the `*Unsafe` wrappers, `createRouterUnsafe()`) instead of casting.
+- The few tests that inspect internal state read them with `Reflect.get()`, e.g. `Reflect.get(router, "_oConfig")`. The library uses TypeScript `private` rather than `#private` fields because UI5's class system relies on prototype-based inheritance and metadata introspection.
 
 The vendored parity sources themselves are maintained with:
 

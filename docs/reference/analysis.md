@@ -239,7 +239,7 @@ The current published package declares and tests against **1.144.0**. The compat
 
 ### 3.1 The Key Insight: Override `parse()`
 
-Every navigation path in UI5 flows through a single method: `parse(sNewHash)`.
+Every hash change in UI5 flows through a single method: `parse(sNewHash)`.
 
 ```
 User clicks link      →  navTo()      →  hashChanged  →  parse()
@@ -247,7 +247,7 @@ Browser back/forward  →                  hashChanged  →  parse()
 Direct URL entry      →                  hashChanged  →  parse()
 ```
 
-By overriding `parse()`, we intercept **all** navigation at the earliest possible point, before route matching, target loading, view creation, or event firing.
+By overriding `parse()`, we intercept every hash change before route matching, target loading, view creation, or event firing. Programmatic `navTo()` gets an additional preflight that runs the same guards before the hash changes, so a blocked or redirected `navTo()` leaves no history entry (see [Two-Entry-Point Model](./architecture.md#two-entry-point-model-navto-preflight--parse-fallback)). Targets displayed without a route (`getTargets().display()`) change no hash and run no guards.
 
 ### 3.2 Architecture Overview
 
@@ -257,9 +257,8 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
                     │  ┌─────────────────────────────────┐ │
                     │  │ destroyed?           → warn     │ │
                     │  │ _suppressedHash?     → return   │ │
-                    │  │ _awaitedHash?        → match    │ │
                     │  │ committing phase?    → commit   │ │
-                    │  │ same hash?           → return   │ │
+                    │  │ same hash?           → rematch  │ │
                     │  │                                 │ │
                     │  │ Resolve route from hash         │ │
                     │  │ Build GuardContext               │ │
@@ -286,7 +285,7 @@ By overriding `parse()`, we intercept **all** navigation at the earliest possibl
 | Async fallback with generation counter                  | Async guards are supported but deferred. A monotonic counter prevents stale results from overlapping navigations.              |
 | Guards evaluate on redirect targets with loop detection | Visited-set + depth cap prevents infinite loops; committing/redirect phase used only for the final commit step                 |
 | `_suppressedHash` for hash restoration                  | `replaceHash()` fires `hashChanged` synchronously; the hash-matched field prevents double-processing                           |
-| Strict `true` for allow                                 | Only `=== true` allows navigation. Truthy values like `1`, `"yes"`, `{}` are treated as blocks to prevent accidental allows.   |
+| Strict `true` for allow                                 | Only `=== true` allows navigation. Other truthy values like `1` or `{}` block; a non-empty string redirects.                   |
 | ES class with `@namespace` JSDoc                        | `@namespace` triggers `babel-plugin-transform-modules-ui5` to emit `.extend()`, giving the class its own UI5 metadata identity |
 
 ### 3.4 Guard API
@@ -367,59 +366,7 @@ No application logic changes needed beyond the guard definitions themselves.
 
 ## 4. Test Coverage
 
-> **Note**: This table is a point-in-time snapshot from the initial implementation. The test suite has since expanded with additional suites (RouterOptions, RouterNavigation, RouterSettlement, RouterManifestGuards, RouterRouteMeta, GuardPipeline, GuardConfig, GuardModules, PatternTree, RouteMeta, UpstreamParity) and E2E files (navto-preflight, redirect-chain, route-metadata). See the actual test files for current coverage.
-
-| Category                       | Count | What's Tested                                                                                                             |
-| ------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------- |
-| Library integration            | 1     | `NavigationOutcome` registered as UI5 enum via `DataType`                                                                 |
-| Drop-in replacement            | 8     | isA, class identity, navTo, parameters, routeMatched/beforeRouteMatched events, getRoute known/unknown                    |
-| Guard API                      | 20    | add/remove/chain guards, cleanup on destroy, invalid inputs, object form (enter only, leave only, both, empty)            |
-| Lifecycle                      | 3     | stop + re-initialize, double initialize, re-init fires routeMatched                                                       |
-| Allow navigation               | 5     | Global, route, async, Promise-like returning `true`; Promise-like returning `false`                                       |
-| Block navigation               | 5     | Global, route, async guards returning `false`, errors, rejections                                                         |
-| Redirect                       | 2     | String redirect, async string redirect                                                                                    |
-| Guard context                  | 3     | Context properties, fromRoute/fromHash tracking, empty on initial nav                                                     |
-| Execution order                | 4     | Global before route, registration order, short-circuit, route isolation                                                   |
-| Invalid values                 | 2     | Non-boolean/string/object treated as block, invalid redirect object                                                       |
-| GuardRedirect objects          | 4     | Plain, with parameters, async, componentTargetInfo forwarding                                                             |
-| Initial navigation recovery    | 2     | Blocked non-empty hash falls back to default; blocked default route stays blocked                                         |
-| Hash change (URL bar)          | 3     | Direct URL blocked, unguarded proceeds, redirect restores hash                                                            |
-| Dynamic guard changes          | 3     | State change respected, mid-session add/remove                                                                            |
-| Re-entrancy                    | 2     | No infinite loops, cross-redirect settlement                                                                              |
-| Mixed sync/async               | 5     | All combinations of sync/async global + route guards                                                                      |
-| Overlapping async              | 2     | Slower first superseded by faster second, stale result discard                                                            |
-| Async guard edge cases         | 8     | Route throw/reject, multi-async short-circuit, async redirect, null, undefined, invalid value, invalid redirect obj       |
-| Rapid sequential               | 2     | Sync: all processed; async: only last wins                                                                                |
-| Current route dedup            | 1     | Navigating back to current route cancels pending async guard                                                              |
-| Destroy during pending         | 1     | Router destroy while async guard is pending                                                                               |
-| Stop during pending            | 1     | Router stop while async guard is pending, signal aborted                                                                  |
-| AbortSignal                    | 4     | Signal on context, aborted on supersede, aborted on destroy, aborted on same-route                                        |
-| Superseded nav stops guards    | 2     | Guards stop executing; route guards don't start when superseded during global                                             |
-| Duplicate/overlapping nav      | 4     | Same-destination dedup, different-destination supersede, re-navigable after complete, AbortError silenced                 |
-| Leave guards                   | 27    | Sync/async allow/block, execution order, short-circuit, object form, chaining, unmatched routes, nested nav handler       |
-| Settlement outcomes            | 26    | Committed/Bypassed/Blocked/Redirected/Cancelled for sync + async paths, leave guard combos, idle replay, failed redirects |
-| Destroy during redirect        | 2     | No errors on destroy mid-redirect; settlement resolves as cancelled                                                       |
-| Post-destroy settlement        | 2     | `navigationSettled()` after destroy resolves immediately; pending nav cancelled                                           |
-| Guard error after signal abort | 2     | Enter guard + leave guard error after abort silenced (no unhandled rejection)                                             |
-| Leave + enter guard combos     | 3     | Leave block settlement fields, leave-allow + enter-block, async leave-allow + async enter-redirect                        |
-| Redirect edge cases            | 2     | Global guard redirect short-circuits route guard; redirect target's own guard is evaluated                                |
-| NativeCompat (API parity)      | 3     | isA, public routing methods, additional guard methods                                                                     |
-| NativeCompat (Route matching)  | 3     | match() known/unknown hashes, getRouteInfoByHash                                                                          |
-| NativeCompat (Navigation)      | 4     | navTo hash update, getRoute objects, initialize/stop, stop + init routeMatched                                            |
-| NativeCompat (Events)          | 3     | routeMatched, patternMatched, bypassed with identical parameters                                                          |
-| NativeCompat (URL generation)  | 4     | Routes without/with params, nested routes, unknown routes                                                                 |
-| NativeCompat (navTo replace)   | 3     | replace=true no history, replace=false creates history, routeMatched with replace                                         |
-| NativeCompat (Hash direction)  | 3     | Forward navigation, direct hash changes, replaceHash                                                                      |
-| E2E (guard-allow)              | 1     | Login then navigate to protected                                                                                          |
-| E2E (guard-block)              | 1     | Enter guard blocks navigation and stays on Home                                                                           |
-| E2E (guard-redirect-auth)      | 1     | Logged out, try protected -> redirected to home                                                                           |
-| E2E (guard-redirect)           | 1     | Navigate to forbidden → redirected                                                                                        |
-| E2E (browser-back)             | 4     | Back button respects guards across login states                                                                           |
-| E2E (direct-url)               | 5     | URL bar entry respects guards for protected/home/forbidden                                                                |
-| E2E (multi-route)              | 3     | Complex sequential navigations with state changes                                                                         |
-| E2E (nav-button)               | 2     | UI5 in-app NavButton interactions                                                                                         |
-| E2E (routing-basic)            | 1     | Smoke test                                                                                                                |
-| E2E (leave-guard)              | 4     | Dirty form leave guard: allow clean, block dirty, clear state, browser back                                               |
+The QUnit suites are registered in `packages/lib/test/qunit/testsuite.qunit.ts`, the E2E specs are in `packages/demo-app/test/e2e/` and `packages/demo-app/test/flp/`. See [Test Architecture](./architecture.md#test-architecture).
 
 ---
 

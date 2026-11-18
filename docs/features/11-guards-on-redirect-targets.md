@@ -1,8 +1,9 @@
 # Guards on Redirect Targets
 
 **Issue:** [#52](https://github.com/wridgeu/ui5-lib-guard-router/issues/52)
-**Status:** Implemented
-**Change type:** Feature -- guards now evaluate on redirect targets with loop detection.
+**Change type:** Feature -- guards evaluate on redirect targets with loop detection.
+
+> **Status**: Implemented.
 
 ## Problem
 
@@ -212,13 +213,13 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
     // 4. Evaluate guards (skip leave guards -- they already ran on first hop)
     const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
-    // 6. Handle sync result
+    // 5. Handle sync result
     if (!isPromiseLike(decision)) {
         this._applyRedirectDecision(decision, target, targetHash, toRoute, chain);
         return;
     }
 
-    // 7. Handle async result. _applyRedirectDecision() checks the generation (superseded chains
+    // 6. Handle async result. _applyRedirectDecision() checks the generation (superseded chains
     //    do nothing); _applyWhenDecided() logs an error thrown while the decision is applied and
     //    settles the navigation as Error if it had not settled yet.
     this._applyWhenDecided(
@@ -374,8 +375,5 @@ README's limitations section has been restructured accordingly.
 
 ## Opt-In Configuration (Deferred)
 
-The initial implementation is always-on (no opt-in flag). The opt-in configuration
-(e.g., `evaluateRedirectGuards`) was planned for after PR #49 (declarative manifest guard
-configuration), since #49 introduces the declarative config surface where this option
-naturally belongs. #49 has merged, but the option has not been added: guards on
-redirect targets always run.
+Guards on redirect targets always run; there is no opt-in flag. If one is added, the
+`guardRouter` manifest block is where it belongs (for example `evaluateRedirectGuards`).
