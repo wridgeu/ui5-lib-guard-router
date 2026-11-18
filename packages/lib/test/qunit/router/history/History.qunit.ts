@@ -13,7 +13,7 @@ import {
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
-} from "./testHelpers";
+} from "../../testHelpers";
 
 /**
  * Steps through the real browser history (back, forward). A page of their own: Chrome ignores

@@ -47,7 +47,7 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterHistory: {
 		title: "QUnit Tests for Router and Browser History",
-		files: ["RouterHistory"],
+		files: ["router/history/History"],
 	},
 	RouterSettlement: {
 		title: "QUnit Tests for Router Settlement and Lifecycle",
