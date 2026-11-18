@@ -382,3 +382,25 @@ export const HIERARCHICAL_ROUTES = [
 export function createHierarchicalRouter(guardRouter: GuardRouterOptions): GuardRouter {
 	return new GuardRouterClass(HIERARCHICAL_ROUTES, { async: true, guardRouter });
 }
+
+/** The part of hasher, through which UI5's hash changer reads and writes the URL, that tests use. */
+interface Hasher {
+	changed: { active: boolean };
+	setHash(hash: string): void;
+	replaceHash(hash: string): void;
+}
+
+/**
+ * Change the URL without a `hashChanged` event of the hash changer. The Fiori launchpad does
+ * that when a navigation filter handles a hash change itself, as it does to put the URL back
+ * after a cross-app navigation that the user cancelled.
+ */
+export async function changeHashSilently(write: (hasher: Hasher) => void): Promise<void> {
+	const hasher = await loadModule<Hasher>("sap/ui/thirdparty/hasher");
+	hasher.changed.active = false;
+	try {
+		write(hasher);
+	} finally {
+		hasher.changed.active = true;
+	}
+}

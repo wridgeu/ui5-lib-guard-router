@@ -1,9 +1,20 @@
 import MobileRouter from "sap/m/routing/Router";
+import Component from "sap/ui/core/Component";
+import ComponentContainer from "sap/ui/core/ComponentContainer";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import UIComponent from "sap/ui/core/UIComponent";
 import coreLibrary from "sap/ui/core/library";
 import type { GuardRouter } from "ui5/guard/router/types";
 import { firstDifference, recordHashes, recordLogs, recordRouter, settle } from "./parityRecorder";
-import { captureHashWrites, flushPromises, GuardRouterClass, initHashChanger } from "./testHelpers";
+import {
+	captureHashWrites,
+	flushPromises,
+	getComponentRouter,
+	getHash,
+	GuardRouterClass,
+	initHashChanger,
+} from "./testHelpers";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -724,3 +735,157 @@ QUnit.test("a hash that several routes could match resolves to the same route", 
 		guard.destroy();
 	}
 });
+
+// ============================================================
+// Module: Two routers on one hash changer
+// ============================================================
+QUnit.module("NativeCompat - Two routers on one hash changer");
+
+const SHARED_FIXTURE = "ui5.guard.router.qunit.fixtures.manifest";
+
+interface SharedRouters<T extends MobileRouter> {
+	/** The router of the app component, which is informed of a hash change first. */
+	app: T;
+	/** The router of a component that the app embeds in a ComponentContainer. */
+	embedded: T;
+	trace: string[];
+}
+
+/**
+ * Run `act` on two components with routing of which none is a routing target of the other: UI5
+ * gives the routers of both the hash changer of the root, so each parses every hash.
+ */
+async function withSharedHashChanger<T extends MobileRouter>(
+	routerClass: string,
+	routerOf: (component: Component) => T,
+	act: (routers: SharedRouters<T>) => Promise<void>,
+): Promise<string[]> {
+	const response = await fetch(sap.ui.require.toUrl("ui5/guard/router/qunit/fixtures/manifest/manifest.json"));
+	const manifest = await response.json();
+	manifest["sap.ui5"].routing = {
+		config: { routerClass, async: true },
+		routes: [
+			{ name: "home", pattern: "" },
+			{ name: "page1", pattern: "page1" },
+			{ name: "detail", pattern: "detail/{id}" },
+		],
+		targets: {},
+	};
+	initHashChanger();
+	const trace: string[] = [];
+	const stopHashes = recordHashes(trace);
+	const appComponent = await Component.create({ id: "sharedApp", name: SHARED_FIXTURE, manifest });
+	const embeddedComponent = await Component.create({ id: "sharedEmbedded", name: SHARED_FIXTURE, manifest });
+	const container = new ComponentContainer({ component: embeddedComponent.getId() }).placeAt("qunit-fixture");
+	try {
+		const app = routerOf(appComponent);
+		const embedded = routerOf(embeddedComponent);
+		recordRouter("app", app, trace);
+		recordRouter("embedded", embedded, trace);
+		app.initialize();
+		embedded.initialize();
+		await settle(trace);
+		await act({ app, embedded, trace });
+		await settle(trace);
+		return trace;
+	} finally {
+		stopHashes();
+		container.destroy();
+		appComponent.destroy();
+		HashChanger.getInstance().setHash("");
+		await flushPromises();
+	}
+}
+
+function nativeRouterOf(component: Component): MobileRouter {
+	const router = component instanceof UIComponent ? component.getRouter() : undefined;
+	if (!(router instanceof MobileRouter)) throw new Error("The component has no sap.m router");
+	return router;
+}
+
+QUnit.test("two guard routers without guards behave like two native routers", async function (assert: Assert) {
+	const act = async ({ app, embedded, trace }: SharedRouters<MobileRouter>): Promise<void> => {
+		trace.push(`one hash changer: ${app.getHashChanger() === embedded.getHashChanger()}`);
+		for (const step of [
+			(): unknown => HashChanger.getInstance().setHash("page1"),
+			(): unknown => app.navTo("detail", { id: "1" }),
+			(): unknown => embedded.navTo("home"),
+			(): unknown => embedded.navTo("page1", {}, true),
+			(): unknown => app.stop(),
+			(): unknown => HashChanger.getInstance().setHash("detail/2"),
+			(): unknown => app.initialize(true),
+			(): unknown => HashChanger.getInstance().setHash(""),
+		]) {
+			step();
+			await settle(trace);
+			trace.push("step done");
+		}
+	};
+	const native = await withSharedHashChanger("sap.m.routing.Router", nativeRouterOf, act);
+	const guard = await withSharedHashChanger("ui5.guard.router.Router", nativeRouterOf, act);
+
+	assert.ok(native.includes("one hash changer: true"), "UI5 gives both routers the hash changer of the root");
+	assert.strictEqual(
+		firstDifference(guard, native),
+		undefined,
+		"the guard routers leave the trace of the native ones",
+	);
+	const matches = (who: string): number => native.filter((line) => line.startsWith(`${who} routeMatched `)).length;
+	assert.strictEqual(matches("app"), 6, "the native app router matched each hash that it was not stopped for");
+	assert.strictEqual(matches("embedded"), 7, "the native embedded router matched every hash");
+});
+
+QUnit.test(
+	"a hash change that the first router redirects is not parsed by the second router after the target",
+	async function (assert: Assert) {
+		const trace = await withSharedHashChanger("ui5.guard.router.Router", getComponentRouter, async (routers) => {
+			routers.app.addRouteGuard("page1", () => ({ route: "detail", parameters: { id: "1" } }));
+
+			HashChanger.getInstance().setHash("page1");
+			await settle(routers.trace);
+
+			assert.strictEqual(getHash(), "detail/1", "the URL shows the redirect target");
+			assert.deepEqual(
+				await routers.embedded.navigationSettled(),
+				{ status: NavigationOutcome.Committed, route: "detail", hash: "detail/1" },
+				"the second router is on the route that the URL shows",
+			);
+		});
+
+		assert.deepEqual(
+			trace.filter((line) => line.startsWith("embedded routeMatched ")).map((line) => line.split(" ")[2]),
+			["home", "detail"],
+			"UI5 reports the redirected hash to it after the target: it is out of date and matches no route",
+		);
+	},
+);
+
+QUnit.test(
+	"a hash change that the first router blocks is parsed by the second router, which follows the URL back",
+	async function (assert: Assert) {
+		const trace = await withSharedHashChanger("ui5.guard.router.Router", getComponentRouter, async (routers) => {
+			routers.app.addRouteGuard("page1", () => false);
+
+			HashChanger.getInstance().setHash("page1");
+			await settle(routers.trace);
+
+			assert.strictEqual(getHash(), "", "the URL is back");
+			assert.deepEqual(
+				await routers.embedded.navigationSettled(),
+				{ status: NavigationOutcome.Committed, route: "home", hash: "" },
+				"the second router is on the route that the URL shows",
+			);
+			assert.deepEqual(
+				await routers.app.navigationSettled(),
+				{ status: NavigationOutcome.Blocked, route: "home", hash: "" },
+				"the first router has blocked",
+			);
+		});
+
+		assert.deepEqual(
+			trace.filter((line) => line.startsWith("embedded routeMatched ")).map((line) => line.split(" ")[2]),
+			["home", "page1", "home"],
+			"the second router shows each hash while the URL shows it, as a native router next to a guard router does",
+		);
+	},
+);

@@ -42,6 +42,9 @@
 		}
 	},
 	"sap.ui5": {
+		"keepAlive": {
+			"supported": true
+		},
 		"contentDensities": {
 			"compact": true,
 			"cozy": true

@@ -2,6 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type { HashChangerBase$HashChangedEvent } from "sap/ui/core/routing/HashChangerBase";
 import type { ComponentTargetParameters, RouteInfo, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
@@ -75,10 +76,17 @@ window.navigation?.addEventListener("currententrychange", (event) => {
 
 /** What it takes to undo the hash change that an uncommitted navigation arrived with. */
 interface HashChangeUndo {
-	/** The hash of the root hash changer before the change, with the hashes of nested routers. */
-	readonly fullHash: string;
+	/** The hash of the root hash changer after the first change that this takes back. */
+	readonly first: string;
+	/**
+	 * The hash of the root hash changer before that change, with the hashes of nested routers.
+	 * The root hash changer reports it with the change, after the routers have parsed their part.
+	 */
+	fullHash: string | undefined;
 	/** The hash of the root hash changer after the change. */
 	readonly shown: string;
+	/** Whether the router has started to put the URL back, and the hash change that does it is still to come. */
+	started: boolean;
 	/** The step through the browser history that the change was, if it was one. */
 	readonly step: HistoryStep | null;
 }
@@ -114,8 +122,10 @@ interface PhaseCommitting {
 interface PhaseRestoring {
 	readonly kind: "restoring";
 	readonly result: NavigationResult;
-	/** The hash to write once UI5 has reported the hash change to every router. */
-	readonly fullHash?: string;
+	/** Whether the previous hash is written once UI5 has reported the hash change to every router. */
+	readonly awaitsReport?: true;
+	/** What a redirect to the route that is shown still has to do once the navigation has settled. */
+	readonly whenBack?: () => void;
 }
 
 type RouterPhase = PhaseIdle | PhaseEvaluating | PhaseCommitting | PhaseRestoring;
@@ -181,8 +191,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _suppressedHash: string | null = null;
 	/** How to undo the hash change of the pending navigation (see {@link _undoHashChange}). */
 	private _undo: HashChangeUndo | null = null;
-	/** The hash of the root hash changer when UI5 had last finished reporting a hash change. */
-	private _lastRootHash: string | null = null;
+	/** The hash that the hash changer of this router is reporting, until `parse()` receives it. */
+	private _reportedHash: unknown = null;
+	/** The hash that the hash changer of this router reported last, reports that are out of date aside. */
+	private _lastReport: unknown = null;
+	/** Whether the hash changer shows a later hash than the one it is reporting (see {@link _onHashReported}). */
+	private _reportOutdated = false;
 	/** The route that was current when the router stopped: `initialize(true)` resumes it, as UI5 does. */
 	private _stoppedRoute = "";
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
@@ -392,15 +406,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _start(ignoreInitialHash?: boolean): this {
 		// UI5 only warns about a router that is initialized already.
-		const resume = ignoreInitialHash && !this.isInitialized();
-		// After UI5's own listener, which the constructor has attached: UI5 has reported a hash
-		// change to every router when this one runs.
-		const rootHashChanger = HashChanger.getInstance();
-		rootHashChanger.detachEvent("hashChanged", this._onRootHashChanged, this);
-		rootHashChanger.attachEvent("hashChanged", this._onRootHashChanged, this);
-		this._lastRootHash = rootHashChanger.getHash();
+		const starting = !this.isInitialized();
+		if (starting) {
+			// Before the listener of UI5 that calls parse(), which initialize() attaches.
+			this.getHashChanger().attachEvent("hashChanged", this._onHashReported, this);
+			// After the listener of UI5 that informs the routers, which is attached with the hash
+			// changer of the first router: UI5 has reported a hash change to every router when
+			// this one runs.
+			HashChanger.getInstance().attachEvent("hashChanged", this._onRootHashChanged, this);
+		}
 		super.initialize(ignoreInitialHash);
-		if (resume) {
+		if (starting && ignoreInitialHash) {
 			// UI5 has reset the hash of the hash changer if a target was displayed without a route.
 			const shownHash: string | undefined = this.getHashChanger().getHash();
 			this._currentRoute = this._stoppedRoute;
@@ -410,15 +426,39 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * UI5 has reported a hash change to every router. A navigation that waited for this to put
+	 * The hash changer of this router reports a hash change: `parse()` is called with it next.
+	 *
+	 * The report is out of date if the hash changer shows a later hash by now, one that it has
+	 * reported to this router already. That happens to a router that shares its hash changer, as
+	 * the routers of all components that are not routing targets do: a router that is informed
+	 * first redirects the hash, UI5 reports the target to every router, and only then the hash
+	 * that was redirected to the routers that are informed later. A hash changer that reports
+	 * while a parent router collects the hashes of a navigation shows no hash at all.
+	 */
+	private _onHashReported(event: HashChangerBase$HashChangedEvent): void {
+		// A string, which the UI5 types declare as an object.
+		const newHash: unknown = event.getParameter("newHash");
+		const shown: unknown = this.getHashChanger().getHash();
+		this._reportedHash = newHash;
+		this._reportOutdated = shown !== newHash && shown === this._lastReport;
+		if (!this._reportOutdated) this._lastReport = newHash;
+	}
+
+	/**
+	 * UI5 has reported a hash change to every router. The event tells what the URL showed before
+	 * the change, which is what undoes it. A snapshot of the URL taken at any other time would not
+	 * do: the URL also changes without an event, as when the Fiori launchpad puts it back after
+	 * a cross-app navigation that the user cancelled. A navigation that waited for this to put
 	 * the URL back does so now (see {@link _undoHashChange}).
 	 */
-	private _onRootHashChanged(): void {
-		const rootHashChanger = HashChanger.getInstance();
-		this._lastRootHash = rootHashChanger.getHash();
-		if (this._phase.kind !== "restoring" || this._phase.fullHash === undefined) return;
-		rootHashChanger.replaceHash(this._phase.fullHash, HistoryDirection.Unknown);
-		this._finishRestore();
+	private _onRootHashChanged(event: HashChangerBase$HashChangedEvent): void {
+		const undo = this._undo;
+		// A string, which the UI5 types declare as an object.
+		const newHash: unknown = event.getParameter("newHash");
+		if (!undo || undo.first !== newHash) return;
+		// Only the first hash change that the page reports has no previous hash.
+		undo.fullHash ??= event.getParameter("oldHash") ?? "";
+		if (this._phase.kind === "restoring" && this._phase.awaitsReport) this._replaceFullHash(undo.fullHash);
 	}
 
 	/**
@@ -1063,12 +1103,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 			super.parse(newHash);
 			return;
 		}
-		if (newHash === this._suppressedHash) {
-			this._suppressedHash = null;
-			this._finishRestore();
+		const reported = this._reportedHash === newHash;
+		this._reportedHash = null;
+		// The URL shows a later hash, which this router has parsed.
+		if (reported && this._reportOutdated) return;
+		// The hash that _restoreHash() is writing.
+		if (newHash === this._suppressedHash) return;
+
+		const undo = this._undo;
+		if (undo?.started && undo.fullHash === HashChanger.getInstance().getHash()) {
+			// The URL is back where the router has put it (see _undoHashChange), so nothing is
+			// evaluated. What the hash changer reports now is the hash of the route that is shown.
+			this._undo = null;
+			this._currentHash = newHash;
+			this._finishRestore(newHash);
 			return;
 		}
-		this._suppressedHash = null;
 
 		if (this._phase.kind === "committing") {
 			this._commitNavigation(newHash, this._phase.route);
@@ -1094,11 +1144,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const toRoute = routeInfo.name;
 
 		// A pending navigation that has moved the URL as well leaves this one to undo both changes.
-		const pendingUndo = this._phase.kind === "evaluating" && this._phase.attempt.restoreHash ? this._undo : null;
+		const pendingUndo = this._phase.kind === "evaluating" && this._phase.attempt.restoreHash ? undo : null;
+		// The router is putting the URL back and gets another hash: that one is not undone as a
+		// whole, so that an undo cannot cause the next one.
+		const undoing = this._phase.kind === "restoring";
 		this._cancelPendingNavigation();
 		// A navigationSettled handler that navigated on the cancellation has moved the URL on.
 		if (this._currentHash !== currentHash) return;
-		this._undo = this._describeUndo(pendingUndo);
+		this._undo = undoing ? null : this._describeUndo(pendingUndo, reported);
 
 		const attempt = this._startAttempt(newHash, toRoute, true);
 		const { generation } = attempt;
@@ -1146,15 +1199,22 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Cancel first so in-flight navigationSettled() resolvers receive the
 		// Cancelled result before _lastSettlement is cleared below.
 		this._cancelPendingNavigation();
-		this._suppressedHash = null;
+		// A hash change that was to put the URL back does not reach a stopped router.
+		this._undo = null;
 		// Nothing is committed on a router that is stopped already, or stops before its first navigation settles.
 		if (this._currentHash !== null) this._stoppedRoute = this._currentRoute;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
-		HashChanger.getInstance().detachEvent("hashChanged", this._onRootHashChanged, this);
+		this._detachHashListeners();
 		super.stop();
 		return this;
+	}
+
+	/** Detach what {@link _start} has attached. */
+	private _detachHashListeners(): void {
+		this.getHashChanger().detachEvent("hashChanged", this._onHashReported, this);
+		HashChanger.getInstance().detachEvent("hashChanged", this._onRootHashChanged, this);
 	}
 
 	/**
@@ -1267,6 +1327,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _commitNavigation(hash: string, route: string, hashPending = false): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
+		// The URL has moved on: a hash change that was to put it back is not awaited any more.
+		this._undo = null;
 		this._currentHash = hash;
 		this._currentRoute = route;
 		// Transition to idle before super.parse so that routeMatched/patternMatched
@@ -1421,14 +1483,19 @@ export default class Router extends MobileRouter implements GuardRouter {
 						{ status: NavigationOutcome.Redirected, route: this._currentRoute, hash: targetHash },
 						chain.attemptedHash,
 						chain.restoreHash,
+						typeof target !== "string" && componentTargetInfo
+							? () => {
+									// Unless a settlement handler has moved the URL on.
+									if (this.getHashChanger().getHash() !== targetHash) return;
+									super.navTo(
+										target.route,
+										target.parameters ?? {},
+										componentTargetInfo,
+										chain.replace,
+									);
+								}
+							: undefined,
 					);
-					if (
-						typeof target !== "string" &&
-						componentTargetInfo &&
-						this.getHashChanger().getHash() === targetHash
-					) {
-						super.navTo(target.route, target.parameters ?? {}, componentTargetInfo, chain.replace);
-					}
 					break;
 				}
 				this._phase = { kind: "committing", route: toRoute, origin: "redirect" };
@@ -1576,31 +1643,41 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * is restored first, so that settlement handlers run on the final URL and a hash they set
 	 * is not overwritten. The exception is a first navigation: nothing is committed yet, so the
 	 * empty hash is restored after the settlement and parsed as a navigation of its own.
+	 * `whenBack` runs after the settlement.
 	 */
 	private _settleUncommitted(
 		result: NavigationResult,
 		attemptedHash: string | undefined,
 		restoreHash: boolean,
+		whenBack?: () => void,
 	): void {
 		const loadDefaultRoute = restoreHash && this._currentHash === null && !!attemptedHash;
 		// It settles once the URL is back.
-		if (restoreHash && !loadDefaultRoute && !this._undoHashChange(result)) return;
+		if (restoreHash && !loadDefaultRoute && !this._undoHashChange(result, whenBack)) return;
 		this._flushSettlement(result);
+		whenBack?.();
 		// Unless a handler navigated and committed in the meantime.
 		if (loadDefaultRoute && this._currentHash === null) this._restoreHash("", false);
 	}
 
 	/**
-	 * Describe how to undo the hash change that UI5 is reporting, for the navigation that starts
-	 * with it. After `pending`, the undo of a navigation that this one supersedes, it takes back
-	 * both changes.
+	 * Describe how to undo the hash change that the navigation starts with. After `pending`, the
+	 * undo of a navigation that this one supersedes, it takes back both changes. A `parse()` that
+	 * is not `reported` by the hash changer comes with no hash change.
 	 */
-	private _describeUndo(pending: HashChangeUndo | null): HashChangeUndo {
+	private _describeUndo(pending: HashChangeUndo | null, reported: boolean): HashChangeUndo | null {
+		if (!reported) return pending;
 		const shown = HashChanger.getInstance().getHash();
 		const step = lastStep;
-		if (!pending) return { fullHash: this._lastRootHash ?? shown, shown, step };
+		if (!pending) return { first: shown, fullHash: undefined, shown, step, started: false };
 		const offset = pending.step && step ? pending.step.offset + step.offset : 0;
-		return { fullHash: pending.fullHash, shown, step: step && offset ? { offset, href: step.href } : null };
+		return {
+			first: pending.first,
+			fullHash: pending.fullHash,
+			shown,
+			step: step && offset ? { offset, href: step.href } : null,
+			started: false,
+		};
 	}
 
 	/**
@@ -1615,44 +1692,55 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *   the full previous hash, once UI5 has reported the change to every router. Nested routers
 	 *   have received their part of the refused hash by then; they receive the previous one next.
 	 *
-	 * If the URL has moved on since, only the hash of this router is restored.
+	 * `parse()` ends the wait when the hash change arrives that shows the full previous hash.
+	 *
+	 * If the URL has moved on since, only the hash of this router is restored. So it is while
+	 * no navigation has committed: the URL before the change showed no route of this router either.
 	 */
-	private _undoHashChange(result: NavigationResult): boolean {
-		const hash = this._currentHash ?? "";
+	private _undoHashChange(result: NavigationResult, whenBack?: () => void): boolean {
 		const undo = this._undo;
-		const rootHashChanger = HashChanger.getInstance();
-		const rootHash = rootHashChanger.getHash();
-		if (undo === null || undo.shown !== rootHash || undo.fullHash === rootHash) {
-			this._restoreHash(hash);
+		const hash = this._currentHash;
+		const rootHash = HashChanger.getInstance().getHash();
+		if (undo === null || hash === null || undo.shown !== rootHash || undo.fullHash === rootHash) {
+			this._restoreHash(hash ?? "");
 			return true;
 		}
 		const href = window.location.href;
-		// parse() ends the wait when it receives the hash.
-		this._suppressedHash = hash;
+		undo.started = true;
+		this._phase = { kind: "restoring", result, whenBack };
 		if (undoneHref === href) {
 			// Another router is taking the step back.
-			this._phase = { kind: "restoring", result };
 		} else if (undo.step) {
-			this._phase = { kind: "restoring", result };
 			undoneHref = href;
 			window.history.go(-undo.step.offset);
-		} else if (rootHash !== this._lastRootHash) {
+		} else if (undo.fullHash === undefined) {
 			// UI5 is still reporting the change to the nested routers.
-			this._phase = { kind: "restoring", result, fullHash: undo.fullHash };
+			this._phase = { ...this._phase, awaitsReport: true };
 		} else {
-			this._phase = { kind: "restoring", result };
-			rootHashChanger.replaceHash(undo.fullHash, HistoryDirection.Unknown);
-			this._finishRestore();
+			this._replaceFullHash(undo.fullHash);
 		}
 		return false;
 	}
 
-	/** Settle the navigation that waited for the URL to be back. */
-	private _finishRestore(): void {
+	/**
+	 * Replace the hash of the root hash changer with the full previous hash, and settle the
+	 * navigation that waits for it unless `parse()` has done so.
+	 */
+	private _replaceFullHash(fullHash: string): void {
+		HashChanger.getInstance().replaceHash(fullHash, HistoryDirection.Unknown);
+		this._finishRestore();
+	}
+
+	/**
+	 * Settle the navigation that waited for the URL to be back: on `hash`, if the hash changer
+	 * has reported one with the URL.
+	 */
+	private _finishRestore(hash?: string): void {
 		const phase = this._phase;
 		if (phase.kind !== "restoring") return;
 		this._phase = IDLE;
-		this._flushSettlement(phase.result);
+		this._flushSettlement(hash === undefined ? phase.result : { ...phase.result, hash });
+		phase.whenBack?.();
 	}
 
 	/**
@@ -1728,9 +1816,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._pendingGuardDescriptors = [];
 		this._sourceDescriptors = [];
 		this._cancelPendingNavigation();
-		this._suppressedHash = null;
 		this._lastSettlement = null;
-		HashChanger.getInstance().detachEvent("hashChanged", this._onRootHashChanged, this);
+		this._detachHashListeners();
 		this._meta.clear();
 		super.destroy();
 		return this;

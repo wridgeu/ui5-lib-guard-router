@@ -33,9 +33,8 @@ export default abstract class BaseController extends Controller {
 	/**
 	 * Go one step back in the browser history. Without a previous entry of this app (deep
 	 * link, fresh load), replace the current entry with the route one level up instead.
-	 	 * Guards run either way: the history step arrives at the router as a hash change. If a
+	 * Guards run either way: the history step arrives at the router as a hash change. If a
 	 * guard blocks it, the router takes the step back and the history stays as it was.
-
 	 */
 	protected navBack(fallbackRoute: string): void {
 		if (History.getInstance().getPreviousHash() !== undefined) {

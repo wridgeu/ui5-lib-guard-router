@@ -31,8 +31,9 @@ export default class Component extends UIComponent {
 		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 
-	private _runtimeCoordinator: RuntimeCoordinator | null = null;
-	private _permissionGuard: GuardFn | null = null;
+	// No initializers: they would run after the UIComponent constructor, which calls init().
+	private _runtimeCoordinator?: RuntimeCoordinator;
+	private _permissionGuard?: GuardFn;
 
 	override init(): void {
 		super.init();
@@ -56,9 +57,22 @@ export default class Component extends UIComponent {
 		this._runtimeCoordinator.start(router);
 	}
 
+	/**
+	 * The launchpad hides the app and keeps it (`sap-keep-alive`). The manifest declares
+	 * `sap.ui5/keepAlive/supported`, so UI5 stops the router and calls this hook.
+	 */
+	override onDeactivate(): void {
+		this._runtimeCoordinator?.deactivate();
+	}
+
+	/** The launchpad shows the kept app again: UI5 has initialized the router. */
+	override onActivate(): void {
+		this._runtimeCoordinator?.activate();
+	}
+
 	override exit(): void {
 		this._runtimeCoordinator?.destroy();
-		this._runtimeCoordinator = null;
-		this._permissionGuard = null;
+		this._runtimeCoordinator = undefined;
+		this._permissionGuard = undefined;
 	}
 }

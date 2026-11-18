@@ -5,9 +5,13 @@ import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
 	captureHashWrites,
 	createRouter,
+	flushPromises,
 	getHash,
+	type GuardRouterClass,
 	initHashChanger,
+	loadModule,
 	recordSettlements,
+	type SinonTestContext,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -336,25 +340,213 @@ QUnit.test(
 );
 
 QUnit.test(
-	"a history step that is redirected to the route that is shown writes no hash while it is taken back",
+	"a history step that is redirected to the route that is shown sets the hashes of nested components once the URL is back",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		await navTo("detail", { id: "7" });
+		router.addRouteGuard("protected", () => ({
+			route: "detail",
+			parameters: { id: "7" },
+			componentTargetInfo: { nested: { route: "list" } },
+		}));
+		// UI5 writes the hash of the route with those of the components in its component targets.
+		const hashChanger = HashChanger.getInstance();
+		const writes: string[] = [];
+		const replaceHash = this.stub(hashChanger, "replaceHash").callsFake(function (this: HashChanger, ...args) {
+			writes.push(`replace:${args[0]} on ${getHash()}`);
+			return replaceHash.wrappedMethod.apply(this, args);
+		});
+		const setHash = this.spy(hashChanger, "setHash");
+
+		const redirected = await historyStep(() => window.history.back());
+		await flushPromises();
+
+		assert.strictEqual(redirected.status, NavigationOutcome.Redirected, "the navigation settles as Redirected");
+		assert.strictEqual(getHash(), "detail/7", "the URL is back");
+		assert.deepEqual(
+			writes,
+			["replace:detail/7 on detail/7"],
+			"UI5 is asked to set the hashes once the URL is back, not while the browser steps",
+		);
+		assert.ok(setHash.notCalled, "no history entry is added");
+	},
+);
+
+QUnit.test(
+	"a parse() of the committed hash while a blocked history step is taken back matches its route again",
 	async function (assert: Assert) {
 		router.initialize();
 		await waitForRoute(router, "home");
 		await navTo("protected");
+		router.addLeaveGuard("protected", () => false);
+		const statuses = recordSettlements(router);
+		await historyStepTo(() => window.history.back(), "");
+		const matched: string[] = [];
+		router.attachRouteMatched((event) => matched.push(String(event.getParameter("name"))));
+
+		const blocked = nextSettlement();
+		router.parse("protected");
+		assert.deepEqual(statuses, [], "the blocked navigation still waits for the URL to be back");
+		await blocked;
+		await flushPromises();
+
+		assert.strictEqual(getHash(), "protected", "which it is when the navigation settles");
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked]);
+		assert.deepEqual(matched, ["protected"], "the route matched again for the parse() call, as it does natively");
+	},
+);
+
+QUnit.test(
+	"a navTo() that is blocked while a blocked history step is taken back leaves the URL to come back",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		router.addLeaveGuard("protected", () => false);
+		const statuses = recordSettlements(router);
+		await historyStepTo(() => window.history.back(), "");
+		const matched: string[] = [];
+		router.attachRouteMatched((event) => matched.push(String(event.getParameter("name"))));
+
+		router.navTo("forbidden");
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Blocked, NavigationOutcome.Blocked],
+			"the blocked step settles, then the blocked navTo()",
+		);
+		await historyStepTo(() => {}, "protected");
+		await flushPromises();
+
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Blocked], "nothing else settles");
+		assert.deepEqual(matched, [], "the route that is shown does not match again when the URL is back");
+	},
+);
+
+QUnit.test(
+	"the hash that a blocked history step was taken back to is navigated to as usual after another navigation",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		const block = (): boolean => false;
+		router.addLeaveGuard("protected", block);
+		await historyStepTo(() => window.history.back(), "");
+		router.removeLeaveGuard("protected", block);
+		// From the entry before: the entry that the browser was to step forward to is gone.
 		await navTo("forbidden");
-		// With component targets, UI5 is asked to set their hashes: only once the URL is back.
-		router.addRouteGuard("protected", () => ({
-			route: "forbidden",
-			componentTargetInfo: { nested: { route: "list" } },
-		}));
 
-		let redirected: NavigationResult | undefined;
-		const writes = await captureHashWrites(HashChanger.getInstance(), async () => {
-			redirected = await historyStep(() => window.history.back());
+		HashChanger.getInstance().setHash("protected");
+		await flushPromises();
+
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Committed, route: "protected", hash: "protected" },
+			"the navigation commits",
+		);
+	},
+);
+
+QUnit.test(
+	"a parse() call that is blocked after a history step takes no step",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		await historyStep(() => window.history.back());
+		router.addRouteGuard("forbidden", () => false);
+		const statuses = recordSettlements(router);
+		const go = this.spy(window.history, "go");
+
+		router.parse("forbidden");
+
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked], "it settles at once: no hash change is to be undone");
+		assert.ok(go.notCalled, "the browser is not asked to step through the history");
+		assert.strictEqual(getHash(), "", "the URL is where the step had arrived");
+	},
+);
+
+QUnit.test("stop() forgets a history step that is being taken back", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	await navTo("protected");
+	router.addLeaveGuard("protected", () => false);
+
+	// The router blocks the step and asks the browser to take it back. It stops before that happens.
+	await historyStepTo(() => window.history.back(), "");
+	router.stop();
+	await historyStepTo(() => {}, "protected");
+
+	const statuses = recordSettlements(router);
+	router.initialize();
+	assert.deepEqual(statuses, [NavigationOutcome.Committed], "a router that starts again parses the hash of the URL");
+	assert.deepEqual(
+		await router.navigationSettled(),
+		{ status: NavigationOutcome.Committed, route: "protected", hash: "protected" },
+		"and is on its route",
+	);
+});
+
+// Last: it loads a second copy of the library.
+QUnit.test(
+	"without the Navigation API a blocked history step has its entry replaced",
+	async function (this: SinonTestContext, assert: Assert) {
+		// The router subscribes to the API when its module loads. Firefox before 147 and Safari
+		// before 26.2 have none.
+		const navigation = Object.getOwnPropertyDescriptor(window, "navigation");
+		if (!navigation) throw new Error("The browser of this test has no Navigation API to hide");
+		sap.ui.loader.config({
+			paths: { "ui5/guard/router/withoutNavigationApi": sap.ui.require.toUrl("ui5/guard/router") },
 		});
+		Object.defineProperty(window, "navigation", { value: undefined, configurable: true });
+		let RouterWithoutApi: typeof GuardRouterClass;
+		try {
+			RouterWithoutApi = await loadModule("ui5/guard/router/withoutNavigationApi/Router");
+		} finally {
+			Object.defineProperty(window, "navigation", navigation);
+		}
+		const routerWithoutApi = new RouterWithoutApi(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{ async: true },
+		);
 
-		assert.strictEqual(redirected?.status, NavigationOutcome.Redirected, "the navigation settles as Redirected");
-		assert.strictEqual(getHash(), "forbidden", "the URL is back");
-		assert.deepEqual(writes, [], "no hash is written");
+		try {
+			routerWithoutApi.initialize();
+			await waitForRoute(routerWithoutApi, "home");
+			routerWithoutApi.navTo("protected");
+			await waitForRoute(routerWithoutApi, "protected");
+			routerWithoutApi.addLeaveGuard("protected", () => false);
+			const settled = new Promise<NavigationResult>((resolve) => {
+				routerWithoutApi.attachEventOnce("navigationSettled", (event: Router$NavigationSettledEvent) => {
+					resolve(event.getParameters());
+				});
+			});
+
+			let blocked: NavigationResult | undefined;
+			const go = this.spy(window.history, "go");
+			const writes = await captureHashWrites(HashChanger.getInstance(), async () => {
+				window.history.back();
+				blocked = await settled;
+			});
+
+			assert.deepEqual(
+				blocked,
+				{ status: NavigationOutcome.Blocked, route: "protected", hash: "protected" },
+				"the navigation is blocked",
+			);
+			assert.deepEqual(
+				writes,
+				["replace:protected"],
+				"the entry that the browser stepped to shows the previous hash",
+			);
+			assert.ok(go.notCalled, "the router knows of no step to take back");
+			assert.strictEqual(getHash(), "protected", "the URL is back");
+		} finally {
+			routerWithoutApi.destroy();
+		}
 	},
 );

@@ -1111,6 +1111,43 @@ QUnit.test("the leave guards of every route that is left run", async function (a
 });
 
 QUnit.test(
+	"a greedy route that still matches is left and entered again, like a first match whose parameters change",
+	async function (assert: Assert) {
+		const calls: string[] = [];
+		for (const name of ["detail", "audit", "auditAll"]) {
+			router.addLeaveGuard(name, (context) => {
+				calls.push(`leave ${name} for ${context.toHash}`);
+				return true;
+			});
+			router.addRouteGuard(name, (context) => {
+				calls.push(`enter ${name} with ${context.toHash}`);
+				return true;
+			});
+		}
+		router.initialize();
+		router.navTo("detail", { id: "1" });
+		await waitForRoute(router, "detail");
+		calls.length = 0;
+
+		router.navTo("detail", { id: "2" });
+		await waitForRoute(router, "detail");
+
+		assert.deepEqual(
+			calls,
+			[
+				"leave detail for detail/2",
+				"leave audit for detail/2",
+				"leave auditAll for detail/2",
+				"enter detail with detail/2",
+				"enter audit with detail/2",
+				"enter auditAll with detail/2",
+			],
+			"every route that matched detail/1 is left, every route that matches detail/2 is entered",
+		);
+	},
+);
+
+QUnit.test(
 	"a greedy route is one that is declared greedy, in any form of the route config",
 	async function (assert: Assert) {
 		router.destroy();

@@ -39,6 +39,36 @@ async function expectInAppNavigationBlocked(): Promise<void> {
 	}
 }
 
+/** Set the app hash through the hash changer, as a link or a URL typed into the address bar does. */
+async function setAppHashInFlp(hash: string): Promise<void> {
+	await browser.execute((appHash: string) => {
+		const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
+		HashChanger.getInstance().setHash(appHash);
+	}, hash);
+}
+
+/**
+ * On Protected: change the app hash to one that a guard blocks, and assert that the page and
+ * the URL stay as they were, without an FLP confirm dialog.
+ */
+async function expectHashChangeBlocked(hash: string): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevision();
+	const { record, cleanup } = installDialogHandler(true);
+
+	try {
+		await setAppHashInFlp(hash);
+
+		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
+		await waitForProtectedPageInFlp();
+		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
+		await expectControlText(CONTROLS.protected.settlementHashText, "protected");
+		await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
+		expect(record.called).toBe(false);
+	} finally {
+		cleanup();
+	}
+}
+
 /** On Protected: navigate to "home" through the router and assert that the navigation committed. */
 async function expectInAppNavigationToHome(): Promise<void> {
 	const settlementRevision = await getRuntimeSettlementRevision();
@@ -137,6 +167,33 @@ describe("FLP preview integration", () => {
 		await waitForRouterRunningInFlp();
 
 		await expectInAppNavigationBlocked();
+	});
+
+	it("returns to the page when the leave guard blocks a hash change after a cancelled cross-app navigation", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+
+		// FLP initializes the router again while the URL still shows the target of the cross-app
+		// navigation, and puts the URL back without a hash change event.
+		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+		await waitForProtectedPageInFlp();
+		await waitForRouterRunningInFlp();
+
+		await expectHashChangeBlocked("employees");
+		// The router is where it was: the next hash change is blocked and undone alike.
+		await expectHashChangeBlocked("employees");
+	});
+
+	it("returns to the page when an enter guard blocks a hash change after a cancelled cross-app navigation", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+		await waitForProtectedPageInFlp();
+		await waitForRouterRunningInFlp();
+		// The leave guard allows now, the enter guard of "blocked" does not.
+		await setDirtyStateInFlp(false);
+
+		await expectHashChangeBlocked("blocked");
 	});
 
 	it("blocks dirty in-app navigation via leave guard without triggering FLP confirm", async () => {

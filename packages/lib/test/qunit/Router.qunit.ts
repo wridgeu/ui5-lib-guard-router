@@ -1,7 +1,7 @@
 import Log from "sap/base/Log";
 import DataType from "sap/ui/base/DataType";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardFn, GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import type { GuardFn, GuardRouter, LeaveGuardFn, NavigationResult } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
@@ -11,8 +11,10 @@ import {
 	addRouteGuardUnsafe,
 	assertBlocked,
 	callUnsafe,
+	captureHashWrites,
 	captureWarnings,
 	captureWarningsAsync,
+	changeHashSilently,
 	createRouter,
 	flushPromises,
 	getHash,
@@ -818,5 +820,146 @@ QUnit.test(
 
 		assert.deepEqual(statuses, [NavigationOutcome.Blocked], "nothing but the block settles");
 		assert.strictEqual(getHash(), "protected", "the URL is back on the hash the router started on");
+	},
+);
+
+/**
+ * What the Fiori launchpad does around a cross-app navigation that the user cancels in its
+ * unsaved-data prompt: it stops the router, initializes it again while the URL still shows the
+ * target, and then puts the URL back without a hash change event.
+ */
+async function cancelCrossAppNavigation(): Promise<void> {
+	router.stop();
+	await changeHashSilently((hasher) => hasher.setHash("forbidden"));
+	router.initialize(true);
+	await changeHashSilently((hasher) => hasher.replaceHash("protected"));
+}
+
+for (const { guard, register } of [
+	{ guard: "leave guard", register: (): unknown => router.addLeaveGuard("protected", () => false) },
+	{ guard: "enter guard", register: (): unknown => router.addRouteGuard("detail", () => false) },
+]) {
+	QUnit.test(
+		`a hash change that a ${guard} blocks after a cancelled cross-app navigation returns to the URL as it was`,
+		async function (assert: Assert) {
+			router.initialize();
+			await waitForRoute(router, "home");
+			router.navTo("protected");
+			await waitForRoute(router, "protected");
+			await cancelCrossAppNavigation();
+			register();
+			const settlements: NavigationResult[] = [];
+			router.attachNavigationSettled((event) => settlements.push(event.getParameters()));
+
+			const hashChanger = HashChanger.getInstance();
+			const writes = await captureHashWrites(hashChanger, () => hashChanger.setHash("detail/1"));
+
+			assert.deepEqual(
+				writes,
+				["set:detail/1", "replace:protected"],
+				"the entry is replaced with the hash that the URL showed before the change",
+			);
+			assert.deepEqual(
+				settlements,
+				[{ status: NavigationOutcome.Blocked, route: "protected", hash: "protected" }],
+				"the navigation is blocked, and nothing else is navigated to",
+			);
+			assert.strictEqual(getHash(), "protected", "the URL is back");
+		},
+	);
+}
+
+QUnit.test(
+	"a blocked hash change returns to a URL that had changed without a hash change event",
+	async function (assert: Assert) {
+		router.addRouteGuard("detail", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		router.stop();
+		HashChanger.getInstance().setHash("forbidden");
+		// The router resumes "protected" on the hash "forbidden", which the URL does not show for long.
+		router.initialize(true);
+		await changeHashSilently((hasher) => hasher.replaceHash("protected"));
+		const settlements: NavigationResult[] = [];
+		router.attachNavigationSettled((event) => settlements.push(event.getParameters()));
+
+		HashChanger.getInstance().setHash("detail/1");
+		await flushPromises();
+
+		assert.strictEqual(getHash(), "protected", "the URL is back on what it showed before the change");
+		assert.deepEqual(
+			settlements,
+			[{ status: NavigationOutcome.Blocked, route: "protected", hash: "protected" }],
+			"the router is on the hash that its hash changer reports then",
+		);
+		assert.deepEqual(await router.navigationSettled(), settlements[0], "and stays on it");
+
+		let leftHash: string | undefined;
+		router.addLeaveGuard("protected", (context) => {
+			leftHash = context.fromHash;
+			return true;
+		});
+		router.navTo("home");
+		await waitForRoute(router, "home");
+		assert.strictEqual(leftHash, "protected", "the next navigation leaves that hash");
+	},
+);
+
+QUnit.test(
+	"a hash that arrives while the router puts the URL back is not undone as a whole",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		router.addLeaveGuard("protected", () => false);
+		const statuses = recordSettlements(router);
+		const hashChanger = HashChanger.getInstance();
+		// A hash changer that writes another hash than the one the router puts the URL back to, once.
+		const replaceHash = this.stub(hashChanger, "replaceHash").callsFake(() => {
+			replaceHash.restore();
+			hashChanger.replaceHash("forbidden", "Unknown");
+		});
+
+		hashChanger.setHash("detail/1");
+		await flushPromises();
+
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Blocked, NavigationOutcome.Blocked],
+			"both hashes are blocked, and the second one causes no further undo",
+		);
+		assert.strictEqual(getHash(), "protected", "the URL is on the hash of the route that is shown");
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Blocked, route: "protected", hash: "protected" },
+			"which is the hash of the router",
+		);
+	},
+);
+
+QUnit.test(
+	"a hash change that is blocked while no navigation has committed ends on the empty hash",
+	async function (assert: Assert) {
+		router.addGuard(() => false);
+		router.initialize();
+		const statuses = recordSettlements(router);
+
+		HashChanger.getInstance().setHash("protected");
+		await flushPromises();
+
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Blocked, NavigationOutcome.Blocked],
+			"the hash is blocked, and so is the empty hash that the router falls back to",
+		);
+		assert.strictEqual(getHash(), "", "the URL does not go back to the hash that was blocked");
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Blocked, route: "", hash: "" },
+			"the router is on no route",
+		);
 	},
 );

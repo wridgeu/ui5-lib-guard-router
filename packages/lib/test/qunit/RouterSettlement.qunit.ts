@@ -153,9 +153,11 @@ QUnit.test("Resolves with 'cancelled' when navigation is superseded", async func
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
-	const result = await settledPromise;
-	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Status is cancelled");
-	assert.strictEqual(result.route, "home", "Route is the route active when cancelled");
+	assert.deepEqual(
+		await settledPromise,
+		{ status: NavigationOutcome.Cancelled, route: "home", hash: "" },
+		"cancelled, on the route and hash that were current when it was superseded",
+	);
 });
 
 QUnit.test("Multiple callers receive the same result", async function (assert: Assert) {
