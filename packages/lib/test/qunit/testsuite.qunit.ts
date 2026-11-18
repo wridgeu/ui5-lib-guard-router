@@ -51,7 +51,13 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterSettlement: {
 		title: "QUnit Tests for Router Settlement and Lifecycle",
-		files: ["RouterSettlement"],
+		files: [
+			"router/settlement/NavigationSettled",
+			"router/settlement/SettlementErrors",
+			"router/settlement/SettlementReentrancy",
+			"router/lifecycle/DestroySettlement",
+			"router/guards/LeaveGuardSettlement",
+		],
 	},
 	RouterOptions: {
 		title: "QUnit Tests for Router Options",
