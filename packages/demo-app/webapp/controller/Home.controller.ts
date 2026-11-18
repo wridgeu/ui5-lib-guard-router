@@ -59,6 +59,15 @@ export default class HomeController extends BaseController {
 		this.getRouter<GuardRouter>().navTo("employees");
 	}
 
+	/**
+	 * "team" is a retired page: its guard redirects to "staff", the legacy name of "employees".
+	 * Both have the pattern "employees", so the navigation settles on "employees".
+	 */
+	onNavToTeam(): void {
+		this.createScenarioRunner().recordAction('Triggered router.navTo("team")');
+		this.getRouter().navTo("team");
+	}
+
 	/** "reports" displays the nested reporting component, which has its own guard router. */
 	onNavToReports(): void {
 		this.createScenarioRunner().recordAction('Triggered router.navTo("reports")');

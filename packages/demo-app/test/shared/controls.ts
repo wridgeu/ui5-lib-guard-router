@@ -55,6 +55,7 @@ export const CONTROLS = {
 		"navForbiddenBtn",
 		"navAdminBtn",
 		"navToEmployees",
+		"navTeamBtn",
 		"navReportsBtn",
 		...SETTLEMENT_PANEL,
 	]),
@@ -72,6 +73,7 @@ export const CONTROLS = {
 		"employeesMeta",
 		"navToEmployee",
 		"updateMeta",
+		...SETTLEMENT_PANEL,
 	]),
 	employee: viewControls("demo.app.view.Employee", "employeeView", ["employeePage", "employeeMeta"]),
 	reportsOverview: viewControls(

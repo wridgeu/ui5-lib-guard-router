@@ -1,5 +1,6 @@
 <mvc:View
 	xmlns:mvc="sap.ui.core.mvc"
+	xmlns:core="sap.ui.core"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Employees">
 	<Page
@@ -13,6 +14,7 @@
 					<Text id="employeesMeta" text="Route metadata will be shown here" />
 					<Button id="navToEmployee" text="Navigate to Employee 42" press=".onNavToEmployee" />
 					<Button id="updateMeta" text="Set runtime metadata" press=".onUpdateMeta" />
+					<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" />
 				</VBox>
 			</Panel>
 		</content>

@@ -205,6 +205,8 @@ router.addRouteGuard("old-page", () => "new-page");
 
 Reference: `forbiddenGuard` in `guards.ts`.
 
+The navigation settles on the route that matches the target's hash. With overlapping patterns, for example a renamed route whose old name is kept as an alias with the same pattern, that is the first matching route in manifest order, which can differ from the name the guard returned. The demo app shows this with its `team` and `staff` routes, see the [demo app README](../../packages/demo-app/README.md#overlapping-routes-team-and-staff).
+
 ## Dirty form leave guard
 
 Leave guard that checks a model property before allowing navigation away from a route. Returns `boolean` only (no redirects).

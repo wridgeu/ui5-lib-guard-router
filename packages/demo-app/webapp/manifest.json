@@ -83,6 +83,7 @@
 						"*": ["guards.navigationLogger"],
 						"blocked": ["guards.blockedGuard"],
 						"forbidden": ["guards.forbiddenGuard"],
+						"team": ["guards.retiredPageGuard"],
 						"protected": {
 							"leave": ["guards.dirtyFormGuard"]
 						}
@@ -123,6 +124,15 @@
 					"name": "employees",
 					"pattern": "employees",
 					"target": "employees"
+				},
+				{
+					"name": "staff",
+					"pattern": "employees",
+					"target": "employees"
+				},
+				{
+					"name": "team",
+					"pattern": "team"
 				},
 				{
 					"name": "employee",

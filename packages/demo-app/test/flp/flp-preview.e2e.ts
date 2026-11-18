@@ -10,6 +10,7 @@ import {
 	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigationAndExpectDirtyPrompt,
 	waitForHomePageInFlp,
+	waitForPageInFlp,
 	waitForProtectedPageInFlp,
 } from "./helpers";
 
@@ -195,6 +196,18 @@ describe("FLP guard router hardening", () => {
 		await navigateToRouteInFlp("forbidden");
 
 		await expectRedirectedHome(settlementRevision);
+	});
+
+	it("settles a redirect to the alias route 'staff' on 'employees', the route that matches the hash", async () => {
+		// The guard of the retired "team" route redirects to "staff". "staff" and "employees"
+		// share the pattern "employees"; UI5 matches and displays "employees".
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		await press(CONTROLS.home.navTeamBtn);
+
+		await waitForPageInFlp(CONTROLS.employees.employeesPage, "Employees", { afterRevision: settlementRevision });
+		await expectAppHashToBe("employees");
+		await expectControlText(CONTROLS.employees.settlementStatus, "Redirected");
+		await expectControlText(CONTROLS.employees.settlementRouteText, "employees");
 	});
 
 	it("allows navigation to protected route when logged in", async () => {

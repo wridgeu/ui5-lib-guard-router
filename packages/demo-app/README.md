@@ -17,6 +17,8 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 | `forbidden` | `"forbidden"`      | Always redirects to `home`                                                                       |
 | `admin`     | `"admin"`          | Enter: always redirects to `protected` (demonstrates redirect chains)                            |
 | `employees` | `"employees"`      | Open, no guard. Displays route metadata and supports runtime metadata updates                    |
+| `staff`     | `"employees"`      | Legacy alias of `employees`, never matched: `employees` is listed first                          |
+| `team`      | `"team"`           | Retired page, no target. Enter: always redirects to `staff`, which settles on `employees`        |
 | `employee`  | `"employees/{id}"` | Open, no guard. Displays inherited metadata via `pattern-tree` inheritance                       |
 | `reports`   | `"reports"`        | Open. Displays the nested reporting component, see [Nested component](#nested-component-reports) |
 | (bypassed)  | no match           | Shows the Not Found page with a button to return home                                            |
@@ -36,6 +38,7 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | `guards.navigationLogger` | Global enter | all (`"*"`) | Logs every navigation with metadata keys     |
 | `guards.blockedGuard`     | Route enter  | `blocked`   | Always blocks before navigation commits      |
 | `guards.forbiddenGuard`   | Route enter  | `forbidden` | Always redirects to `home`                   |
+| `guards.retiredPageGuard` | Route enter  | `team`      | Always redirects to the alias route `staff`  |
 | `guards.dirtyFormGuard`   | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
 
 **Programmatic** (`Component.ts`): Registers guards during `init()` for the component lifetime. These guards need closure access to component models that declarative guards cannot have.
@@ -59,6 +62,18 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | `createRedirectWithParamsGuard()` | Redirect preserving route parameters                                |
 | `createErrorDemoGuard()`          | Sync error handling behavior                                        |
 | `createAsyncErrorDemoGuard()`     | Async error handling behavior                                       |
+
+## Overlapping routes (`team` and `staff`)
+
+The people list was renamed from `staff` to `employees`. The manifest keeps `staff` as an alias: same pattern `employees`, same target, listed after `employees`. `navTo("staff")` in old code still works, and because UI5 matches the first route in manifest order, the route that matches the hash `employees` is always `employees`.
+
+The retired `team` page has a manifest guard (`guards/retiredPageGuard.ts`) that still redirects to the old name `staff`. Press "Team (retired: redirects to alias "staff")" on Home, or open `#/team` (`#app-preview&/team` in the FLP preview).
+
+**What to observe**
+
+- The Employees page is shown and the hash becomes `#/employees`, without a history entry for `team`.
+- The settlement panel on the Employees page shows `Redirected` with route `employees`, not `staff`: a redirect settles on the route that matches the hash, the one UI5 displays and fires `routeMatched` for. `getRouteMeta(result.route)` in a `navigationSettled` handler therefore returns the metadata of `employees`.
+- The guards of `employees` run on the redirect hop. The demo has none besides the global logger: `requiresAuth` is metadata only, so the result is the same logged in and logged out.
 
 ## Nested component (Reports)
 
@@ -146,6 +161,7 @@ Individual guard functions loaded by the router from `manifest.json` `guardRoute
 | `guards/navigationLogger.ts` | Global enter | Logs every navigation with metadata keys         |
 | `guards/blockedGuard.ts`     | Route enter  | Always blocks navigation                         |
 | `guards/forbiddenGuard.ts`   | Route enter  | Always redirects to `home`                       |
+| `guards/retiredPageGuard.ts` | Route enter  | Always redirects to the alias route `staff`      |
 | `guards/dirtyFormGuard.ts`   | Route leave  | Blocks leaving when the form model reports dirty |
 
 ### Models
@@ -248,6 +264,7 @@ Test files are in `test/e2e/`:
 | `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back                                      |
 | `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                    |
 | `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                             |
+| `redirect-alias.e2e.ts`      | Redirect to an alias route name settles on the route that matches the hash                          |
 | `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                   |
 | `nested-component.e2e.ts`    | Nested component: prefixed hash, guarded nested route, back navigation, deep links, fresh page load |
 
@@ -257,12 +274,12 @@ Shared utilities (`helpers.ts`) provide `waitForPage`, `resetAuth`, `expectHashT
 
 FLP-specific coverage lives in `test/flp/` and is split across four spec files:
 
-| File                         | Purpose                                                                                                                |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, dirty-state separation, browser history, independence                   |
-| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()`: user confirms, navigation completes                                     |
-| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()`: no dirty prompt, navigation completes                                   |
-| `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display |
+| File                         | Purpose                                                                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, redirect to an alias route, dirty-state separation, browser history, independence |
+| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation via `toExternal()`: user confirms, navigation completes                                               |
+| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation via `toExternal()`: no dirty prompt, navigation completes                                             |
+| `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display           |
 
 The cross-app specs are isolated because `toExternal()` navigates to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
 

@@ -102,6 +102,12 @@
 								width="100%"
 								class="sapUiTinyMarginBottom" />
 							<Button
+								id="navTeamBtn"
+								text="Team (retired: redirects to alias &quot;staff&quot;)"
+								press=".onNavToTeam"
+								width="100%"
+								class="sapUiTinyMarginBottom" />
+							<Button
 								id="navReportsBtn"
 								text="Reports (nested component)"
 								press=".onNavToReports"
