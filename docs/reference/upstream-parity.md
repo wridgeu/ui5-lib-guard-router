@@ -237,7 +237,7 @@ and the mechanisms are described in
 
 Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:compat:120`):
 
-- `packages/lib/test/qunit/RouterAsync.qunit.ts`, module "Router - Native matching flag"
+- `packages/lib/test/qunit/router/async/AsyncGuards.qunit.ts`, module "Router - Native matching flag"
 - `packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`, module "GuardPipeline - Promise resolve functions"
 - `packages/lib/test/qunit/RouterManifestGuards.qunit.ts`, module "Router - Manifest-driven instantiation",
   the tests on a component loaded as a routing target and on parent routes of a nested component

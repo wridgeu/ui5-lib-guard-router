@@ -204,7 +204,7 @@ Tests in the Router test files and `GuardPipelineAsync.qunit.ts` that currently 
 4. Guard returning `false` → `{ action: "block" }` (regression — not Error)
 5. Guard error after signal abort → `{ action: "block" }` (unchanged behavior)
 
-**Router tests** (`packages/lib/test/qunit/RouterGuards.qunit.ts`, `RouterAsync.qunit.ts`, `RouterNavigation.qunit.ts`, `RouterSettlement.qunit.ts`):
+**Router tests** (`packages/lib/test/qunit/router/`):
 
 6. Sync guard throw → `NavigationOutcome.Error` with error on result
 7. Async guard reject → `NavigationOutcome.Error` with error on result

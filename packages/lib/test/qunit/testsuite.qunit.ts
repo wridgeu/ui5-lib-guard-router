@@ -39,7 +39,7 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterAsync: {
 		title: "QUnit Tests for Router Async and Concurrency",
-		files: ["RouterAsync"],
+		files: ["router/async/AsyncGuards", "router/async/Concurrency", "router/async/Abort"],
 	},
 	RouterNavigation: {
 		title: "QUnit Tests for Router Navigation Paths",
