@@ -462,26 +462,28 @@ parityTest("a target displayed without a route", {
 	],
 });
 
-// The demo app logs this warning for its nested component. It comes from sap.m.NavContainer and
-// the native router causes it as well: for the first page of a NavContainer, and, depending on
-// how fast a nested component loads, for the page of that component.
+// The demo app logs this warning for its nested component. It comes from sap.m.NavContainer#to(),
+// which logs it when asked for the page that is already current, and the native router causes it
+// as well. For the child's first page it is logged in every run. For the parent's first page it
+// depends on timing: NavContainer queues to() while a navigation is in progress, and on the
+// Windows CI runner the parent's warning is not logged.
 QUnit.test(
-	"the first page of a NavContainer logs the same 'current page' warning with both routers",
+	"the first page of a nested NavContainer logs the same 'current page' warning with both routers",
 	async function (assert: Assert) {
+		const parentWarning =
+			"Element sap.m.App#parity---appView--app: Cannot navigate to page parity---home because this is the current page.";
+		const childWarning =
+			"Element sap.m.App#parity---child---appView--app: Cannot navigate to page parity---child---list because this is the current page.";
 		const scenario: Scenario = { startHash: "", started: [PARENT_HOME], steps: [showChild()] };
-		const native: string[] = [];
-		const guard: string[] = [];
-		await run("native", scenario, native);
-		await run("guard", scenario, guard);
 
-		assert.deepEqual(
-			native,
-			[
-				"Element sap.m.App#parity---appView--app: Cannot navigate to page parity---home because this is the current page.",
-				"Element sap.m.App#parity---child---appView--app: Cannot navigate to page parity---child---list because this is the current page.",
-			],
-			"the native router causes the warning for the first page of the parent and of the child",
-		);
-		assert.deepEqual(guard, native, "the guard router causes the same warnings");
+		for (const flavor of ["native", "guard"] as const) {
+			const logged: string[] = [];
+			await run(flavor, scenario, logged);
+			assert.deepEqual(
+				logged.filter((warning) => warning !== parentWarning),
+				[childWarning],
+				`${flavor}: the child's first page logs the warning, and nothing else is logged`,
+			);
+		}
 	},
 );
