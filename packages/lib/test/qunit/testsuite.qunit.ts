@@ -43,7 +43,12 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterNavigation: {
 		title: "QUnit Tests for Router Navigation Paths",
-		files: ["RouterNavigation"],
+		files: [
+			"router/navigation/HashChange",
+			"router/navigation/NavToPreflight",
+			"router/navigation/Redirects",
+			"router/navigation/RedirectTargetGuards",
+		],
 	},
 	RouterHistory: {
 		title: "QUnit Tests for Router and Browser History",
