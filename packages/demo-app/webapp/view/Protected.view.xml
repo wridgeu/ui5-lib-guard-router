@@ -57,15 +57,19 @@
 								text="{= ${runtime>/flpDirtyProviderActive} ? ${i18n>flpDirtyProviderActive} : ${i18n>flpDirtyProviderInactive}}"
 								state="{= ${runtime>/flpDirtyProviderActive} ? 'Success' : 'None'}"
 								class="sapUiTinyMarginBottom" />
-							<VBox class="sapUiTinyMarginBottom" renderType="Bare">
-								<Label text="{i18n>currentHashLabel}" />
-								<Text id="protectedCurrentHashText" text="{= ${runtime>/currentHash} || ${i18n>emptyHash}}" />
-							</VBox>
 							<VBox renderType="Bare">
-								<Label text="{i18n>lastActionLabel}" />
-								<Text id="protectedLastActionText" text="{= ${runtime>/lastAction} || ${i18n>actionReady}}" />
+								<ObjectStatus
+									id="protectedCurrentHashText"
+									title="{i18n>currentHashLabel}"
+									text="{= ${runtime>/currentHash} || ${i18n>emptyHash}}"
+									class="sapUiTinyMarginBottom" />
+								<ObjectStatus
+									id="protectedLastActionText"
+									title="{i18n>lastActionLabel}"
+									text="{= ${runtime>/lastAction} || ${i18n>actionReady}}"
+									class="sapUiTinyMarginBottom" />
+								<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" />
 							</VBox>
-							<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" class="sapUiTinyMarginTop" />
 						</content>
 					</Panel>
 				</FlexBox>

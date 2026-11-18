@@ -1,8 +1,8 @@
 import type { GuardRouter } from "ui5/guard/router/types";
 import { CONTROLS, expectControlText, getAppComponentId, press } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectAppHashToBe,
-	getRuntimeSettlementRevisionInFlp,
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	navigateToRouteInFlp,
@@ -12,6 +12,7 @@ import {
 	waitForHomePageInFlp,
 	waitForPageInFlp,
 	waitForProtectedPageInFlp,
+	waitForRouterRunningInFlp,
 } from "./helpers";
 
 const EMPLOYEES_META = { section: "hr", requiresAuth: true };
@@ -22,7 +23,7 @@ const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
  * leave guard blocked it without an FLP confirm dialog.
  */
 async function expectInAppNavigationBlocked(): Promise<void> {
-	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+	const settlementRevision = await getRuntimeSettlementRevision();
 	const { record, cleanup } = installDialogHandler(true);
 
 	try {
@@ -40,7 +41,7 @@ async function expectInAppNavigationBlocked(): Promise<void> {
 
 /** On Protected: navigate to "home" through the router and assert that the navigation committed. */
 async function expectInAppNavigationToHome(): Promise<void> {
-	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+	const settlementRevision = await getRuntimeSettlementRevision();
 
 	await navigateToRouteInFlp("home");
 
@@ -51,7 +52,7 @@ async function expectInAppNavigationToHome(): Promise<void> {
 
 /** On Protected: go back in the browser history and assert that the navigation to Home committed. */
 async function browserBackToHome(): Promise<void> {
-	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+	const settlementRevision = await getRuntimeSettlementRevision();
 
 	await browser.back();
 
@@ -125,6 +126,19 @@ describe("FLP preview integration", () => {
 		await waitForProtectedPageInFlp();
 	});
 
+	it("still runs the leave guard after a cancelled cross-app navigation", async () => {
+		await loginAndGoToProtectedInFlp();
+		await setDirtyStateInFlp(true);
+
+		// FLP stops the router of the app when the cross-app navigation starts, and initializes
+		// it again once the user cancelled the prompt: the router has to resume on "protected".
+		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+		await waitForProtectedPageInFlp();
+		await waitForRouterRunningInFlp();
+
+		await expectInAppNavigationBlocked();
+	});
+
 	it("blocks dirty in-app navigation via leave guard without triggering FLP confirm", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
@@ -185,23 +199,21 @@ describe("FLP guard router hardening", () => {
 
 	it("redirects navigation to protected route to home when logged out", async () => {
 		// Logged out (resetFlpDemo asserts this). Try to navigate to protected.
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navigateToRouteInFlp("protected");
 
 		await expectRedirectedHome(settlementRevision);
 	});
 
 	it("redirects forbidden route to home", async () => {
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await navigateToRouteInFlp("forbidden");
 
 		await expectRedirectedHome(settlementRevision);
 	});
 
 	it("settles a redirect to the alias route 'staff' on 'employees', the route that matches the hash", async () => {
-		// The guard of the retired "team" route redirects to "staff". "staff" and "employees"
-		// share the pattern "employees"; UI5 matches and displays "employees".
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await press(CONTROLS.home.navTeamBtn);
 
 		await waitForPageInFlp(CONTROLS.employees.employeesPage, "Employees", { afterRevision: settlementRevision });
@@ -248,7 +260,7 @@ describe("FLP guard router hardening", () => {
 	it("blocks browser back when form is dirty", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 
 		await browser.back();
 
@@ -267,7 +279,7 @@ describe("FLP guard router hardening", () => {
 		await expectControlText(CONTROLS.home.authStatus, "Logged Out");
 
 		// Browser forward toward previously visited #/protected.
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 
 		// Enter guard redirects back to home.
@@ -279,7 +291,7 @@ describe("FLP guard router hardening", () => {
 		await browserBackToHome();
 
 		// Forward to protected (still logged in, guard allows)
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
 		await expectAppHashToBe("protected");

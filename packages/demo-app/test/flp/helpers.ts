@@ -1,5 +1,15 @@
 import type UshellContainer from "sap/ushell/Container";
-import { CONTROLS, type ControlRef, expectControlText, getAppComponentId, getControl, press } from "../shared/controls";
+import {
+	CONTROLS,
+	type ControlRef,
+	expectControlText,
+	getAppComponentId,
+	getControl,
+	isPageDisplayed,
+	press,
+	waitForComponent,
+} from "../shared/controls";
+import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 
 type PageWaitOptions = {
 	timeout?: number;
@@ -11,18 +21,6 @@ type AppHashWaitOptions = {
 	afterRevision?: number;
 };
 
-export async function getRuntimeSettlementRevisionInFlp(): Promise<number> {
-	return browser.execute(
-		(componentId: string) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			return Number(
-				Component.getComponentById(componentId).getModel("runtime").getProperty("/lastSettlementRevision"),
-			);
-		},
-		await getAppComponentId(),
-	);
-}
-
 export async function waitForPageInFlp(
 	page: ControlRef,
 	expectedTitle: string,
@@ -32,67 +30,27 @@ export async function waitForPageInFlp(
 	const name = `${page.viewId}/${page.id}`;
 
 	if (afterRevision !== undefined) {
-		await browser.waitUntil(async () => (await getRuntimeSettlementRevisionInFlp()) > afterRevision, {
+		await browser.waitUntil(async () => (await getRuntimeSettlementRevision()) > afterRevision, {
 			timeout,
 			timeoutMsg: `Page "${name}" did not observe a fresh settlement after revision ${afterRevision}`,
 		});
 	}
 
-	await browser.waitUntil(
-		async () => {
-			try {
-				const control = await getControl(page, { interaction: "root" });
-				if ((await control.getProperty("title")) !== expectedTitle) {
-					return false;
-				}
-
-				return browser.execute(
-					(componentId: string, viewId: string, id: string) => {
-						const Component = sap.ui.require("sap/ui/core/Component");
-						const domRef = Component.getComponentById(componentId).byId(viewId).byId(id).getDomRef();
-						if (!domRef) {
-							return false;
-						}
-
-						// Also false for a hidden ancestor: the page of a nested component whose container is hidden.
-						return domRef.checkVisibility({ visibilityProperty: true });
-					},
-					await getAppComponentId(page.appId),
-					page.viewId,
-					page.id,
-				);
-			} catch {
-				return false;
-			}
-		},
-		{
-			timeout,
-			timeoutMsg: `Page "${name}" did not show title "${expectedTitle}"`,
-		},
-	);
-}
-
-async function isDemoAppMounted(): Promise<boolean> {
-	return getAppComponentId().then(
-		() => true,
-		() => false,
-	);
-}
-
-export async function launchFlpApp(): Promise<void> {
-	// CDM-based FLP preview (enhancedHomePage) takes longer to bootstrap
-	// than sandbox.js mode. Wait for the demo component to mount before
-	// proceeding. If it never mounts, the test is likely running after a
-	// cross-app navigation that left the sandbox unrecoverable.
-	await browser.waitUntil(() => isDemoAppMounted(), {
-		timeout: 15000,
-		timeoutMsg:
-			"Demo component did not mount. If this follows a cross-app navigation (toExternal), " +
-			"move the test to a separate spec file so it gets its own browser session.",
+	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle).catch(() => false), {
+		timeout,
+		timeoutMsg: `Page "${name}" did not show title "${expectedTitle}"`,
 	});
+}
+
+async function launchFlpApp(): Promise<void> {
+	// The CDM-based FLP preview (enhancedHomePage) takes a while to bootstrap.
+	await waitForComponent(
+		undefined,
+		" If this follows a cross-app navigation, move the test to a separate spec file so it gets its own browser session.",
+	);
 
 	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
-	await resetDirtyState();
+	await setDirtyState(false);
 	await navigateToRouteInFlp("home");
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home");
 	await expectAppHashToBe("");
@@ -117,7 +75,7 @@ export async function loginAndGoToProtectedInFlp(): Promise<void> {
 	await press(CONTROLS.home.toggleLoginBtn);
 	await expectControlText(CONTROLS.home.authStatus, "Logged In");
 
-	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+	const settlementRevision = await getRuntimeSettlementRevision();
 	await press(CONTROLS.home.navProtectedBtn);
 	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 	await expectAppHashToBe("protected");
@@ -132,16 +90,6 @@ export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 		await press(CONTROLS.protected.dirtyCheckbox);
 	}
 	await expectControlText(CONTROLS.protected.dirtyStatus, isDirty ? "Form has unsaved changes" : "Form is clean");
-}
-
-async function resetDirtyState(): Promise<void> {
-	await browser.execute(
-		(componentId: string) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			Component.getComponentById(componentId).getModel("form").setProperty("/isDirty", false);
-		},
-		await getAppComponentId(),
-	);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +192,23 @@ export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<v
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home", options);
 }
 
+/** Wait until the router of the demo app is initialized and not stopped: FLP stops and initializes it around a cross-app navigation. */
+export async function waitForRouterRunningInFlp(): Promise<void> {
+	const componentId = await getAppComponentId();
+	await browser.waitUntil(
+		() =>
+			browser.execute((id: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				const router = Component.getComponentById(id).getRouter();
+				return router.isInitialized() && !router.isStopped();
+			}, componentId),
+		{
+			timeout: 5000,
+			timeoutMsg: "The router of the demo app did not run again after the cancelled cross-app navigation",
+		},
+	);
+}
+
 /**
  * Navigate to a route programmatically via the demo app's router.
  */
@@ -285,7 +250,7 @@ export async function expectAppHashToBe(expected: string, options: AppHashWaitOp
 				return false;
 			}
 
-			return afterRevision === undefined || (await getRuntimeSettlementRevisionInFlp()) > afterRevision;
+			return afterRevision === undefined || (await getRuntimeSettlementRevision()) > afterRevision;
 		},
 		{
 			timeout,

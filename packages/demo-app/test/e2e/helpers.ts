@@ -8,7 +8,15 @@
  * 3. We need to manipulate model state without UI interaction
  */
 
-import { CONTROLS, type ControlRef, expectControlText, getAppComponentId, press } from "../shared/controls";
+import {
+	CONTROLS,
+	type ControlRef,
+	expectControlText,
+	getAppComponentId,
+	isPageDisplayed,
+	press,
+} from "../shared/controls";
+import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 
 type SettlementSnapshot = {
 	status?: string;
@@ -180,36 +188,10 @@ export async function waitForPage(
 	}
 
 	// Phase 2: Poll until the page control is rendered and visible.
-	await browser.waitUntil(
-		async () => {
-			return browser.execute(
-				(compId: string, viewId: string, id: string, title: string) => {
-					const Component = sap.ui.require("sap/ui/core/Component");
-					const control = Component?.getComponentById(compId)?.byId(viewId)?.byId(id);
-					if (control?.getTitle?.() !== title) {
-						return false;
-					}
-
-					const domRef = control?.getDomRef?.();
-					if (!domRef) {
-						return false;
-					}
-
-					// NavContainer hides non-current pages with display:none. checkVisibility() also
-					// sees a hidden ancestor: the page of a nested component whose container is hidden.
-					return domRef.checkVisibility({ visibilityProperty: true });
-				},
-				componentId,
-				page.viewId,
-				page.id,
-				expectedTitle,
-			);
-		},
-		{
-			timeout,
-			timeoutMsg: `Page "${pageName}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
-		},
-	);
+	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle), {
+		timeout,
+		timeoutMsg: `Page "${pageName}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
+	});
 }
 
 /**
@@ -237,9 +219,9 @@ export async function fireEvent(control: ControlRef, eventName: string): Promise
 }
 
 /**
- * Reset the auth model to logged-out state. Tests call it through {@link startAtHome}.
+ * Reset the auth model to logged-out state.
  */
-export async function resetAuth(): Promise<void> {
+async function resetAuth(): Promise<void> {
 	await browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
@@ -294,11 +276,6 @@ async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 	) as Promise<RuntimeSettlementSnapshot>;
 }
 
-export async function getRuntimeSettlementRevision(): Promise<number> {
-	const settlement = await getRuntimeSettlement();
-	return settlement.revision;
-}
-
 function formatRuntimeSettlementExpectation(expected: RuntimeSettlementExpectation): string {
 	return Object.entries(expected)
 		.map(([key, value]) => `${key}=${String(value)}`)
@@ -337,23 +314,6 @@ export async function waitForRuntimeSettlement(
 	);
 
 	return matchedSettlement ?? getRuntimeSettlement();
-}
-
-/**
- * Set the dirty state by updating the form model property directly.
- *
- * The form model is owned by the Component (not the view) and inherited by views.
- * Avoids relying on CheckBox internals or two-way binding propagation.
- */
-export async function setDirtyState(isDirty: boolean): Promise<void> {
-	await browser.execute(
-		(dirty: boolean, componentId: string) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			Component.getComponentById(componentId).getModel("form").setProperty("/isDirty", dirty);
-		},
-		isDirty,
-		await getAppComponentId(),
-	);
 }
 
 /**
@@ -404,4 +364,32 @@ export async function loginAndGoToProtected(): Promise<void> {
 	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision });
 	await waitForRuntimeSettlement({ status: "Committed", route: "protected", hash: "protected" }, { afterRevision });
 	await expectHashToBe("#/protected");
+}
+
+/**
+ * Assert that the navigation started after `afterRevision` did not leave Home: the guard
+ * settled it with `status`, and the hash is empty. Home and the empty hash are also the
+ * starting state, so the fresh settlement is what proves that the navigation ran.
+ */
+export async function expectKeptOnHome(
+	status: "Redirected" | "Blocked",
+	afterRevision: number,
+	timeout?: number,
+): Promise<void> {
+	await waitForRuntimeSettlement({ status, route: "home", hash: "" }, { afterRevision, timeout });
+	await expectHashToBe("", `Hash should be empty after the navigation settled as ${status}`);
+	await waitForPage(CONTROLS.home.homePage, "Home");
+}
+
+/** On Protected: press the Page nav button and assert that the navigation to Home committed. */
+export async function navBackToHome(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevision();
+	await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+
+	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
+	await waitForRuntimeSettlement(
+		{ status: "Committed", route: "home", hash: "" },
+		{ afterRevision: settlementRevision },
+	);
+	await expectHashToBe("");
 }

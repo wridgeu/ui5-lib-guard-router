@@ -1,8 +1,9 @@
 import { CONTROLS, press } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectHashToBe,
+	expectKeptOnHome,
 	getHistoryLength,
-	getRuntimeSettlementRevision,
 	startAtHome,
 	toggleLogin,
 	waitForPage,
@@ -20,8 +21,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navBlockedBtn);
 
-		await waitForRuntimeSettlement({ status: "Blocked", route: "home", hash: "" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Blocked", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -33,8 +33,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navForbiddenBtn);
 
-		await waitForRuntimeSettlement({ status: "Redirected", route: "home", hash: "" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -46,8 +45,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navProtectedBtn);
 
-		await waitForRuntimeSettlement({ status: "Redirected", route: "home", hash: "" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);

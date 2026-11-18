@@ -1,0 +1,11 @@
+{
+	"sales": [
+		{ "quarter": 1, "amount": 1200000, "currency": "EUR" },
+		{ "quarter": 2, "amount": 1400000, "currency": "EUR" },
+		{ "quarter": 3, "amount": 1100000, "currency": "EUR" }
+	],
+	"salaryBudgets": {
+		"engineering": { "amount": 4800000, "currency": "EUR" },
+		"sales": { "amount": 2900000, "currency": "EUR" }
+	}
+}

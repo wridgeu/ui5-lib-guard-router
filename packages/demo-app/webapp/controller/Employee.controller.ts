@@ -1,4 +1,3 @@
-import type { GuardRouter } from "ui5/guard/router/types";
 import type Text from "sap/m/Text";
 import BaseController from "./BaseController";
 
@@ -13,20 +12,19 @@ import BaseController from "./BaseController";
  */
 export default class EmployeeController extends BaseController {
 	override onInit(): void {
-		this.getRouter<GuardRouter>().getRoute("employee")?.attachPatternMatched(this._showMeta, this);
+		this.getRouter().getRoute("employee")?.attachPatternMatched(this._showMeta, this);
 	}
 
 	override onExit(): void {
-		this.getRouter<GuardRouter>().getRoute("employee")?.detachPatternMatched(this._showMeta, this);
+		this.getRouter().getRoute("employee")?.detachPatternMatched(this._showMeta, this);
 	}
 
 	private _showMeta(): void {
-		const meta = this.getRouter<GuardRouter>().getRouteMeta("employee");
+		const meta = this.getRouter().getRouteMeta("employee");
 		(this.byId("employeeMeta") as Text).setText(JSON.stringify(meta));
 	}
 
-	/** Navigate back to the Employees list. */
-	onNavBack(): void {
-		this.getRouter<GuardRouter>().navTo("employees");
+	override onNavBack(): void {
+		this.navBack("employees");
 	}
 }

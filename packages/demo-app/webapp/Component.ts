@@ -11,7 +11,7 @@ import { createRuntimeModel } from "./model/runtime";
  *
  * **Declarative** (manifest.json `guardRouter.guards`):
  * - Global navigation logger (`"*"`)
- * - `blocked` and `forbidden` enter guards (shorthand array syntax)
+ * - `blocked`, `forbidden` and `team` enter guards (shorthand array syntax)
  * - `protected` leave guard (object form with `leave`)
  *
  * **Programmatic** (registered here in `init()`):
@@ -44,8 +44,8 @@ export default class Component extends UIComponent {
 		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
-		// Programmatic guards that close over component models. Manifest guards
-		// reach the component through context.ownerComponent instead.
+		// The permission guard closes over the auth model. Manifest guards reach the
+		// component through context.ownerComponent instead.
 		router.addRouteGuard("admin", adminGuard);
 		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
 		router.addRouteGuard("protected", this._permissionGuard);

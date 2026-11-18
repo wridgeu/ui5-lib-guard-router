@@ -1,5 +1,13 @@
-import { CONTROLS, expectControlText, press } from "../shared/controls";
-import { setConfidentialUnlocked, settleReportsNavigation, waitForReportsComponent } from "../shared/reports";
+import type StandardListItem from "sap/m/StandardListItem";
+import {
+	CONTROLS,
+	REPORTS_APP_ID,
+	expectControlText,
+	getAppComponentId,
+	press,
+	waitForComponent,
+} from "../shared/controls";
+import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
 import { expectHashToBe, fireEvent, getHistoryLength, setBrowserHash, startAtHome, waitForPage } from "./helpers";
 
 const OVERVIEW_HASH = "#/reports";
@@ -12,7 +20,7 @@ describe("Nested component with its own guard router", () => {
 		await startAtHome();
 
 		await press(CONTROLS.home.navReportsBtn);
-		await waitForReportsComponent();
+		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		await setConfidentialUnlocked(false);
 		await expectControlText(CONTROLS.reportsOverview.accessStatus, "Confidential reports locked");
@@ -35,6 +43,34 @@ describe("Nested component with its own guard router", () => {
 		const settlement = await settleReportsNavigation();
 		expect(settlement.status).toBe("committed");
 		expect(settlement.route).toBe("sales");
+	});
+
+	it("should list the sales of the reports model with formatted amounts", async () => {
+		await press(CONTROLS.reportsOverview.navSalesBtn);
+		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
+
+		const { viewId, id } = CONTROLS.reportsSales.salesList;
+		const readItems = async (): Promise<string[]> =>
+			browser.execute(
+				(componentId: string, view: string, list: string) => {
+					const Component = sap.ui.require("sap/ui/core/Component");
+					const items: StandardListItem[] = Component.getComponentById(componentId)
+						.byId(view)
+						.byId(list)
+						.getItems();
+					// The number format separates amount and currency with a no-break space.
+					return items.map((item) => `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " "));
+				},
+				await getAppComponentId(REPORTS_APP_ID),
+				viewId,
+				id,
+			);
+
+		// The model loads its data asynchronously.
+		await browser.waitUntil(async () => (await readItems()).length > 0, {
+			timeoutMsg: "The sales list has no items",
+		});
+		expect(await readItems()).toEqual(["Q1: 1.2M EUR", "Q2: 1.4M EUR", "Q3: 1.1M EUR"]);
 	});
 
 	it("should redirect to the overview when the nested guard finds the report locked", async () => {
@@ -65,9 +101,12 @@ describe("Nested component with its own guard router", () => {
 		expect(settlement.status).toBe("committed");
 		expect(settlement.route).toBe("confidential");
 
+		// The nav button goes one step back in the browser history.
+		const historyLength = await getHistoryLength();
 		await fireEvent(CONTROLS.reportsConfidential.confidentialPage, "navButtonPress");
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		await expectHashToBe(OVERVIEW_HASH);
+		expect(await getHistoryLength()).toBe(historyLength);
 	});
 
 	it("should handle browser back within the nested router and out of it", async () => {
@@ -85,9 +124,11 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should return to the parent app from the overview and display the nested component again", async () => {
+		const historyLength = await getHistoryLength();
 		await fireEvent(CONTROLS.reportsOverview.overviewPage, "navButtonPress");
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await expectHashToBe("");
+		expect(await getHistoryLength()).toBe(historyLength);
 
 		await press(CONTROLS.home.navReportsBtn);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
@@ -137,7 +178,7 @@ describe("Nested component with its own guard router", () => {
 		expect(settlement.route).toBe("overview");
 	});
 
-	// Last test of the file: the reload drops the wdi5 bridge, so it only uses browser.execute helpers.
+	// Last test of the block: the reload drops the wdi5 bridge, so it only uses browser.execute helpers.
 	it("should guard the first display of the nested component on a fresh page load", async () => {
 		await setConfidentialUnlocked(true);
 		await press(CONTROLS.reportsOverview.navConfidentialBtn);
@@ -147,11 +188,52 @@ describe("Nested component with its own guard router", () => {
 		// The reload creates both components anew: the report is locked again.
 		await browser.refresh();
 
-		await waitForReportsComponent();
+		await waitForComponent(REPORTS_APP_ID);
 		await expectHashToBe(OVERVIEW_HASH, { timeout: 10000 });
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		const settlement = await settleReportsNavigation();
 		expect(settlement.status).toBe("redirected");
 		expect(settlement.route).toBe("overview");
+	});
+});
+
+// The reload above dropped the wdi5 bridge: these tests only use browser.execute helpers.
+describe("Nested component: nav button without a previous history entry", () => {
+	it("should replace the entry with the overview when the app was entered on a report", async () => {
+		// The entry before the deep link is Home: a step back in the history would not end on the overview.
+		await setBrowserHash("");
+		await waitForPage(CONTROLS.home.homePage, "Home");
+		await setBrowserHash(SALES_HASH);
+		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
+
+		await browser.refresh();
+		await waitForComponent(REPORTS_APP_ID);
+		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
+		const historyLength = await getHistoryLength();
+
+		await fireEvent(CONTROLS.reportsSales.salesPage, "navButtonPress");
+
+		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
+		await expectHashToBe(OVERVIEW_HASH);
+		expect(await getHistoryLength()).toBe(historyLength);
+	});
+
+	it("should replace the entry with Home of the parent app when the app was entered on the overview", async () => {
+		// The entry before the deep link is Employees: a step back in the history would not end on Home.
+		await setBrowserHash("#/employees");
+		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+		await setBrowserHash(OVERVIEW_HASH);
+		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
+
+		await browser.refresh();
+		await waitForComponent(REPORTS_APP_ID);
+		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
+		const historyLength = await getHistoryLength();
+
+		await fireEvent(CONTROLS.reportsOverview.overviewPage, "navButtonPress");
+
+		await waitForPage(CONTROLS.home.homePage, "Home");
+		await expectHashToBe("");
+		expect(await getHistoryLength()).toBe(historyLength);
 	});
 });

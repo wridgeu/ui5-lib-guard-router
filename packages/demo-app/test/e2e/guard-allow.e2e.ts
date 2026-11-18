@@ -1,12 +1,6 @@
 import { CONTROLS, press } from "../shared/controls";
-import {
-	expectHashToBe,
-	getRuntimeSettlementRevision,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { getRuntimeSettlementRevision } from "../shared/models";
+import { expectHashToBe, startAtHome, toggleLogin, waitForPage, waitForRuntimeSettlement } from "./helpers";
 
 describe("Guard allows navigation when logged in", () => {
 	it("should allow navigation to Protected after login", async () => {

@@ -1,24 +1,14 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectHashToBe,
-	getRuntimeSettlementRevision,
+	expectKeptOnHome,
 	setBrowserHash,
 	startAtHome,
 	toggleLogin,
 	waitForPage,
 	waitForRuntimeSettlement,
 } from "./helpers";
-
-/**
- * Assert that the hash change made after `afterRevision` did not leave Home: the guard
- * settled it with `status` and the router restored the empty hash. Home and the empty
- * hash are also the starting state, so the fresh settlement is what proves the outcome.
- */
-async function expectKeptOnHome(status: "Redirected" | "Blocked", afterRevision: number): Promise<void> {
-	await waitForRuntimeSettlement({ status, route: "home", hash: "" }, { afterRevision });
-	await expectHashToBe("", "Hash should be restored to home");
-	await waitForPage(CONTROLS.home.homePage, "Home");
-}
 
 describe("Direct URL navigation with guards", () => {
 	beforeEach(async () => {

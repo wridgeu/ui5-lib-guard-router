@@ -3,8 +3,5 @@
 	xmlns="sap.m"
 	controllerName="demo.app.controller.App"
 	displayBlock="true">
-	<Shell>
-		<App id="appContainer">
-		</App>
-	</Shell>
+	<App id="appContainer" />
 </mvc:View>

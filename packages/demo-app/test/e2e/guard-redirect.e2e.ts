@@ -1,11 +1,6 @@
 import { CONTROLS, press } from "../shared/controls";
-import {
-	expectHashToBe,
-	getRuntimeSettlementRevision,
-	startAtHome,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { getRuntimeSettlementRevision } from "../shared/models";
+import { expectKeptOnHome, startAtHome } from "./helpers";
 
 describe("Guard redirects to Home", () => {
 	it("should redirect from Forbidden to Home", async () => {
@@ -14,13 +9,6 @@ describe("Guard redirects to Home", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await press(CONTROLS.home.navForbiddenBtn);
 
-		// Home and the empty hash are also the starting state: the settlement after
-		// `settlementRevision` proves that the navigation ran and was redirected.
-		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "" },
-			{ afterRevision: settlementRevision },
-		);
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await expectKeptOnHome("Redirected", settlementRevision);
 	});
 });

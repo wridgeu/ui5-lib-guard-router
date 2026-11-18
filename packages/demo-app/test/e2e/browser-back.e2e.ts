@@ -1,7 +1,8 @@
 import { CONTROLS } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectHashToBe,
-	getRuntimeSettlementRevision,
+	expectKeptOnHome,
 	loginAndGoToProtected,
 	startAtHome,
 	toggleLogin,
@@ -40,14 +41,7 @@ describe("Browser back navigation with guards", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 
-		// Home and the empty hash are also the state before the forward navigation: the
-		// settlement after `settlementRevision` proves that the guard ran and redirected.
-		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "" },
-			{ afterRevision: settlementRevision },
-		);
-		await expectHashToBe("", "Hash should settle to home after guard redirect");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await expectKeptOnHome("Redirected", settlementRevision);
 	});
 
 	it("should handle multiple back/forward cycles", async () => {

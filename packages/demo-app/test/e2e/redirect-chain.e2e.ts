@@ -1,7 +1,8 @@
 import { CONTROLS, press } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectHashToBe,
-	getRuntimeSettlementRevision,
+	expectKeptOnHome,
 	startAtHome,
 	toggleLogin,
 	waitForPage,
@@ -20,12 +21,7 @@ describe("Redirect chain: admin -> protected -> home", () => {
 		// Admin guard redirects to protected, protected's async auth guard
 		// checks login state (logged out) and redirects to home.
 		// The entire chain settles as Redirected on home.
-		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "" },
-			{ afterRevision: rev, timeout: 5000 },
-		);
-		await expectHashToBe("");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await expectKeptOnHome("Redirected", rev, 5000);
 	});
 
 	it("should stop at protected when logged in (admin -> protected)", async () => {

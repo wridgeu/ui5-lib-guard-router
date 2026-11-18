@@ -7,7 +7,7 @@
 		title="{i18n>overviewTitle}"
 		titleAlignment="Center"
 		showNavButton="true"
-		navButtonPress=".onNavHome">
+		navButtonPress=".onNavBack">
 		<content>
 			<VBox id="overviewContent" class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
 				<MessageStrip

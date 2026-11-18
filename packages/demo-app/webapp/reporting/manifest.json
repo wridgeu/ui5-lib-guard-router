@@ -13,6 +13,12 @@
 		"embeddedBy": "../",
 		"applicationVersion": {
 			"version": "1.0.0"
+		},
+		"dataSources": {
+			"reports": {
+				"type": "JSON",
+				"uri": "model/reports.json"
+			}
 		}
 	},
 	"sap.ui": {
@@ -45,6 +51,10 @@
 					"supportedLocales": [""],
 					"fallbackLocale": ""
 				}
+			},
+			"reports": {
+				"type": "sap.ui.model.json.JSONModel",
+				"dataSource": "reports"
 			}
 		},
 		"rootView": {

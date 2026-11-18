@@ -15,7 +15,7 @@
 				title="{i18n>notFoundTitle}"
 				description="{i18n>notFoundDescription}">
 				<additionalContent>
-					<Button id="backToOverviewBtn" text="{i18n>backToOverview}" type="Emphasized" press=".onNavBack" />
+					<Button id="backToOverviewBtn" text="{i18n>backToOverview}" type="Emphasized" press=".onNavToOverview" />
 				</additionalContent>
 			</IllustratedMessage>
 		</content>

@@ -1,5 +1,5 @@
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
 
@@ -22,7 +22,7 @@ export default class HomeController extends BaseController {
 		// Register a standalone leave guard via addLeaveGuard().
 		// The guard is registered when the controller initializes and
 		// removed when it is destroyed (see onExit below).
-		const router = this.getRouter<GuardRouter>();
+		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
@@ -56,13 +56,10 @@ export default class HomeController extends BaseController {
 
 	onNavToEmployees(): void {
 		this.createScenarioRunner().recordAction("actionNavTo", ["employees"]);
-		this.getRouter<GuardRouter>().navTo("employees");
+		this.getRouter().navTo("employees");
 	}
 
-	/**
-	 * "team" is a retired page: its guard redirects to "staff", the legacy name of "employees".
-	 * Both have the pattern "employees", so the navigation settles on "employees".
-	 */
+	/** "team" is a retired page, see guards/retiredPageGuard.ts. */
 	onNavToTeam(): void {
 		this.createScenarioRunner().recordAction("actionNavTo", ["team"]);
 		this.getRouter().navTo("team");
@@ -106,7 +103,7 @@ export default class HomeController extends BaseController {
 	 */
 	override onExit(): void {
 		if (this._leaveGuard) {
-			const router = this.getRouter<GuardRouter>();
+			const router = this.getRouter();
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}

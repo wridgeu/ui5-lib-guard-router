@@ -13,18 +13,6 @@ type ReportsSettlement = {
 	hash: string;
 };
 
-/** The nested component is loaded lazily when the parent's "reports" route is first displayed. */
-export async function waitForReportsComponent(timeout = 15000): Promise<void> {
-	await browser.waitUntil(
-		() =>
-			getAppComponentId(REPORTS_APP_ID).then(
-				() => true,
-				() => false,
-			),
-		{ timeout, timeoutMsg: `Nested component "${REPORTS_APP_ID}" was not created within ${timeout}ms` },
-	);
-}
-
 /** Set the lock that the nested component's `confidential` guard reads from the `access` model. */
 export async function setConfidentialUnlocked(unlocked: boolean): Promise<void> {
 	await browser.execute(

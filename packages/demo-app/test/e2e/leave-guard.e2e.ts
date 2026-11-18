@@ -1,10 +1,9 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
+import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 import {
 	expectHashToBe,
 	fireEvent,
-	getRuntimeSettlementRevision,
 	loginAndGoToProtected,
-	setDirtyState,
 	startAtHome,
 	waitForPage,
 	waitForRuntimeSettlement,

@@ -82,7 +82,12 @@ export const CONTROLS = {
 		["overviewPage", "unlockCheckbox", "accessStatus", "navSalesBtn", "navConfidentialBtn"],
 		REPORTS_APP_ID,
 	),
-	reportsSales: viewControls("demo.app.reporting.view.Sales", "salesView", ["salesPage"], REPORTS_APP_ID),
+	reportsSales: viewControls(
+		"demo.app.reporting.view.Sales",
+		"salesView",
+		["salesPage", "salesList"],
+		REPORTS_APP_ID,
+	),
 	reportsNotFound: viewControls("demo.app.reporting.view.NotFound", "notFoundView", ["notFoundPage"], REPORTS_APP_ID),
 	reportsConfidential: viewControls(
 		"demo.app.reporting.view.Confidential",
@@ -96,7 +101,7 @@ export const CONTROLS = {
  * wdi5 selector for a control. The anchored ID is matched within the view, so
  * sub-elements such as `homePage-navButton` are never picked up.
  */
-export function selectorFor(ref: ControlRef, extra: Partial<wdi5Selector["selector"]> = {}): wdi5Selector {
+function selectorFor(ref: ControlRef, extra: Partial<wdi5Selector["selector"]> = {}): wdi5Selector {
 	return {
 		selector: { viewName: ref.viewName, id: new RegExp(`^${ref.id}$`), ...extra },
 		forceSelect: true,
@@ -173,4 +178,39 @@ export async function getAppComponentId(appId = APP_ID): Promise<string> {
 		throw new Error(`Expected exactly one "${appId}" component, found ${ids.length}`);
 	}
 	return ids[0];
+}
+
+/**
+ * Wait until exactly one component with the `sap.app/id` is mounted: after a page load,
+ * or for a component that is loaded lazily.
+ */
+export async function waitForComponent(appId = APP_ID, hint = ""): Promise<void> {
+	await browser.waitUntil(
+		() =>
+			getAppComponentId(appId).then(
+				() => true,
+				() => false,
+			),
+		{ timeout: 15000, timeoutMsg: `Component "${appId}" was not mounted within 15s.${hint}` },
+	);
+}
+
+/**
+ * Whether the page has the title and is visible. A NavContainer hides the pages that are
+ * not current with display:none; checkVisibility() also sees a hidden ancestor: the page
+ * of a nested component whose container is hidden.
+ */
+export async function isPageDisplayed(page: ControlRef, expectedTitle: string): Promise<boolean> {
+	return browser.execute(
+		(componentId: string, viewId: string, id: string, title: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const control = Component.getComponentById(componentId).byId(viewId)?.byId(id);
+			const domRef = control?.getTitle() === title ? control.getDomRef() : null;
+			return domRef ? domRef.checkVisibility({ visibilityProperty: true }) : false;
+		},
+		await getAppComponentId(page.appId),
+		page.viewId,
+		page.id,
+		expectedTitle,
+	);
 }

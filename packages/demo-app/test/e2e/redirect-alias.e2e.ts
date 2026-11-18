@@ -1,7 +1,7 @@
 import { CONTROLS, expectControlText, getAppComponentId, press } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectHashToBe,
-	getRuntimeSettlementRevision,
 	setBrowserHash,
 	startAtHome,
 	toggleLogin,

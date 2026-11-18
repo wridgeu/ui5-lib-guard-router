@@ -7,9 +7,9 @@ import {
 } from "./helpers";
 
 /**
- * Clean cross-app navigation test. Isolated spec file because toExternal()
- * navigates to Shell-home, leaving the sandbox unrecoverable for the
- * browser session.
+ * Clean cross-app navigation test. Isolated spec file because the
+ * cross-app navigation ends on Shell-home, leaving the sandbox
+ * unrecoverable for the browser session.
  */
 describe("FLP clean cross-app navigation (isolated session)", () => {
 	before(async () => {
