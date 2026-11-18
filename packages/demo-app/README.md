@@ -63,6 +63,8 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | `createErrorDemoGuard()`          | Sync error handling behavior                                        |
 | `createAsyncErrorDemoGuard()`     | Async error handling behavior                                       |
 
+No scenario of the demo settles as `Error`.
+
 ## Overlapping routes (`team` and `staff`)
 
 The people list was renamed from `staff` to `employees`. The manifest keeps `staff` as an alias: same pattern `employees`, same target, listed after `employees`. `navTo("staff")` in old code still works, and because UI5 matches the first route in manifest order, the route that matches the hash `employees` is always `employees`.
@@ -147,13 +149,13 @@ All controllers extend `BaseController`, which provides shared helpers: `getRout
 
 These files power the runtime inspector panels and hash-driven scenario buttons in the UI. They are isolated from the library and exist solely to make the demo interactive.
 
-| File                         | Purpose                                                                                                                                       |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, and lazily registers the FLP dirty-state provider                             |
-| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model |
-| `routing/hashNavigation.ts`  | Wrapper around the global `HashChanger` for the scenario buttons; like the address bar, it replaces the whole hash, including the nested part |
-| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, and last navigation settlement details): values only, no texts      |
-| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                   |
+| File                         | Purpose                                                                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, registers the FLP dirty-state provider lazily and deregisters it while the app is hidden |
+| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model            |
+| `routing/hashNavigation.ts`  | Wrapper around the global `HashChanger` for the scenario buttons; like the address bar, it replaces the whole hash, including the nested part            |
+| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, and last navigation settlement details): values only, no texts                 |
+| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                              |
 
 ### Models
 
@@ -196,6 +198,8 @@ The `start:flp` script launches a local FLP sandbox at `/test/flp.html#app-previ
 - Cross-app navigation (hash changes to routes outside the app) triggers the FLP dirty-state popup instead of the router's leave guard, avoiding a conflict where both would fire
 
 The `crossNavigation.inbounds` configuration in `manifest.json` defines the semantic object (`guarddemo`, action `display`) used by the FLP tile.
+
+**Keep-alive:** the manifests of the app and of the nested reporting component declare `sap.ui5/keepAlive/supported` (UI5 supports keep-alive only when every nested component does). With `?sap-keep-alive=true` the launchpad hides the app instead of destroying it when the user opens another app. UI5 then stops the router and calls `Component.onDeactivate()`, which deregisters the dirty-state provider through `RuntimeCoordinator.deactivate()`. When the app is shown again, UI5 calls `router.initialize()`, which parses the hash through the guards, and `onActivate()` registers the provider again. Returning through the intent without an inner route starts on the default route. The setup and its reasons are in the library README, [Keep-alive apps](../lib/README.md#keep-alive-apps).
 
 ## Running
 
@@ -267,7 +271,7 @@ Test files are in `test/e2e/`:
 | `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                                                                                                                     |
 | `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, blocked browser back leaves the history as it was, nav button after a block                                                                |
 | `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                                                                                                             |
-| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                                                                                                                      |
+| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out), with the log of the permission check of the hop in between, and stop points                                                         |
 | `redirect-alias.e2e.ts`      | Redirect to an alias route name and `navTo()` to the alias settle on the route that matches the hash; browser back after a redirect returns to Home, a directly entered `#/team` is replaced |
 | `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                                                                                                            |
 | `nested-component.e2e.ts`    | Nested component: prefixed hash, sales figures of the reports model, guarded nested route, back navigation with and without a previous entry, deep links, fresh page load                    |
@@ -276,16 +280,21 @@ Tests reference controls only through `test/shared/controls.ts`: each entry is t
 
 Helpers of the standalone suite are in `test/e2e/helpers.ts`, for example `waitForPage`, `expectHashToBe`, `fireEvent`, `waitForRuntimeSettlement`, `getHistoryLength`, `startAtHome`, `expectKeptOnHome` and `navBackToHome`. Both suites share `test/shared/`: `controls.ts` (control references, `press`, `waitForComponent(appId)`, `isPageDisplayed`), `models.ts` (`setDirtyState`, `getRuntimeSettlementRevision`) and `reports.ts` for the nested component (`setConfidentialUnlocked`, `settleReportsNavigation`; wait for it with `waitForComponent(REPORTS_APP_ID)`).
 
-FLP-specific coverage lives in `test/flp/` and is split across four spec files:
+The E2E configuration (`test/wdio.conf.ts`) loads the app with `sap-ui-language=en`, because the expected texts and number formats are those of English.
 
-| File                         | Purpose                                                                                                                                                                                             |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, redirect to an alias route, dirty-state separation, leave guard after a cancelled cross-app navigation (router stopped and resumed), browser history |
-| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation through the `Navigation` service's `navigate()`: user confirms, navigation completes                                                                                     |
-| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation through the `Navigation` service's `navigate()`: no dirty prompt, navigation completes                                                                                   |
-| `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display                                                                              |
+FLP-specific coverage lives in `test/flp/` and is split across five spec files:
 
-The cross-app specs are isolated because they navigate to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
+| File                         | Purpose                                                                                                                                                                                                                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flp-preview.e2e.ts`         | Guard hardening under CDM: enter/leave guards, redirect to an alias route, dirty-state separation, leave guard after a cancelled cross-app navigation (router stopped and resumed), a hash change that a leave or enter guard blocks after a cancelled cross-app navigation, browser history |
+| `flp-keep-alive.e2e.ts`      | `sap-keep-alive=true`: the hidden app keeps its component and unsaved data; the launchpad asks about them only when the demo app is the one that is left                                                                                                                                     |
+| `flp-cross-app.e2e.ts`       | Dirty cross-app navigation through the `Navigation` service's `navigate()`: user confirms, navigation completes                                                                                                                                                                              |
+| `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation through the `Navigation` service's `navigate()`: no dirty prompt, navigation completes                                                                                                                                                                            |
+| `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display                                                                                                                                                                       |
+
+The cross-app and keep-alive specs are isolated because they navigate to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
+
+`flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds a minimal component (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
 
 ## Framework
 

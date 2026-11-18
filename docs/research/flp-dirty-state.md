@@ -287,6 +287,10 @@ In-app route changes, including an app's own `navTo()`, run the same filter. Whe
 
 A prompted in-app change does not reach the app router unless the user confirms. A guard router's `navTo()` whose hash write is held back this way settles as `Blocked`; the confirmed change then arrives as a hash change and runs through the guards. Leave guards plus a provider that returns `false` for in-app navigation keep the two scopes apart.
 
+### Keep-alive apps
+
+The shell asks every registered provider on each navigation and removes none itself. With `sap-keep-alive`, a hidden app embedded in the launchpad page keeps its provider registered, so the user is asked about its unsaved data while navigating between other apps. The app has to deregister the provider while it is hidden (`onDeactivate()`/`onActivate()`, see the library README, [Keep-alive apps](../../packages/lib/README.md#keep-alive-apps)). For apps in an iframe, the app runtime of SAPUI5 1.144.0 stores and swaps the providers per app (`AppLifeCycleAgent`); the 1.149.0 sources have no such swap. Source locations: [FLP evidence table](../reference/upstream-parity.md#fiori-launchpad-sapushell).
+
 ## Production FLP vs Sandbox Preview
 
 The `ShellNavigationHashChanger` replacement is central to understanding how leave guards behave in each environment.

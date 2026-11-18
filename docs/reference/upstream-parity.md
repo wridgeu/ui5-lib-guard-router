@@ -15,6 +15,11 @@ The vendored lane exists to answer a specific question:
 
 It is a conformance-style test layer, not a replacement for the library's own feature tests.
 
+The library README sums up the result per behavior and cites the test for each row:
+[Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter).
+This page describes how the comparison works. All four layers run on both QUnit lanes, OpenUI5
+1.144.0 (`npm run test:qunit`) and 1.120.0 (`npm run test:qunit:compat:120`).
+
 ## Contract
 
 The upstream parity lane verifies only the native inherited contract:
@@ -200,6 +205,24 @@ route that is shown with no navigation at all, and greedy routes, which match an
 events as with the native router. A `parse()` of the current hash matches the route again, as
 it does natively; only a redirect to the route that is shown skips the match.
 
+## Routers that share a hash changer
+
+Module "NativeCompat - Two routers on one hash changer" of `NativeRouterCompat.qunit.ts`
+creates two components with routing, neither a routing target of the other, so UI5 gives both
+routers the hash changer of the root (described in
+[Routers that share a hash changer](./architecture.md#routers-that-share-a-hash-changer)).
+
+- "two guard routers without guards behave like two native routers": hash changes, `navTo()`
+  of either router, `stop()` and `initialize(true)` of the first leave the trace of two native
+  routers.
+- "a hash change that the first router redirects is not parsed by the second router after the
+  target": differs on purpose. UI5 reports the redirected hash to the second router after the
+  target. A native second router parses that stale hash and displays its route although the URL
+  shows the target; a guard router drops the report.
+- "a hash change that the first router blocks is parsed by the second router, which follows the
+  URL back": the second router displays each hash while the URL shows it, as a native router
+  next to a guard router does.
+
 ## Private UI5 Coupling
 
 The vendored lane covers public behavior. The router also depends on two things in UI5 that no
@@ -292,9 +315,13 @@ SAPUI5 sources; the `sap/ui/core` rows are from OpenUI5.
 | Keep-alive: routers of cached apps stopped before a new app is created                | `appIntegration/contracts/EmbeddedUI5Handler.js` line 33        | `appIntegration/contracts/EmbeddedUI5Handler.js` line 58        |
 | Keep-alive: hide calls `stop()`, unless `isKeepAliveSupported()`                      | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 88, 100  | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 138, 150 |
 | Keep-alive: show calls `initialize(true)`, unless `isKeepAliveSupported()`            | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 112, 128 | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 170, 186 |
+| `Component#deactivate()` stops the router                                             | `sap/ui/core/Component.js` line 3968 (OpenUI5)                  | `sap/ui/core/Component.js` line 3974 (OpenUI5)                  |
+| `Component#activate()` calls `initialize()`                                           | `sap/ui/core/Component.js` line 4031 (OpenUI5)                  | `sap/ui/core/Component.js` line 4037 (OpenUI5)                  |
+| Restricted keep-alive: kept apps destroyed on the way home                            | `appIntegration/AppLifeCycle.js` line 437                       | `appIntegration/AppLifeCycle.js` line 611                       |
+| Iframe app hidden: `deactivate()` or `stop()`                                         | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 295, 301   | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 323, 329   |
+| Iframe app shown: `activate()`, `initialize()` or `initialize(true)`                  | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 339-348    | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 363-372    |
+| Iframe runtime swaps the dirty-state providers per app                                | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 290, 331   | not present                                                     |
 
 ## Current Scope
 
-The initial implementation vendors the `Router.qunit.js` entrypoint from the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports a small first batch of parity cases through the local harness.
-
-This is intentionally incremental: start with high-value router cases, keep provenance explicit, and expand only when the maintenance cost is justified.
+The vendored lane holds the `Router.qunit.js` entry point of the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports two of its cases through the local harness: forward navigation on a `NavContainer` and back navigation by view level. Further cases are ported when they are worth the maintenance.
