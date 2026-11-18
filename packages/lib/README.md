@@ -179,8 +179,10 @@ export default class Component extends UIComponent {
 
 The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
 
-- **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. If a guard blocks or redirects, the hash never changes, so no history entry is created.
-- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks, the router restores the previous hash via `replaceHash()`. A redirect replaces the current history entry with the target.
+- **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
+- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks, the router undoes the hash change. A redirect replaces the history entry of the hash change with the target.
+
+[Browser history](#browser-history) describes what each case leaves in the history.
 
 Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
 
@@ -246,12 +248,12 @@ Enter guards return `GuardResult`, covering four behaviors:
 GuardResult = boolean | string | GuardRedirect
 ```
 
-| Return                                         | Type            | When to use                                             | Effect                                                                                                                                                       |
-| ---------------------------------------------- | --------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `true`                                         | `boolean`       | Guard condition passes                                  | Allow navigation                                                                                                                                             |
-| `false`                                        | `boolean`       | Guard condition fails, no specific destination          | Stay on current route. Programmatic `navTo()` creates no history entry. Browser-initiated navigation restores the previous hash.                             |
-| `"routeName"`                                  | `string`        | Redirect to a fixed route (no parameters needed)        | Navigate to target route. Programmatic `navTo()` goes directly to target with no intermediate entry. Browser-initiated navigation replaces the current hash. |
-| `{ route, parameters?, componentTargetInfo? }` | `GuardRedirect` | Redirect and pass route parameters or component targets | Same as string redirect, with parameters                                                                                                                     |
+| Return                                         | Type            | When to use                                             | Effect                                                                                                           |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `true`                                         | `boolean`       | Guard condition passes                                  | Allow navigation                                                                                                 |
+| `false`                                        | `boolean`       | Guard condition fails, no specific destination          | Stay on current route. The URL and the history stay as they were, see [Browser history](#browser-history)        |
+| `"routeName"`                                  | `string`        | Redirect to a fixed route (no parameters needed)        | Navigate to target route. The guarded hash does not stay in the history, see [Browser history](#browser-history) |
+| `{ route, parameters?, componentTargetInfo? }` | `GuardRedirect` | Redirect and pass route parameters or component targets | Same as string redirect, with parameters                                                                         |
 
 `toArguments` holds the route's parameters as UI5's `Route#getURL()` expects them back. A query parameter of the pattern (`products{?query}` or `products:?query:`) arrives under the key `"?query"` as an object, `{ "?query": { tab: "notes" } }`; an optional parameter that the hash leaves out is `undefined`. Pass the same shape in `GuardRedirect.parameters`.
 
@@ -303,7 +305,7 @@ const result: NavigationResult = await router.navigationSettled();
 | `NavigationOutcome.Committed`  | Guards allowed the navigation; target route is active                                                   |
 | `NavigationOutcome.Bypassed`   | Guards allowed the navigation, but no route matched; UI5 continued with `bypassed` / not-found handling |
 | `NavigationOutcome.Blocked`    | A guard blocked navigation; previous route stays active                                                 |
-| `NavigationOutcome.Redirected` | A guard redirected navigation to a different route                                                      |
+| `NavigationOutcome.Redirected` | A guard redirected navigation to a different route, or to the route that is shown                       |
 | `NavigationOutcome.Cancelled`  | Navigation was cancelled before settling (superseded, stopped, or destroyed)                            |
 | `NavigationOutcome.Error`      | A guard threw or rejected; previous route stays active. `result.error` holds the thrown value           |
 
@@ -371,7 +373,7 @@ router.attachNavigationSettled((event) => {
 });
 ```
 
-A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL has already been restored when the event fires, so a handler sees the hash of the route the user is on, and a navigation or hash change it starts is not undone by the restore. (On first load, a blocked non-empty hash settles before the router falls back to the default route.) Two things follow from navigating inside the event:
+A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL has already been restored when the event fires (for a blocked back or forward step, the event waits for that, see [Browser history](#browser-history)), so a handler sees the hash of the route the user is on, and a navigation or hash change it starts is not undone by the restore. (On first load, a blocked non-empty hash settles before the router falls back to the default route.) Two things follow from navigating inside the event:
 
 - A navigation that is left again while it commits (the handler navigates on synchronously for a `Committed` or `Redirected` settlement) is not displayed and fires no `routeMatched`; only the handler's target is.
 - When a navigation is `Cancelled` because another one supersedes it, the event fires before the superseding navigation starts. That navigation continues after the handler returns and supersedes what the handler started: a navigation that already committed is navigated away from, one whose guards are still pending is dropped without a settlement of its own. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
@@ -396,6 +398,14 @@ An error thrown while an allowed navigation is carried out, for example by a `be
 Each phase short-circuits on the first non-`true` result. If a leave guard blocks, no enter guards run. If a global guard redirects, route-specific guards are skipped.
 
 Leave guards run whenever the hash changes, also when only the parameters of the same route change (`employees/1` to `employees/2`): `fromRoute` and `toRoute` are then equal. A leave guard that should only protect leaving the route compares them.
+
+**Greedy routes.** UI5 matches a route with `greedy: true` even when an earlier route has matched the hash. The guards of such a route run as well:
+
+- The leave guards of every greedy route that matched the current hash run after those of `fromRoute`.
+- The route-specific enter guards of every greedy route that matches the target hash run after those of `toRoute`, in the order the routes are defined. This holds for redirect hops too.
+- A block or redirect from any of them applies to the whole navigation.
+
+Every guard of a navigation gets the same context: `toRoute`, `toArguments` and `fromRoute` are those of the first route that matches. UI5 has no public API for the arguments of a greedy route that is not the first match; a guard that needs them reads `toHash`.
 
 ## Manifest Configuration
 
@@ -969,6 +979,24 @@ Two safeguards prevent infinite redirect loops:
 
 Both safeguards log an error and settle the navigation as `Blocked`.
 
+## Browser history
+
+The router keeps the browser history as the user left it: a hash that a guard refused does not stay in the history, and Back returns to the page the navigation started from.
+
+| Navigation                                                     | Blocked (or `Error`)                                                                                   | Redirected                                                                                                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `navTo()`                                                      | No hash is written                                                                                     | Only the final target is written, the way the call asked: a new entry, or with `bReplace` the current entry replaced. Back returns to the page it started on |
+| Back or forward (a step through the history)                   | The router takes the step back with `history.go()`. The history is as it was, forward entries included | The entry the step arrived at is replaced with the target                                                                                                    |
+| Any other hash change (URL bar, link, `HashChanger.setHash()`) | The new entry is replaced with the previous hash                                                       | The new entry is replaced with the target                                                                                                                    |
+
+A redirect chain writes once, its final target. A redirect to the route that is shown settles as `Redirected` without matching that route again (no `routeMatched`) and writes no hash: after a `navTo()` the URL stays as it is, a hash change is undone as if it were blocked. A `parse()` call with the current hash still matches the route again, as it does with the native router.
+
+**Settlement of a blocked step.** The browser takes a step asynchronously. A navigation that the router undoes with a step settles once the URL is back: `navigationSettled()` resolves, and the `navigationSettled` event fires, after the `hashChanged` event that started the navigation has returned.
+
+**How a step is recognized.** The router reads the length and direction of a step from the browser's [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API) (Chrome and Edge 102+, Firefox 147+, Safari 26.2+). Without it, a blocked back or forward step is handled like any other hash change: its entry is replaced with the previous hash. The page the step went to is then gone from the history, and the current page has two entries.
+
+The cases that leave the history different from before are listed under [Limitations](#browser-history-after-a-refused-hash-change).
+
 ## Nested components
 
 A component that a parent router displays through a routing target of type `Component` can have its own guard router: set `routerClass` to `ui5.guard.router.Router` in the nested component's manifest and declare its guards there or in its `Component.ts`. Each router guards only its own routes:
@@ -1003,13 +1031,18 @@ The router extends `sap.m.routing.Router`. Apps whose root control is `sap.f.Fle
 
 With `inheritance: "pattern-tree"`, ancestry is decided by the mandatory segments of a pattern. Optional (`:id:`), rest (`:all*:`) and query segments are ignored, so a route whose pattern has only such segments is an ancestor of no route.
 
-### History guarantees differ by navigation source
+### Browser history after a refused hash change
 
-Programmatic `router.navTo()` calls get clean history: blocked or redirected navigations create no history entry. Browser back/forward and URL bar entry may leave an extra history entry because the browser changes the hash before guards can intercept. The guard still protects the route, but the browser history may contain a duplicate entry that the router repairs via `replaceHash()`.
+The router puts the URL back after every hash change it refuses, see [Browser history](#browser-history). In these cases the history still differs from what it was:
+
+- **A hash change that is not a step through the history** (URL bar, link, `HashChanger.setHash()`) has added an entry and dropped the forward entries. The router replaces the new entry with the previous hash, so the current page has two entries, and the dropped forward entries are not recovered.
+- **Browsers without the Navigation API** (Firefox before 147, Safari before 26.2) handle a blocked back or forward step the same way.
+- **`navTo()` while a blocked step is taken back.** The blocked navigation settles first, then the `navTo()` runs. Its new entry drops the entry that the browser was stepping back to.
+- **Nested components.** When the parent router blocks a hash change, or redirects it to the route it shows, it undoes the whole hash: the nested component's part is back as well, and the nested router ends on its previous route. UI5 reports every hash change to the nested router regardless of the parent, so the nested router first receives its part of the refused hash and then its previous one. It matches a route for each (for example `list`, then `detail` again) and fires the events of both.
 
 ### URL bar shows target hash during async guards (browser-initiated only)
 
-For browser-initiated navigation (back/forward, URL bar entry, direct hash changes), the URL bar shows the target hash while an async guard resolves. If the guard blocks or redirects, the URL reverts via `replaceHash()`. There is a brief window where the displayed URL does not match the active route.
+For browser-initiated navigation (back/forward, URL bar entry, direct hash changes), the URL bar shows the target hash while an async guard resolves. If the guard blocks or redirects, the router puts the URL back or replaces it with the target (see [Browser history](#browser-history)). There is a brief window where the displayed URL does not match the active route.
 
 This does **not** apply to programmatic `navTo()` calls, where the hash does not change until guards approve. It also does not affect sync guards on the `parse()` path, which resolve in the same tick as the hash change.
 
@@ -1026,8 +1059,8 @@ Browser-initiated navigation (back/forward, URL bar, setHash):
      ┌────┴────┐
   allowed    blocked
      ↓          ↓
-  views      _restoreHash()
-  load       reverts URL
+  views      router undoes
+  load       the hash change
 
 Programmatic navigation (navTo):
   navTo() called                     ← guards run HERE
@@ -1086,7 +1119,7 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 **Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks and logs the warning `Guard returned invalid value, treating as block`. A plain `false` is not logged, so add logging to your guards to find the one that returned it.
 
-**Redirect treated as blocked**: The redirect target route does not exist. The router logs the target name (`Guard redirect target "<name>" is not a known route, treating as blocked`) so you can verify it. A redirect to the current hash is not treated as blocked; it settles as `Redirected`.
+**Redirect treated as blocked**: The redirect target route does not exist. The router logs the target name (`Guard redirect target "<name>" is not a known route, treating as blocked`) so you can verify it. A redirect to the route that is shown is not treated as blocked; it settles as `Redirected`, and the route does not match again.
 
 **Async guard hangs indefinitely**: `context.signal` only aborts on supersede or router stop/destroy, not on "too slow." If a guard's `fetch` targets a dead endpoint, the navigation stays in the evaluating phase forever. Combine `context.signal` with `AbortSignal.timeout()` to enforce a hard deadline: `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`. See the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout) for the full example and a compatibility fallback for older browsers.
 

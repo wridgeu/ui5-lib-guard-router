@@ -51,7 +51,7 @@ export default class Component extends UIComponent {
 }
 ```
 
-No view renders for `"protected"` unless the guard returns `true`. A redirect to `"home"` replaces the hash without polluting browser history.
+No view renders for `"protected"` unless the guard returns `true`. A redirect to `"home"` keeps `"protected"` out of the browser history (see [Browser history](../../packages/lib/README.md#browser-history)).
 
 ## Step-by-step migration
 

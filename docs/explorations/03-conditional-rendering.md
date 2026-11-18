@@ -95,15 +95,15 @@ This is described in detail as "Approach B" in the original proof-of-concept.
 
 ## Comparison with This Repository's Approach
 
-| Aspect                  | Conditional Rendering    | `ui5.guard.router`            |
-| ----------------------- | ------------------------ | ----------------------------- |
-| History pollution       | None                     | None (guards use replaceHash) |
-| Flash of content        | None                     | None                          |
-| Per-route guards        | Not supported            | Full support                  |
-| Async conditions        | Not applicable           | Supported                     |
-| Deep linking            | Limited                  | Full                          |
-| Code complexity         | Very low                 | Low-medium                    |
-| Generalizability        | Single binary state only | Any condition, any route      |
-| Browser back protection | Inherent (no nav)        | Via guard re-evaluation       |
+| Aspect                  | Conditional Rendering    | `ui5.guard.router`         |
+| ----------------------- | ------------------------ | -------------------------- |
+| History pollution       | None                     | None (see Browser history) |
+| Flash of content        | None                     | None                       |
+| Per-route guards        | Not supported            | Full support               |
+| Async conditions        | Not applicable           | Supported                  |
+| Deep linking            | Limited                  | Full                       |
+| Code complexity         | Very low                 | Low-medium                 |
+| Generalizability        | Single binary state only | Any condition, any route   |
+| Browser back protection | Inherent (no nav)        | Via guard re-evaluation    |
 
 ## References

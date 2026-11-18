@@ -13,7 +13,8 @@ The router provides:
 - Per-call guard bypass (`navTo(..., { skipGuards: true })`)
 - Guard results: allow (`true`), block (`false`), redirect (string / `GuardRedirect`)
 - Concurrent navigation handling via generation counter
-- Clean history on programmatic block/redirect; best-effort for browser-initiated navigation
+- Browser history kept as the user left it on block/redirect, browser back/forward included ([Browser history](../../packages/lib/README.md#browser-history))
+- Guards of greedy routes (`greedy: true`) run with those of the first match
 - Guard evaluation on redirect targets with loop detection
 - Declarative manifest-based guard and metadata configuration
 - Route metadata (`getRouteMeta` / `setRouteMeta`, `toMeta` / `fromMeta` on GuardContext)

@@ -326,13 +326,15 @@ router.removeGuard(guard1);
 
 ### 3.5 Guard Return Values
 
-| Return                                         | Effect                                             |
-| ---------------------------------------------- | -------------------------------------------------- |
-| `true`                                         | Allow navigation                                   |
-| `false`                                        | Block (restore previous hash, no history entry)    |
-| `"routeName"`                                  | Redirect to route (replace hash, no history entry) |
-| `{ route, parameters?, componentTargetInfo? }` | Redirect with parameters                           |
-| Anything else (`null`, `undefined`, `42`)      | Treated as block with warning                      |
+| Return                                         | Effect                                            |
+| ---------------------------------------------- | ------------------------------------------------- |
+| `true`                                         | Allow navigation                                  |
+| `false`                                        | Block (the URL and the history stay as they were) |
+| `"routeName"`                                  | Redirect to route (the guarded hash is not kept)  |
+| `{ route, parameters?, componentTargetInfo? }` | Redirect with parameters                          |
+| Anything else (`null`, `undefined`, `42`)      | Treated as block with warning                     |
+
+The history effects for each kind of navigation are in the library README, [Browser history](../../packages/lib/README.md#browser-history).
 
 ### 3.6 How It Addresses Each Original Problem
 
@@ -341,7 +343,7 @@ router.removeGuard(guard1);
 | View B flashes before redirect to C              | Guards run **before** `parse()` delegates to the parent router. No view is created.  |
 | `router.stop()` + `initialize()` still goes to B | Not needed. Guard returns `"C"` and the router never processes B's hash.             |
 | Browser back to invalid state                    | Guard runs on every `parse()` including back/forward. Returns `false` or redirect.   |
-| `navTo()` creates history entries                | `navTo()` runs guards before the hash changes; redirects navigate with `replace`.    |
+| `navTo()` creates history entries                | `navTo()` runs guards before the hash changes; only the final target is written.     |
 | Guards scattered across controllers              | Centralized registration in `Component.init()`: one place for all guard logic.       |
 | No async support (UI5's blocker)                 | Async guards natively supported. Generation counter handles concurrency.             |
 | `beforeRouteMatched` has no `preventDefault()`   | Override at `parse()` level, earlier than any event. No need for `preventDefault()`. |

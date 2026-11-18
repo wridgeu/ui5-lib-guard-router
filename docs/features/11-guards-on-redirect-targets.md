@@ -245,10 +245,11 @@ private _applyRedirectDecision(
             // which sees committing and calls _commitNavigation().
             // The committed route is the one that matches the hash, the route UI5 displays.
             this._phase = { kind: "committing", route: toRoute, origin: "redirect" };
+            // chain.replace: bReplace of the navTo() that started the chain, true after a hash change.
             if (typeof target === "string") {
-                this.navTo(target, {}, {}, true);
+                this.navTo(target, {}, {}, chain.replace);
             } else {
-                this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+                this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, chain.replace);
             }
             // If parse() was not reached (the hash already is the target, or component
             // targets change it later), commit the target directly:
@@ -285,12 +286,11 @@ and discards the stale result.
 
 When a redirect target's hash equals `_currentHash` (the user is already on the
 target), the redirect target's guards are evaluated normally. If they allow, the
-chain commits with `NavigationOutcome.Redirected`. UI5's `HashChanger` does
-not fire `hashChanged` for a same-hash `navTo()`, so the normal commit path
-(parse → commitNavigation) does not trigger; `_applyRedirectDecision` then commits
-the target directly. The same direct commit covers a redirect with non-empty
-`componentTargetInfo`, whose hash change arrives later, and a redirect to the hash
-the URL already shows.
+navigation settles as `NavigationOutcome.Redirected` without a commit: the route does
+not match again and no hash is written; a hash change the navigation arrived with is
+undone (see the library README, [Browser history](../../packages/lib/README.md#browser-history)).
+A redirect with non-empty `componentTargetInfo`, whose hash change arrives later, and a
+redirect to a hash the URL already shows are committed directly by `_applyRedirectDecision`.
 
 ### Settlement
 
@@ -368,7 +368,7 @@ README's limitations section has been restructured accordingly.
 9. Loop detection log message includes the full chain path
 10. Guard on redirect target receives correct context (toRoute = redirect target, fromRoute = original source)
 11. Leave guards run only on first hop, not on each redirect hop
-12. Redirect to current hash: guards evaluate, chain commits with `Redirected`
+12. Redirect to current hash: guards evaluate, chain settles as `Redirected` without matching the route again
 13. Guard on redirect target throws -> entire chain settles as `Error` (pipeline error handling)
 14. Redirect target is unknown route -> chain blocked with warning
 15. Self-redirect (A -> A with same hash) detected as loop immediately

@@ -71,7 +71,7 @@ The retired `team` page has a manifest guard (`guards/retiredPageGuard.ts`) that
 
 **What to observe**
 
-- The Employees page is shown and the hash becomes `#/employees`, without a history entry for `team`.
+- The Employees page is shown and the hash becomes `#/employees`, without a history entry for `team`: after the button, browser back returns to Home; after opening `#/team` directly, its entry is replaced, so back skips it.
 - The settlement panel on the Employees page shows `Redirected` with route `employees`, not `staff`: a redirect settles on the route that matches the hash, the one UI5 displays and fires `routeMatched` for. `getRouteMeta(result.route)` in a `navigationSettled` handler therefore returns the metadata of `employees`.
 - The guards of `employees` run on the redirect hop. The demo has none besides the global logger: `requiresAuth` is metadata only, so the result is the same logged in and logged out.
 
@@ -116,7 +116,7 @@ The lock lives in the nested component and is locked again after a page reload, 
 **What to observe**
 
 - The parent router only sees `reports`. Navigations inside the nested component are settled by the nested router; the settlement panel on Home shows the parent router only.
-- A redirect by the nested guard does not add a browser history entry, as with the parent router.
+- A redirect by the nested guard keeps the guarded hash out of the browser history, as with the parent router.
 - When the parent leaves the `reports` route, UI5 stops the nested router and removes its part of the hash. Displaying the route again starts it on `overview`.
 - The nav buttons of the nested pages go one step back in the browser history. Without a previous entry (deep link), a report page replaces the entry with `overview`, and the overview replaces it with `home` of the parent's router, which it reaches through `Component.getOwnerComponentFor()`.
 
@@ -128,7 +128,7 @@ See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui
 
 All controllers extend `BaseController`, which provides shared helpers: `getRouter()` (typed as `GuardRouter`), `getModel()`, `createScenarioRunner()`, and `navBack()` with the Page nav button handler `onNavBack()`.
 
-**Back navigation.** The nav buttons follow the UI5 routing guidance: with a previous entry of this app in the history (`History.getInstance().getPreviousHash()`), `navBack()` goes one step back with `history.go(-1)`; without one (deep link, fresh load) it replaces the current entry with the route one level up, `navTo(route, {}, true)`. Guards run either way, because the history step reaches the router as a hash change. `onNavBack()` goes back to `home`; `Employee.controller.ts` overrides it to go back to `employees`.
+**Back navigation.** The nav buttons follow the UI5 routing guidance: with a previous entry of this app in the history (`History.getInstance().getPreviousHash()`), `navBack()` goes one step back with `history.go(-1)`; without one (deep link, fresh load) it replaces the current entry with the route one level up, `navTo(route, {}, true)`. Guards run either way, because the history step reaches the router as a hash change. If a guard blocks the step, the router takes it back and the history stays as it was (see [Browser history](../lib/README.md#browser-history)). `onNavBack()` goes back to `home`; `Employee.controller.ts` overrides it to go back to `employees`.
 
 | File                                 | Purpose                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
@@ -254,23 +254,23 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                         | Coverage                                                                                                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                                                                                                                    |
-| `guard-allow.e2e.ts`         | Navigation allowed after login                                                                                                                                            |
-| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                                                                                                                           |
-| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                                                                                                                     |
-| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                                                                                                                         |
-| `nav-button.e2e.ts`          | Page nav button: one step back in the history, re-navigation, replace with the parent route after a deep link                                                             |
-| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                                                                                                                  |
-| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                                                                                                                             |
-| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                                                                                                  |
-| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back                                                                                                            |
-| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                                                                                          |
-| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                                                                                                   |
-| `redirect-alias.e2e.ts`      | Redirect to an alias route name and `navTo()` to the alias settle on the route that matches the hash                                                                      |
-| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                                                                                         |
-| `nested-component.e2e.ts`    | Nested component: prefixed hash, sales figures of the reports model, guarded nested route, back navigation with and without a previous entry, deep links, fresh page load |
+| File                         | Coverage                                                                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                                                                                                                                       |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                                                                                                                                               |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                                                                                                                                              |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                                                                                                                                        |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                                                                                                                                            |
+| `nav-button.e2e.ts`          | Page nav button: one step back in the history, re-navigation, replace with the parent route after a deep link                                                                                |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                                                                                                                                     |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                                                                                                                                                |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                                                                                                                     |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, blocked browser back leaves the history as it was, nav button after a block                                                                |
+| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                                                                                                             |
+| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                                                                                                                      |
+| `redirect-alias.e2e.ts`      | Redirect to an alias route name and `navTo()` to the alias settle on the route that matches the hash; browser back after a redirect returns to Home, a directly entered `#/team` is replaced |
+| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                                                                                                            |
+| `nested-component.e2e.ts`    | Nested component: prefixed hash, sales figures of the reports model, guarded nested route, back navigation with and without a previous entry, deep links, fresh page load                    |
 
 Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 
