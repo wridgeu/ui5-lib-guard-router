@@ -31,31 +31,31 @@ export default class HomeController extends BaseController {
 		const model = this.getModel<JSONModel>("auth");
 		const isLoggedIn = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
-		this.createScenarioRunner().recordAction(isLoggedIn ? "User logged out" : "User logged in");
+		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
 	}
 
 	onNavToProtected(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("protected")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["protected"]);
 		this.getRouter().navTo("protected");
 	}
 
 	onNavToBlocked(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("blocked")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["blocked"]);
 		this.getRouter().navTo("blocked");
 	}
 
 	onNavToForbidden(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("forbidden")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["forbidden"]);
 		this.getRouter().navTo("forbidden");
 	}
 
 	onNavToAdmin(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("admin")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["admin"]);
 		this.getRouter().navTo("admin");
 	}
 
 	onNavToEmployees(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("employees")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["employees"]);
 		this.getRouter<GuardRouter>().navTo("employees");
 	}
 
@@ -64,13 +64,13 @@ export default class HomeController extends BaseController {
 	 * Both have the pattern "employees", so the navigation settles on "employees".
 	 */
 	onNavToTeam(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("team")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["team"]);
 		this.getRouter().navTo("team");
 	}
 
 	/** "reports" displays the nested reporting component, which has its own guard router. */
 	onNavToReports(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("reports")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["reports"]);
 		this.getRouter().navTo("reports");
 	}
 

@@ -17,7 +17,7 @@ describe("Guard redirects to Home", () => {
 		// Home and the empty hash are also the starting state: the settlement after
 		// `settlementRevision` proves that the navigation ran and was redirected.
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
+			{ status: "Redirected", route: "home", hash: "" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("", "Hash should settle to home after guard redirect");

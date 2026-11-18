@@ -20,10 +20,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navBlockedBtn);
 
-		await waitForRuntimeSettlement(
-			{ status: "Blocked", route: "home", hash: "(empty hash)" },
-			{ afterRevision: rev },
-		);
+		await waitForRuntimeSettlement({ status: "Blocked", route: "home", hash: "" }, { afterRevision: rev });
 		await expectHashToBe("");
 
 		const after = await getHistoryLength();
@@ -36,10 +33,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navForbiddenBtn);
 
-		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
-			{ afterRevision: rev },
-		);
+		await waitForRuntimeSettlement({ status: "Redirected", route: "home", hash: "" }, { afterRevision: rev });
 		await expectHashToBe("");
 
 		const after = await getHistoryLength();
@@ -52,10 +46,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navProtectedBtn);
 
-		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
-			{ afterRevision: rev },
-		);
+		await waitForRuntimeSettlement({ status: "Redirected", route: "home", hash: "" }, { afterRevision: rev });
 		await expectHashToBe("");
 
 		const after = await getHistoryLength();

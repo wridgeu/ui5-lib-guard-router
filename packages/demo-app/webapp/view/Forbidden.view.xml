@@ -2,11 +2,11 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Forbidden">
-	<Page id="forbiddenPage" title="Forbidden Page" titleAlignment="Center">
+	<Page id="forbiddenPage" title="{i18n>forbiddenTitle}" titleAlignment="Center">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start">
 				<MessageStrip
-					text="You should never see this page. The guard always redirects away."
+					text="{i18n>forbiddenInfo}"
 					type="Error"
 					showIcon="true" />
 			</VBox>

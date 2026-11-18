@@ -3,18 +3,18 @@
 	xmlns:core="sap.ui.core"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.NotFound">
-	<Page id="notFoundPage" title="Not Found" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavHome">
+	<Page id="notFoundPage" title="{i18n>notFoundTitle}" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavHome">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Stretch" renderType="Bare">
 				<IllustratedMessage
 					illustrationType="PageNotFound"
-					title="Page Not Found"
-					description="The requested page does not exist in this demo application.">
+					title="{i18n>notFoundMessageTitle}"
+					description="{i18n>notFoundDescription}">
 					<additionalContent>
-						<Button text="Go to Home" type="Emphasized" press=".onNavHome" />
+						<Button text="{i18n>goHome}" type="Emphasized" press=".onNavHome" />
 					</additionalContent>
 				</IllustratedMessage>
-				<Panel headerText="Last Settlement" class="sapUiMediumMarginTop">
+				<Panel headerText="{i18n>settlementLabel}" class="sapUiMediumMarginTop">
 					<content>
 						<core:Fragment fragmentName="demo.app.view.SettlementPanel" type="XML" />
 					</content>

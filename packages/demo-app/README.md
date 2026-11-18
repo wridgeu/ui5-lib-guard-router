@@ -144,13 +144,13 @@ All controllers extend `BaseController`, which provides shared helpers (`getRout
 
 These files power the runtime inspector panels and hash-driven scenario buttons in the UI. They are isolated from the library and exist solely to make the demo interactive.
 
-| File                         | Purpose                                                                                                                        |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, and lazily registers the FLP dirty-state provider              |
-| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records last-action messages to the runtime model          |
-| `routing/hashNavigation.ts`  | Thin wrapper around `HashChanger` for `getCurrentHash()`, `setHash()`, `runHashSequence()`, and `attachHashChanged()`          |
-| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, launch mode, FLP status, last action, and last navigation settlement details) |
-| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                    |
+| File                         | Purpose                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, and lazily registers the FLP dirty-state provider                             |
+| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model |
+| `routing/hashNavigation.ts`  | Thin wrapper around `HashChanger` for `getCurrentHash()`, `setHash()`, `runHashSequence()`, and `attachHashChanged()`                         |
+| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, and last navigation settlement details): values only, no texts      |
+| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                   |
 
 ### Declarative guard modules
 
@@ -166,11 +166,22 @@ Individual guard functions loaded by the router from `manifest.json` `guardRoute
 
 ### Models
 
-| Name      | Source                 | Contents                                                                              |
-| --------- | ---------------------- | ------------------------------------------------------------------------------------- |
-| `auth`    | `model/auth.json`      | `{ isLoggedIn: false }`, toggled by the UI                                            |
-| `form`    | Created in `Component` | `{ isDirty: false }`, used by the leave guard                                         |
-| `runtime` | `model/runtime.ts`     | Hash, launch mode, ushell status, dirty provider, last action, and settlement outcome |
+| Name      | Source                 | Contents                                                                     |
+| --------- | ---------------------- | ---------------------------------------------------------------------------- |
+| `auth`    | `model/auth.json`      | `{ isLoggedIn: false }`, toggled by the UI                                   |
+| `form`    | Created in `Component` | `{ isDirty: false }`, used by the leave guard                                |
+| `runtime` | `model/runtime.ts`     | Hash, ushell status, dirty provider, last action, and settlement outcome     |
+| `i18n`    | `i18n/i18n.properties` | All texts of the root component, declared as `ResourceModel` in the manifest |
+
+### Texts (i18n)
+
+The root component and the nested reporting component each have their own bundle (`i18n/i18n.properties`, `reporting/i18n/i18n.properties`), declared in their manifest under `sap.app/i18n` and as the `i18n` model. Both support the default bundle only (`supportedLocales: [""]`, `fallbackLocale: ""`), so UI5 requests no language variants.
+
+- Views bind texts with `{i18n>key}`. A text that depends on a value is chosen in an expression binding (`{= ${auth>/isLoggedIn} ? ${i18n>authLoggedIn} : ${i18n>authLoggedOut}}`); a text with a placeholder is filled with `sap/base/strings/formatMessage` (see `view/SettlementPanel.fragment.xml`).
+- The manifest uses `{{appTitle}}` and `{{appDescription}}`, also for the title of the FLP inbound.
+- The `runtime` model holds values only. The views supply the texts for empty values, such as "(empty hash)" or "Not settled yet".
+- Code that needs a text awaits the bundle, because the model loads it asynchronously: `ScenarioRunner.recordAction(key, args)` for the last action, `reporting/guards/confidentialGuard.ts` for its toast.
+- Not translated on purpose: route names, hashes, the settlement status (`Committed`, `Redirected`, ...) and the route metadata JSON are technical values and shown as they are. Log messages are for developers.
 
 ## FLP preview
 
@@ -187,7 +198,7 @@ The `start:flp` script launches a local FLP sandbox at `/test/flp.html#app-previ
 
 **What's different in FLP mode:**
 
-- The runtime inspector shows "FLP Preview" as launch mode and "Available" for ushell container
+- The runtime inspector shows "FLP Preview" as launch mode and "sap.ushell.Container available"
 - The dirty-state provider is registered via `sap.ushell.Container.registerDirtyStateProvider`
 - Cross-app navigation (hash changes to routes outside the app) triggers the FLP dirty-state popup instead of the router's leave guard, avoiding a conflict where both would fire
 
@@ -250,23 +261,23 @@ Each command starts and stops its own demo server for you. Standalone and FLP te
 
 Test files are in `test/e2e/`:
 
-| File                         | Coverage                                                                                            |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                                              |
-| `guard-allow.e2e.ts`         | Navigation allowed after login                                                                      |
-| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                                                     |
-| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                                               |
-| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                                                   |
-| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                                                             |
-| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                                            |
-| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                                                       |
-| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                            |
-| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back                                      |
-| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                    |
-| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                             |
-| `redirect-alias.e2e.ts`      | Redirect to an alias route name settles on the route that matches the hash                          |
-| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                   |
-| `nested-component.e2e.ts`    | Nested component: prefixed hash, guarded nested route, back navigation, deep links, fresh page load |
+| File                         | Coverage                                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `routing-basic.e2e.ts`       | Basic navigation, login flow, nav-back                                                               |
+| `guard-allow.e2e.ts`         | Navigation allowed after login                                                                       |
+| `guard-block.e2e.ts`         | Enter guard blocks navigation and stays on Home                                                      |
+| `guard-redirect-auth.e2e.ts` | Logged-out auth redirect back to Home                                                                |
+| `guard-redirect.e2e.ts`      | Forbidden route redirects to Home                                                                    |
+| `nav-button.e2e.ts`          | UI5 Page nav-back button, re-navigation                                                              |
+| `multi-route.e2e.ts`         | Multi-step sequences, mid-session logout                                                             |
+| `browser-back.e2e.ts`        | Browser back/forward with guard state changes                                                        |
+| `direct-url.e2e.ts`          | Direct URL entry, nonexistent routes, rapid hash changes                                             |
+| `leave-guard.e2e.ts`         | Dirty form leave guard: allow clean, block dirty, browser back                                       |
+| `navto-preflight.e2e.ts`     | Preflight history guarantees: no history entry on block/redirect                                     |
+| `redirect-chain.e2e.ts`      | Redirect chain: admin -> protected -> home (logged out) and stop points                              |
+| `redirect-alias.e2e.ts`      | Redirect to an alias route name and `navTo()` to the alias settle on the route that matches the hash |
+| `route-metadata.e2e.ts`      | Route metadata display, pattern-tree inheritance, runtime updates                                    |
+| `nested-component.e2e.ts`    | Nested component: prefixed hash, guarded nested route, back navigation, deep links, fresh page load  |
 
 Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 

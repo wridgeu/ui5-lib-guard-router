@@ -17,7 +17,7 @@ describe("Guard blocks enter navigation", () => {
 		// Home and the empty hash are also the starting state: the settlement after
 		// `settlementRevision` proves that the navigation ran and was blocked.
 		await waitForRuntimeSettlement(
-			{ status: "Blocked", route: "home", hash: "(empty hash)" },
+			{ status: "Blocked", route: "home", hash: "" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("", "Hash should stay on home after enter guard blocks");

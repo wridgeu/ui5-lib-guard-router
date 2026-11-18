@@ -15,7 +15,7 @@ import {
  * hash are also the starting state, so the fresh settlement is what proves the outcome.
  */
 async function expectKeptOnHome(status: "Redirected" | "Blocked", afterRevision: number): Promise<void> {
-	await waitForRuntimeSettlement({ status, route: "home", hash: "(empty hash)" }, { afterRevision });
+	await waitForRuntimeSettlement({ status, route: "home", hash: "" }, { afterRevision });
 	await expectHashToBe("", "Hash should be restored to home");
 	await waitForPage(CONTROLS.home.homePage, "Home");
 }
@@ -79,7 +79,7 @@ describe("Direct URL navigation with guards", () => {
 		await setBrowserHash("#/");
 		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: recoveryRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "home", hash: "(empty hash)" },
+			{ status: "Committed", route: "home", hash: "" },
 			{ afterRevision: recoveryRevision },
 		);
 	});
@@ -96,7 +96,7 @@ describe("Direct URL navigation with guards", () => {
 		// guard pipeline of the last hash, so the settlement read below is the final one.
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
+			{ status: "Redirected", route: "home", hash: "" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("", "Hash should not stay on a guarded route");

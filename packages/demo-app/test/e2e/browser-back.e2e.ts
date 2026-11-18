@@ -16,7 +16,7 @@ async function browserBackToHome(): Promise<void> {
 
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 	await waitForRuntimeSettlement(
-		{ status: "Committed", route: "home", hash: "(empty hash)" },
+		{ status: "Committed", route: "home", hash: "" },
 		{ afterRevision: settlementRevision },
 	);
 	await expectHashToBe("");
@@ -43,7 +43,7 @@ describe("Browser back navigation with guards", () => {
 		// Home and the empty hash are also the state before the forward navigation: the
 		// settlement after `settlementRevision` proves that the guard ran and redirected.
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
+			{ status: "Redirected", route: "home", hash: "" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("", "Hash should settle to home after guard redirect");

@@ -2,11 +2,11 @@
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	controllerName="demo.app.controller.Blocked">
-	<Page id="blockedPage" title="Blocked Page" titleAlignment="Center">
+	<Page id="blockedPage" title="{i18n>blockedTitle}" titleAlignment="Center">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start">
 				<MessageStrip
-					text="You should never see this page. The guard always blocks before navigation commits."
+					text="{i18n>blockedInfo}"
 					type="Error"
 					showIcon="true" />
 			</VBox>

@@ -3,16 +3,22 @@
 	"sap.app": {
 		"id": "demo.app",
 		"type": "application",
+		"i18n": {
+			"bundleName": "demo.app.i18n.i18n",
+			"supportedLocales": [""],
+			"fallbackLocale": ""
+		},
 		"applicationVersion": {
 			"version": "1.0.0"
 		},
-		"title": "UI5 Enhanced Router Demo",
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
 		"crossNavigation": {
 			"inbounds": {
 				"guarddemo-display": {
 					"semanticObject": "guarddemo",
 					"action": "display",
-					"title": "UI5 Enhanced Router Demo",
+					"title": "{{appTitle}}",
 					"signature": {
 						"parameters": {},
 						"additionalParameters": "allowed"
@@ -55,6 +61,15 @@
 			}
 		},
 		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": {
+					"bundleName": "demo.app.i18n.i18n",
+					"async": true,
+					"supportedLocales": [""],
+					"fallbackLocale": ""
+				}
+			},
 			"auth": {
 				"type": "sap.ui.model.json.JSONModel",
 				"dataSource": "auth"

@@ -1,4 +1,4 @@
-import { CONTROLS, expectControlText, press } from "../shared/controls";
+import { CONTROLS, expectControlText, getAppComponentId, press } from "../shared/controls";
 import {
 	expectHashToBe,
 	getRuntimeSettlementRevision,
@@ -44,5 +44,28 @@ describe("Redirect to a route name whose hash another route matches: team -> sta
 		await setBrowserHash("#/team");
 
 		await expectRedirectedToEmployees(settlementRevision);
+	});
+
+	// No button calls navTo("staff"): the alias only exists for old callers, so the test is one.
+	it("should commit on employees when navTo('staff') is called directly", async () => {
+		const settlementRevision = await getRuntimeSettlementRevision();
+
+		await browser.execute(
+			(componentId: string) => {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				Component.getComponentById(componentId).getRouter().navTo("staff");
+			},
+			await getAppComponentId(),
+		);
+
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "employees", hash: "employees" },
+			{ afterRevision: settlementRevision },
+		);
+		await expectHashToBe("#/employees");
+		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+		await expectControlText(CONTROLS.employees.settlementStatus, "Committed");
+		await expectControlText(CONTROLS.employees.settlementRouteText, "employees");
+		await expectControlText(CONTROLS.employees.settlementHashText, "employees");
 	});
 });

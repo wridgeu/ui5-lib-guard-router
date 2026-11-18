@@ -4,13 +4,13 @@
 	controllerName="demo.app.controller.Employee">
 	<Page
 		id="employeePage"
-		title="Employee Detail"
+		title="{i18n>employeeTitle}"
 		showNavButton="true"
 		navButtonPress=".onNavBack">
 		<content>
-			<Panel headerText="Inherited Metadata">
+			<Panel headerText="{i18n>employeeMetaPanelTitle}">
 				<VBox class="sapUiSmallMargin">
-					<Text id="employeeMeta" text="Inherited metadata will be shown here" />
+					<Text id="employeeMeta" text="{i18n>employeeMetaPlaceholder}" />
 				</VBox>
 			</Panel>
 		</content>

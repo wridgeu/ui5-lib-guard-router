@@ -26,7 +26,7 @@ async function expectLeaveBlocked(afterRevision: number): Promise<void> {
 /** Assert that the navigation started after `afterRevision` left Protected and committed on Home. */
 async function expectLeftToHome(afterRevision: number): Promise<void> {
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision });
-	await waitForRuntimeSettlement({ status: "Committed", route: "home", hash: "(empty hash)" }, { afterRevision });
+	await waitForRuntimeSettlement({ status: "Committed", route: "home", hash: "" }, { afterRevision });
 	await expectHashToBe("", "Hash should settle to home after leave guard allows");
 }
 

@@ -21,7 +21,7 @@ describe("Redirect chain: admin -> protected -> home", () => {
 		// checks login state (logged out) and redirects to home.
 		// The entire chain settles as Redirected on home.
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "(empty hash)" },
+			{ status: "Redirected", route: "home", hash: "" },
 			{ afterRevision: rev, timeout: 5000 },
 		);
 		await expectHashToBe("");

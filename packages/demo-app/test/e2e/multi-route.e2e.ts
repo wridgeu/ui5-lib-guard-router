@@ -28,7 +28,7 @@ async function pressAndExpectRedirectHome(button: "navProtectedBtn" | "navForbid
 	await press(CONTROLS.home[button]);
 
 	await waitForRuntimeSettlement(
-		{ status: "Redirected", route: "home", hash: "(empty hash)" },
+		{ status: "Redirected", route: "home", hash: "" },
 		{ afterRevision: settlementRevision },
 	);
 	await expectHashToBe("", "Hash should settle to home after guard redirect");

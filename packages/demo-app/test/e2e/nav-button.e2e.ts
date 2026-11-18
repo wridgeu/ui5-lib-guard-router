@@ -16,7 +16,7 @@ async function navBackToHome(): Promise<void> {
 
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 	await waitForRuntimeSettlement(
-		{ status: "Committed", route: "home", hash: "(empty hash)" },
+		{ status: "Committed", route: "home", hash: "" },
 		{ afterRevision: settlementRevision },
 	);
 	await expectHashToBe("");

@@ -5,7 +5,6 @@ import { getCurrentHash } from "../routing/hashNavigation";
 
 type RuntimeState = {
 	currentHash: string;
-	launchMode: string;
 	hasUshellContainer: boolean;
 	flpDirtyProviderActive: boolean;
 	lastAction: string;
@@ -18,10 +17,7 @@ type RuntimeState = {
 };
 
 function formatSettlementStatus(status: string): string {
-	if (!status) {
-		return "Not settled yet";
-	}
-
+	// The outcome is a technical value and shown as such; "" until the first settlement.
 	return `${status.charAt(0).toUpperCase()}${status.slice(1)}`;
 }
 
@@ -44,42 +40,28 @@ function formatSettlementState(status: string): string {
 	}
 }
 
-function formatSettlementRoute(route: string): string {
-	return route || "(no match)";
-}
-
-function formatSettlementHash(hash: string): string {
-	return hash || "(empty hash)";
-}
-
 function formatSettlementHashTechnical(hash: string): string {
 	return JSON.stringify(hash);
 }
 
-function buildRuntimeState(
-	lastAction: string,
-	flpDirtyProviderActive: boolean,
-	lastSettlementRevision = 0,
-): RuntimeState {
-	const ushellAvailable = hasUshellContainer();
-
-	return {
-		currentHash: getCurrentHash(),
-		launchMode: ushellAvailable ? "FLP Preview" : "Standalone",
-		hasUshellContainer: ushellAvailable,
-		flpDirtyProviderActive: ushellAvailable && flpDirtyProviderActive,
-		lastAction,
-		lastSettlementStatus: "Not settled yet",
-		lastSettlementState: "None",
-		lastSettlementRoute: "(pending)",
-		lastSettlementHash: formatSettlementHash(getCurrentHash()),
-		lastSettlementHashTechnical: formatSettlementHashTechnical(getCurrentHash()),
-		lastSettlementRevision,
-	};
-}
-
+/**
+ * The model holds values only. The views take the texts for empty values ("Ready",
+ * "Not settled yet", "(pending)", "(no match)", "(empty hash)") from the i18n bundle.
+ */
 export function createRuntimeModel(): JSONModel {
-	return new JSONModel(buildRuntimeState("Ready", false));
+	const state: RuntimeState = {
+		currentHash: getCurrentHash(),
+		hasUshellContainer: hasUshellContainer(),
+		flpDirtyProviderActive: false,
+		lastAction: "",
+		lastSettlementStatus: "",
+		lastSettlementState: "None",
+		lastSettlementRoute: "",
+		lastSettlementHash: getCurrentHash(),
+		lastSettlementHashTechnical: formatSettlementHashTechnical(getCurrentHash()),
+		lastSettlementRevision: 0,
+	};
+	return new JSONModel(state);
 }
 
 export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boolean): void {
@@ -87,7 +69,6 @@ export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boole
 	model.setData(
 		{
 			currentHash: getCurrentHash(),
-			launchMode: ushellAvailable ? "FLP Preview" : "Standalone",
 			hasUshellContainer: ushellAvailable,
 			flpDirtyProviderActive: ushellAvailable && flpDirtyProviderActive,
 		},
@@ -103,8 +84,8 @@ export function setSettlementResult(model: JSONModel, result: NavigationResult):
 	const lastSettlementRevision = Number(model.getProperty("/lastSettlementRevision") ?? 0) + 1;
 	model.setProperty("/lastSettlementStatus", formatSettlementStatus(result.status));
 	model.setProperty("/lastSettlementState", formatSettlementState(result.status));
-	model.setProperty("/lastSettlementRoute", formatSettlementRoute(result.route));
-	model.setProperty("/lastSettlementHash", formatSettlementHash(result.hash));
+	model.setProperty("/lastSettlementRoute", result.route);
+	model.setProperty("/lastSettlementHash", result.hash);
 	model.setProperty("/lastSettlementHashTechnical", formatSettlementHashTechnical(result.hash));
 	model.setProperty("/lastSettlementRevision", lastSettlementRevision);
 }

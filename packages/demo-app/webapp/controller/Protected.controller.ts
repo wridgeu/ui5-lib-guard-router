@@ -23,7 +23,7 @@ export default class ProtectedController extends BaseController {
 
 	onClearDirtyAndNavHome(): void {
 		this.getModel<JSONModel>("form").setProperty("/isDirty", false);
-		this.createScenarioRunner().recordAction("Cleared dirty state and returned to Home");
+		this.createScenarioRunner().recordAction("actionClearedDirty");
 		this.getRouter().navTo("home");
 	}
 }
