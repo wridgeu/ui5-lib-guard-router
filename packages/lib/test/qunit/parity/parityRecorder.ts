@@ -4,7 +4,7 @@ import ManagedObject from "sap/ui/base/ManagedObject";
 import BaseObject from "sap/ui/base/Object";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type Router from "sap/ui/core/routing/Router";
-import { flushPromises } from "./testHelpers";
+import { flushPromises } from "../testHelpers";
 
 /**
  * Recorders for differential tests against the native router. Each appends one line per observed

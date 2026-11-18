@@ -7,7 +7,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type Router from "sap/ui/core/routing/Router";
 import type UIComponent from "sap/ui/core/UIComponent";
 import { drain, recordHashes, recordLogs, recordRouter, settle, until } from "./parityRecorder";
-import { initHashChanger, loadModule } from "./testHelpers";
+import { initHashChanger, loadModule } from "../testHelpers";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child

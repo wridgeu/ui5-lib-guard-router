@@ -4,7 +4,7 @@ This folder contains the repository's vendored OpenUI5 router parity lane.
 
 ## Purpose
 
-The parity lane supplements `NativeRouterCompat.qunit.ts` with a pinned upstream reference set.
+The parity lane supplements the local differential tests in `../parity/` with a pinned upstream reference set.
 It verifies inherited `sap.m.routing.Router` behavior when no guards are registered.
 
 It does **not** verify guard-specific behavior.

@@ -1176,8 +1176,8 @@ stateDiagram-v2
 The QUnit suites are registered in `packages/lib/test/qunit/testsuite.qunit.ts`. They run
 against the library in isolation, with programmatic Router instances and fixture components:
 guard lifecycle, sync and async pipelines, redirects, settlement, options, manifest guards,
-the helper modules, and parity with the native router (`NativeRouterCompat`,
-`NestedRouterParity` and the vendored `UpstreamParity` lane, see
+the helper modules, and parity with the native router (`parity/native`,
+`parity/nested`, `parity/guarded` and the vendored `upstream-parity` lane, see
 [upstream-parity.md](./upstream-parity.md)).
 
 E2E tests run against the demo app served by `ui5 serve`, exercising real browser navigation,

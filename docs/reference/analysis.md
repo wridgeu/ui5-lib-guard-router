@@ -383,7 +383,7 @@ The QUnit suites are registered in `packages/lib/test/qunit/testsuite.qunit.ts`,
 - Removing or renaming it would break the router's core architecture
 - The `sap.m.routing.Router` inherits it unchanged
 
-**Mitigation**: The `NativeRouterCompat.qunit.ts` test suite validates API parity with the native router. If a UI5 update changes `parse()`, these tests would catch it.
+**Mitigation**: The tests in `packages/lib/test/qunit/parity/native/` validate API parity with the native router. If a UI5 update changes `parse()`, these tests would catch it.
 
 ### 5.2 Redirect targets evaluate guards with loop detection
 

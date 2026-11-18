@@ -1,6 +1,6 @@
 import type { GuardContext, GuardResult, GuardRouter } from "ui5/guard/router/types";
-import { GuardRouterClass } from "./testHelpers";
-import { firstDifference } from "./parityRecorder";
+import { GuardRouterClass } from "../../testHelpers";
+import { firstDifference } from "../parityRecorder";
 import {
 	type App,
 	browserBack,
@@ -14,7 +14,7 @@ import {
 	type Scenario,
 	showChild,
 	type Step,
-} from "./nestedParityHarness";
+} from "../nestedParityHarness";
 
 /**
  * Differential tests for what guards decide, on the app of the nested parity tests: after a

@@ -1,4 +1,4 @@
-import { firstDifference } from "./parityRecorder";
+import { firstDifference } from "../parityRecorder";
 import {
 	addressBar,
 	browserBack,
@@ -16,7 +16,7 @@ import {
 	type Scenario,
 	showChild,
 	showChildRoute,
-} from "./nestedParityHarness";
+} from "../nestedParityHarness";
 
 /**
  * Run `scenario` with each flavor and compare the traces with the native one. The second native

@@ -4,9 +4,9 @@
 
 This repository keeps four complementary compatibility layers for the core router:
 
-- `packages/lib/test/qunit/NativeRouterCompat.qunit.ts` - fast local differential tests authored in this repo
-- `packages/lib/test/qunit/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
-- `packages/lib/test/qunit/GuardedNavigationParity.qunit.ts` - local differential tests that compare what guards decide with the native navigation the decision stands for (see [Guard decisions and their native equivalents](#guard-decisions-and-their-native-equivalents))
+- `packages/lib/test/qunit/parity/native/` (`NativeCompat.qunit.ts`, `NativeCompatTraces.qunit.ts`) - fast local differential tests authored in this repo
+- `packages/lib/test/qunit/parity/nested/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
+- `packages/lib/test/qunit/parity/guarded/GuardedNavigationParity.qunit.ts` - local differential tests that compare what guards decide with the native navigation the decision stands for (see [Guard decisions and their native equivalents](#guard-decisions-and-their-native-equivalents))
 - `packages/lib/test/qunit/upstream-parity/` - a vendored OpenUI5 parity lane with pinned upstream source snapshots and local executable ports
 
 The vendored lane exists to answer a specific question:
@@ -199,7 +199,7 @@ within ten seconds.
 | A history step that the parent and the child block    | No step                                               |
 | A history step that only the parent blocks            | No step, after the child's round trip described above |
 
-`NativeRouterCompat.qunit.ts` compares a router without nested components the same way: a
+`NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
 redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
 route that is shown with no navigation at all, and greedy routes, which match and fire their
 events as with the native router. A `parse()` of the current hash matches the route again, as
@@ -207,7 +207,7 @@ it does natively; only a redirect to the route that is shown skips the match.
 
 ## Routers that share a hash changer
 
-Module "NativeCompat - Two routers on one hash changer" of `NativeRouterCompat.qunit.ts`
+Module "NativeCompat - Two routers on one hash changer" of `NativeCompatTraces.qunit.ts`
 creates two components with routing, neither a routing target of the other, so UI5 gives both
 routers the hash changer of the root (described in
 [Routers that share a hash changer](./architecture.md#routers-that-share-a-hash-changer)).

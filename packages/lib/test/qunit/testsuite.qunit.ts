@@ -67,11 +67,11 @@ const tests: Record<string, TestPage> = {
 	},
 	NativeRouterCompat: {
 		title: "QUnit Tests for Native Router Compatibility",
-		files: ["NativeRouterCompat"],
+		files: ["parity/native/NativeCompat", "parity/native/NativeCompatTraces"],
 	},
 	NestedRouterParity: {
 		title: "QUnit Tests for Native Router Parity in Nested Components",
-		files: ["NestedRouterParity"],
+		files: ["parity/nested/NestedRouterParity"],
 		// Each test starts the fixture app four times.
 		qunit: {
 			testTimeout: 30000,
@@ -79,7 +79,7 @@ const tests: Record<string, TestPage> = {
 	},
 	GuardedNavigationParity: {
 		title: "QUnit Tests for Guard Decisions and their Native Equivalents",
-		files: ["GuardedNavigationParity"],
+		files: ["parity/guarded/GuardedNavigationParity"],
 		// Each test starts the fixture app three times.
 		qunit: {
 			testTimeout: 30000,
