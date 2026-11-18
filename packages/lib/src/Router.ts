@@ -28,6 +28,22 @@ const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
 const LOG_COMPONENT = "ui5.guard.router.Router";
 
+/**
+ * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
+ * not a copy, because UIComponent adds `targetParent` (the ID of the root view) to its config
+ * object after it has constructed the router, and the native router reads it from that object.
+ */
+function withoutGuardRouter(config: object): object {
+	const hidden = (key: PropertyKey): boolean => key === "guardRouter";
+	return new Proxy(config, {
+		get: (target, key, receiver) => (hidden(key) ? undefined : (Reflect.get(target, key, receiver) as unknown)),
+		has: (target, key) => !hidden(key) && Reflect.has(target, key),
+		ownKeys: (target) => Reflect.ownKeys(target).filter((key) => !hidden(key)),
+		getOwnPropertyDescriptor: (target, key) =>
+			hidden(key) ? undefined : Reflect.getOwnPropertyDescriptor(target, key),
+	});
+}
+
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
 	return typeof guard === "object" && guard !== null;
 }
@@ -118,6 +134,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _phase: RouterPhase = IDLE;
 	private _parseGeneration = 0;
 	private _suppressedHash: string | null = null;
+	/** The hash of a committed navigation that UI5 has not written yet (see {@link _commitAfterNavTo}). */
+	private _awaitedHash: string | null = null;
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[];
@@ -139,10 +157,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object);
 	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, ...rest: unknown[]) {
 		const isRecordConfig = isRecord(config);
-		const { guardRouter, ...cleanConfig } = isRecordConfig ? config : {};
+		const guardRouter = isRecordConfig ? config.guardRouter : undefined;
 		// UI5 passes more than its types declare: after the targets config comes the
 		// hash changer of a component that is loaded as a routing target.
-		super(routes, isRecordConfig ? cleanConfig : config, owner, ...(rest as [object?]));
+		super(routes, isRecordConfig ? withoutGuardRouter(config) : config, owner, ...(rest as [object?]));
 		this._ownerComponent = owner;
 		this._mirrorMatchingProcess();
 		let componentNamespace = "";
@@ -835,9 +853,20 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const routeInfo = this.getRouteInfoByHash(targetHash);
 		const toRoute = routeInfo?.name ?? "";
 
-		// Same-hash dedup: cancel any pending navigation and return without navigating.
+		// Same hash: no route of this router changes, so there is nothing to guard. Cancel any
+		// pending navigation and navigate natively: UI5 still sets the hashes of nested
+		// components (componentTargetInfo), or resets them when none are given.
 		if (targetHash === this._currentHash) {
 			this._cancelPendingNavigation(true);
+			// A navigationSettled handler of the cancelled navigation may have navigated on.
+			const shownHash: string | undefined = this.getHashChanger().getHash();
+			if (shownHash === undefined || shownHash === targetHash) {
+				// UI5 has reset the hash of the hash changer after a target was displayed without
+				// a route: it reports the hash again, and the route matches again.
+				this._awaitedHash = shownHash === undefined ? targetHash : null;
+				super.navTo(routeName, parameters, componentTargetInfo, replace);
+				this._awaitedHash = null;
+			}
 			return this;
 		}
 
@@ -933,11 +962,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._phase = { kind: "committing", route: toRoute, origin: "preflight" };
 		try {
 			super.navTo(routeName, parameters, componentTargetInfo, bReplace);
-			// parse() has not run: the hash is already the target, or changes later
-			// (component targets). Commit manually.
-			if (this._phase.kind === "committing") {
-				this._commitNavigation(targetHash, toRoute);
-			}
+			this._commitAfterNavTo(targetHash, toRoute);
 		} finally {
 			// A failed hash change must not leave the next one to be committed without guards.
 			if (this._phase.kind === "committing") {
@@ -1015,6 +1040,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 		this._suppressedHash = null;
 
+		const awaitedHash = this._awaitedHash;
+		this._awaitedHash = null;
+		if (newHash === awaitedHash) {
+			super.parse(newHash);
+			return;
+		}
+
 		if (this._phase.kind === "committing") {
 			this._commitNavigation(newHash, this._phase.route);
 			return;
@@ -1084,6 +1116,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Cancelled result before _lastSettlement is cleared below.
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
+		this._awaitedHash = null;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
@@ -1195,7 +1228,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * fires before parse as well, so the settlements of such nested navigations
 	 * follow it.
 	 */
-	private _commitNavigation(hash: string, route: string): void {
+	private _commitNavigation(hash: string, route: string, hashPending = false): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
 		this._currentHash = hash;
 		this._currentRoute = route;
@@ -1212,7 +1245,24 @@ export default class Router extends MobileRouter implements GuardRouter {
 			hash,
 		});
 		// A navigationSettled handler that navigated on has committed its own hash.
-		if (this._currentHash === hash) super.parse(hash);
+		if (this._currentHash !== hash) return;
+		if (hashPending) {
+			this._awaitedHash = hash;
+		} else {
+			super.parse(hash);
+		}
+	}
+
+	/**
+	 * Commit a navigation after `super.navTo()` unless `parse()` has committed it: the hash is
+	 * already the target, or UI5 writes it later. UI5 writes a hash with component targets only
+	 * once the nested components are loaded. The route then matches when `parse()` gets that
+	 * hash, as it does natively. Matched here, it would display a nested component, and fire
+	 * `routeMatched`, before UI5 has set the hash of that component.
+	 */
+	private _commitAfterNavTo(hash: string, route: string): void {
+		if (this._phase.kind !== "committing") return;
+		this._commitNavigation(hash, route, this.getHashChanger().getHash() !== hash);
 	}
 
 	/**
@@ -1336,11 +1386,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					} else if (!hashShown || target.componentTargetInfo) {
 						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
 					}
-					// parse() has not run: the hash is already the target, or changes later
-					// (component targets). Commit manually, like the preflight does.
-					if (this._phase.kind === "committing") {
-						this._commitNavigation(targetHash, targetName);
-					}
+					this._commitAfterNavTo(targetHash, targetName);
 				} finally {
 					if (this._phase.kind === "committing") {
 						this._phase = IDLE;

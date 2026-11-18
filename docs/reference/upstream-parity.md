@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This repository keeps two complementary compatibility layers for the core router:
+This repository keeps three complementary compatibility layers for the core router:
 
 - `packages/lib/test/qunit/NativeRouterCompat.qunit.ts` - fast local differential tests authored in this repo
+- `packages/lib/test/qunit/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
 - `packages/lib/test/qunit/upstream-parity/` - a vendored OpenUI5 parity lane with pinned upstream source snapshots and local executable ports
 
 The vendored lane exists to answer a specific question:
@@ -81,6 +82,101 @@ Recommended process:
 3. update or add local executable ports only where valuable
 4. for a version bump, migrate the versioned port paths before writing the new manifest version
 5. run `npm run verify:openui5-router-vendor` and `npm run test:qunit` (the parity suite is part of the QUnit lane)
+
+## Nested component targets
+
+`NestedRouterParity.qunit.ts` runs one fixture app (`packages/lib/test/qunit/fixtures/parity/`)
+once per flavor and compares what each run did. The parent's `shell` route displays a child
+component through `componentUsages` and a target of type `Component` with the prefix `child`.
+Parent and child each have a `bypassed` target, as the demo app has.
+
+| Flavor   | Parent router                                      | Child component | Child router                                                      |
+| -------- | -------------------------------------------------- | --------------- | ----------------------------------------------------------------- |
+| `native` | `sap.m.routing.Router`                             | `childNative`   | `sap.m.routing.Router`                                            |
+| `guard`  | `ui5.guard.router.Router`, no guards               | `childGuard`    | `ui5.guard.router.Router`, no guards                              |
+| `allow`  | `ui5.guard.router.Router`, guard `"*"` that allows | `childAllow`    | `ui5.guard.router.Router`, manifest guard `"*"` that allows, lazy |
+
+The test replaces the router class, the child and the guards in the parent's manifest and passes
+the manifest to `Component.create()`. The three child components differ only in their manifest.
+
+### What is compared
+
+Every run records one trace, in the order things happen (`parityRecorder.ts`):
+
+- the browser hash: `hashChanged`, and `hashSet` (adds a history entry) or `hashReplaced` (adds
+  none) of the `HashChanger`. These two stand for the history length, which the browser caps
+  and which therefore differs between two runs for reasons unrelated to the router
+- `beforeRouteMatched`, `routeMatched`, `routePatternMatched`, `bypassed` and `titleChanged` of
+  the parent router and the child router, with all parameters (controls as their ID)
+- every target the two `Targets` instances display
+- every warning and error logged through `sap/base/Log`, except two that a `NavContainer`
+  logs depending on how fast views load ("page stack is empty", "Cannot navigate to page ...
+  because this is the current page"). A router's own class name in a line is replaced by the
+  native one
+- after each step: the browser hash, the pages of both `NavContainer`s (pages, current page,
+  previous page), whether each router is initialized or stopped, and each title history
+
+The traces of `guard` and `allow` must equal the trace of `native`. A second `native` run is the
+control: if it differs from the first, the scenario depends on what ran before it, and the
+comparison with the guard router proves nothing.
+
+Scenarios: first display of the child, `navTo` in the child with and without a history entry,
+the address bar into the child and inside of it, a start on a hash the child does not know, a
+start on a hash the parent does not know, a start on a deep link to a child route, leaving the
+parent route and displaying the child again, browser back and forward, the parent's `navTo` with
+`componentTargetInfo`, `navTo` to the route already shown, and a target displayed without a
+route. Titles propagate from the child to the parent (`propagateTitle`) in every scenario.
+
+Three things about the scenarios are deliberate:
+
+- The two scenarios that change the URL as the browser does (address bar, back and forward)
+  come first in the file. Chrome ignores hash changes once a page has made about 200 of them
+  within ten seconds, and the tests of this page make more. UI5 does not notice, because it
+  reports its own hash changes itself. A real address bar change or a real back does.
+- The start on a hash the child does not know is compared without regard to order
+  (`anyOrder`). The parent does not wait for the child's `bypassed` target as it waits for a
+  route of the child, so the native router itself displays the two in either order.
+- The warning "Cannot navigate to page ... because this is the current page" has a test of its
+  own. `sap.m.NavContainer` logs it when a router navigates to the page that is already the
+  current one, which is the case for the first page of every `NavContainer`. The native
+  router causes it exactly as the guard router does, for the first page of the parent and of
+  the child. On a start on a hash the child does not know, it is also logged for the page of
+  the child component, depending on how fast the component loads, again with both routers.
+
+### What differs on purpose
+
+These behaviors exist only with guards that block, redirect or decide asynchronously. They are
+not compared with the native router. The tests that pin them are in
+`packages/lib/test/qunit/RouterManifestGuards.qunit.ts`, module "Router - Manifest-driven
+instantiation".
+
+| Behavior of the guard router                                                                                                                                                                   | Native router                                                        | Reason                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A blocked navigation of the child fires no routing event. A blocked `navTo` never writes the hash, a blocked browser hash is restored under the child's prefix                                 | Every hash that matches a route is displayed                         | Blocking is the purpose of a guard                                                                                                                 |
+| A redirected navigation of the child fires the routing events of the redirect target only and writes that target under the child's prefix. A redirect to the hash that is shown writes nothing | No redirects                                                         | Redirecting is the purpose of a guard                                                                                                              |
+| While the child's first navigation waits for an async guard (in lazy mode: for the guard module), the parent's route does not match. `_bMatchingProcessStarted` reads `true` for that time     | The member is `true` only between the route match and `routeMatched` | Without it the parent would count the child as displayed before the child's first route matched, see [Private UI5 Coupling](#private-ui5-coupling) |
+| The parent's route matches although the child's navigation was blocked: the router resolves the wait of the component target                                                                   | The child always fires `routeMatched`, which resolves the wait       | A blocked navigation fires no `routeMatched`, so the parent's route would never match                                                              |
+| While a navigation waits for async guards, a `titleChanged` event is deferred to the next `routeMatched` and `resetHash` is skipped                                                            | The same, for the time of a route match                              | The two other readers of `_bMatchingProcessStarted` see the value the component target sees                                                        |
+| The routers fire `navigationSettled`                                                                                                                                                           | No such event                                                        | Additional API. The trace does not record it                                                                                                       |
+
+A guard that allows changes when the events fire (after the guard has decided), never which
+events fire or in which order. The `allow` flavor asserts that.
+
+When a UI5 upgrade breaks a scenario, read the first differing trace line. A difference between
+the two `native` runs is a change in the test setup, not in the router.
+
+### Differences the comparison found
+
+The first run of these tests found four differences between the guard router without guards
+and the native router. All four were bugs and are fixed in `packages/lib/src/Router.ts`. The
+tests named here fail without the fix.
+
+| Difference                                                                                                                                                                                                            | Cause                                                                                                                                                  | Fix                                                                                                                    | Test                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The router config lacked `targetParent`, the ID of the component's root view. It is part of the `config` of every routing event, and a route with its own target options finds its control through it                 | `UIComponent` adds `targetParent` to its config object after it has constructed the router. The router passed UI5 a copy without `guardRouter`         | UI5 gets a view of the caller's object that hides `guardRouter` (`withoutGuardRouter()`)                               | every scenario of `NestedRouterParity.qunit.ts`                                                |
+| `navTo()` to the route that is shown did nothing. Natively it sets the hashes of nested components (`componentTargetInfo`), or resets them: `navTo("shell")` on `shell&/child/detail/1` leads to `shell`              | The router returned early when the target hash was the committed one                                                                                   | It calls `super.navTo()` without running guards                                                                        | "navTo to the route that is already shown", "the parent navigates to a route of the child ..." |
+| After `Targets#display()` without a route, `navTo()` to the route shown before did not display that route again                                                                                                       | Same early return. UI5 resets the hash of the router's hash changer for this case and reports the hash again, and `parse()` ignored the committed hash | `parse()` lets the route match for the hash that such a `navTo()` awaits (`_awaitedHash`)                              | "a target displayed without a route"                                                           |
+| `navTo()` with `componentTargetInfo` matched the parent's route before UI5 had written the hash: `routeMatched` of the parent fired before the route of the child had matched, and before `titleChanged` of the child | UI5 writes that hash only once the nested components are loaded. The router did not wait for it and called `super.parse()` at once                     | The navigation commits and settles at once, the route matches when `parse()` receives the hash (`_commitAfterNavTo()`) | "the parent navigates to a route of the child with componentTargetInfo"                        |
 
 ## Private UI5 Coupling
 

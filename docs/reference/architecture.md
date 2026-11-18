@@ -189,7 +189,9 @@ flowchart TD
     destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
     destroyed -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
     suppress -- "yes" --> sclear["clear _suppressedHash"] --> ret(["return"])
-    suppress -- "no" --> sclear2["clear _suppressedHash"] --> redir{committing phase?}
+    suppress -- "no" --> sclear2["clear _suppressedHash"] --> awaited{"hash equals<br/>_awaitedHash?"}
+    awaited -- "yes" --> match(["super.parse()<br/>the route matches"])
+    awaited -- "no" --> redir{committing phase?}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> canceldup["cancel a pending navigation<br/>that had moved the URL"] --> ret
@@ -298,9 +300,27 @@ committing/preflight phase (which records the approved route) before calling
 `super.navTo()`. The parent router triggers a hash change, which re-enters through
 `parse()`. On entry, `parse()` sees the committing phase and calls `_commitNavigation()`
 with the incoming hash, which transitions to idle and commits without re-running guards.
-If `super.navTo()` does not change the hash, `parse()` is not called and `navTo()` commits
-directly. This avoids double evaluation while keeping `parse()` as the authoritative
-commit path.
+This avoids double evaluation while keeping `parse()` as the authoritative commit path.
+
+If `parse()` is not called inside `super.navTo()`, `_commitAfterNavTo()` commits the
+navigation and settles it. There are two cases:
+
+- The hash changer already shows the target hash, so no hash change comes. The router calls
+  `super.parse()` itself and the route matches.
+- UI5 writes the hash later. That is the case with `componentTargetInfo`: UI5 first loads
+  the nested components, collects their hashes and then writes one combined hash. The router
+  stores the target in `_awaitedHash` and does not call `super.parse()`. The route matches
+  when `parse()` receives that hash, as it does natively. Matched earlier, the route would
+  display the nested component, and fire its own `routeMatched`, before UI5 has set the hash
+  of that component. Any other hash that reaches `parse()` first clears `_awaitedHash`.
+
+A `navTo()` to the hash that is committed changes no route of this router, so no guard runs.
+It cancels a pending navigation and then calls `super.navTo()`, because UI5 may still have
+work to do: it sets the hashes of nested components (`componentTargetInfo`), or resets them
+when none are given. If UI5 has reset the hash of the router's hash changer, which it does
+after a target was displayed without a route (`Targets#display()`), UI5 reports the hash
+again and the route matches again (`_awaitedHash`). The call is skipped when a
+`navigationSettled` handler of the cancelled navigation has moved the hash on.
 
 `skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
 guards. Both go through `_navigateAllowed()`. If `super.navTo()` throws there, the phase is
@@ -320,8 +340,8 @@ phase and calls `navTo(target, replace=true)`. A target whose hash the hash chan
 shows is not written again, unless it passes `componentTargetInfo`: the write would change
 nothing, except that a nested router adds its prefix for an empty hash (`shell` would become
 `shell&/child/`, as for `_restoreHash()` below). If `parse()` is not reached, because the hash
-already is the target or because component targets change it later, it commits the target
-directly. The navigation settles once, as `Redirected`, and the target's guards do not run
+already is the target or because component targets change it later, `_commitAfterNavTo()`
+commits the target as described above. The navigation settles once, as `Redirected`, and the target's guards do not run
 again when the hash change arrives.
 
 A redirect target whose hash cannot be built (`Route#getURL()` throws for a missing
@@ -816,6 +836,7 @@ upgrade breaks one of these tests.
 | `_phase`                   | `RouterPhase`                          | Discriminated union tracking the router's lifecycle phase (see below)                                                                            |
 | `_parseGeneration`         | `number`                               | Monotonic counter for async invalidation                                                                                                         |
 | `_suppressedHash`          | `string \| null`                       | Hash to suppress in the next `parse()` call                                                                                                      |
+| `_awaitedHash`             | `string \| null`                       | Hash of a committed navigation that UI5 has not reported yet; the route matches when `parse()` receives it                                       |
 | `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                          |
 | `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                             |
 | `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                      |
@@ -886,6 +907,7 @@ upgrade breaks one of these tests.
   | PatternTree.qunit.ts          |   | redirect-chain.e2e.ts      |
   | RouteMeta.qunit.ts            |   | route-metadata.e2e.ts      |
   | NativeRouterCompat.qunit.ts   |   +----------------------------+
+  | NestedRouterParity.qunit.ts   |
   | UpstreamParity.qunit.ts       |
   +-------------------------------+
 

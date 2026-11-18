@@ -2,6 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import coreLibrary from "sap/ui/core/library";
 import type { GuardRouter } from "ui5/guard/router/types";
+import { firstDifference, recordHashes, recordLogs, recordRouter, settle } from "./parityRecorder";
 import { flushPromises, GuardRouterClass, initHashChanger } from "./testHelpers";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
@@ -558,4 +559,179 @@ QUnit.test("replaceHash behaves identically", async function (assert: Assert) {
 
 	assert.deepEqual(extMatched, ["home", "page1"], "ext router matched the replaced hash");
 	assert.deepEqual(extMatched, nativeMatched, "replaceHash produces identical routeMatched sequence");
+});
+
+// ============================================================
+// Module: Recorded behavior parity
+// ============================================================
+
+/** Routes with every kind of pattern segment: mandatory, optional, query and rest. */
+const TRACE_ROUTES = [
+	{ name: "home", pattern: "" },
+	{ name: "page1", pattern: "page1" },
+	{ name: "detail", pattern: "detail/{id}" },
+	{ name: "search", pattern: "search/{term}:?query:" },
+	{ name: "files", pattern: "files/:path*:" },
+];
+
+type TraceStep = (router: MobileRouter, trace: string[]) => void;
+
+/**
+ * Run `steps` on a router of its own and return everything it did: router and route events with
+ * their parameters, hash writes, logged warnings and errors. One router runs at a time, so that
+ * no event or hash write of the other router gets into the trace.
+ */
+async function traceRouter(create: () => MobileRouter, steps: TraceStep[]): Promise<string[]> {
+	initHashChanger();
+	const trace: string[] = [];
+	const router = create();
+	const stopHashes = recordHashes(trace);
+	const stopLogs = recordLogs(trace);
+	recordRouter(
+		"router",
+		router,
+		trace,
+		TRACE_ROUTES.map((route) => route.name),
+	);
+	try {
+		for (const [index, step] of steps.entries()) {
+			trace.push(`step ${index}`);
+			step(router, trace);
+			await settle(trace);
+			trace.push(`hash "${HashChanger.getInstance().getHash()}"`);
+		}
+		return trace;
+	} finally {
+		stopLogs();
+		stopHashes();
+		router.destroy();
+		HashChanger.getInstance().setHash("");
+		await flushPromises();
+	}
+}
+
+/** Assert that the guard router without guards leaves the same trace as the native router. */
+async function assertSameTrace(assert: Assert, steps: TraceStep[], expected: string[]): Promise<void> {
+	const config = { async: true };
+	const native = await traceRouter(() => new MobileRouter(TRACE_ROUTES, config), steps);
+	const guard = await traceRouter(() => new GuardRouterClass(TRACE_ROUTES, config), steps);
+
+	for (const prefix of expected) {
+		assert.ok(
+			native.some((line) => line.startsWith(prefix)),
+			`the native router recorded "${prefix}"`,
+		);
+	}
+	assert.strictEqual(
+		firstDifference(guard, native),
+		undefined,
+		"the guard router leaves the same trace as the native router",
+	);
+}
+
+/** navTo as a step; UI5 throws out of navTo when a mandatory parameter is missing. */
+const navTo =
+	(name: string, parameters?: object, replace?: boolean): TraceStep =>
+	(router, trace) => {
+		try {
+			trace.push(`navTo returns the router: ${router.navTo(name, parameters, replace) === router}`);
+		} catch (error) {
+			trace.push(`navTo throws: ${String(error)}`);
+		}
+	};
+
+const browserHash =
+	(hash: string): TraceStep =>
+	() => {
+		HashChanger.getInstance().setHash(hash);
+	};
+
+QUnit.module("NativeCompat - Recorded behavior");
+
+QUnit.test("a sequence of navigations fires the same events in the same order", async function (assert: Assert) {
+	await assertSameTrace(
+		assert,
+		[
+			(router) => router.initialize(),
+			navTo("page1"),
+			navTo("detail", { id: "4 2" }),
+			navTo("search", { term: "ui5", "?query": { sort: "asc", page: "2" } }),
+			navTo("files", { "path*": "a/b/c" }),
+			navTo("files"),
+			browserHash("unknown/route"),
+			() => HashChanger.getInstance().replaceHash("page1", HistoryDirection.NewEntry),
+			navTo("page1"),
+			navTo("home", {}, true),
+		],
+		[
+			"router beforeRouteMatched page1 ",
+			"router route:page1 switched ",
+			"router routePatternMatched detail ",
+			"router routeMatched search ",
+			"router routeMatched files ",
+			"router bypassed unknown/route ",
+			"hash hashReplaced ",
+		],
+	);
+});
+
+QUnit.test("navTo with a route or parameters that do not resolve behaves the same", async function (assert: Assert) {
+	await assertSameTrace(
+		assert,
+		[
+			(router) => router.initialize(),
+			navTo("nonexistent"),
+			// The mandatory parameter is missing.
+			navTo("detail"),
+			navTo("page1"),
+		],
+		["router routeMatched page1 "],
+	);
+});
+
+QUnit.test("stop and initialize cycles fire the same events", async function (assert: Assert) {
+	await assertSameTrace(
+		assert,
+		[
+			(router) => router.initialize(),
+			navTo("page1"),
+			(router) => router.stop(),
+			// A hash change while stopped fires nothing; initialize() then matches the current hash.
+			browserHash("detail/1"),
+			(router) => router.initialize(),
+			(router) => router.initialize(),
+			(router) => router.stop(),
+			browserHash("page1"),
+			// initialize(true) ignores the current hash.
+			(router) => router.initialize(true),
+			browserHash("detail/2"),
+			(router, trace) => {
+				trace.push(`initialized: ${router.isInitialized()}, stopped: ${router.isStopped()}`);
+			},
+		],
+		["router routeMatched detail "],
+	);
+});
+
+QUnit.test("a hash that several routes could match resolves to the same route", function (assert: Assert) {
+	const routes = [
+		{ name: "detail", pattern: "detail/{id}" },
+		{ name: "optional", pattern: "optional/:id:" },
+		{ name: "catchAll", pattern: ":all*:" },
+	];
+	const native = new MobileRouter(routes, { async: true });
+	const guard = new GuardRouterClass(routes, { async: true });
+	try {
+		for (const hash of ["", "detail/1", "optional", "optional/1", "anything/else", "detail/a%20b?x=1"]) {
+			assert.deepEqual(
+				guard.getRouteInfoByHash(hash),
+				native.getRouteInfoByHash(hash),
+				`getRouteInfoByHash("${hash}") returns the same route and arguments`,
+			);
+			assert.strictEqual(guard.match(hash), native.match(hash), `match("${hash}") returns the same result`);
+		}
+	} finally {
+		native.destroy();
+		guard.destroy();
+	}
 });

@@ -72,6 +72,13 @@ export default {
 		NativeRouterCompat: {
 			title: "QUnit Tests for Native Router Compatibility",
 		},
+		NestedRouterParity: {
+			title: "QUnit Tests for Native Router Parity in Nested Components",
+			// Each test starts the fixture app four times.
+			qunit: {
+				testTimeout: 30000,
+			},
+		},
 		UpstreamParity: {
 			title: "QUnit Tests for Vendored OpenUI5 Router Parity",
 		},

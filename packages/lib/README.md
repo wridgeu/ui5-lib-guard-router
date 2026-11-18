@@ -1057,10 +1057,10 @@ Or set the global log level via URL parameter (per-component filtering is only a
 
 ### Running tests
 
-The library ships fifteen QUnit test suites that run in headless Chrome via WebdriverIO:
+The library ships sixteen QUnit test suites that run in headless Chrome via WebdriverIO:
 
 ```bash
-# All suites (GuardPipeline, GuardConfig, GuardModules, PatternTree, RouteMeta, Router, RouterGuards, RouterAsync, RouterNavigation, RouterSettlement, RouterOptions, RouterManifestGuards, RouterRouteMeta, NativeRouterCompat, UpstreamParity)
+# All suites (GuardPipeline, GuardConfig, GuardModules, PatternTree, RouteMeta, Router, RouterGuards, RouterAsync, RouterNavigation, RouterSettlement, RouterOptions, RouterManifestGuards, RouterRouteMeta, NativeRouterCompat, NestedRouterParity, UpstreamParity)
 npm run test:qunit
 
 # Full matrix including OpenUI5 1.120 compatibility lane and E2E
