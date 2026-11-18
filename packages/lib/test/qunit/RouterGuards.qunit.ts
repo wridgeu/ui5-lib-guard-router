@@ -1,4 +1,3 @@
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
@@ -21,7 +20,9 @@ import {
 	createRouter,
 	flushPromises,
 	initHashChanger,
+	logMessages,
 	recordSettlements,
+	type SinonTestContext,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -186,6 +187,7 @@ QUnit.test("Guard context has no ownerComponent when the router has no owner", a
 	await waitForRoute(router, "home");
 
 	assert.ok(capturedContext, "Context was captured");
+	assert.ok("ownerComponent" in capturedContext!, "the context has the property");
 	assert.strictEqual(capturedContext!.ownerComponent, undefined, "ownerComponent is undefined");
 });
 
@@ -268,21 +270,32 @@ QUnit.test(
 );
 
 QUnit.test("Route guard only runs for its route", async function (assert: Assert) {
-	let protectedGuardCalled = false;
+	let protectedGuardCalls = 0;
 	router.addRouteGuard("protected", () => {
-		protectedGuardCalled = true;
+		protectedGuardCalls++;
 		return true;
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
-	assert.notOk(protectedGuardCalled, "Protected route guard did not run for home route");
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+	assert.strictEqual(protectedGuardCalls, 0, "Protected route guard did not run for the other routes");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(protectedGuardCalls, 1, "It ran for its own route");
 });
 
-QUnit.test("No guards behaves identically to native router", async function (assert: Assert) {
+QUnit.test("Navigation commits without any guards", async function (assert: Assert) {
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation works without any guards");
+	assert.deepEqual(await router.navigationSettled(), {
+		status: NavigationOutcome.Committed,
+		route: "protected",
+		hash: "protected",
+	});
+	assert.strictEqual(HashChanger.getInstance().getHash(), "protected");
 });
 
 // ============================================================
@@ -339,36 +352,29 @@ QUnit.test("Async leave guard returning undefined treats as block", async functi
 	);
 });
 
-QUnit.test("Leave guard returning false blocks without warning", async function (assert: Assert) {
-	const warningSpy = sinon.spy(Log, "warning");
-	try {
+QUnit.test(
+	"Leave guard returning false blocks without warning",
+	async function (this: SinonTestContext, assert: Assert) {
+		const warning = this.stub(Log, "warning");
 		router.addLeaveGuard("home", () => false);
 		router.initialize();
 		await waitForRoute(router, "home");
 		await assertBlocked(assert, router, () => router.navTo("protected"), "False leave guard blocks navigation");
-		const leaveGuardWarnings = warningSpy
-			.getCalls()
-			.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
-		assert.strictEqual(leaveGuardWarnings.length, 0, "No non-boolean warning for a legitimate false return");
-	} finally {
-		warningSpy.restore();
-	}
-});
+		assert.deepEqual(logMessages(warning), [], "No warning for a legitimate false return");
+	},
+);
 
-QUnit.test("Leave guard returning non-boolean logs a warning", async function (assert: Assert) {
-	const warningSpy = sinon.spy(Log, "warning");
-	try {
-		addLeaveGuardUnsafe(router, "home", () => 42);
-		router.initialize();
-		await waitForRoute(router, "home");
-		await assertBlocked(assert, router, () => router.navTo("protected"), "Non-boolean leave guard blocks");
-		const leaveGuardWarnings = warningSpy
-			.getCalls()
-			.filter((call) => String(call.args[0]).includes("Leave guard returned non-boolean"));
-		assert.strictEqual(leaveGuardWarnings.length, 1, "Warning logged for non-boolean leave guard return");
-	} finally {
-		warningSpy.restore();
-	}
+QUnit.test("Leave guard returning non-boolean logs a warning", async function (this: SinonTestContext, assert: Assert) {
+	const warning = this.stub(Log, "warning");
+	addLeaveGuardUnsafe(router, "home", () => 42);
+	router.initialize();
+	await waitForRoute(router, "home");
+	await assertBlocked(assert, router, () => router.navTo("protected"), "Non-boolean leave guard blocks");
+	assert.deepEqual(
+		logMessages(warning),
+		["Leave guard returned non-boolean value, treating as block"],
+		"One warning for the non-boolean leave guard return",
+	);
 });
 
 // ============================================================
@@ -575,14 +581,18 @@ QUnit.test("Leave guard only runs when leaving its registered route", async func
 });
 
 QUnit.test("Leave guard does not run on initial navigation", async function (assert: Assert) {
-	let guardCalled = false;
+	let guardCalls = 0;
 	router.addLeaveGuard("home", () => {
-		guardCalled = true;
+		guardCalls++;
 		return true;
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
-	assert.notOk(guardCalled, "Leave guard did not run on initial navigation");
+	assert.strictEqual(guardCalls, 0, "Leave guard did not run on initial navigation");
+
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+	assert.strictEqual(guardCalls, 1, "It ran when the route was left");
 });
 
 QUnit.test("Leave guard does not run during redirects", async function (assert: Assert) {

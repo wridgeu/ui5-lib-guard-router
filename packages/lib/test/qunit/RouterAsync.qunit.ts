@@ -7,12 +7,15 @@ import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	addGuardUnsafe,
 	assertBlocked,
+	captureErrorsAsync,
+	captureUnhandledRejections,
 	createRouter,
 	flushPromises,
 	getHash,
 	initHashChanger,
 	isMatching,
 	recordSettlements,
+	type SinonTestContext,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -243,10 +246,10 @@ QUnit.test("Async global guard allows, sync route guard redirects", async functi
 	await waitForRoute(router, "home");
 
 	router.navTo("forbidden");
-	await waitForRoute(router, "home");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"",
+	const result = await router.navigationSettled();
+	assert.deepEqual(
+		{ status: result.status, route: result.route, hash: result.hash },
+		{ status: NavigationOutcome.Redirected, route: "home", hash: "" },
 		"Sync route guard redirected after async global allowed",
 	);
 });
@@ -314,8 +317,7 @@ QUnit.test("Superseded async guard result does not apply", async function (asser
  */
 async function assertStaleResultIgnored(assert: Assert, resolveStale: () => void): Promise<void> {
 	const winner = await router.navigationSettled();
-	const lateSettlements: string[] = [];
-	router.attachNavigationSettled((event) => lateSettlements.push(event.getParameters().status));
+	const lateSettlements = recordSettlements(router);
 
 	resolveStale();
 	await flushPromises();
@@ -446,17 +448,23 @@ async function assertSupersededFailureIgnored(assert: Assert, navigate: () => vo
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const statuses: string[] = [];
-	router.attachNavigationSettled((event) => {
-		statuses.push(event.getParameter("status") as string);
+	const statuses = recordSettlements(router);
+	router.attachNavigationSettled(() => {
 		if (statuses.length > 1) return;
 		router.navTo("forbidden");
 		throw new Error("listener failed after superseding");
 	});
 
-	navigate();
-	await flushPromises();
+	const errors = await captureErrorsAsync(async () => {
+		navigate();
+		await flushPromises();
+	});
 
+	assert.deepEqual(
+		errors,
+		[{ message: "A navigationSettled handler threw", details: "Error: listener failed after superseding" }],
+		"the listener's error is logged",
+	);
 	assert.deepEqual(
 		statuses,
 		[NavigationOutcome.Committed, NavigationOutcome.Committed],
@@ -548,28 +556,31 @@ QUnit.test(
 	},
 );
 
-QUnit.test("Multiple async guards - first rejection short-circuits remaining", async function (assert: Assert) {
-	const order: number[] = [];
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"Multiple async guards - the first that blocks short-circuits the remaining",
+	async function (assert: Assert) {
+		const order: number[] = [];
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.addGuard(async () => {
-		order.push(1);
-		return true;
-	});
-	router.addGuard(async () => {
-		order.push(2);
-		return false;
-	});
-	router.addGuard(async () => {
-		order.push(3);
-		return true;
-	});
+		router.addGuard(async () => {
+			order.push(1);
+			return true;
+		});
+		router.addGuard(async () => {
+			order.push(2);
+			return false;
+		});
+		router.addGuard(async () => {
+			order.push(3);
+			return true;
+		});
 
-	router.navTo("protected");
-	await router.navigationSettled();
-	assert.deepEqual(order, [1, 2], "Third guard was short-circuited after second rejected");
-});
+		router.navTo("protected");
+		await router.navigationSettled();
+		assert.deepEqual(order, [1, 2], "Third guard was short-circuited after the second blocked");
+	},
+);
 
 QUnit.test("Async route guard redirects", async function (assert: Assert) {
 	router.addRouteGuard("protected", async () => "home");
@@ -577,8 +588,12 @@ QUnit.test("Async route guard redirects", async function (assert: Assert) {
 	await waitForRoute(router, "home");
 
 	router.navTo("protected");
-	await waitForRoute(router, "home");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Async route guard redirected to home");
+	const result = await router.navigationSettled();
+	assert.deepEqual(
+		{ status: result.status, route: result.route, hash: result.hash },
+		{ status: NavigationOutcome.Redirected, route: "home", hash: "" },
+		"Async route guard redirected to home",
+	);
 });
 
 QUnit.test("Guard returning null is treated as block", async function (assert: Assert) {
@@ -630,8 +645,12 @@ QUnit.test("Rapid sync navigations - last one wins", async function (assert: Ass
 	router.navTo("detail", { id: "1" });
 
 	await waitForRoute(router, "detail");
-	const lastMatched = matchedRoutes[matchedRoutes.length - 1];
-	assert.strictEqual(lastMatched, "detail", "Last rapid navigation won");
+	assert.deepEqual(
+		matchedRoutes,
+		["protected", "forbidden", "detail"],
+		"each navigation committed within its navTo(), and the last one is the last route matched",
+	);
+	assert.strictEqual(getHash(), "detail/1");
 });
 
 QUnit.test("Rapid async navigations - only last navigation settles", async function (assert: Assert) {
@@ -983,12 +1002,6 @@ QUnit.test("Route is navigable again after a guarded navigation completes", asyn
 });
 
 QUnit.test("AbortError from guard is silenced when navigation is superseded", async function (assert: Assert) {
-	const unhandledRejections: PromiseRejectionEvent[] = [];
-	const rejectionHandler = (event: PromiseRejectionEvent): void => {
-		unhandledRejections.push(event);
-	};
-	window.addEventListener("unhandledrejection", rejectionHandler);
-
 	router.addRouteGuard("protected", async (context: GuardContext) => {
 		// Simulate a fetch that only ends by throwing AbortError when the signal is aborted
 		await new Promise<void>((_resolve, reject) => {
@@ -1001,16 +1014,15 @@ QUnit.test("AbortError from guard is silenced when navigation is superseded", as
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Start navigation (triggers guard with simulated fetch)
-	router.navTo("protected");
-	// Supersede while the fetch is pending
-	router.navTo("forbidden");
-	await waitForRoute(router, "forbidden");
+	const unhandled = await captureUnhandledRejections(async () => {
+		// Start navigation (triggers guard with simulated fetch)
+		router.navTo("protected");
+		// Supersede while the fetch is pending
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+	});
 
-	// Let any stale rejection surface
-	await flushPromises();
-	window.removeEventListener("unhandledrejection", rejectionHandler);
-	assert.strictEqual(unhandledRejections.length, 0, "No unhandled promise rejections from AbortError");
+	assert.deepEqual(unhandled, [], "No unhandled promise rejections from AbortError");
 });
 
 // ============================================================
@@ -1108,12 +1120,6 @@ QUnit.module("Router - Guard error after signal abort", standardHooks);
 QUnit.test(
 	"Enter guard rejecting after signal abort does not produce unhandled rejection",
 	async function (assert: Assert) {
-		const unhandledRejections: PromiseRejectionEvent[] = [];
-		const rejectionHandler = (event: PromiseRejectionEvent): void => {
-			unhandledRejections.push(event);
-		};
-		window.addEventListener("unhandledrejection", rejectionHandler);
-
 		router.addRouteGuard("protected", async (context: GuardContext) => {
 			await new Promise<void>((_resolve, reject) => {
 				context.signal.addEventListener("abort", () => {
@@ -1125,28 +1131,21 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Start navigation (guard stays pending)
-		router.navTo("protected");
-		// Supersede: aborts the signal, guard rejects
-		router.navTo("forbidden");
-		await waitForRoute(router, "forbidden");
+		const unhandled = await captureUnhandledRejections(async () => {
+			// Start navigation (guard stays pending)
+			router.navTo("protected");
+			// Supersede: aborts the signal, guard rejects
+			router.navTo("forbidden");
+			await waitForRoute(router, "forbidden");
+		});
 
-		// Let any stale rejection surface
-		await flushPromises();
-		window.removeEventListener("unhandledrejection", rejectionHandler);
-		assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from guard error after abort");
+		assert.deepEqual(unhandled, [], "No unhandled rejections from guard error after abort");
 	},
 );
 
 QUnit.test(
 	"Leave guard rejecting after signal abort does not produce unhandled rejection",
 	async function (assert: Assert) {
-		const unhandledRejections: PromiseRejectionEvent[] = [];
-		const rejectionHandler = (event: PromiseRejectionEvent): void => {
-			unhandledRejections.push(event);
-		};
-		window.addEventListener("unhandledrejection", rejectionHandler);
-
 		let leaveGuardCalls = 0;
 		router.addLeaveGuard("home", (context: GuardContext) => {
 			leaveGuardCalls++;
@@ -1162,16 +1161,16 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Navigate to protected (leave guard on home stays pending)
-		router.navTo("protected");
-		// Supersede: aborts the signal, leave guard rejects
-		router.navTo("forbidden");
+		const unhandled = await captureUnhandledRejections(async () => {
+			// Navigate to protected (leave guard on home stays pending)
+			router.navTo("protected");
+			// Supersede: aborts the signal, leave guard rejects
+			router.navTo("forbidden");
+			await router.navigationSettled();
+		});
 
-		await router.navigationSettled();
-		// Let the stale leave guard rejection surface
-		await flushPromises();
-		window.removeEventListener("unhandledrejection", rejectionHandler);
-		assert.strictEqual(unhandledRejections.length, 0, "No unhandled rejections from leave guard error after abort");
+		assert.strictEqual(leaveGuardCalls, 2, "the leave guard ran for both navigations");
+		assert.deepEqual(unhandled, [], "No unhandled rejections from leave guard error after abort");
 	},
 );
 
@@ -1183,7 +1182,7 @@ QUnit.module("Router - Async leave guard abort check before enter phase", standa
 QUnit.test(
 	"enter guards do not run for superseded navigation after async leave guard resolves",
 	async function (assert: Assert) {
-		let enterGuardCalledWhileAborted = false;
+		let enterGuardCalls = 0;
 
 		router.initialize();
 		await waitForRoute(router, "home");
@@ -1199,11 +1198,8 @@ QUnit.test(
 				}),
 		);
 
-		// Enter guard on "protected" that tracks if it was called with an aborted signal
-		router.addRouteGuard("protected", (ctx: GuardContext) => {
-			if (ctx.signal.aborted) {
-				enterGuardCalledWhileAborted = true;
-			}
+		router.addRouteGuard("protected", () => {
+			enterGuardCalls++;
 			return true;
 		});
 
@@ -1223,10 +1219,7 @@ QUnit.test(
 		leaveResolvers[0](true);
 		await flushPromises();
 
-		assert.notOk(
-			enterGuardCalledWhileAborted,
-			"Enter guard was not called with an aborted signal for the superseded navigation",
-		);
+		assert.strictEqual(enterGuardCalls, 0, "No enter guard ran for the superseded navigation");
 	},
 );
 
@@ -1235,6 +1228,8 @@ QUnit.test(
 // ============================================================
 QUnit.module("Router - Native matching flag", standardHooks);
 
+// A canary for UI5 itself: the router mirrors the private member `_bMatchingProcessStarted`, so
+// this fails if UI5 renames it or stops writing it.
 QUnit.test("UI5 sets the flag for the time of a route match", async function (assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -1249,7 +1244,7 @@ QUnit.test("UI5 sets the flag for the time of a route match", async function (as
 
 QUnit.test(
 	"the flag is set while a navigation waits for async guards, until it ends without a match",
-	async function (assert) {
+	async function (this: SinonTestContext, assert) {
 		let decision: { resolve: (allowed: boolean) => void; reject: (error: Error) => void } | undefined;
 		router.addRouteGuard(
 			"protected",
@@ -1266,18 +1261,14 @@ QUnit.test(
 			[NavigationOutcome.Error, () => decision?.reject(new Error("guard failed"))],
 			[NavigationOutcome.Cancelled, () => router.navTo("home")],
 		];
-		const errorStub = sinon.stub(Log, "error");
-		try {
-			for (const [status, end] of endings) {
-				router.navTo("protected");
-				assert.strictEqual(isMatching(router), true, `set while navTo waits for the guard (${status})`);
-				end();
-				const settled = await router.navigationSettled();
-				assert.strictEqual(settled.status, status, `the navigation settles as ${status}`);
-				assert.strictEqual(isMatching(router), false, `cleared by the ${status} settlement`);
-			}
-		} finally {
-			errorStub.restore();
+		this.stub(Log, "error");
+		for (const [status, end] of endings) {
+			router.navTo("protected");
+			assert.strictEqual(isMatching(router), true, `set while navTo waits for the guard (${status})`);
+			end();
+			const settled = await router.navigationSettled();
+			assert.strictEqual(settled.status, status, `the navigation settles as ${status}`);
+			assert.strictEqual(isMatching(router), false, `cleared by the ${status} settlement`);
 		}
 
 		HashChanger.getInstance().setHash("protected");

@@ -406,9 +406,10 @@ QUnit.test("invalid routeMeta entries produce warnings", function (assert: Asser
 		});
 	});
 
-	assert.ok(
-		warnings.some((w) => w.message.includes('routeMeta["home"]')),
-		"warning for non-object metadata entry",
+	assert.deepEqual(
+		warnings.map((w) => w.message),
+		['guardRouter.routeMeta["home"]: expected object, skipping'],
+		"one warning for the non-object metadata entry",
 	);
 	assert.deepEqual(router.getRouteMeta("protected"), { valid: true }, "valid entries still parsed");
 });
@@ -420,9 +421,10 @@ QUnit.test("non-object routeMeta produces warning", function (assert: Assert) {
 		});
 	});
 
-	assert.ok(
-		warnings.some((w) => w.message.includes("routeMeta")),
-		"warning for non-object routeMeta",
+	assert.deepEqual(
+		warnings,
+		[{ message: "guardRouter.routeMeta: expected object, skipping", details: '"invalid"' }],
+		"one warning for the non-object routeMeta",
 	);
 });
 
@@ -1222,19 +1224,30 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Add an imperative bagReaderGuard on "employees". It blocks if "writer"
-		// key is NOT in the bag. If the inherited root guard wrote to the bag,
-		// the reader will find it and allow navigation.
-		let bagHadWriter = false;
-		router.addRouteGuard("employees", (context: GuardContext) => {
-			bagHadWriter = context.bag.has("writer");
-			return true;
-		});
+		// A guard added here runs after the manifest guards of its route, so it sees the bag entry
+		// of the root guard if the route inherited that guard.
+		const routes: Record<string, object> = {
+			employees: {},
+			employee: { id: "1" },
+			employeeResume: { id: "1" },
+			settings: {},
+			settingsProfile: {},
+		};
+		const inherited: Record<string, boolean> = {};
+		for (const [name, parameters] of Object.entries(routes)) {
+			router.addRouteGuard(name, (context: GuardContext) => {
+				inherited[name] = context.bag.has("writer");
+				return true;
+			});
+			router.navTo(name, parameters);
+			await router.navigationSettled();
+		}
 
-		router.navTo("employees");
-		await waitForRoute(router, "employees");
-
-		assert.ok(bagHadWriter, "inherited root guard wrote to bag before route guard ran on descendant");
+		assert.deepEqual(
+			inherited,
+			{ employees: true, employee: true, employeeResume: true, settings: true, settingsProfile: true },
+			"the root guard ran before the route guard of every other route",
+		);
 	},
 );
 

@@ -1,11 +1,7 @@
 import Log from "sap/base/Log";
 import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
-import type { GuardContext, GuardFn } from "ui5/guard/router/types";
-import { logMessages } from "./testHelpers";
-
-interface SinonTestContext {
-	stub: sinon.SinonStubStatic;
-}
+import type { GuardFn } from "ui5/guard/router/types";
+import { createGuardContext, logMessages, type SinonTestContext } from "./testHelpers";
 
 const PATH = "app/guards/auth";
 const a: GuardFn = () => true;
@@ -99,29 +95,15 @@ QUnit.test("empty and unsupported exports", function (this: SinonTestContext, as
 
 QUnit.module("GuardModules - runGuardsInOrder");
 
-function createContext(signal = new AbortController().signal): GuardContext {
-	return {
-		toRoute: "t",
-		toHash: "t",
-		toArguments: {},
-		toMeta: {},
-		fromRoute: "",
-		fromHash: "",
-		fromMeta: {},
-		signal,
-		bag: new Map(),
-	};
-}
-
 QUnit.test("runs synchronously and stops at the first result that is not true", function (assert) {
 	const calls: string[] = [];
 	const result = runGuardsInOrder(
 		[() => (calls.push("a"), true), () => (calls.push("b"), "home"), () => (calls.push("c"), true)],
-		createContext(),
+		createGuardContext(),
 	);
 	assert.strictEqual(result, "home");
 	assert.deepEqual(calls, ["a", "b"]);
-	assert.strictEqual(runGuardsInOrder([], createContext()), true);
+	assert.strictEqual(runGuardsInOrder([], createGuardContext()), true);
 });
 
 QUnit.test("continues after an async guard until a result is not true", async function (assert) {
@@ -133,7 +115,7 @@ QUnit.test("continues after an async guard until a result is not true", async fu
 			() => (calls.push("c"), Promise.resolve(false)),
 			() => (calls.push("d"), true),
 		],
-		createContext(),
+		createGuardContext(),
 	);
 	assert.strictEqual(result instanceof Promise, true);
 	assert.strictEqual(await result, false);
@@ -145,7 +127,7 @@ QUnit.test("skips the remaining guards when the navigation is aborted while awai
 	const calls: string[] = [];
 	const result = runGuardsInOrder(
 		[() => (calls.push("a"), Promise.resolve(true)), () => (calls.push("b"), true)],
-		createContext(controller.signal),
+		createGuardContext({ signal: controller.signal }),
 	);
 	controller.abort();
 	assert.strictEqual(await result, false);
@@ -160,8 +142,8 @@ QUnit.test("a navigation aborted while the module loads resolves false and runs 
 	const [wrapper] = createLazyGuards({ route: "t", type: "enter", modulePath });
 	assert.strictEqual(sap.ui.require(modulePath), undefined, "module was not cached when the guard was created");
 
-	const result = wrapper(createContext(controller.signal));
+	const result = wrapper(createGuardContext({ signal: controller.signal }));
 	controller.abort();
 	assert.strictEqual(await result, false, "neither an allow nor the guard's own result");
-	assert.strictEqual(await wrapper(createContext()), "ran", "a later navigation runs the guard");
+	assert.strictEqual(await wrapper(createGuardContext()), "ran", "a later navigation runs the guard");
 });

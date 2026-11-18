@@ -4,13 +4,11 @@
  */
 import Log from "sap/base/Log";
 import type { GuardContext, GuardFn, GuardResult } from "./types";
-import { isPromiseLike, nameGuard } from "./GuardPipeline";
+import { isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord } from "./GuardConfig";
 
-const LOG_COMPONENT = "ui5.guard.router.Router";
-
 /** A guard function from a module, with the name its log messages show. */
-export interface NamedGuard {
+interface NamedGuard {
 	readonly name: string;
 	readonly fn: GuardFn;
 }
@@ -18,6 +16,11 @@ export interface NamedGuard {
 /** Log a warning about a guard module entry in the manifest. */
 function guardWarning(modulePath: string, detail: string): void {
 	Log.warning(`guardRouter.guards: "${modulePath}" ${detail}`, undefined, LOG_COMPONENT);
+}
+
+/** The last segment of a module path, by which the guards of the module are named. */
+function moduleNameOf(modulePath: string): string {
+	return modulePath.slice(modulePath.lastIndexOf("/") + 1);
 }
 
 /** The position an export key selects: a plain non-negative integer, otherwise `NaN`. */
@@ -37,9 +40,8 @@ function positionOf(exportKey: string): number {
  * When `exportKey` is set on a function export, the key is ignored with a debug log.
  */
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
-	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
+	const moduleName = moduleNameOf(modulePath);
 
-	// Shape 1: function
 	if (typeof moduleExport === "function") {
 		if (exportKey !== undefined) {
 			Log.debug(
@@ -51,7 +53,6 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		return [{ name: exportKey ?? moduleName, fn: moduleExport as GuardFn }];
 	}
 
-	// Shape 2: array
 	if (Array.isArray(moduleExport)) {
 		if (moduleExport.length === 0) {
 			guardWarning(modulePath, "exported an empty array, skipping");
@@ -84,7 +85,6 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		return results;
 	}
 
-	// Shape 3: plain object
 	if (isRecord(moduleExport)) {
 		const entries = Object.entries(moduleExport);
 		if (entries.length === 0) {
@@ -158,11 +158,11 @@ async function finishGuardsAsync(
 	return runGuardsInOrder(remaining, context);
 }
 
-/** Load a guard module asynchronously. Rejects (with a warning) when the load fails. */
-export function loadGuardModule(modulePath: string): Promise<unknown> {
+/** Load a guard module asynchronously. Warns with `failure` and rejects when the load fails. */
+function loadGuardModule(modulePath: string, failure: string): Promise<unknown> {
 	return new Promise((resolve, reject) => {
 		sap.ui.require([modulePath], resolve, (err: Error) => {
-			Log.warning(`guardRouter.guards: lazy load of "${modulePath}" failed`, String(err), LOG_COMPONENT);
+			Log.warning(`guardRouter.guards: ${failure}`, String(err), LOG_COMPONENT);
 			reject(err);
 		});
 	});
@@ -179,28 +179,14 @@ export function loadGuardModules(
 	descriptors: GuardDescriptor[],
 ): Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }[]> {
 	return Promise.all(
-		descriptors.map(
-			(descriptor) =>
-				new Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }>((resolve) => {
-					sap.ui.require(
-						[descriptor.modulePath],
-						(moduleExport: unknown) => {
-							resolve({
-								descriptor,
-								guards: resolveNamedGuards(moduleExport, descriptor.modulePath, descriptor.exportKey),
-							});
-						},
-						(err: Error) => {
-							Log.warning(
-								`guardRouter.guards: failed to load module "${descriptor.modulePath}", skipping`,
-								String(err),
-								LOG_COMPONENT,
-							);
-							resolve({ descriptor, guards: [] });
-						},
-					);
-				}),
-		),
+		descriptors.map(async (descriptor) => {
+			const { modulePath, exportKey } = descriptor;
+			const guards = await loadGuardModule(modulePath, `failed to load module "${modulePath}", skipping`).then(
+				(moduleExport) => resolveNamedGuards(moduleExport, modulePath, exportKey),
+				() => [],
+			);
+			return { descriptor, guards };
+		}),
 	);
 }
 
@@ -219,7 +205,7 @@ export function loadGuardModules(
  */
 export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 	const { modulePath, exportKey } = descriptor;
-	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
+	const moduleName = moduleNameOf(modulePath);
 
 	if (exportKey === undefined) {
 		const cached = sap.ui.require(modulePath) as unknown;
@@ -238,7 +224,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 	const wrapper = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
 		const mod = sap.ui.require(modulePath) as unknown;
 		if (mod !== undefined) return run(mod, context);
-		return loadGuardModule(modulePath).then((loadedModule) =>
+		return loadGuardModule(modulePath, `lazy load of "${modulePath}" failed`).then((loadedModule) =>
 			context.signal.aborted ? false : run(loadedModule, context),
 		);
 	};

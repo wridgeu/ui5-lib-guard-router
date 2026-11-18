@@ -3,7 +3,7 @@ import probe from "../probe";
 
 /**
  * Child component of the native parity tests: routed by ui5.guard.router.Router without guards.
- * @namespace ui5.guard.router.qunit.fixtures.parity.childGuard
+ * @namespace ui5.guard.router.qunit.fixtures.parity.childNoGuards
  */
 export default class Component extends UIComponent {
 	static readonly metadata = {

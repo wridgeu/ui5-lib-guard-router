@@ -1,18 +1,18 @@
 import { chromeProfileHooks } from "./wdio-chrome-profile";
 import { config as baseConfig } from "./wdio-qunit.conf";
 
+interface StrykerNamespace {
+	activeMutant?: string;
+	hitCount?: number;
+	hitLimit?: number;
+}
+
 // Browsers can't read process.env, so hand Stryker's active mutant to the page before UI5 loads.
 const activeMutant = process.env.__STRYKER_ACTIVE_MUTANT__;
 
 // Stryker's infinite-loop guard: instrumented code throws once the active mutant runs this often
 // on one page. Without it a looping mutant grows the browser's memory until the run timeout.
 const HIT_LIMIT = 10_000;
-
-interface StrykerNamespace {
-	activeMutant?: string;
-	hitCount?: number;
-	hitLimit?: number;
-}
 
 // A mutant that allocates without end crashes its page at this heap size instead of at V8's
 // default of about 4 GB; the wdio run then fails and the mutant counts as killed.

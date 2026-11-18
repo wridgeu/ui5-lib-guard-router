@@ -101,11 +101,14 @@ export function recordLogs(trace: string[], currentPageWarnings: string[] = []):
 	const listener = {
 		__implements__sap_base_Log_Listener: true,
 		onLogEntry(entry: Entry): void {
-			// A NavContainer logs this each time it renders before its first page arrives: how often
-			// depends on how fast the views load.
 			if (entry.message.includes("because this is the current page")) {
 				currentPageWarnings.push(entry.message);
-			} else if (entry.level <= Log.Level.WARNING && !entry.message.includes("page stack is empty")) {
+				return;
+			}
+			// A NavContainer without a page logs this whenever it is asked for its current page: by
+			// its renderer, and by the snapshots of the parity tests, which record the pages themselves.
+			if (entry.message.includes("page stack is empty")) return;
+			if (entry.level <= Log.Level.WARNING) {
 				const severity = entry.level === Log.Level.WARNING ? "warning" : "error";
 				trace.push(nativeName(`log ${severity} ${entry.message} (component: ${entry.component ?? ""})`));
 			}
@@ -118,23 +121,38 @@ export function recordLogs(trace: string[], currentPageWarnings: string[] = []):
 	};
 }
 
-/** Resolve once the trace has stopped growing: every promise chain of the last action has run. */
+/**
+ * Let everything that is queued run. Three tasks: a routing step queues a task from a task (UI5
+ * renders in one, a NavContainer navigates in the next).
+ */
+export async function drain(): Promise<void> {
+	await flushPromises();
+	await flushPromises();
+	await flushPromises();
+}
+
+/**
+ * Resolve once the trace has stopped growing: every promise chain of the last action has run.
+ * It cannot wait for what a request brings later, so a step names the line that ends it
+ * (see {@link until}).
+ */
 export async function settle(trace: string[]): Promise<void> {
 	const length = trace.length;
-	await flushPromises();
-	await flushPromises();
-	await flushPromises();
+	await drain();
 	if (trace.length !== length) {
 		return settle(trace);
 	}
 }
+
+/** A deadline and not a wait: {@link until} gives up before the test timeout does, to report the trace. */
+const GIVE_UP_AFTER_MS = 4000;
 
 /**
  * Resolve once every line prefix in `expected` occurs in the trace from index `from` on.
  * A behavior that never happens fails the test with the trace instead of hanging it.
  */
 export async function until(trace: string[], from: number, expected: string[], what: string): Promise<void> {
-	const deadline = performance.now() + 4000;
+	const deadline = performance.now() + GIVE_UP_AFTER_MS;
 	const missing = (): string[] =>
 		expected.filter((prefix) => !trace.slice(from).some((line) => line.startsWith(prefix)));
 	while (missing().length > 0) {

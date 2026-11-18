@@ -41,19 +41,6 @@ QUnit.module("Router - Router options - constructor", {
 	},
 });
 
-QUnit.test("constructor reads unknownRouteRegistration from config", function (assert: Assert) {
-	// Arrange: create router with "ignore" policy
-	router = createRouterWithOptions({ unknownRouteRegistration: "ignore" });
-
-	// Act: register guard for unknown route
-	const warnings = captureWarnings(() => {
-		router.addRouteGuard("nonexistent", () => true);
-	});
-
-	// Assert: "ignore" policy means no warning
-	assert.strictEqual(warnings.length, 0, "ignore policy produces no warnings for unknown routes");
-});
-
 QUnit.test("UI5 gets the caller's config object without guardRouter", function (assert: Assert) {
 	const config: Record<string, unknown> = { async: true, guardRouter: { navToPreflight: "guard" } };
 	router = createRouterUnsafe([{ name: "home", pattern: "" }], config);
@@ -78,35 +65,17 @@ QUnit.test("malformed guardRouter config warns and falls back to default behavio
 		router = createRouterWithOptionsUnsafe("not-an-object");
 	});
 
-	// Assert: warning was logged
-	assert.ok(warnings.length > 0, "warning logged for non-object config");
+	assert.deepEqual(
+		warnings,
+		[{ message: "guardRouter config is not a plain object, using defaults", details: '"not-an-object"' }],
+		"one warning for the non-object config",
+	);
 
 	// Assert: default "warn" policy is active (registering for unknown route logs a warning)
 	const routeWarnings = captureWarnings(() => {
 		router.addRouteGuard("nonexistent", () => true);
 	});
 	assert.strictEqual(routeWarnings.length, 1, "default warn policy active after malformed config");
-});
-
-QUnit.test("invalid option values warn individually and fall back to defaults", function (assert: Assert) {
-	// Arrange & Act: create router with all invalid option values
-	const warnings = captureWarnings(() => {
-		router = createRouterWithOptionsUnsafe({
-			unknownRouteRegistration: "invalid",
-			navToPreflight: 42,
-			guardLoading: null,
-			inheritance: "invalid",
-		});
-	});
-
-	// Assert: one warning per invalid option
-	assert.strictEqual(warnings.length, 4, "one warning per invalid option");
-
-	// Assert: default "warn" policy is active (behavioral proof of fallback)
-	const routeWarnings = captureWarnings(() => {
-		router.addRouteGuard("nonexistent", () => true);
-	});
-	assert.strictEqual(routeWarnings.length, 1, "default warn policy active after invalid config");
 });
 
 QUnit.test("invalid inheritance value warns and falls back to default", function (assert: Assert) {

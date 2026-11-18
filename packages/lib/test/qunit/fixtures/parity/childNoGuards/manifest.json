@@ -1,7 +1,7 @@
 {
 	"_version": "2.0.0",
 	"sap.app": {
-		"id": "ui5.guard.router.qunit.fixtures.parity.childGuard",
+		"id": "ui5.guard.router.qunit.fixtures.parity.childNoGuards",
 		"type": "component",
 		"title": "Native parity child",
 		"applicationVersion": {

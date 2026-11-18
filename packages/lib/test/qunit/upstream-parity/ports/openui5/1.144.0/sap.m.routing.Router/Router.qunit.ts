@@ -33,6 +33,7 @@ type ForwardNavigationResult = {
 	} | null;
 };
 
+// Views#_getView is private in UI5: the upstream test stubs it in the same way.
 function stubViewsForSinglePage(targetPage: Page) {
 	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
 	return sinon.stub(prototype, "_getView").callsFake(() => targetPage);

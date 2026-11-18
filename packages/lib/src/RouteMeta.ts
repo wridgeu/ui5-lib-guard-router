@@ -45,6 +45,7 @@ export default class RouteMetaStore {
 		this._resolved.clear();
 	}
 
+	/** Drop all metadata, manifest and runtime. */
 	clear(): void {
 		this._manifest.clear();
 		this._runtime.clear();

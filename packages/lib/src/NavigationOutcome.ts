@@ -14,7 +14,7 @@ const NavigationOutcome = Object.freeze({
 	Committed: "committed",
 	/** Navigation was allowed, but no route matched; UI5 continued with bypassed handling. @since 1.3.0 */
 	Bypassed: "bypassed",
-	/** A guard blocked navigation; the previous route remains active. @since 1.2.0 */
+	/** A guard blocked navigation, or the hash changer refused the hash change; the previous route remains active. @since 1.2.0 */
 	Blocked: "blocked",
 	/** A guard redirected navigation to a different route. @since 1.2.0 */
 	Redirected: "redirected",

@@ -129,16 +129,16 @@ export function expandForNewRoute<T extends { readonly route: string }>(
 	const result: T[] = [];
 	for (const entry of byRouteDepth(entries, patternByName)) {
 		if (entry.route === "*") continue;
-		if (entry.route !== newName) {
-			const ancestorPattern = patternByName.get(entry.route);
-			if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
-				result.push({ ...entry, route: newName });
-			}
-		} else {
+		if (entry.route === newName) {
 			for (const { name, pattern } of routes) {
 				if (name !== newName && isPatternAncestor(newPattern, pattern)) {
 					result.push({ ...entry, route: name });
 				}
+			}
+		} else {
+			const ancestorPattern = patternByName.get(entry.route);
+			if (ancestorPattern !== undefined && isPatternAncestor(ancestorPattern, newPattern)) {
+				result.push({ ...entry, route: newName });
 			}
 		}
 	}

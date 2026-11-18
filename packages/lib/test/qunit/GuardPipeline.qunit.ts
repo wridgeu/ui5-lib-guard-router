@@ -1,33 +1,8 @@
 import Log from "sap/base/Log";
 import jQuery from "sap/ui/thirdparty/jquery";
 import GuardPipeline, { isPromiseLike, isPromiseResolver, nameGuard } from "ui5/guard/router/GuardPipeline";
-import type { GuardContext, GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
-import { callUnsafe } from "./testHelpers";
-
-/**
- * Sinon-qunit-bridge injects `stub`, `spy`, `mock` onto the QUnit test
- * context (`this`) via a per-test sandbox that is auto-restored in afterEach.
- * Using `this.stub` (sandbox) rather than `sinon.stub` (global) ensures
- * stubs are cleaned up between tests without manual restore.
- */
-interface SinonTestContext {
-	stub: sinon.SinonStubStatic;
-}
-
-function createContext(overrides: Partial<GuardContext> = {}): GuardContext {
-	return {
-		toRoute: "target",
-		toHash: "target",
-		toArguments: {},
-		fromRoute: "",
-		fromHash: "",
-		signal: new AbortController().signal,
-		bag: new Map(),
-		toMeta: Object.freeze({}),
-		fromMeta: Object.freeze({}),
-		...overrides,
-	};
-}
+import type { GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
+import { callUnsafe, createGuardContext as createContext, logMessages, type SinonTestContext } from "./testHelpers";
 
 // ============================================================
 // Module: evaluate
@@ -79,7 +54,6 @@ QUnit.test("removeEnterGuard removes by reference", function (assert: Assert) {
 
 	const result = pipeline.evaluate(createContext());
 	assert.deepEqual(result, { action: "allow" }, "Enter guard removed");
-	assert.notOk(Reflect.get(pipeline, "_enterGuards").has("target"), "Route entry dropped with its last guard");
 });
 
 QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
@@ -90,7 +64,6 @@ QUnit.test("removeLeaveGuard removes by reference", function (assert: Assert) {
 
 	const result = pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(result, { action: "allow" }, "Leave guard removed");
-	assert.notOk(Reflect.get(pipeline, "_leaveGuards").has("current"), "Route entry dropped with its last guard");
 });
 
 QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) {
@@ -730,7 +703,11 @@ QUnit.test(
 
 		const result = await pipeline.evaluate(createContext());
 		assert.deepEqual(result, { action: "block" });
-		assert.ok(warnStub.calledOnce, "Warning logged for invalid async return");
+		assert.deepEqual(
+			logMessages(warnStub),
+			["Guard returned invalid value, treating as block"],
+			"One warning for the invalid async return",
+		);
 	},
 );
 
@@ -820,14 +797,8 @@ QUnit.module("GuardPipeline - Promise resolve functions");
 
 /** The resolve and reject functions of a native Promise. A UI5 component target subscribes the first one. */
 function createPromiseFunctions(): [resolve: (value: unknown) => void, reject: (reason: unknown) => void] {
-	let functions: [(value: unknown) => void, (reason: unknown) => void] | undefined;
-	void new Promise((resolve, reject) => {
-		functions = [resolve, reject];
-	});
-	if (!functions) {
-		throw new Error("The Promise executor did not run synchronously");
-	}
-	return functions;
+	const { resolve, reject } = Promise.withResolvers<unknown>();
+	return [resolve, reject];
 }
 
 QUnit.test("the resolve function of a Promise is recognized by its exact shape", function (assert: Assert) {

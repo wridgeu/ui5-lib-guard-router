@@ -13,7 +13,7 @@
 				"routerClass": "ui5.guard.router.Router",
 				"guardRouter": {
 					"unknownRouteRegistration": "ignore",
-					"navToPreflight": "guard",
+					"navToPreflight": "off",
 					"guardLoading": "block",
 					"guards": {
 						"protected": ["guards.blockGuard"]

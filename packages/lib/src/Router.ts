@@ -18,15 +18,13 @@ import type {
 	RouteGuardConfig,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
-import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver } from "./GuardPipeline";
+import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver, LOG_COMPONENT } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
 import { createLazyGuards, loadGuardModules } from "./GuardModules";
 import { expandForNewRoute, expandToDescendants, type RoutePattern } from "./PatternTree";
 import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
-
-const LOG_COMPONENT = "ui5.guard.router.Router";
 
 /**
  * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
@@ -134,8 +132,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _phase: RouterPhase = IDLE;
 	private _parseGeneration = 0;
 	private _suppressedHash: string | null = null;
-	/** The hash of a committed navigation that UI5 has not written yet (see {@link _commitAfterNavTo}). */
-	private _awaitedHash: string | null = null;
+	/** The route that was current when the router stopped: `initialize(true)` resumes it, as UI5 does. */
+	private _stoppedRoute = "";
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
 	private _lastSettlement: NavigationResult | null = null;
 	private _pendingGuardDescriptors: GuardDescriptor[];
@@ -195,54 +193,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Report a navigation that waits for async guards as a route match in progress, through the
-	 * UI5-private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`.
+	 * UI5-private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`. UI5 reads it
+	 * to tell whether the router of a nested component is still matching; without this, a parent
+	 * route would count the component as displayed before its first route matched. The router does
+	 * not write the member: it replaces it with an accessor that keeps what UI5 writes in
+	 * {@link _nativeMatching} and also reads `true` while a navigation is postponed.
 	 *
-	 * This is one of two places where the router depends on UI5 behavior that no public contract
-	 * covers. The other is {@link attachRouteMatched}.
-	 *
-	 * What UI5 does with the member. The native router sets it to `true` inside `parse()`, as soon
-	 * as a route matches (`Route#_routeMatched`), and back to `false` once the targets of the route
-	 * are displayed, right before it fires `routeMatched`. UI5 reads it in three places:
-	 * - `Target#waitForComponentTarget` (nested component readiness): a component target counts as
-	 *   displayed only after the next `routeMatched` of the nested component's router, if that
-	 *   router is not initialized or is matching.
-	 * - The `display` handler that the `Router` constructor attaches to its targets: a target
-	 *   displayed outside of a route match resets the router's hash changer (`resetHash`), so that
-	 *   the route that matched before can match again. Not during a match.
-	 * - `Router#fireTitleChanged`: a `titleChanged` during a match is fired after `routeMatched`.
-	 *
-	 * Why the router is involved. It postpones `super.parse()` while guards are async, such as on
-	 * the first navigation in lazy mode while a guard module loads. If the member stayed `false` in
-	 * that time, a parent route would count the nested component as displayed, and fire its own
-	 * `routeMatched`, before the first route of the nested component matched.
-	 *
-	 * What the router does. It does not write the member. It replaces it with an accessor on the
-	 * instance, which keeps the value UI5 writes in {@link _nativeMatching} and reads `true`
-	 * - while the value UI5 wrote is `true`, and
-	 * - from the moment a navigation (initial hash, hash change, `navTo()` preflight or redirect
-	 *   hop) starts to wait for async guards, until that navigation settles.
-	 *
-	 * A navigation that commits calls `super.parse()` in the call that settles it, where UI5 sets
-	 * the member and later clears it as it does natively. A navigation that is blocked, fails, is
-	 * cancelled or superseded, or ends with `stop()` or `destroy()`, reads `false` from its
-	 * settlement on. Guards that decide synchronously never make it read `true`.
-	 *
-	 * All three readers see the same value. While a navigation waits for async guards, UI5
-	 * therefore also defers a `titleChanged` to the next `routeMatched` and skips `resetHash`, as
-	 * during a native match.
-	 *
-	 * Assumptions about UI5 that no public contract covers:
-	 * - The member exists under this name, and `Route#_routeMatched` is its only writer.
-	 * - `true` means to UI5 that a `routeMatched` follows. A navigation that guards veto breaks
-	 *   that, which {@link attachRouteMatched} makes up for.
-	 *
-	 * Verified against OpenUI5 1.144.0 (`sap/ui/core/routing/Route.js` lines 745 and 831,
-	 * `Target.js` 819, `Router.js` 289 and 1527) and OpenUI5 1.120.0 (`sap/ui/core/routing/async/Route.js`
-	 * lines 49 and 135, `async/Target.js` 275, `Router.js` 264 and 1495). Pinned by the QUnit module
-	 * "Router - Native matching flag" (`RouterAsync.qunit.ts`) and the nested component tests of
-	 * "Router - Manifest-driven instantiation" (`RouterManifestGuards.qunit.ts`): they fail on both
-	 * UI5 lanes if UI5 renames the member, stops writing it, or stops reading it. See
-	 * docs/reference/upstream-parity.md for what to do then.
+	 * See docs/reference/architecture.md ("UI5 Internals the Router Relies On") for the UI5 code this
+	 * relies on, and docs/reference/upstream-parity.md for the tests that pin it.
 	 */
 	private _mirrorMatchingProcess(): void {
 		Object.defineProperty(this, "_bMatchingProcessStarted", {
@@ -260,54 +218,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Attach an event handler for the `routeMatched` event, as the native router does. In addition,
-	 * remember a Promise by which a UI5 component target waits for this router, so that a
-	 * navigation that ends without a route match does not leave it waiting forever.
+	 * remember a Promise resolve function ({@link isPromiseResolver}) that is subscribed while the
+	 * router is not initialized or a match is in progress: that is how a UI5 component target
+	 * waits for this router. UI5 relies on a match always ending in `routeMatched`, which a
+	 * navigation that guards block, fail or cancel never fires, so {@link _settleMatchWaiters}
+	 * resolves the Promise then. Application code that subscribes a Promise resolve function under
+	 * the same condition is treated alike.
 	 *
-	 * What UI5 does. A component target (`"type": "Component"`) of a parent router that displays
-	 * the component of this router waits for the next `routeMatched` of this router, if the router
-	 * is not initialized or reports a match in progress (see {@link _mirrorMatchingProcess}), a
-	 * route with targets matches the router's current hash, and the parent route did not ask to
-	 * ignore that hash. It waits with
-	 * `oRouter.attachRouteMatched(resolve)`, where `resolve` is the bare resolve function of a
-	 * Promise that only the target holds. The Promise is never rejected and nothing else releases
-	 * it: UI5 relies on a match in progress always ending in `routeMatched`. A stopped router is
-	 * initialized by the target right after.
-	 *
-	 * Why the router is involved. A navigation that guards block, fail or cancel never fires
-	 * `routeMatched`. The parent route would then never fire its own `routeMatched`, and in
-	 * `sap.m.routing.Router` later target placements of the parent queue behind the one that
-	 * waits (`TargetHandler#_chainNavigation`). This does not depend on the mirrored member alone.
-	 * UI5 also waits when the router is not initialized: when a parent route displays the
-	 * component again and starts its stopped router, and while guard modules load in block mode.
-	 *
-	 * What the router does. A listener that is subscribed while UI5 would wait (the router is not
-	 * initialized, or a match is in progress) and that is a Promise resolve function
-	 * ({@link isPromiseResolver}) is remembered. {@link _settleMatchWaiters} resolves it when a
-	 * navigation ends without a route match. The parent route then displays the component, in
-	 * which no route matched. The listener is subscribed as usual in any case, so a `routeMatched`
-	 * resolves it as in UI5.
-	 *
-	 * Assumptions about UI5 that no public contract covers:
-	 * - The component target subscribes through `attachRouteMatched()`, with the resolve function
-	 *   itself as the only argument, under the condition above.
-	 * - A second call of the resolve function has no effect, so the `routeMatched` of a later
-	 *   navigation may still call it.
-	 *
-	 * False positives. The router cannot see who subscribes. Application code that subscribes a
-	 * Promise resolve function (or another anonymous built-in with one parameter, such as a Promise
-	 * reject function) under the same condition is treated in the same way: its Promise settles
-	 * without an event when the navigation ends without a match. Handler functions written in
-	 * JavaScript are never remembered and are only ever called by the `routeMatched` event.
-	 *
-	 * Verified against OpenUI5 1.144.0 (`sap/ui/core/routing/Target.js` line 786 for the Promise,
-	 * 819 for the condition, 821 for the subscription, 823 to 826 for the start of a stopped router,
-	 * 619 for the stop; `sap/m/routing/Target.js` line 61 for the queue) and OpenUI5 1.120.0
-	 * (`sap/ui/core/routing/async/Target.js` lines 245, 275, 277, 279 to 282 and 81;
-	 * `sap/m/routing/async/Target.js` line 25). Pinned by the QUnit module "GuardPipeline - Promise
-	 * resolve functions" (`GuardPipeline.qunit.ts`), by the Promise tests of "Router - Native
-	 * matching flag" (`RouterAsync.qunit.ts`) and by the nested component tests of "Router -
-	 * Manifest-driven instantiation" (`RouterManifestGuards.qunit.ts`), which time out on both UI5
-	 * lanes if the component target waits in another way. See docs/reference/upstream-parity.md.
+	 * See docs/reference/architecture.md ("UI5 Internals the Router Relies On") for the UI5 code this
+	 * relies on, and docs/reference/upstream-parity.md for the tests that pin it.
 	 *
 	 * @override sap.ui.core.routing.Router#attachRouteMatched
 	 * @since 1.7.0
@@ -375,7 +294,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 		if (this._pendingGuardDescriptors.length === 0) {
-			return super.initialize(bIgnoreInitialHash);
+			return this._start(bIgnoreInitialHash);
 		}
 
 		const descriptors = this._pendingGuardDescriptors;
@@ -389,7 +308,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		if (this._options.guardLoading === "lazy") {
 			this._registerLazyGuards(expandedDescriptors);
-			return super.initialize(bIgnoreInitialHash);
+			return this._start(bIgnoreInitialHash);
 		}
 
 		// "block" mode: load all modules, then register their guards in declaration order
@@ -403,8 +322,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 			for (const { descriptor, guards } of results) {
 				for (const fn of guards) this._registerManifestGuard(descriptor, fn);
 			}
-			if (blockLoad.start) super.initialize(blockLoad.ignoreInitialHash);
+			if (blockLoad.start) this._start(blockLoad.ignoreInitialHash);
 		});
+		return this;
+	}
+
+	/**
+	 * Start the native router. With `ignoreInitialHash` it parses nothing and resumes the route
+	 * that was displayed when the router stopped. That route is the current one again, on the hash
+	 * that the URL shows now, so that its leave guards run and a blocked hash change returns to it.
+	 */
+	private _start(ignoreInitialHash?: boolean): this {
+		// UI5 only warns about a router that is initialized already.
+		const resume = ignoreInitialHash && !this.isInitialized();
+		super.initialize(ignoreInitialHash);
+		if (resume) {
+			// UI5 has reset the hash of the hash changer if a target was displayed without a route.
+			const shownHash: string | undefined = this.getHashChanger().getHash();
+			this._currentRoute = this._stoppedRoute;
+			this._currentHash = shownHash ?? null;
+		}
 		return this;
 	}
 
@@ -683,7 +620,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * settlement result. Before any navigation has settled, it falls back to a
 	 * synthetic `Committed` result derived from the router's current route/hash
 	 * state. After `stop()`, that idle fallback reports empty route/hash values
-	 * until a new navigation settles.
+	 * until a new navigation settles, or `initialize(true)` resumes the route.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 * @since 1.2.0
@@ -761,7 +698,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 		for (const resolve of resolvers) {
 			resolve(result);
 		}
-		this.fireEvent("navigationSettled", result);
+		try {
+			this.fireEvent("navigationSettled", result);
+		} catch (error) {
+			// A handler must not keep the router from finishing the navigation it reports.
+			Log.error("A navigationSettled handler threw", String(error), LOG_COMPONENT);
+		}
 	}
 
 	/**
@@ -772,10 +714,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * history entry, and redirected navigations go directly to the final
 	 * target.
 	 *
-	 * Same-hash navigations are deduped: if the target hash matches
-	 * `_currentHash`, any pending navigation is cancelled and the call
-	 * returns without navigating. If it matches the in-flight attempt's
-	 * hash, the in-flight preflight continues undisturbed.
+	 * A `navTo()` to the committed hash changes no route of this router, so
+	 * no guard runs: any pending navigation is cancelled and the call goes
+	 * to the native `navTo()`, which sets or resets the hashes of nested
+	 * components (`componentTargetInfo`). If the target matches the
+	 * in-flight attempt's hash, the in-flight preflight continues undisturbed.
 	 *
 	 * When all guards are synchronous, the decision and the resulting
 	 * hash change happen in the same tick. When any guard returns a
@@ -784,7 +727,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * Assumes `super.navTo()` calls `HashChanger.setHash()` which fires
 	 * `hashChanged` synchronously, causing `parse()` to re-enter in the
-	 * same call stack (validated by test).
+	 * same call stack (validated by test). If the hash changer refuses the
+	 * hash change, as the Fiori launchpad does while it asks the user about
+	 * unsaved data, nothing is committed and the navigation settles as `Blocked`.
 	 *
 	 * On a router that is not initialized (before `initialize()`, while
 	 * block-mode guard modules load, after `stop()`) the call goes straight
@@ -836,8 +781,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 
-		// Resolve the target hash so we can build a guard context.
-		// getURL() returns the hash pattern with parameters substituted.
 		const route = this.getRoute(routeName);
 		if (!route) {
 			// Unknown route -- let the parent handle it (it logs a warning).
@@ -861,10 +804,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			const shownHash: string | undefined = this.getHashChanger().getHash();
 			if (shownHash === undefined || shownHash === targetHash) {
 				// If UI5 has reset the hash of the hash changer, after a target was displayed without
-				// a route, it reports the hash again, and the route matches again.
-				this._awaitedHash = targetHash;
+				// a route, it reports the hash again, and parse() lets the route match again.
 				super.navTo(routeName, parameters, componentTargetInfo, replace);
-				this._awaitedHash = null;
 			}
 			return this;
 		}
@@ -884,19 +825,25 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const restoreHash = this._phase.kind === "evaluating" && this._phase.attempt.restoreHash;
 		this._cancelPendingNavigation();
 
-		// Bypass mode: skip guards for programmatic navTo() -- commit directly.
 		if (skipGuards) {
-			this._navigateAllowed(routeName, parameters, componentTargetInfo, replace, targetHash, toRoute);
+			this._navigateAllowed(
+				routeName,
+				parameters,
+				componentTargetInfo,
+				replace,
+				targetHash,
+				toRoute,
+				restoreHash,
+			);
 			return this;
 		}
 
-		// Off mode: defer guard evaluation to parse() fallback.
+		// parse() evaluates the guards once the hash has changed.
 		if (this._options.navToPreflight === "off") {
 			super.navTo(routeName, parameters, componentTargetInfo, replace);
 			return this;
 		}
 
-		// Default "guard" mode: evaluate guards before hash change.
 		const attempt = this._startAttempt(targetHash, toRoute, restoreHash);
 		const { generation } = attempt;
 
@@ -934,7 +881,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return this;
 		}
 
-		// Sync path: apply the decision immediately.
 		this._applyPreflightDecision(
 			decision,
 			routeName,
@@ -949,7 +895,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return this;
 	}
 
-	/** Navigate to a `navTo()` target that needs no guards (allowed or bypassed) and commit it. */
+	/**
+	 * Navigate to a `navTo()` target that needs no guards (allowed or bypassed) and commit it,
+	 * or block it if the hash change was refused (see {@link _commitAfterNavTo}).
+	 */
 	private _navigateAllowed(
 		routeName: string,
 		parameters: object | undefined,
@@ -957,11 +906,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 		bReplace: boolean | undefined,
 		targetHash: string,
 		toRoute: string,
+		restoreHash: boolean,
 	): void {
 		this._phase = { kind: "committing", route: toRoute, origin: "preflight" };
 		try {
 			super.navTo(routeName, parameters, componentTargetInfo, bReplace);
-			this._commitAfterNavTo(targetHash, toRoute);
+			if (!this._commitAfterNavTo(targetHash, toRoute, componentTargetInfo)) {
+				this._blockNavigation(targetHash, restoreHash);
+			}
 		} finally {
 			// A failed hash change must not leave the next one to be committed without guards.
 			if (this._phase.kind === "committing") {
@@ -976,14 +928,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * only touched to restore it after a superseded hash-change navigation.
 	 * For "redirect", start a redirect chain.
 	 * For "error", flush Error settlement with the guard's error.
-	 *
-	 * @param decision - Normalized guard pipeline result.
-	 * @param routeName - Original route name passed to navTo().
-	 * @param parameters - Original route parameters.
-	 * @param componentTargetInfo - Optional component target info from the navTo() overload.
-	 * @param bReplace - Whether to replace the current history entry.
-	 * @param targetHash - Resolved hash for the target route.
-	 * @param toRoute - Resolved route name (may differ from routeName for nested routes).
 	 */
 	private _applyPreflightDecision(
 		decision: GuardDecision,
@@ -1000,7 +944,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (attempt.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow":
-				this._navigateAllowed(routeName, parameters, componentTargetInfo, bReplace, targetHash, toRoute);
+				this._navigateAllowed(
+					routeName,
+					parameters,
+					componentTargetInfo,
+					bReplace,
+					targetHash,
+					toRoute,
+					attempt.restoreHash,
+				);
 				break;
 			case "block":
 				this._blockNavigation(targetHash, attempt.restoreHash);
@@ -1039,13 +991,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 		this._suppressedHash = null;
 
-		const awaitedHash = this._awaitedHash;
-		this._awaitedHash = null;
-		if (newHash === awaitedHash) {
-			super.parse(newHash);
-			return;
-		}
-
 		if (this._phase.kind === "committing") {
 			this._commitNavigation(newHash, this._phase.route);
 			return;
@@ -1053,11 +998,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		const currentHash = this._currentHash;
 		if (newHash === currentHash) {
-			// The URL is back on the committed hash. That ends a navigation that had moved it away,
-			// but not a navTo() that started while the hash change of a committed navigation was
-			// still on its way (component targets).
 			if (this._phase.kind === "evaluating" && this._phase.attempt.restoreHash) {
+				// The URL is back on the committed hash, which ends the navigation that had moved it away.
 				this._cancelPendingNavigation();
+			} else {
+				// The committed hash is reported again, and its route matches again as it does
+				// natively: UI5 has written the hash of a navigation with component targets, or has
+				// reset the hash of the hash changer after a target was displayed without a route,
+				// or parse() was called directly.
+				super.parse(newHash);
 			}
 			return;
 		}
@@ -1104,7 +1053,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * Resets `_currentRoute` and `_currentHash` so that a subsequent
 	 * `initialize()` re-parses the current hash and fires `routeMatched`,
-	 * matching the native `sap.m.routing.Router` behavior.
+	 * matching the native `sap.m.routing.Router` behavior. The route is
+	 * kept for `initialize(true)`, which resumes it instead.
 	 *
 	 * @override sap.ui.core.routing.Router#stop
 	 * @since 1.0.1
@@ -1115,7 +1065,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// Cancelled result before _lastSettlement is cleared below.
 		this._cancelPendingNavigation();
 		this._suppressedHash = null;
-		this._awaitedHash = null;
+		// Nothing is committed on a router that is stopped already, or stops before its first navigation settles.
+		if (this._currentHash !== null) this._stoppedRoute = this._currentRoute;
 		this._currentRoute = "";
 		this._currentHash = null;
 		this._lastSettlement = null;
@@ -1225,7 +1176,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * (e.g., routeMatched) trigger nested navigation, the leave guards will
 	 * run for the correct (new) route rather than the old one. The settlement
 	 * fires before parse as well, so the settlements of such nested navigations
-	 * follow it.
+	 * follow it. With `hashPending`, the route matches when `parse()` gets the
+	 * hash (see {@link _commitAfterNavTo}).
 	 */
 	private _commitNavigation(hash: string, route: string, hashPending = false): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
@@ -1245,23 +1197,31 @@ export default class Router extends MobileRouter implements GuardRouter {
 		});
 		// A navigationSettled handler that navigated on has committed its own hash.
 		if (this._currentHash !== hash) return;
-		if (hashPending) {
-			this._awaitedHash = hash;
-		} else {
-			super.parse(hash);
-		}
+		if (!hashPending) super.parse(hash);
 	}
 
 	/**
-	 * Commit a navigation after `super.navTo()` unless `parse()` has committed it: the hash is
-	 * already the target, or UI5 writes it later. UI5 writes a hash with component targets only
-	 * once the nested components are loaded. The route then matches when `parse()` gets that
-	 * hash, as it does natively. Matched here, it would display a nested component, and fire
-	 * `routeMatched`, before UI5 has set the hash of that component.
+	 * Commit a navigation after `super.navTo()` unless `parse()` has committed it. Returns
+	 * whether the navigation took place:
+	 * - The hash changer shows the target hash: the route matches here.
+	 * - UI5 writes the hash later, which it does with component targets, once the nested
+	 *   components are loaded. The route matches when `parse()` gets that hash, as it does
+	 *   natively. Matched here, it would display a nested component, and fire `routeMatched`,
+	 *   before UI5 has set the hash of that component.
+	 * - Otherwise the hash changer has refused the hash change, as the Fiori launchpad does while
+	 *   it asks the user about unsaved data. Nothing changed, so nothing is committed.
 	 */
-	private _commitAfterNavTo(hash: string, route: string): void {
-		if (this._phase.kind !== "committing") return;
-		this._commitNavigation(hash, route, this.getHashChanger().getHash() !== hash);
+	private _commitAfterNavTo(
+		hash: string,
+		route: string,
+		componentTargetInfo: Record<string, ComponentTargetParameters> | undefined,
+	): boolean {
+		if (this._phase.kind !== "committing") return true;
+		const hashShown = this.getHashChanger().getHash() === hash;
+		const hashPending = !hashShown && !!componentTargetInfo && Object.keys(componentTargetInfo).length > 0;
+		if (!hashShown && !hashPending) return false;
+		this._commitNavigation(hash, route, hashPending);
+		return true;
 	}
 
 	/**
@@ -1323,21 +1283,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 		chain.visited.add(targetHash);
 
-		// Build guard context for the redirect target.
 		const routeInfo = this._matchRoute(targetHash);
 		const toRoute = routeInfo.name;
-		const context: GuardContext = {
-			toRoute,
-			toHash: targetHash,
-			toArguments: routeInfo.arguments,
-			fromRoute: chain.fromRoute,
-			fromHash: chain.fromHash,
-			signal: chain.signal,
-			bag: chain.bag,
-			toMeta: this.getRouteMeta(toRoute),
-			fromMeta: this.getRouteMeta(chain.fromRoute),
-			ownerComponent: this._ownerComponent,
-		};
+		const context = this._createGuardContext(routeInfo, targetHash, chain.signal, chain);
 
 		const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
@@ -1362,7 +1310,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 *
 	 * @param decision - Normalized guard pipeline result for this hop.
 	 * @param target - The redirect target (route name or {@link GuardRedirect}).
-	 * @param targetHash - Resolved hash for the redirect target (guaranteed non-null).
+	 * @param targetHash - Resolved hash for the redirect target.
 	 * @param toRoute - Route that matches the hash, as in the hop's guard context: the route UI5 displays.
 	 * @param chain - Shared redirect chain context with visited set, signals, etc.
 	 */
@@ -1382,12 +1330,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 					// Writing the hash the URL already shows changes nothing, except that a nested
 					// router would add its prefix for an empty hash (see _restoreHash).
 					const hashShown = this.getHashChanger().getHash() === targetHash;
+					const componentTargetInfo = typeof target === "string" ? undefined : target.componentTargetInfo;
 					if (typeof target === "string") {
 						if (!hashShown) this.navTo(target, {}, {}, true);
-					} else if (!hashShown || target.componentTargetInfo) {
-						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+					} else if (!hashShown || componentTargetInfo) {
+						this.navTo(target.route, target.parameters ?? {}, componentTargetInfo, true);
 					}
-					this._commitAfterNavTo(targetHash, toRoute);
+					if (!this._commitAfterNavTo(targetHash, toRoute, componentTargetInfo)) {
+						this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+					}
 				} finally {
 					if (this._phase.kind === "committing") {
 						this._phase = IDLE;
@@ -1414,20 +1365,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Build a guard context for a new navigation.
-	 * Called by {@link navTo} (preflight path) and {@link parse} (browser-initiated path).
+	 * Build the guard context of a navigation to `routeInfo`. A hop of a redirect chain passes the
+	 * chain, whose source route, source hash and bag are those of the original navigation.
 	 */
-	private _createGuardContext(routeInfo: RouteInfo, toHash: string, signal: AbortSignal): GuardContext {
+	private _createGuardContext(
+		routeInfo: RouteInfo,
+		toHash: string,
+		signal: AbortSignal,
+		chain?: RedirectChainContext,
+	): GuardContext {
+		const fromRoute = chain ? chain.fromRoute : this._currentRoute;
 		return {
 			toRoute: routeInfo.name,
 			toHash,
 			toArguments: routeInfo.arguments,
-			fromRoute: this._currentRoute,
-			fromHash: this._currentHash ?? "",
+			fromRoute,
+			fromHash: chain ? chain.fromHash : (this._currentHash ?? ""),
 			signal,
-			bag: new Map(),
+			bag: chain ? chain.bag : new Map(),
 			toMeta: this.getRouteMeta(routeInfo.name),
-			fromMeta: this.getRouteMeta(this._currentRoute),
+			fromMeta: this.getRouteMeta(fromRoute),
 			ownerComponent: this._ownerComponent,
 		};
 	}
@@ -1530,13 +1487,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _collectRoutePatterns(): RoutePattern[] {
 		const result: RoutePattern[] = [];
 		for (const name of this._routeNames) {
-			const route = this.getRoute(name);
-			if (route) {
-				const pattern = route.getPattern();
-				if (pattern !== undefined) {
-					result.push({ name, pattern });
-				}
-			}
+			const pattern = this.getRoute(name)?.getPattern();
+			if (pattern !== undefined) result.push({ name, pattern });
 		}
 		return result;
 	}
@@ -1548,23 +1500,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _registerManifestGuard(descriptor: GuardDescriptor, guardFn: GuardFn): void {
 		try {
-			this._registerGuardFromDescriptor(descriptor, guardFn);
+			if (descriptor.route === "*") {
+				this.addGuard(guardFn);
+			} else if (descriptor.type === "leave") {
+				// Not addLeaveGuard(): a guard from an untyped module is not known to return a boolean.
+				this._handleUnknownRouteRegistration(descriptor.route, "addLeaveGuard");
+				this._pipeline.addLeaveGuard(descriptor.route, guardFn);
+			} else {
+				this.addRouteGuard(descriptor.route, guardFn);
+			}
 		} catch (err: unknown) {
 			Log.error(`guardRouter.guards: failed to register "${descriptor.modulePath}"`, String(err), LOG_COMPONENT);
-		}
-	}
-
-	/**
-	 * Route a parsed guard descriptor to the correct registration method.
-	 */
-	private _registerGuardFromDescriptor(descriptor: GuardDescriptor, guardFn: GuardFn): void {
-		if (descriptor.route === "*") {
-			this.addGuard(guardFn);
-		} else if (descriptor.type === "leave") {
-			this._handleUnknownRouteRegistration(descriptor.route, "addLeaveGuard");
-			this._pipeline.addLeaveGuard(descriptor.route, guardFn);
-		} else {
-			this.addRouteGuard(descriptor.route, guardFn);
 		}
 	}
 

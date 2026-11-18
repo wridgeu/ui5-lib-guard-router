@@ -27,12 +27,11 @@ export function chromeProfileHooks(
 		},
 		// Runs in the worker: one profile per session, so no spec sees state another left behind.
 		beforeSession: (_config, capabilities) => {
-			const root = process.env[PROFILE_ROOT_ENV] ?? parentDir;
+			const root = process.env[PROFILE_ROOT_ENV];
+			if (!root) throw new Error("onPrepare has not created the folder for the Chrome profiles");
 			const profileDir = mkdtempSync(join(root, "session-"));
-			(capabilities as WebdriverIO.Capabilities)["goog:chromeOptions"]?.args?.push(
-				`--user-data-dir=${profileDir}`,
-				...extraArgs,
-			);
+			const options = ((capabilities as WebdriverIO.Capabilities)["goog:chromeOptions"] ??= {});
+			(options.args ??= []).push(`--user-data-dir=${profileDir}`, ...extraArgs);
 		},
 		onComplete: () => {
 			if (profileRoot) rmSync(profileRoot, { recursive: true, force: true, maxRetries: 5 });

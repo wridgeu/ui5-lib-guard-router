@@ -2,7 +2,8 @@
  * Custom oxlint JS plugin that enforces test stability guardrails.
  *
  * Detects flaky hard-wait patterns in test files and guides towards
- * proper condition-based waiting (waitUntil / waitFor*).
+ * proper condition-based waiting (waitUntil / waitFor*), and timers of
+ * any kind in unit tests.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
@@ -106,6 +107,14 @@ const noHardWait = {
 
 const TIMER_FUNCTIONS = new Set(["setTimeout", "setInterval"]);
 
+/** The name of the called function: `name()`, `window.name()` or `globalThis.name()`. */
+function calledGlobal(callee) {
+	if (callee.type === "Identifier") return callee.name;
+	if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier") return undefined;
+	if (callee.object.name !== "window" && callee.object.name !== "globalThis") return undefined;
+	return callee.property.type === "Identifier" ? callee.property.name : undefined;
+}
+
 /**
  * Reports any `setTimeout` / `setInterval` call, including `window.` and `globalThis.` forms.
  *
@@ -129,16 +138,7 @@ const noTimers = {
 	create(context) {
 		return {
 			CallExpression(node) {
-				const { callee } = node;
-				const name =
-					callee.type === "Identifier"
-						? callee.name
-						: callee.type === "MemberExpression" &&
-							  callee.object.type === "Identifier" &&
-							  (callee.object.name === "window" || callee.object.name === "globalThis") &&
-							  callee.property.type === "Identifier"
-							? callee.property.name
-							: undefined;
+				const name = calledGlobal(node.callee);
 				if (name && TIMER_FUNCTIONS.has(name)) {
 					context.report({ node, messageId: "noTimers" });
 				}

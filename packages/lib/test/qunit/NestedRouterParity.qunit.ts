@@ -6,8 +6,8 @@ import View from "sap/ui/core/mvc/View";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type Router from "sap/ui/core/routing/Router";
 import type UIComponent from "sap/ui/core/UIComponent";
-import { firstDifference, recordHashes, recordLogs, recordRouter, settle, until } from "./parityRecorder";
-import { flushPromises, initHashChanger } from "./testHelpers";
+import { drain, firstDifference, recordHashes, recordLogs, recordRouter, settle, until } from "./parityRecorder";
+import { initHashChanger, loadModule } from "./testHelpers";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -33,7 +33,7 @@ const FLAVORS = {
 	/** The reference: parent and child use the native router. */
 	native: { routerClass: "sap.m.routing.Router", child: "childNative", guards: false },
 	/** Parent and child use the guard router, no guard is registered. */
-	guard: { routerClass: "ui5.guard.router.Router", child: "childGuard", guards: false },
+	guard: { routerClass: "ui5.guard.router.Router", child: "childNoGuards", guards: false },
 	/** Parent and child use the guard router, each with a lazily loaded guard that always allows. */
 	allow: { routerClass: "ui5.guard.router.Router", child: "childAllow", guards: true },
 };
@@ -48,6 +48,7 @@ interface ParentManifest {
 
 interface Probe {
 	created: ((component: UIComponent) => void) | undefined;
+	guardOwners: (string | undefined)[];
 }
 
 interface App {
@@ -74,12 +75,6 @@ interface Scenario {
 	 * itself does two things in an order that depends on how fast a view loads.
 	 */
 	anyOrder?: true;
-}
-
-// Load the probe by the module name the fixture components resolve it to: the test page loads
-// test files under test-resources/, so a relative import would get a second instance.
-function loadModule<T>(path: string): Promise<T> {
-	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
 }
 
 /** The parent manifest of the fixture with the router class and the child of `flavor`. */
@@ -123,9 +118,18 @@ function routerState(component: UIComponent | undefined): unknown {
 	};
 }
 
-/** Run `scenario` on the fixture app of `flavor` and return the trace of what it did. */
-async function run(flavor: Flavor, scenario: Scenario, currentPageWarnings: string[] = []): Promise<string[]> {
+/**
+ * Run `scenario` on the fixture app of `flavor` and return the trace of what it did. `guardOwners`
+ * receives the IDs of the components whose router ran the allowing guard.
+ */
+async function run(
+	flavor: Flavor,
+	scenario: Scenario,
+	currentPageWarnings: string[] = [],
+	guardOwners: (string | undefined)[] = [],
+): Promise<string[]> {
 	const probe = await loadModule<Probe>(`${FIXTURE_PATH}/probe`);
+	probe.guardOwners = guardOwners;
 	const manifest = await loadParentManifest(flavor);
 	const trace: string[] = [];
 	// The parent first, then the child once the parent displays it.
@@ -196,9 +200,7 @@ async function run(flavor: Flavor, scenario: Scenario, currentPageWarnings: stri
 		}
 		HashChanger.getInstance().setHash("");
 		// Nothing of this run may reach the trace of the next one.
-		await flushPromises();
-		await flushPromises();
-		await flushPromises();
+		await drain();
 	}
 }
 
@@ -291,14 +293,22 @@ const browserForward = (expect: string[]): Step => ({
  */
 function parityTest(title: string, scenario: Scenario): void {
 	QUnit.test(title, async function (assert: Assert) {
+		const guardOwners: Record<Flavor, (string | undefined)[]> = { native: [], guard: [], allow: [] };
 		const record = async (flavor: Flavor): Promise<string[]> => {
-			const trace = await run(flavor, scenario);
+			const trace = await run(flavor, scenario, [], guardOwners[flavor]);
 			return scenario.anyOrder ? trace.toSorted() : trace;
 		};
 		const native = await record("native");
 		const guard = await record("guard");
 		const allow = await record("allow");
 		const control = await record("native");
+
+		assert.deepEqual(
+			[...new Set(guardOwners.allow)].toSorted(),
+			["parity", "parity---child"],
+			"the allowing guard ran in the parent's and in the child's router",
+		);
+		assert.deepEqual([...guardOwners.native, ...guardOwners.guard], [], "and only where it is declared");
 
 		assert.strictEqual(
 			firstDifference(control, native),
@@ -462,11 +472,27 @@ parityTest("a target displayed without a route", {
 	],
 });
 
-// The demo app logs this warning for its nested component. It comes from sap.m.NavContainer#to(),
-// which logs it when asked for the page that is already current, and the native router causes it
-// as well. For the child's first page it is logged in every run. For the parent's first page it
-// depends on timing: NavContainer queues to() while a navigation is in progress, and on the
-// Windows CI runner the parent's warning is not logged.
+// UI5 resets the hash of the parent's router when it displays the target. The next hash change
+// reports the parent's hash again, although only the child's has changed.
+parityTest("a route matches again when its hash is reported after a target was displayed without it", {
+	startHash: "",
+	started: [PARENT_HOME],
+	steps: [
+		showChild(),
+		childDetail("4"),
+		{
+			label: "parent displays its notFound target",
+			act: (app) => {
+				void app.parentRouter.getTargets()?.display("notFound");
+			},
+			expect: ["parent display notFound "],
+		},
+		childDetail("5", [CHILD_DETAIL, PARENT_SHELL]),
+	],
+});
+
+// sap.m.NavContainer#to() logs this warning when asked for the page that is already current. For
+// the child's first page that happens in every run; for the parent's it depends on timing.
 QUnit.test(
 	"the first page of a nested NavContainer logs the same 'current page' warning with both routers",
 	async function (assert: Assert) {

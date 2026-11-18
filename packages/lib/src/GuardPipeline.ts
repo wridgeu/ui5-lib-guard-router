@@ -1,7 +1,8 @@
 import Log from "sap/base/Log";
 import type { GuardFn, GuardContext, GuardResult, GuardRedirect } from "./types";
 
-const LOG_COMPONENT = "ui5.guard.router.Router";
+/** The component under which the library logs. */
+export const LOG_COMPONENT = "ui5.guard.router.Router";
 
 function isGuardRedirect(value: unknown): value is GuardRedirect {
 	if (typeof value !== "object" || value === null) {
@@ -35,25 +36,9 @@ void new Promise((resolve) => {
 /**
  * Whether `value` looks exactly like the resolve function of a native Promise: a function with
  * the name `""`, the length `1` and the source text that this engine prints for such a function.
- *
- * The router needs this for one subscriber that nothing else identifies. A UI5 component target
- * waits for a nested router by subscribing the bare resolve function of a Promise to
- * `routeMatched`: `oRouter.attachRouteMatched(resolve)` in `Target#waitForComponentTarget`
- * (`sap/ui/core/routing/Target.js` line 821 in OpenUI5 1.144.0,
- * `sap/ui/core/routing/async/Target.js` line 277 in OpenUI5 1.120.0). See
- * `Router#attachRouteMatched` for what the router does with it.
- *
- * Assumptions about UI5 that no public contract covers: the component target subscribes the
- * resolve function itself and not a function that wraps it, and it uses the Promise of the engine.
- *
- * A function written in JavaScript never matches, because its source text is its own code. Bound
- * functions and named built-ins such as `Math.max` differ in the name, `Function.prototype` in the
- * length. Other anonymous built-ins with one parameter do match, above all the reject function of
- * a Promise. Calling a match runs no application code: at worst it settles a Promise that
- * something else created.
- *
- * Pinned by the QUnit module "GuardPipeline - Promise resolve functions"
- * (`GuardPipeline.qunit.ts`).
+ * `Router#attachRouteMatched` needs this to recognize a UI5 component target that waits for the
+ * router. A function written in JavaScript never matches; other anonymous built-ins with one
+ * parameter do, above all the reject function of a Promise.
  */
 export function isPromiseResolver(value: unknown): value is () => void {
 	return (

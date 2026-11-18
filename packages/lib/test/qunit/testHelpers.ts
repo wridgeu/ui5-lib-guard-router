@@ -1,11 +1,13 @@
 import type Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type HashChangerBase from "sap/ui/core/routing/HashChangerBase";
+import type { HashChangerBase$HashChangedEvent } from "sap/ui/core/routing/HashChangerBase";
 import UIComponent from "sap/ui/core/UIComponent";
 import Log from "sap/base/Log";
 import jQuery from "sap/ui/thirdparty/jquery";
 import Router from "ui5/guard/router/Router";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import type { GuardRouter, GuardRouterOptions } from "ui5/guard/router/types";
+import type { GuardContext, GuardRouter, GuardRouterOptions } from "ui5/guard/router/types";
 
 export interface CapturedLogEntry {
 	message: string;
@@ -16,6 +18,39 @@ export interface CapturedLogEntry {
 export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
+
+/**
+ * Sinon-qunit-bridge puts `stub` and `spy` on the QUnit test context (`this`), from a sandbox
+ * per test that is restored in afterEach. Unlike `sinon.stub`, they need no manual restore.
+ */
+export interface SinonTestContext {
+	stub: sinon.SinonStubStatic;
+	spy: sinon.SinonSpyStatic;
+}
+
+/**
+ * Load a module by the name that fixtures and the router resolve it to: the test page loads
+ * test files under test-resources/, so a relative import would get a second instance.
+ */
+export function loadModule<T>(path: string): Promise<T> {
+	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
+}
+
+/** A guard context for tests of the pipeline and of guard modules, which need no router. */
+export function createGuardContext(overrides: Partial<GuardContext> = {}): GuardContext {
+	return {
+		toRoute: "target",
+		toHash: "target",
+		toArguments: {},
+		fromRoute: "",
+		fromHash: "",
+		signal: new AbortController().signal,
+		bag: new Map(),
+		toMeta: Object.freeze({}),
+		fromMeta: Object.freeze({}),
+		...overrides,
+	};
+}
 
 const TEST_ROUTES = [
 	{ name: "home", pattern: "" },
@@ -125,13 +160,13 @@ export function flushPromises(): Promise<void> {
 }
 
 /**
- * Wait for a single patternMatched on `routeName`, then detach.
+ * Wait for the next patternMatched on `routeName`.
  *
  * Waits for future events only. Tests must call `waitForRoute` before or
  * immediately after `navTo()`. This is safe because the router config uses
  * `async: true`, which defers patternMatched to a microtask. With sync
  * routing the event would fire inside `navTo()` before the listener is
- * attached, and these tests would hang.
+ * attached, and the test would time out.
  */
 export function waitForRoute(router: GuardRouter, routeName: string): Promise<void> {
 	const route = router.getRoute(routeName);
@@ -167,20 +202,77 @@ export async function assertBlocked(
 export function recordHashChanges(): { hashes: string[]; stop: () => void } {
 	const hashChanger = HashChanger.getInstance();
 	const hashes: string[] = [];
-	const listener = (event: { getParameter(name: string): unknown }): void => {
+	const listener = (event: HashChangerBase$HashChangedEvent): void => {
+		// The UI5 types declare the hash as an object.
 		hashes.push(String(event.getParameter("newHash")));
 	};
 	hashChanger.attachEvent("hashChanged", listener);
 	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };
 }
 
+/**
+ * The hash writes that reach `hashChanger` while `act` runs, in order: `set:<hash>` adds a
+ * history entry, `replace:<hash>` does not.
+ */
+export async function captureHashWrites(
+	hashChanger: HashChangerBase,
+	act: () => void | Promise<void>,
+): Promise<string[]> {
+	const writes: string[] = [];
+	const setHash = sinon.stub(hashChanger, "setHash").callsFake(function (this: HashChangerBase, ...args) {
+		writes.push(`set:${String(args[0])}`);
+		return setHash.wrappedMethod.apply(this, args);
+	});
+	const replaceHash = sinon.stub(hashChanger, "replaceHash").callsFake(function (this: HashChangerBase, ...args) {
+		writes.push(`replace:${String(args[0])}`);
+		return replaceHash.wrappedMethod.apply(this, args);
+	});
+	try {
+		await act();
+		await flushPromises();
+	} finally {
+		setHash.restore();
+		replaceHash.restore();
+	}
+	return writes;
+}
+
 /** Record each settlement's status as it fires, so a test can check what settled before navTo/setHash returned. */
-export function recordSettlements(router: GuardRouter): string[] {
-	const statuses: string[] = [];
+export function recordSettlements(router: GuardRouter): NavigationOutcome[] {
+	const statuses: NavigationOutcome[] = [];
 	router.attachNavigationSettled((event) => {
-		statuses.push(event.getParameter("status") as string);
+		statuses.push(event.getParameter("status"));
 	});
 	return statuses;
+}
+
+/**
+ * Run `act` and return the reasons of the promise rejections that nothing handled meanwhile.
+ * The browser reports unhandled rejections in order, from a task of its own, so everything
+ * `act` caused is reported before the marker that is rejected once `act` is done.
+ */
+export async function captureUnhandledRejections(act: () => Promise<void>): Promise<string[]> {
+	const marker = new Error("marker");
+	const unhandled: string[] = [];
+	const markerReported = new Promise<void>((resolve) => {
+		const onUnhandled = (event: PromiseRejectionEvent): void => {
+			if (event.reason !== marker) {
+				unhandled.push(String(event.reason));
+				return;
+			}
+			event.preventDefault();
+			window.removeEventListener("unhandledrejection", onUnhandled);
+			resolve();
+		};
+		window.addEventListener("unhandledrejection", onUnhandled);
+	});
+	try {
+		await act();
+	} finally {
+		void Promise.reject(marker);
+		await markerReported;
+	}
+	return unhandled;
 }
 
 /**

@@ -1,10 +1,10 @@
-import sinon from "sinon";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
 	GuardContext,
 	GuardFn,
 	GuardRedirect,
 	GuardRouter,
+	NavigationResult,
 	Router$NavigationSettledEvent,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -16,7 +16,9 @@ import {
 	flushPromises,
 	getHash,
 	initHashChanger,
+	recordHashChanges,
 	recordSettlements,
+	type SinonTestContext,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -53,10 +55,14 @@ QUnit.test("Resolves immediately with 'committed' when nothing pending", async f
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Committed, "Status is committed");
-	assert.strictEqual(result.route, "home", "Route is current route");
-	assert.strictEqual(result.hash, "", "Hash is current hash");
+	let result: NavigationResult | undefined;
+	void router.navigationSettled().then((settled) => {
+		result = settled;
+	});
+	// One microtask: the Promise was resolved when it was returned.
+	await Promise.resolve();
+
+	assert.deepEqual(result, { status: NavigationOutcome.Committed, route: "home", hash: "" });
 });
 
 QUnit.test("Resolves with 'committed' when sync guard allows", async function (assert: Assert) {
@@ -163,11 +169,8 @@ QUnit.test("Multiple callers receive the same result", async function (assert: A
 		router.navigationSettled(),
 		router.navigationSettled(),
 	]);
-	assert.strictEqual(result1.status, NavigationOutcome.Committed, "First caller gets committed");
-	assert.strictEqual(result2.status, NavigationOutcome.Committed, "Second caller gets committed");
-	assert.strictEqual(result3.status, NavigationOutcome.Committed, "Third caller gets committed");
-	assert.strictEqual(result1.route, result2.route, "All callers get the same route");
-	assert.strictEqual(result2.route, result3.route, "All callers get the same route");
+	const committed = { status: NavigationOutcome.Committed, route: "protected", hash: "protected" };
+	assert.deepEqual([result1, result2, result3], [committed, committed, committed], "All callers get the result");
 });
 
 QUnit.test("Resolves with 'redirected' when guard returns GuardRedirect object", async function (assert: Assert) {
@@ -181,17 +184,6 @@ QUnit.test("Resolves with 'redirected' when guard returns GuardRedirect object",
 	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Status is redirected");
 	assert.strictEqual(result.route, "detail", "Route is redirect target");
 	assert.strictEqual(result.hash, "detail/42", "Hash includes parameters");
-});
-
-QUnit.test("Leave guard block produces 'blocked' status", async function (assert: Assert) {
-	router.addLeaveGuard("home", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Leave guard block is reflected");
-	assert.strictEqual(result.route, "home", "Route stays on home");
 });
 
 QUnit.test("Async leave guard block produces 'blocked' status", async function (assert: Assert) {
@@ -536,26 +528,34 @@ QUnit.test(
 // ============================================================
 QUnit.module("Router - Destroy during redirect", standardHooks);
 
-QUnit.test("Destroy during redirect settles pending navigationSettled as cancelled", async function (assert: Assert) {
-	const redirectGuard = Promise.withResolvers<string>();
-	router.addRouteGuard("protected", () => redirectGuard.promise);
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"destroy() while a guard is pending settles as Cancelled, and the guard's late redirect does nothing",
+	async function (assert: Assert) {
+		const redirectGuard = Promise.withResolvers<string>();
+		router.addRouteGuard("protected", () => redirectGuard.promise);
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	const settledPromise = router.navigationSettled();
-	router.destroy();
+		router.navTo("protected");
+		const settledPromise = router.navigationSettled();
+		router.destroy();
 
-	const result = await settledPromise;
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Cancelled,
-		"Settlement is cancelled on destroy during redirect",
-	);
-	// Let the guard resolve its redirect after destroy; an error on that late path fails the test.
-	redirectGuard.resolve("forbidden");
-	await flushPromises();
-});
+		assert.deepEqual(
+			await settledPromise,
+			{ status: NavigationOutcome.Cancelled, route: "home", hash: "" },
+			"the pending navigation is cancelled",
+		);
+
+		const recorder = recordHashChanges();
+		const errors = await captureErrorsAsync(async () => {
+			redirectGuard.resolve("forbidden");
+			await flushPromises();
+		});
+		recorder.stop();
+		assert.deepEqual(errors, [], "the late redirect logs no error");
+		assert.deepEqual(recorder.hashes, [], "and does not change the hash");
+	},
+);
 
 // ============================================================
 // Module: navigationSettled after destroy
@@ -575,24 +575,6 @@ QUnit.test("navigationSettled called after destroy resolves immediately", async 
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "Returns default Committed status");
 	assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
 	assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
-});
-
-QUnit.test("navigationSettled resolves for pending navigation when destroy is called", async function (assert: Assert) {
-	const pendingGuard = Promise.withResolvers<boolean>();
-	router.addRouteGuard("protected", () => pendingGuard.promise);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const settledPromise = router.navigationSettled();
-	router.destroy();
-
-	const result = await settledPromise;
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Cancelled,
-		"Pending settlement resolved as cancelled on destroy",
-	);
 });
 
 // ============================================================
@@ -688,18 +670,12 @@ QUnit.test("fires on redirected navigation", async function (assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const events: { status: string }[] = [];
-	router.attachNavigationSettled((event) => {
-		events.push({ status: event.getParameter("status") as string });
-	});
+	const statuses = recordSettlements(router);
 
 	router.navTo("protected");
 	await router.navigationSettled();
 
-	assert.ok(
-		events.some((e) => e.status === NavigationOutcome.Redirected),
-		"At least one event has Redirected status",
-	);
+	assert.deepEqual(statuses, [NavigationOutcome.Redirected], "one event, with the Redirected status");
 });
 
 QUnit.test("fires on cancelled navigation", async function (assert) {
@@ -708,20 +684,14 @@ QUnit.test("fires on cancelled navigation", async function (assert) {
 	await waitForRoute(router, "home");
 	router.addGuard(() => pendingGuard.promise);
 
-	const events: { status: string }[] = [];
-	router.attachNavigationSettled((event) => {
-		events.push({ status: event.getParameter("status") as string });
-	});
+	const statuses = recordSettlements(router);
 
 	router.navTo("protected");
 	router.navTo("home"); // cancels first
 
 	await router.navigationSettled();
 
-	assert.ok(
-		events.some((e) => e.status === NavigationOutcome.Cancelled),
-		"Cancelled event fired",
-	);
+	assert.deepEqual(statuses, [NavigationOutcome.Cancelled], "one event, with the Cancelled status");
 });
 
 QUnit.test("fires on bypassed navigation", async function (assert) {
@@ -944,18 +914,18 @@ QUnit.test("idle replay after error returns Error status with error", async func
 	const throwingGuard: GuardFn = () => {
 		throw thrownError;
 	};
-	router.addGuard(throwingGuard);
+	// Only this route fails, so the error is not that of the initial navigation.
+	router.addRouteGuard("protected", throwingGuard);
 	router.initialize();
+	await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	const errorResult = await router.navigationSettled();
-	assert.strictEqual(errorResult.status, NavigationOutcome.Error, "First settlement is Error");
+	const failed = { status: NavigationOutcome.Error, route: "home", hash: "", error: thrownError };
+	captureErrors(() => router.navTo("protected"));
+	assert.deepEqual(await router.navigationSettled(), failed, "First settlement is Error");
 
 	// Remove guard and query idle settlement
-	router.removeGuard(throwingGuard);
-	const replay = await router.navigationSettled();
-	assert.strictEqual(replay.status, NavigationOutcome.Error, "Replay returns Error");
-	assert.strictEqual(replay.error, thrownError, "Replay includes the error");
+	router.removeRouteGuard("protected", throwingGuard);
+	assert.deepEqual(await router.navigationSettled(), failed, "Replay returns the same result");
 });
 
 QUnit.test("guard error on the initial navigation settles with empty route and hash", async function (assert: Assert) {
@@ -1148,14 +1118,15 @@ QUnit.test(
 	},
 );
 
-QUnit.test("an error thrown before an async-guarded navigation settled fails it", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
-	const statuses = recordSettlements(router);
-	const setHash = sinon.stub(router.getHashChanger(), "setHash").throws(new Error("hash failed"));
+QUnit.test(
+	"an error thrown before an async-guarded navigation settled fails it",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.addRouteGuard("protected", async () => true);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+		this.stub(router.getHashChanger(), "setHash").throws(new Error("hash failed"));
 
-	try {
 		const errors = await captureErrorsAsync(async () => {
 			router.navTo("protected");
 			await flushPromises();
@@ -1169,10 +1140,8 @@ QUnit.test("an error thrown before an async-guarded navigation settled fails it"
 		const result = await router.navigationSettled();
 		assert.strictEqual(result.route, "home", "the router stays on the current route");
 		assert.ok(result.error instanceof Error, "the error is on the result");
-	} finally {
-		setHash.restore();
-	}
-});
+	},
+);
 
 QUnit.test(
 	"an error thrown before an async-guarded hash change settled fails it and restores the hash",
@@ -1367,3 +1336,54 @@ QUnit.test(
 		});
 	},
 );
+
+// ============================================================
+// Module: navigationSettled handlers that throw
+// ============================================================
+QUnit.module("Router - navigationSettled handlers that throw", standardHooks);
+
+QUnit.test("the route of a committed navigation is still displayed", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.attachNavigationSettled(() => {
+		throw new Error("handler failed");
+	});
+
+	const errors = await captureErrorsAsync(async () => {
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+	});
+
+	assert.deepEqual(
+		errors,
+		[{ message: "A navigationSettled handler threw", details: "Error: handler failed" }],
+		"the error is logged",
+	);
+	assert.strictEqual(getHash(), "protected");
+});
+
+QUnit.test("a hash change that cancels a pending navigation is still evaluated", async function (assert: Assert) {
+	router.addRouteGuard("protected", () => new Promise<boolean>(() => {}));
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	router.attachNavigationSettled((event) => {
+		if (event.getParameter("status") === NavigationOutcome.Cancelled) throw new Error("handler failed");
+	});
+
+	const errors = await captureErrorsAsync(async () => {
+		HashChanger.getInstance().setHash("forbidden");
+		await waitForRoute(router, "forbidden");
+	});
+
+	assert.deepEqual(
+		errors,
+		[{ message: "A navigationSettled handler threw", details: "Error: handler failed" }],
+		"the error is logged",
+	);
+	assert.deepEqual(await router.navigationSettled(), {
+		status: NavigationOutcome.Committed,
+		route: "forbidden",
+		hash: "forbidden",
+	});
+});

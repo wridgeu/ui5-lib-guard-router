@@ -2,10 +2,18 @@ import Component from "sap/ui/core/Component";
 import ComponentContainer from "sap/ui/core/ComponentContainer";
 import UIComponent from "sap/ui/core/UIComponent";
 import HashChanger from "sap/ui/core/routing/HashChanger";
-import type { GuardContext, GuardFn, GuardResult, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+import type {
+	GuardContext,
+	GuardFn,
+	GuardResult,
+	GuardRouter,
+	GuardRouterOptions,
+	Router$NavigationSettledEvent,
+} from "ui5/guard/router/types";
 import {
 	captureErrors,
+	captureUnhandledRejections,
 	captureWarnings,
 	captureErrorsAsync,
 	captureWarningsAsync,
@@ -15,6 +23,7 @@ import {
 	GuardRouterClass,
 	initHashChanger,
 	getHash,
+	loadModule,
 	recordHashChanges,
 	recordSettlements,
 	waitForRoute,
@@ -37,12 +46,6 @@ function createLazyRouter(guards: Record<string, string[]>): GuardRouter {
 	});
 }
 
-// Load fixtures by the module name the router uses: the test page loads test files under
-// test-resources/, so a relative import would get a second instance of the module.
-function loadModule<T>(path: string): Promise<T> {
-	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
-}
-
 interface LazyProbe {
 	calls: string[];
 	behaviors: GuardFn[];
@@ -55,10 +58,7 @@ async function loadProbe(): Promise<LazyProbe> {
 	return probe;
 }
 
-// ============================================================
-// Module: Declarative manifest guards: block loading
-// ============================================================
-QUnit.module("Router - Declarative manifest guards (block loading)", {
+const manifestHooks = {
 	beforeEach: function () {
 		initHashChanger();
 	},
@@ -66,7 +66,12 @@ QUnit.module("Router - Declarative manifest guards (block loading)", {
 		router.destroy();
 		HashChanger.getInstance().setHash("");
 	},
-});
+};
+
+// ============================================================
+// Module: Declarative manifest guards: block loading
+// ============================================================
+QUnit.module("Router - Declarative manifest guards (block loading)", manifestHooks);
 
 QUnit.test("guards from config are registered and functional (block mode)", async function (assert: Assert) {
 	router = new GuardRouterClass(
@@ -281,15 +286,7 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 // ============================================================
 // Module: Declarative manifest guards: lazy loading
 // ============================================================
-QUnit.module("Router - Declarative manifest guards (lazy loading)", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Declarative manifest guards (lazy loading)", manifestHooks);
 
 QUnit.test("lazy manifest guard blocks navigation", async function (assert: Assert) {
 	router = new GuardRouterClass(
@@ -336,8 +333,8 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 		},
 	);
 
-	// In lazy mode, initialize() is synchronous
 	router.initialize();
+	assert.ok(router.isInitialized(), "the router starts within initialize(), which block mode defers");
 
 	// The guard should still work on first navigation (lazy loads it)
 	await waitForRoute(router, "home");
@@ -359,17 +356,19 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 
 	try {
 		const manifestRouter = getComponentRouter(component);
-		// "ignore" policy means registering guard on unknown route produces NO warning
+		// Each option of the fixture differs from its default.
 		const warnings = captureWarnings(() => {
 			manifestRouter.addRouteGuard("totallyUnknownRoute", () => true);
 		});
-		const unknownRouteWarnings = warnings.filter((w) => w.message.includes("unknown route"));
-		assert.strictEqual(unknownRouteWarnings.length, 0, "unknownRouteRegistration='ignore' suppresses warnings");
-		// Verify navToPreflight='guard' was loaded from manifest: a blocking guard on the
-		// "protected" route must prevent navTo from changing the hash (preflight blocks).
-		// If navToPreflight were "off" or "bypass", the hash would change despite the guard.
+		assert.deepEqual(
+			warnings.filter((w) => w.message.includes("unknown route")),
+			[],
+			"unknownRouteRegistration 'ignore': an unknown route is not warned about",
+		);
+
 		initHashChanger();
 		manifestRouter.initialize();
+		assert.notOk(manifestRouter.isInitialized(), "guardLoading 'block': the start waits for the guard modules");
 		await waitForRoute(manifestRouter, "home");
 
 		const recorder = recordHashChanges();
@@ -380,9 +379,14 @@ QUnit.test("UIComponent creates router with manifest-provided guardRouter option
 		assert.strictEqual(
 			result.status,
 			NavigationOutcome.Blocked,
-			"navToPreflight='guard' blocks navigation before hash change",
+			"the guard, declared relative to the component's sap.app.id, blocks",
 		);
-		assert.deepEqual(recorder.hashes, [], "hash never changed because preflight blocked navTo");
+		// The restored hash is reported first: the router restores it while the hash change is dispatched.
+		assert.deepEqual(
+			recorder.hashes,
+			["", "protected"],
+			"navToPreflight 'off': the hash changed before the guard blocked it",
+		);
 	} finally {
 		component.destroy();
 	}
@@ -578,6 +582,33 @@ QUnit.test("a component loaded as a routing target navigates under its prefix", 
 });
 
 QUnit.test(
+	"a redirect to the hash that is shown sets the route of the nested component (componentTargetInfo)",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const parentRouter = getComponentRouter(parent);
+			parentRouter.navTo("shell");
+			await waitForRoute(parentRouter, "shell");
+			const childRouter = getComponentRouter(getChild(probe));
+			assert.strictEqual((await childRouter.navigationSettled()).route, "list", "the child is on its list");
+
+			parentRouter.addRouteGuard("home", () => ({
+				route: "shell",
+				componentTargetInfo: { child: { route: "detail" } },
+			}));
+			parentRouter.navTo("home");
+			await waitForRoute(childRouter, "detail");
+
+			assert.deepEqual(
+				await parentRouter.navigationSettled(),
+				{ status: NavigationOutcome.Redirected, route: "shell", hash: "shell" },
+				"the parent settles as Redirected on the route it was on",
+			);
+			assert.strictEqual(getHash(), "shell&/child/detail", "UI5 wrote the hash of the nested component");
+		});
+	},
+);
+
+QUnit.test(
 	"a parent route waits for the route that a nested component's first navigation is redirected to",
 	async function (assert: Assert) {
 		await withNestedApp(async (parent, probe) => {
@@ -693,40 +724,7 @@ QUnit.test(
 // ============================================================
 // Module: Manifest guard module path resolution
 // ============================================================
-QUnit.module("Router - Manifest guard module path resolution", {
-	afterEach: function () {
-		try {
-			router.destroy();
-		} catch {
-			/* may not exist if test used component router */
-		}
-		HashChanger.getInstance().setHash("");
-	},
-});
-
-QUnit.test("dot-notation guard paths resolve relative to component sap.app.id", async function (assert: Assert) {
-	initHashChanger();
-	const component = await Component.create({
-		name: "ui5.guard.router.qunit.fixtures.manifest",
-	});
-
-	try {
-		const manifestRouter = getComponentRouter(component);
-		manifestRouter.initialize();
-		await waitForRoute(manifestRouter, "home");
-
-		manifestRouter.navTo("protected");
-		const result = await manifestRouter.navigationSettled();
-
-		assert.strictEqual(
-			result.status,
-			NavigationOutcome.Blocked,
-			"guard loaded via dot-notation path blocks navigation",
-		);
-	} finally {
-		component.destroy();
-	}
-});
+QUnit.module("Router - Manifest guard module path resolution", manifestHooks);
 
 QUnit.test('"module:" prefix bypasses namespace resolution', async function (assert: Assert) {
 	initHashChanger();
@@ -791,15 +789,7 @@ QUnit.test('"module:" prefix with slash notation (UI5 convention)', async functi
 // ============================================================
 // Module: Cherry-pick syntax
 // ============================================================
-QUnit.module("Router - Cherry-pick syntax", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Cherry-pick syntax", manifestHooks);
 
 QUnit.test("cherry-pick by name from object module registers only that guard", async function (assert: Assert) {
 	router = new GuardRouterClass(
@@ -1039,17 +1029,15 @@ QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) 
 		},
 	);
 
-	// lazy mode: initialize() registers lazy wrappers synchronously.
-	// Navigate directly to "other". The lazy wrapper will load the module
-	// and execute checkRole (returns false), blocking navigation.
 	router.initialize();
+	const initial = await router.navigationSettled();
 	router.navTo("other");
-	const result = await router.navigationSettled();
+	const other = await router.navigationSettled();
 
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"global cherry-picked guard (checkRole=false) blocks all routes",
+	assert.deepEqual(
+		[initial.status, other.status],
+		[NavigationOutcome.Blocked, NavigationOutcome.Blocked],
+		"the picked guard (checkRole) blocks the initial route and the next one",
 	);
 });
 
@@ -1086,17 +1074,10 @@ QUnit.test("module: prefix with cherry-pick composes correctly", async function 
 // ============================================================
 // Module: Multi-guard module exports (block loading)
 // ============================================================
-QUnit.module("Router - Multi-guard module exports (block loading)", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Multi-guard module exports (block loading)", manifestHooks);
 
 QUnit.test("object module: bare path registers all guards in key order", async function (assert: Assert) {
+	const probe = await loadProbe();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -1120,14 +1101,12 @@ QUnit.test("object module: bare path registers all guards in key order", async f
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"second guard (checkRole=false) blocks when all object guards registered",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "the second guard blocks");
+	assert.deepEqual(probe.calls, ["checkAuth", "checkRole"], "both guards ran, in key order");
 });
 
 QUnit.test("array module: bare path registers all guards in index order", async function (assert: Assert) {
+	const probe = await loadProbe();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -1151,11 +1130,8 @@ QUnit.test("array module: bare path registers all guards in index order", async 
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"second guard (blockSecond=false) blocks when all array guards registered",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "the second guard blocks");
+	assert.deepEqual(probe.calls, ["allowFirst", "blockSecond"], "both guards ran, in index order");
 });
 
 QUnit.test("empty object module warns and registers no guards", async function (assert: Assert) {
@@ -1235,17 +1211,10 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 // ============================================================
 // Module: Multi-guard module exports (lazy loading)
 // ============================================================
-QUnit.module("Router - Multi-guard module exports (lazy loading)", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Multi-guard module exports (lazy loading)", manifestHooks);
 
 QUnit.test("lazy mode: object module bare path registers all guards", async function (assert: Assert) {
+	const probe = await loadProbe();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -1269,11 +1238,8 @@ QUnit.test("lazy mode: object module bare path registers all guards", async func
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"lazy object module: checkRole (false) blocks after expansion",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "the second guard blocks");
+	assert.deepEqual(probe.calls, ["checkAuth", "checkRole"], "both guards ran, in key order");
 });
 
 QUnit.test("lazy mode: cherry-pick from object module", async function (assert: Assert) {
@@ -1308,6 +1274,7 @@ QUnit.test("lazy mode: cherry-pick from object module", async function (assert: 
 });
 
 QUnit.test("lazy mode: array module bare path registers all guards", async function (assert: Assert) {
+	const probe = await loadProbe();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -1331,11 +1298,8 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Blocked,
-		"lazy array module: blockSecond (false) blocks after expansion",
-	);
+	assert.strictEqual(result.status, NavigationOutcome.Blocked, "the second guard blocks");
+	assert.deepEqual(probe.calls, ["allowFirst", "blockSecond"], "both guards ran, in index order");
 });
 
 QUnit.test("lazy mode: uncached module runs all of its guards in order", async function (assert: Assert) {
@@ -1491,27 +1455,12 @@ QUnit.test("lazy mode: a module that fails to load fails the navigation", async 
 
 QUnit.test("lazy mode: a failed preload is not an uncaught error", async function (assert: Assert) {
 	const path = `${FIXTURES}/preloadDoesNotExist`;
-	// Unhandled rejections are reported in order, so everything the preload causes is
-	// reported before the marker this test rejects after the load has failed.
-	const marker = new Error("marker");
-	const unhandled: string[] = [];
-	const markerReported = new Promise<void>((resolve) => {
-		const onUnhandled = (event: PromiseRejectionEvent): void => {
-			if (event.reason !== marker) {
-				unhandled.push(String(event.reason));
-				return;
-			}
-			event.preventDefault();
-			window.removeEventListener("unhandledrejection", onUnhandled);
-			resolve();
-		};
-		window.addEventListener("unhandledrejection", onUnhandled);
-	});
+	let unhandled: string[] = [];
 	const preloadWarnings = await captureWarningsAsync(async () => {
-		router = createLazyRouter({ protected: [path] });
-		await loadModule(path).catch(() => undefined);
-		void Promise.reject(marker);
-		await markerReported;
+		unhandled = await captureUnhandledRejections(async () => {
+			router = createLazyRouter({ protected: [path] });
+			await loadModule(path).catch(() => undefined);
+		});
 	});
 	assert.deepEqual(unhandled, [], "the failed preload rejects no promise without a handler");
 	assert.deepEqual(
@@ -1581,15 +1530,7 @@ QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (a
 // ============================================================
 // Module: Multi-guard edge cases
 // ============================================================
-QUnit.module("Router - Multi-guard edge cases", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Multi-guard edge cases", manifestHooks);
 
 QUnit.test("empty array module warns and registers no guards", async function (assert: Assert) {
 	const warnings = await captureWarningsAsync(async () => {
@@ -1614,9 +1555,16 @@ QUnit.test("empty array module warns and registers no guards", async function (a
 		await waitForRoute(router, "home");
 	});
 
-	assert.ok(
-		warnings.some((w) => w.message.includes("empty array")),
-		"warning about empty array export",
+	assert.deepEqual(
+		warnings.map((w) => w.message).filter((message) => message.startsWith("guardRouter.")),
+		[`guardRouter.guards: "${FIXTURES}/emptyArrayGuard" exported an empty array, skipping`],
+		"one warning about the empty array export",
+	);
+	router.navTo("protected");
+	assert.strictEqual(
+		(await router.navigationSettled()).status,
+		NavigationOutcome.Committed,
+		"no guard was registered for the route",
 	);
 });
 
@@ -1653,15 +1601,7 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 // ============================================================
 // Module: Invalid manifest guard config
 // ============================================================
-QUnit.module("Router - Invalid manifest guard config", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Invalid manifest guard config", manifestHooks);
 
 QUnit.test("guards value is not a plain object (array) warns and registers no guards", async function (assert: Assert) {
 	const warnings = captureWarnings(() => {
@@ -1755,15 +1695,7 @@ QUnit.test("'*' with object form warns about leave and still registers enter gua
 // ============================================================
 // Module: Invalid guard module exports
 // ============================================================
-QUnit.module("Router - Invalid guard module exports", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Invalid guard module exports", manifestHooks);
 
 QUnit.test("module exporting a primitive warns and is skipped", async function (assert: Assert) {
 	const warnings = await captureWarningsAsync(async () => {
@@ -1880,15 +1812,7 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 // ============================================================
 // Module: Block mode module load failure
 // ============================================================
-QUnit.module("Router - Block mode module load failure", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Block mode module load failure", manifestHooks);
 
 QUnit.test(
 	"block mode with invalid module path still initializes router after load failure",
@@ -1932,27 +1856,24 @@ QUnit.test(
 // ============================================================
 // Module: Manifest guard order, shapes and lifecycle
 // ============================================================
-QUnit.module("Router - Manifest guard order, shapes and lifecycle", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("Router - Manifest guard order, shapes and lifecycle", manifestHooks);
 
-function createBlockRouter(guards: Record<string, string[]>, unknownRouteRegistration = "ignore"): GuardRouter {
-	return createRouterUnsafe(ROUTES, {
+function createBlockRouter(
+	guards: Record<string, string[]>,
+	unknownRouteRegistration: GuardRouterOptions["unknownRouteRegistration"] = "ignore",
+): GuardRouter {
+	return new GuardRouterClass(ROUTES, {
 		async: true,
 		guardRouter: { guardLoading: "block", unknownRouteRegistration, guards },
 	});
 }
 
 /** Resolve with the status of the first settlement, including one that happens while the router starts. */
-function firstSettlement(target: GuardRouter): Promise<string> {
+function firstSettlement(target: GuardRouter): Promise<NavigationOutcome> {
 	return new Promise((resolve) => {
-		target.attachNavigationSettled((event) => resolve(event.getParameter("status") as string));
+		target.attachEventOnce("navigationSettled", (event: Router$NavigationSettledEvent) => {
+			resolve(event.getParameter("status"));
+		});
 	});
 }
 
@@ -2416,10 +2337,10 @@ QUnit.test("lazy mode starts loading guard modules in the constructor", async fu
 	assert.strictEqual(sap.ui.require(path), undefined, "module was not cached before the router existed");
 	const fetched = whenFetched("lazyPreloadGuard.js");
 
+	// initialize() is never called: the constructor alone starts the fetch.
 	router = createLazyRouter({ protected: [path] });
 
-	await fetched;
-	assert.strictEqual(router.isInitialized(), false, "the module was fetched before initialize()");
+	assert.ok((await fetched).name.endsWith("lazyPreloadGuard.js"), "the module was fetched");
 });
 
 QUnit.test("block mode starts loading guard modules in initialize()", async function (assert: Assert) {

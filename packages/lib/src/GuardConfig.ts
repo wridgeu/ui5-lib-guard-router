@@ -3,8 +3,7 @@
  */
 import Log from "sap/base/Log";
 import type { GuardLoading, Inheritance, NavToPreflightMode, UnknownRouteRegistrationPolicy } from "./types";
-
-const LOG_COMPONENT = "ui5.guard.router.Router";
+import { LOG_COMPONENT } from "./GuardPipeline";
 
 /** Type guard for plain objects. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -203,7 +202,7 @@ function parseRouteMeta(raw: unknown): Map<string, Readonly<Record<string, unkno
 }
 
 /** The `guardRouter` config block, validated. Invalid parts are warned about and dropped. */
-export interface ParsedGuardRouterConfig {
+interface ParsedGuardRouterConfig {
 	readonly options: ResolvedGuardRouterOptions;
 	readonly routeMeta: Map<string, Readonly<Record<string, unknown>>>;
 	readonly guards: GuardDescriptor[];

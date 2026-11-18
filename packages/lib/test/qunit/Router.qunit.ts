@@ -1,4 +1,3 @@
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import DataType from "sap/ui/base/DataType";
 import HashChanger from "sap/ui/core/routing/HashChanger";
@@ -20,6 +19,7 @@ import {
 	GuardRouterClass,
 	initHashChanger,
 	recordSettlements,
+	type SinonTestContext,
 	removeGuardUnsafe,
 	removeLeaveGuardUnsafe,
 	removeRouteGuardUnsafe,
@@ -123,13 +123,13 @@ QUnit.test("routeMatched event fires", async function (assert: Assert) {
 });
 
 QUnit.test("beforeRouteMatched event fires", async function (assert: Assert) {
-	let fired = false;
-	router.attachBeforeRouteMatched(() => {
-		fired = true;
+	const routes: (string | undefined)[] = [];
+	router.attachBeforeRouteMatched((event) => {
+		routes.push(event.getParameter("name"));
 	});
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.ok(fired, "beforeRouteMatched fired");
+	assert.deepEqual(routes, ["protected"], "beforeRouteMatched fired once, for the route");
 });
 
 QUnit.test("getRoute returns route by name", function (assert: Assert) {
@@ -512,22 +512,21 @@ QUnit.test("addRouteGuard object form ignores invalid enter guard input", async 
 	);
 });
 
-QUnit.test("addRouteGuard logs an info only for a config without handlers", function (assert: Assert) {
-	const info = sinon.stub(Log, "info");
-	try {
+QUnit.test(
+	"addRouteGuard logs an info only for a config without handlers",
+	function (this: SinonTestContext, assert: Assert) {
+		const info = this.stub(Log, "info");
 		addRouteGuardUnsafe(router, "home", {});
 		router.addRouteGuard("home", { beforeEnter: () => true });
 		router.addRouteGuard("home", { beforeLeave: () => true });
-	} finally {
-		info.restore();
-	}
 
-	assert.deepEqual(
-		info.args,
-		[["addRouteGuard: config has no beforeEnter or beforeLeave", "home", "ui5.guard.router.Router"]],
-		"One info for the empty config, under the router's log component",
-	);
-});
+		assert.deepEqual(
+			info.args,
+			[["addRouteGuard: config has no beforeEnter or beforeLeave", "home", "ui5.guard.router.Router"]],
+			"One info for the empty config, under the router's log component",
+		);
+	},
+);
 
 // ============================================================
 // Module: Router lifecycle
@@ -628,20 +627,21 @@ QUnit.test("Re-initialize after stop fires routeMatched like native router", asy
 
 	router.stop();
 	assert.notOk(router.isInitialized(), "Router stopped");
+	const matched: (string | undefined)[] = [];
+	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+		matched.push(event.getParameter("name"));
+	});
 
 	router.initialize();
 	assert.ok(router.isInitialized(), "Router re-initialized");
 
 	// Native router fires routeMatched on re-init; guard router must match.
 	await waitForRoute(router, "home");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"",
-		"Re-initialize fires routeMatched for current hash (native parity)",
-	);
+	assert.deepEqual(matched, ["home"], "Re-initialize fires routeMatched once for the current hash");
 });
 
 QUnit.test("the hash changer UI5 passes to the router of a nested component is used", async function (assert: Assert) {
+	// createSubHashChanger() is protected in UI5: a component target calls it for its component.
 	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child") as object;
 	router.destroy();
 	try {
@@ -741,3 +741,82 @@ QUnit.test("navTo() on a stopped router does nothing, like the native router", a
 	assert.notOk(matched, "the route was not displayed");
 	assert.strictEqual(getHash(), "", "the hash is unchanged");
 });
+
+QUnit.test(
+	"stop() and initialize(true) keep the route the user is on, as the native router does",
+	async function (assert: Assert) {
+		const leaveContexts: string[] = [];
+		let allowLeave = false;
+		router.addLeaveGuard("protected", (context) => {
+			leaveContexts.push(`${context.fromRoute}|${context.fromHash}|${context.toRoute}`);
+			return allowLeave;
+		});
+		router.addRouteGuard("detail", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+		let homeMatched = false;
+		router.getRoute("home")!.attachMatched(() => {
+			homeMatched = true;
+		});
+
+		// What the Fiori launchpad does around a cross-app navigation that the user cancels.
+		router.stop();
+		// UI5 warns about a second stop(), which must not forget the route.
+		captureWarnings(() => router.stop());
+		router.initialize(true);
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Committed, route: "protected", hash: "protected" },
+			"the router is on the route it resumed",
+		);
+		const statuses = recordSettlements(router);
+
+		router.navTo("forbidden");
+		assert.deepEqual(leaveContexts, ["protected|protected|forbidden"], "the leave guard of that route runs");
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked], "and blocks");
+
+		allowLeave = true;
+		HashChanger.getInstance().setHash("detail/1");
+		await flushPromises();
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Blocked], "the enter guard blocks");
+		assert.strictEqual(getHash(), "protected", "a blocked hash change goes back to the hash of that route");
+		assert.notOk(homeMatched, "and not to the default route");
+	},
+);
+
+QUnit.test("initialize(true) on a router that is running changes nothing", async function (assert: Assert) {
+	let leaveCalls = 0;
+	router.addLeaveGuard("protected", () => {
+		leaveCalls++;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.navTo("protected");
+	await waitForRoute(router, "protected");
+
+	// UI5 warns and does nothing.
+	captureWarnings(() => router.initialize(true));
+	router.navTo("forbidden");
+	await waitForRoute(router, "forbidden");
+
+	assert.strictEqual(leaveCalls, 1, "the router is still on the route it was on");
+});
+
+QUnit.test(
+	"a hash change blocked after a first initialize(true) restores the ignored hash",
+	async function (assert: Assert) {
+		router.addRouteGuard("forbidden", () => false);
+		HashChanger.getInstance().setHash("protected");
+		router.initialize(true);
+		const statuses = recordSettlements(router);
+
+		HashChanger.getInstance().setHash("forbidden");
+		await flushPromises();
+
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked], "nothing but the block settles");
+		assert.strictEqual(getHash(), "protected", "the URL is back on the hash the router started on");
+	},
+);

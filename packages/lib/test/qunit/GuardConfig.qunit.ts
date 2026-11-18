@@ -1,10 +1,6 @@
 import Log from "sap/base/Log";
 import { isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
-import { logMessages } from "./testHelpers";
-
-interface SinonTestContext {
-	stub: sinon.SinonStubStatic;
-}
+import { logMessages, type SinonTestContext } from "./testHelpers";
 
 const DEFAULTS: ResolvedGuardRouterOptions = {
 	unknownRouteRegistration: "warn",
