@@ -328,6 +328,11 @@ export async function getHistoryLength(): Promise<number> {
 	return length;
 }
 
+/** The position of the current entry in the browser history. */
+export function getHistoryEntryIndex(): Promise<number> {
+	return browser.execute(() => window.navigation.currentEntry?.index ?? -1);
+}
+
 /** Set the browser hash like a user who edits the address bar. */
 export async function setBrowserHash(hash: string): Promise<void> {
 	await browser.execute((value: string) => {
@@ -344,7 +349,11 @@ export async function startAtHome(): Promise<void> {
 	// A dirty form would make the leave guard block the navigation away from Protected.
 	await setDirtyState(false);
 	await resetAuth();
-	await browser.url("#");
+	// Not from the empty hash: the browser would add an entry without a hash change. UI5's History
+	// has no state for such an entry and misreads the direction of later steps through it.
+	if ((await browser.execute(() => window.location.hash)) !== "") {
+		await browser.url("#");
+	}
 	await expectHashToBe("", "Hash should be empty after navigating home");
 	await waitForPage(CONTROLS.home.homePage, "Home");
 	await expectControlText(CONTROLS.home.authStatus, "Logged Out");

@@ -164,12 +164,23 @@ export default class GuardPipeline {
 	 * @param options.skipLeaveGuards - When true, leave guards are skipped even if
 	 *   `context.fromRoute` is set. Used by redirect chain hops to avoid re-running
 	 *   leave guards while still preserving `fromRoute` in the context.
+	 * @param options.alsoLeaving - Greedy routes that are left as well: their leave guards run
+	 *   after those of `context.fromRoute`, with the same context.
+	 * @param options.alsoEntering - Greedy routes that match as well: their enter guards run
+	 *   after those of `context.toRoute`, with the same context.
 	 * @returns A synchronous {@link GuardDecision} when all guards return plain values,
 	 *   or a `Promise<GuardDecision>` when at least one guard returns a thenable.
 	 */
-	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision> {
-		const leaveGuards =
-			options?.skipLeaveGuards || context.fromRoute === "" ? undefined : this._leaveGuards.get(context.fromRoute);
+	evaluate(
+		context: GuardContext,
+		options?: { skipLeaveGuards?: boolean; alsoLeaving?: string[]; alsoEntering?: string[] },
+	): GuardDecision | Promise<GuardDecision> {
+		// No route is left on the first navigation, or after a hash that matched none.
+		const leaving =
+			options?.skipLeaveGuards || context.fromRoute === ""
+				? []
+				: [context.fromRoute, ...(options?.alsoLeaving ?? [])];
+		const entering = [context.toRoute, ...(options?.alsoEntering ?? [])];
 
 		const processEnterResult = (
 			enterResult: GuardResult | Promise<GuardResult>,
@@ -191,27 +202,25 @@ export default class GuardPipeline {
 		};
 
 		const runEnterPhase = (): GuardDecision | Promise<GuardDecision> => {
-			const enterResult = this._runEnterGuards(context.toRoute, context);
+			const enterResult = this._runEnterGuards(entering, context);
 			return processEnterResult(enterResult);
 		};
 
 		try {
-			if (leaveGuards) {
-				const leaveResult = this._runLeaveGuards(leaveGuards, context);
+			const leaveResult = this._runForEach(leaving, context, (route) => this._runLeaveGuards(route, context));
 
-				if (isPromiseLike(leaveResult)) {
-					return leaveResult
-						.then((allowed: boolean): GuardDecision | Promise<GuardDecision> => {
-							if (allowed !== true) return { action: "block" };
-							if (context.signal.aborted) return { action: "block" };
-							return runEnterPhase();
-						})
-						.catch((error: unknown): GuardDecision => {
-							return { action: "error", error };
-						});
-				}
-				if (leaveResult !== true) return { action: "block" };
+			if (isPromiseLike(leaveResult)) {
+				return leaveResult
+					.then((allowed: GuardResult): GuardDecision | Promise<GuardDecision> => {
+						if (allowed !== true) return { action: "block" };
+						if (context.signal.aborted) return { action: "block" };
+						return runEnterPhase();
+					})
+					.catch((error: unknown): GuardDecision => {
+						return { action: "error", error };
+					});
 			}
+			if (leaveResult !== true) return { action: "block" };
 
 			return runEnterPhase();
 		} catch (error) {
@@ -237,14 +246,38 @@ export default class GuardPipeline {
 	}
 
 	/**
-	 * Run leave guards for the current route. Returns boolean (no redirects).
+	 * Run `run` for each route in order until one does not return `true`. Stays sync as long
+	 * as the runs do; after an async run the next one starts unless the navigation was aborted.
+	 */
+	private _runForEach(
+		routes: string[],
+		context: GuardContext,
+		run: (route: string) => GuardResult | Promise<GuardResult>,
+		start = 0,
+	): GuardResult | Promise<GuardResult> {
+		for (let i = start; i < routes.length; i++) {
+			const result = run(routes[i]);
+			if (isPromiseLike(result)) {
+				return result.then((settled: GuardResult) => {
+					if (settled !== true) return settled;
+					if (context.signal.aborted) return false;
+					return this._runForEach(routes, context, run, i + 1);
+				});
+			}
+			if (result !== true) return result;
+		}
+		return true;
+	}
+
+	/**
+	 * Run the leave guards of `route`. Returns boolean (no redirects).
 	 *
 	 * The guard array is snapshot-copied before iteration so that guards
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	private _runLeaveGuards(registered: GuardFn[], context: GuardContext): boolean | Promise<boolean> {
-		const guards = registered.slice();
+	private _runLeaveGuards(route: string, context: GuardContext): boolean | Promise<boolean> {
+		const guards = (this._leaveGuards.get(route) ?? []).slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
 				const result = guards[i](context);
@@ -256,14 +289,14 @@ export default class GuardPipeline {
 						context,
 						(candidate) => this._validateLeaveGuardResult(candidate),
 						"Leave guard",
-						true,
+						route,
 					) as Promise<boolean>;
 				}
 				if (result !== true) return this._validateLeaveGuardResult(result);
 			} catch (error) {
 				if (context.signal.aborted) return false;
 				Log.error(
-					`${describeGuard("Leave guard", i, guards[i])} on route "${context.fromRoute}" threw, navigation failed`,
+					`${describeGuard("Leave guard", i, guards[i])} on route "${route}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
@@ -273,25 +306,27 @@ export default class GuardPipeline {
 		return true;
 	}
 
-	/** Run global guards, then route-specific guards. Stays sync when possible. */
-	private _runEnterGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
-		const globalResult = this._runGuards(this._globalGuards, context);
+	/** Run global guards, then the route-specific guards of each route in `entering`. Stays sync when possible. */
+	private _runEnterGuards(entering: string[], context: GuardContext): GuardResult | Promise<GuardResult> {
+		const runRouteGuards = (): GuardResult | Promise<GuardResult> =>
+			this._runForEach(entering, context, (route) => this._runRouteGuards(route, context));
+		const globalResult = this._runGuards(this._globalGuards, context, context.toRoute);
 
 		if (isPromiseLike(globalResult)) {
 			return globalResult.then((result: GuardResult) => {
 				if (result !== true) return result;
 				if (context.signal.aborted) return false;
-				return this._runRouteGuards(toRoute, context);
+				return runRouteGuards();
 			});
 		}
 		if (globalResult !== true) return globalResult;
-		return this._runRouteGuards(toRoute, context);
+		return runRouteGuards();
 	}
 
 	/** Run route-specific guards if any are registered. */
 	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		if (!toRoute || !this._enterGuards.has(toRoute)) return true;
-		return this._runGuards(this._enterGuards.get(toRoute)!, context);
+		return this._runGuards(this._enterGuards.get(toRoute)!, context, toRoute);
 	}
 
 	/**
@@ -301,7 +336,7 @@ export default class GuardPipeline {
 	 * may safely add/remove themselves (e.g. one-shot guards) without
 	 * affecting the current pipeline run.
 	 */
-	private _runGuards(guards: GuardFn[], context: GuardContext): GuardResult | Promise<GuardResult> {
+	private _runGuards(guards: GuardFn[], context: GuardContext, route: string): GuardResult | Promise<GuardResult> {
 		guards = guards.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
@@ -314,14 +349,14 @@ export default class GuardPipeline {
 						context,
 						(candidate) => this._validateGuardResult(candidate),
 						"Enter guard",
-						false,
+						route,
 					);
 				}
 				if (result !== true) return this._validateGuardResult(result);
 			} catch (error) {
 				if (context.signal.aborted) return false;
 				Log.error(
-					`${describeGuard("Enter guard", i, guards[i])} on route "${context.toRoute}" threw, navigation failed`,
+					`${describeGuard("Enter guard", i, guards[i])} on route "${route}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),
 					LOG_COMPONENT,
 				);
@@ -338,7 +373,7 @@ export default class GuardPipeline {
 	 * determines what to return for non-true results: leave guards always
 	 * return `false`, enter guards validate and may return redirects.
 	 *
-	 * @param isLeaveGuard - When true, error logs reference `fromRoute`; otherwise `toRoute`.
+	 * @param route - The route the guards are registered for, named in error logs.
 	 */
 	private async _continueGuardsAsync(
 		pendingResult: PromiseLike<GuardResult>,
@@ -347,7 +382,7 @@ export default class GuardPipeline {
 		context: GuardContext,
 		onBlock: (result: unknown) => GuardResult,
 		label: string,
-		isLeaveGuard: boolean,
+		route: string,
 	): Promise<GuardResult> {
 		let guardIndex = currentIndex;
 		try {
@@ -363,7 +398,6 @@ export default class GuardPipeline {
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				const route = isLeaveGuard ? context.fromRoute : context.toRoute;
 				Log.error(
 					`${describeGuard(label, guardIndex, guards[guardIndex])} on route "${route}" threw, navigation failed`,
 					error instanceof Error ? error : String(error),

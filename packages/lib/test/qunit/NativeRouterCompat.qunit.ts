@@ -416,7 +416,16 @@ type TraceStep = (router: MobileRouter, trace: string[]) => void;
  * their parameters, hash writes, logged warnings and errors. One router runs at a time, so that
  * no event or hash write of the other router gets into the trace.
  */
-async function traceRouter(create: () => MobileRouter, steps: TraceStep[]): Promise<string[]> {
+function traceRouter(create: () => MobileRouter, steps: TraceStep[]): Promise<string[]> {
+	return traceRouterWith(TRACE_ROUTES, create, steps);
+}
+
+/** {@link traceRouter} for a router that `create` constructs with `routes`. */
+async function traceRouterWith(
+	routes: { name: string }[],
+	create: () => MobileRouter,
+	steps: TraceStep[],
+): Promise<string[]> {
 	initHashChanger();
 	const trace: string[] = [];
 	const router = create();
@@ -426,7 +435,7 @@ async function traceRouter(create: () => MobileRouter, steps: TraceStep[]): Prom
 		"router",
 		router,
 		trace,
-		TRACE_ROUTES.map((route) => route.name),
+		routes.map((route) => route.name),
 	);
 	try {
 		for (const [index, step] of steps.entries()) {
@@ -461,6 +470,39 @@ async function assertSameTrace(assert: Assert, steps: TraceStep[], expected: str
 		firstDifference(guard, native),
 		undefined,
 		"the guard router leaves the same trace as the native router",
+	);
+}
+
+/**
+ * Assert that the guard router, with the guards that `guarded` registers, leaves the same trace
+ * for `guardedSteps` as the native router for `nativeSteps`: what a guard decided has the same
+ * effect on events, hash and history as the native navigation it stands for.
+ */
+async function assertEquivalentTrace(
+	assert: Assert,
+	nativeSteps: TraceStep[],
+	guarded: (router: GuardRouter) => void,
+	guardedSteps: TraceStep[],
+	expected: string[],
+): Promise<void> {
+	const config = { async: true };
+	const native = await traceRouter(() => new MobileRouter(TRACE_ROUTES, config), nativeSteps);
+	const guard = await traceRouter(() => {
+		const router = new GuardRouterClass(TRACE_ROUTES, config);
+		guarded(router);
+		return router;
+	}, guardedSteps);
+
+	for (const prefix of expected) {
+		assert.ok(
+			native.some((line) => line.startsWith(prefix)),
+			`the native router recorded "${prefix}"`,
+		);
+	}
+	assert.strictEqual(
+		firstDifference(guard, native),
+		undefined,
+		"the guarded navigation leaves the same trace as its native equivalent",
 	);
 }
 
@@ -578,6 +620,86 @@ QUnit.test("a hash that is parsed again matches its route again", async function
 		],
 		["page1 matched 2 times"],
 	);
+});
+
+QUnit.test("a redirected navTo() behaves like a native navTo() to the target", async function (assert: Assert) {
+	await assertEquivalentTrace(
+		assert,
+		[
+			(router) => router.initialize(),
+			navTo("page1"),
+			navTo("detail", { id: "7" }),
+			navTo("home"),
+			navTo("detail", { id: "7" }, true),
+		],
+		(router) => {
+			router.addRouteGuard("files", () => ({ route: "detail", parameters: { id: "7" } }));
+			router.addRouteGuard("search", () => "files");
+		},
+		[
+			(router) => router.initialize(),
+			navTo("page1"),
+			// Redirected in one hop, and in a chain.
+			navTo("files"),
+			navTo("home"),
+			navTo("search", { term: "ui5" }, true),
+		],
+		["hash hashSet detail/7 ", "hash hashReplaced detail/7 ", "router routeMatched detail "],
+	);
+});
+
+QUnit.test(
+	"a navTo() that is redirected to the route that is shown changes nothing, as if the router had not been asked",
+	async function (assert: Assert) {
+		await assertEquivalentTrace(
+			assert,
+			[
+				(router) => router.initialize(),
+				navTo("page1"),
+				(_router, trace) => {
+					trace.push("navTo returns the router: true");
+				},
+				navTo("home"),
+			],
+			(router) => {
+				router.addRouteGuard("files", () => "page1");
+			},
+			[(router) => router.initialize(), navTo("page1"), navTo("files"), navTo("home")],
+			["router routeMatched page1 ", "router routeMatched home "],
+		);
+	},
+);
+
+QUnit.test("greedy routes match and fire their events as with the native router", async function (assert: Assert) {
+	const routes = [...TRACE_ROUTES, { name: "audit", pattern: "detail/:rest*:", greedy: true }];
+	const steps: TraceStep[] = [
+		(router) => router.initialize(),
+		navTo("detail", { id: "1" }),
+		browserHash("detail/2"),
+		navTo("page1"),
+		navTo("audit", { "rest*": "3" }),
+	];
+	const trace = (create: () => MobileRouter): Promise<string[]> => traceRouterWith(routes, create, steps);
+	const native = await trace(() => new MobileRouter(routes, { async: true }));
+	const guard = await trace(() => new GuardRouterClass(routes, { async: true }));
+	const guarded = await trace(() => {
+		const router = new GuardRouterClass(routes, { async: true });
+		router.addGuard(() => true);
+		router.addRouteGuard("audit", () => true);
+		router.addLeaveGuard("audit", () => true);
+		return router;
+	});
+
+	assert.ok(
+		native.some((line) => line.startsWith("router routeMatched audit ")),
+		"the native router matched the greedy route",
+	);
+	assert.strictEqual(
+		firstDifference(guard, native),
+		undefined,
+		"the guard router without guards leaves the same trace",
+	);
+	assert.strictEqual(firstDifference(guarded, native), undefined, "and with guards that allow");
 });
 
 QUnit.test("a hash that several routes could match resolves to the same route", function (assert: Assert) {

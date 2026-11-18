@@ -16,7 +16,7 @@ const NavigationOutcome = Object.freeze({
 	Bypassed: "bypassed",
 	/** A guard blocked navigation, or the hash changer refused the hash change; the previous route remains active. @since 1.2.0 */
 	Blocked: "blocked",
-	/** A guard redirected navigation to a different route. @since 1.2.0 */
+	/** A guard redirected navigation to a different route, or to the route that is displayed, which then does not match again. @since 1.2.0 */
 	Redirected: "redirected",
 	/** Navigation was cancelled before settling (superseded, stopped, or destroyed). @since 1.2.0 */
 	Cancelled: "cancelled",

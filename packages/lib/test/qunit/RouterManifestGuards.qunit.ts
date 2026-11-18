@@ -12,6 +12,7 @@ import type {
 	Router$NavigationSettledEvent,
 } from "ui5/guard/router/types";
 import {
+	captureHashWrites,
 	captureErrors,
 	captureUnhandledRejections,
 	captureWarnings,
@@ -580,6 +581,207 @@ QUnit.test("a component loaded as a routing target navigates under its prefix", 
 		assert.strictEqual((await parentRouter.navigationSettled()).route, "shell", "the parent route stays matched");
 	});
 });
+
+/**
+ * Display the child on its "detail" route (`shell&/child/detail`) and record the routes it matches
+ * from then on.
+ */
+async function showChildDetail(
+	parent: UIComponent,
+	probe: OwnerProbe,
+): Promise<{ parentRouter: GuardRouter; childRouter: GuardRouter; childMatches: string[] }> {
+	const parentRouter = getComponentRouter(parent);
+	parentRouter.navTo("shell");
+	await waitForRoute(parentRouter, "shell");
+	const childRouter = getComponentRouter(getChild(probe));
+	childRouter.navTo("detail");
+	await waitForRoute(childRouter, "detail");
+	const childMatches: string[] = [];
+	childRouter.attachRouteMatched((event) => {
+		childMatches.push(String(event.getParameter("name")));
+	});
+	return { parentRouter, childRouter, childMatches };
+}
+
+QUnit.test(
+	"a hash change that the parent blocks is undone with the hash of the nested component",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { parentRouter, childRouter, childMatches } = await showChildDetail(parent, probe);
+			parentRouter.addLeaveGuard("shell", () => false);
+			const parentStatuses = recordSettlements(parentRouter);
+
+			const hashChanger = HashChanger.getInstance();
+			const backOnDetail = waitForRoute(childRouter, "detail");
+			const writes = await captureHashWrites(hashChanger, () => {
+				hashChanger.setHash("");
+			});
+			await backOnDetail;
+
+			assert.deepEqual(parentStatuses, [NavigationOutcome.Blocked], "the parent blocks the navigation");
+			assert.deepEqual(
+				writes,
+				["set:", "replace:shell&/child/detail"],
+				"one write restores the hash of the parent and of the nested component",
+			);
+			assert.strictEqual(getHash(), "shell&/child/detail", "the full previous hash is back");
+			assert.strictEqual(
+				(await parentRouter.navigationSettled()).route,
+				"shell",
+				"the parent stays on its route",
+			);
+			assert.deepEqual(
+				await childRouter.navigationSettled(),
+				{ status: NavigationOutcome.Committed, route: "detail", hash: "detail" },
+				"the nested component is on the route it was on",
+			);
+			// UI5 reports the refused hash to the nested router before the parent can restore it.
+			assert.deepEqual(childMatches, ["list", "detail"], "it received the refused hash, then the previous one");
+		});
+	},
+);
+
+QUnit.test(
+	"a hash change that the parent blocks after an async guard is undone with the hash of the nested component",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { parentRouter, childRouter } = await showChildDetail(parent, probe);
+			let decide: (allowed: boolean) => void = () => {};
+			parentRouter.addLeaveGuard("shell", () => new Promise<boolean>((resolve) => (decide = resolve)));
+
+			HashChanger.getInstance().setHash("");
+			await waitForRoute(childRouter, "list");
+			assert.strictEqual(getHash(), "", "the refused hash is shown while the guard is pending");
+
+			const backOnDetail = waitForRoute(childRouter, "detail");
+			const writes = await captureHashWrites(HashChanger.getInstance(), () => {
+				decide(false);
+			});
+			await backOnDetail;
+
+			assert.deepEqual(writes, ["replace:shell&/child/detail"], "one write restores the full previous hash");
+			assert.strictEqual(getHash(), "shell&/child/detail", "the full previous hash is back");
+			assert.strictEqual(
+				(await parentRouter.navigationSettled()).status,
+				NavigationOutcome.Blocked,
+				"the parent blocked the navigation",
+			);
+			assert.strictEqual(
+				(await childRouter.navigationSettled()).route,
+				"detail",
+				"the child is back on its route",
+			);
+		});
+	},
+);
+
+QUnit.test(
+	"a blocked hash change of the nested router restores only its own hash once the URL has moved on",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { childRouter } = await showChildDetail(parent, probe);
+			const decisions: ((allowed: boolean) => void)[] = [];
+			childRouter.addLeaveGuard("detail", () => new Promise<boolean>((resolve) => decisions.push(resolve)));
+
+			const hashChanger = HashChanger.getInstance();
+			hashChanger.setHash("shell&/child/list");
+			// Another nested component navigates while the guard is pending.
+			hashChanger.setHash("shell&/child/list&/other/item");
+			decisions[0](false);
+			const blocked = await childRouter.navigationSettled();
+
+			assert.strictEqual(blocked.status, NavigationOutcome.Blocked, "the navigation is blocked");
+			assert.strictEqual(
+				getHash(),
+				"shell&/child/detail&/other/item",
+				"the hash of the other component is untouched",
+			);
+		});
+	},
+);
+
+QUnit.test(
+	"two hash changes of which the second supersedes the first are undone with the hash before both",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { parentRouter, childRouter } = await showChildDetail(parent, probe);
+			const decisions: ((allowed: boolean) => void)[] = [];
+			parentRouter.addLeaveGuard("shell", () => new Promise<boolean>((resolve) => decisions.push(resolve)));
+			const parentStatuses = recordSettlements(parentRouter);
+
+			HashChanger.getInstance().setHash("");
+			await waitForRoute(childRouter, "list");
+			HashChanger.getInstance().setHash("elsewhere");
+			await flushPromises();
+			assert.deepEqual(parentStatuses, [NavigationOutcome.Cancelled], "the second hash change cancels the first");
+
+			const backOnDetail = waitForRoute(childRouter, "detail");
+			const writes = await captureHashWrites(HashChanger.getInstance(), () => {
+				decisions.at(-1)?.(false);
+			});
+			await backOnDetail;
+
+			assert.deepEqual(
+				writes,
+				["replace:shell&/child/detail"],
+				"one write restores the hash before both changes",
+			);
+			assert.deepEqual(parentStatuses, [NavigationOutcome.Cancelled, NavigationOutcome.Blocked]);
+			assert.strictEqual(getHash(), "shell&/child/detail", "the full previous hash is back");
+		});
+	},
+);
+
+QUnit.test(
+	"a hash change that the parent redirects to the route it shows is undone with the hash of the nested component",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { parentRouter, childRouter } = await showChildDetail(parent, probe);
+			parentRouter.addRouteGuard("home", () => "shell");
+			const shellMatches: string[] = [];
+			parentRouter.attachRouteMatched((event) => shellMatches.push(String(event.getParameter("name"))));
+
+			HashChanger.getInstance().setHash("");
+			await waitForRoute(childRouter, "detail");
+
+			assert.deepEqual(
+				await parentRouter.navigationSettled(),
+				{ status: NavigationOutcome.Redirected, route: "shell", hash: "shell" },
+				"the parent settles as Redirected on the route it shows",
+			);
+			assert.strictEqual(getHash(), "shell&/child/detail", "the full previous hash is back");
+			assert.deepEqual(shellMatches, [], "the parent route does not match again");
+		});
+	},
+);
+
+QUnit.test(
+	"a hash change that the nested component blocks while the parent's guard is pending is undone as a whole",
+	async function (assert: Assert) {
+		await withNestedApp(async (parent, probe) => {
+			const { parentRouter, childRouter, childMatches } = await showChildDetail(parent, probe);
+			parentRouter.addLeaveGuard("shell", () => new Promise<boolean>(() => {}));
+			childRouter.addLeaveGuard("detail", () => false);
+			const parentStatuses = recordSettlements(parentRouter);
+			const childStatuses = recordSettlements(childRouter);
+
+			const hashChanger = HashChanger.getInstance();
+			const writes = await captureHashWrites(hashChanger, () => {
+				hashChanger.setHash("");
+			});
+
+			assert.deepEqual(
+				writes,
+				["set:", "replace:shell&/child/detail"],
+				"the nested router restores the full hash",
+			);
+			assert.strictEqual(getHash(), "shell&/child/detail", "the full previous hash is back");
+			assert.deepEqual(childStatuses, [NavigationOutcome.Blocked], "the nested component blocked");
+			assert.deepEqual(parentStatuses, [NavigationOutcome.Cancelled], "which ends the parent's navigation");
+			assert.deepEqual(childMatches, [], "the nested component matched no route");
+		});
+	},
+);
 
 QUnit.test(
 	"a redirect to the hash that is shown sets the route of the nested component (componentTargetInfo)",

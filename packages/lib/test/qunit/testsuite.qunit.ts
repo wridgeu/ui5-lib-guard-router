@@ -57,6 +57,9 @@ export default {
 		RouterNavigation: {
 			title: "QUnit Tests for Router Navigation Paths",
 		},
+		RouterHistory: {
+			title: "QUnit Tests for Router and Browser History",
+		},
 		RouterSettlement: {
 			title: "QUnit Tests for Router Settlement and Lifecycle",
 		},
@@ -75,6 +78,13 @@ export default {
 		NestedRouterParity: {
 			title: "QUnit Tests for Native Router Parity in Nested Components",
 			// Each test starts the fixture app four times.
+			qunit: {
+				testTimeout: 30000,
+			},
+		},
+		GuardedNavigationParity: {
+			title: "QUnit Tests for Guard Decisions and their Native Equivalents",
+			// Each test starts the fixture app three times.
 			qunit: {
 				testTimeout: 30000,
 			},

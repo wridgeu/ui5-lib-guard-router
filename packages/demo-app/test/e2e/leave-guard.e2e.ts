@@ -3,6 +3,8 @@ import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 import {
 	expectHashToBe,
 	fireEvent,
+	getHistoryEntryIndex,
+	getHistoryLength,
 	loginAndGoToProtected,
 	startAtHome,
 	waitForPage,
@@ -75,5 +77,51 @@ describe("Leave Guard - Dirty Form", () => {
 		await browser.back();
 
 		await expectLeaveBlocked(settlementRevision);
+	});
+
+	it("should leave the browser history as it was after a blocked browser back", async () => {
+		await setDirtyOnProtected(true);
+		const historyLength = await getHistoryLength();
+		const entryIndex = await getHistoryEntryIndex();
+		const blockedRevision = await getRuntimeSettlementRevision();
+		await browser.back();
+		await expectLeaveBlocked(blockedRevision);
+		// The browser is on the entry it left, not on the one before it with the hash replaced.
+		expect(await getHistoryEntryIndex()).toBe(entryIndex);
+		expect(await getHistoryLength()).toBe(historyLength);
+
+		// The entry of Home is still behind Protected: one step back arrives there.
+		await setDirtyOnProtected(false);
+		const backRevision = await getRuntimeSettlementRevision();
+		await browser.back();
+		await expectLeftToHome(backRevision);
+
+		// And the entry of Protected is still ahead of it.
+		const forwardRevision = await getRuntimeSettlementRevision();
+		await browser.forward();
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: forwardRevision },
+		);
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+	});
+
+	it("should go one step back with the nav button after it was blocked", async () => {
+		await setDirtyOnProtected(true);
+		const blockedRevision = await getRuntimeSettlementRevision();
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await expectLeaveBlocked(blockedRevision);
+
+		await setDirtyOnProtected(false);
+		const historyLength = await getHistoryLength();
+		const settlementRevision = await getRuntimeSettlementRevision();
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await expectLeftToHome(settlementRevision);
+
+		// A step back, not a new entry: the entry of Protected is ahead.
+		expect(await getHistoryLength()).toBe(historyLength);
+		await browser.forward();
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+		await expectHashToBe("#/protected");
 	});
 });

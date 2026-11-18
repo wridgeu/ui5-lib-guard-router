@@ -198,13 +198,17 @@ export async function waitForComponent(appId = APP_ID, hint = ""): Promise<void>
 /**
  * Whether the page has the title and is visible. A NavContainer hides the pages that are
  * not current with display:none; checkVisibility() also sees a hidden ancestor: the page
- * of a nested component whose container is hidden.
+ * of a nested component whose container is hidden. During a transition the page that is
+ * left is visible as well, so the view also has to be the current page of its container.
  */
 export async function isPageDisplayed(page: ControlRef, expectedTitle: string): Promise<boolean> {
 	return browser.execute(
 		(componentId: string, viewId: string, id: string, title: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const control = Component.getComponentById(componentId).byId(viewId)?.byId(id);
+			const view = Component.getComponentById(componentId).byId(viewId);
+			const control = view?.byId(id);
+			const container = view?.getParent();
+			if (container?.getCurrentPage && container.getCurrentPage() !== view) return false;
 			const domRef = control?.getTitle() === title ? control.getDomRef() : null;
 			return domRef ? domRef.checkVisibility({ visibilityProperty: true }) : false;
 		},

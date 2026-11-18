@@ -75,11 +75,18 @@ QUnit.test("Direct hash change with redirect restores correct hash", async funct
 	router.initialize();
 	await waitForRoute(router, "home");
 
+	const matched: string[] = [];
+	router.attachRouteMatched((event) => matched.push(String(event.getParameter("name"))));
 	HashChanger.getInstance().setHash("forbidden");
-	await waitForRoute(router, "home");
+	assert.deepEqual(
+		await router.navigationSettled(),
+		{ status: NavigationOutcome.Redirected, route: "home", hash: "" },
+		"the redirect to the route that is shown settles as Redirected",
+	);
 	await flushPromises();
 
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored to home route");
+	assert.deepEqual(matched, [], "the route that is shown does not match again");
 });
 
 QUnit.test("Direct hash change to a guard that throws restores the hash", async function (assert: Assert) {
@@ -729,7 +736,7 @@ QUnit.test("navTo with replace=true works through preflight (4-arg overload)", a
 	assert.strictEqual(getHash(), "forbidden", "Hash updated to forbidden");
 });
 
-QUnit.test("Guard redirect replaces the history entry instead of adding one", async function (assert) {
+QUnit.test("A redirected navTo() writes its target the way the call asked for", async function (assert) {
 	router.addRouteGuard("protected", () => "forbidden");
 	router.addRouteGuard("detail", (context) =>
 		context.toArguments.id === "1" ? { route: "detail", parameters: { id: "7" } } : true,
@@ -742,14 +749,37 @@ QUnit.test("Guard redirect replaces the history entry instead of adding one", as
 		await router.navigationSettled();
 		router.navTo("detail", { id: "1" });
 		await router.navigationSettled();
+		router.navTo("home");
+		await router.navigationSettled();
+		router.navTo("protected", {}, true);
+		await router.navigationSettled();
+		router.navTo("detail", { id: "1" }, undefined, true);
+		await router.navigationSettled();
 	});
 
 	assert.deepEqual(
 		writes,
-		["replace:forbidden", "replace:detail/7"],
-		"string and object redirect targets replace the history entry, and add none",
+		["set:forbidden", "set:detail/7", "set:", "replace:forbidden", "replace:detail/7"],
+		"string and object redirect targets add a history entry, so that Back returns to the origin, unless the call replaces",
 	);
 });
+
+QUnit.test(
+	"A redirect chain after navTo() writes only its final target, as one history entry",
+	async function (assert) {
+		router.addRouteGuard("protected", () => "forbidden");
+		router.addRouteGuard("forbidden", async () => ({ route: "detail", parameters: { id: "7" } }));
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		const writes = await captureHashWrites(HashChanger.getInstance(), async () => {
+			router.navTo("protected");
+			await router.navigationSettled();
+		});
+
+		assert.deepEqual(writes, ["set:detail/7"], "the hops in between never reach the URL");
+	},
+);
 
 QUnit.test("navTo returns this for chaining", function (assert) {
 	router.initialize();
@@ -1456,11 +1486,9 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		const replaceHash = this.stub(HashChanger.getInstance(), "replaceHash").throws(
-			new Error("history unavailable"),
-		);
+		const setHash = this.stub(HashChanger.getInstance(), "setHash").throws(new Error("history unavailable"));
 		assert.throws(() => router.navTo("protected"), /history unavailable/, "the failure reaches the caller");
-		replaceHash.restore();
+		setHash.restore();
 
 		router.addGuard(() => false);
 		router.navTo("detail", { id: "1" });
@@ -1668,9 +1696,9 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		const statuses = recordSettlements(router);
 
-		const replaceHash = this.stub(router.getHashChanger(), "replaceHash");
+		const setHash = this.stub(router.getHashChanger(), "setHash");
 		router.navTo("protected");
-		replaceHash.restore();
+		setHash.restore();
 		assert.deepEqual(
 			await router.navigationSettled(),
 			{ status: NavigationOutcome.Blocked, route: "home", hash: "" },
@@ -1686,3 +1714,26 @@ QUnit.test(
 		);
 	},
 );
+
+for (const [kind, guard] of [
+	["a sync", (): boolean => false],
+	["an async", (): Promise<boolean> => Promise.resolve(false)],
+] as const) {
+	QUnit.test(
+		`a hash change that ${kind} guard blocks settles although its restore is refused`,
+		async function (this: SinonTestContext, assert: Assert) {
+			router.addRouteGuard("protected", guard);
+			router.initialize();
+			await waitForRoute(router, "home");
+			const statuses = recordSettlements(router);
+
+			const hashChanger = HashChanger.getInstance();
+			const replaceHash = this.stub(hashChanger, "replaceHash");
+			hashChanger.setHash("protected");
+			await flushPromises();
+			replaceHash.restore();
+
+			assert.deepEqual(statuses, [NavigationOutcome.Blocked], "the navigation settles as Blocked");
+		},
+	);
+}

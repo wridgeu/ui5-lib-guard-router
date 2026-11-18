@@ -870,3 +870,160 @@ QUnit.test("the reject function of a Promise has the shape of its resolve functi
 
 	assert.strictEqual(isPromiseResolver(reject), true, "the documented false positive");
 });
+
+// ============================================================
+// Module: greedy routes
+// ============================================================
+QUnit.module("GuardPipeline - greedy routes");
+
+QUnit.test(
+	"the guards of routes that are entered as well run after those of toRoute, with the same context",
+	function (assert: Assert) {
+		const pipeline = new GuardPipeline();
+		const calls: string[] = [];
+		const record =
+			(name: string): GuardFn =>
+			(context) => {
+				calls.push(`${name}:${context.toRoute}`);
+				return true;
+			};
+		pipeline.addEnterGuard("audit", record("audit"));
+		pipeline.addEnterGuard("target", record("target"));
+		pipeline.addEnterGuard("other", record("other"));
+		pipeline.addGlobalGuard(record("global"));
+
+		const result = pipeline.evaluate(createContext(), { alsoEntering: ["audit", "unguarded"] });
+
+		assert.deepEqual(result, { action: "allow" }, "all guards allow");
+		assert.deepEqual(
+			calls,
+			["global:target", "target:target", "audit:target"],
+			"global, first match, greedy match",
+		);
+	},
+);
+
+QUnit.test(
+	"a guard of a route that is entered as well blocks or redirects the navigation",
+	async function (assert: Assert) {
+		const pipeline = new GuardPipeline();
+		pipeline.addEnterGuard("audit", () => false);
+		assert.deepEqual(
+			pipeline.evaluate(createContext(), { alsoEntering: ["audit"] }),
+			{ action: "block" },
+			"a sync guard blocks",
+		);
+		assert.deepEqual(pipeline.evaluate(createContext()), { action: "allow" }, "not when its route does not match");
+
+		const redirecting = new GuardPipeline();
+		redirecting.addEnterGuard("target", async () => true);
+		redirecting.addEnterGuard("audit", async () => "login");
+		redirecting.addEnterGuard("last", () => {
+			throw new Error("must not run");
+		});
+		assert.deepEqual(
+			await redirecting.evaluate(createContext(), { alsoEntering: ["audit", "last"] }),
+			{ action: "redirect", target: "login" },
+			"an async guard redirects after the async guard of the first match, and ends the evaluation",
+		);
+	},
+);
+
+QUnit.test("an aborted navigation runs no guard of a further route", async function (assert: Assert) {
+	const pipeline = new GuardPipeline();
+	const controller = new AbortController();
+	let auditCalled = false;
+	pipeline.addEnterGuard("target", async () => {
+		controller.abort();
+		return true;
+	});
+	pipeline.addEnterGuard("audit", () => {
+		auditCalled = true;
+		return true;
+	});
+	const leaving = new GuardPipeline();
+	leaving.addLeaveGuard("current", async () => {
+		controller.abort();
+		return true;
+	});
+	leaving.addLeaveGuard("audit", () => {
+		auditCalled = true;
+		return true;
+	});
+
+	assert.deepEqual(
+		await pipeline.evaluate(createContext({ signal: controller.signal }), { alsoEntering: ["audit"] }),
+		{ action: "block" },
+		"enter guards",
+	);
+	assert.deepEqual(
+		await leaving.evaluate(createContext({ fromRoute: "current", signal: controller.signal }), {
+			alsoLeaving: ["audit"],
+		}),
+		{ action: "block" },
+		"leave guards",
+	);
+	assert.notOk(auditCalled, "the guards of the greedy route did not run");
+});
+
+QUnit.test(
+	"the leave guards of routes that are left as well run after those of fromRoute",
+	async function (assert: Assert) {
+		const pipeline = new GuardPipeline();
+		const calls: string[] = [];
+		pipeline.addLeaveGuard("audit", (context) => {
+			calls.push(`audit:${context.fromRoute}`);
+			return false;
+		});
+		pipeline.addLeaveGuard("current", async (context) => {
+			calls.push(`current:${context.fromRoute}`);
+			return true;
+		});
+		pipeline.addGlobalGuard(() => {
+			calls.push("global");
+			return true;
+		});
+
+		assert.deepEqual(
+			await pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["audit"] }),
+			{ action: "block" },
+			"the leave guard of the greedy route blocks",
+		);
+		assert.deepEqual(calls, ["current:current", "audit:current"], "in order, before any enter guard");
+		assert.deepEqual(
+			pipeline.evaluate(createContext({ fromRoute: "current" }), {
+				alsoLeaving: ["audit"],
+				skipLeaveGuards: true,
+			}),
+			{ action: "allow" },
+			"a redirect hop runs none of them",
+		);
+		assert.deepEqual(
+			pipeline.evaluate(createContext(), { alsoLeaving: ["audit"] }),
+			{ action: "allow" },
+			"nor does a navigation that leaves no route",
+		);
+	},
+);
+
+QUnit.test(
+	"a failing guard of a greedy route is logged with the name of that route",
+	function (this: SinonTestContext, assert: Assert) {
+		const error = this.stub(Log, "error");
+		const pipeline = new GuardPipeline();
+		pipeline.addEnterGuard("audit", () => {
+			throw new Error("enter failed");
+		});
+		pipeline.addLeaveGuard("auditLeft", () => {
+			throw new Error("leave failed");
+		});
+
+		pipeline.evaluate(createContext(), { alsoEntering: ["audit"] });
+		pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["auditLeft"] });
+
+		assert.deepEqual(logMessages(error), [
+			'Enter guard [0] on route "audit" threw, navigation failed',
+			'Leave guard [0] on route "auditLeft" threw, navigation failed',
+		]);
+	},
+);

@@ -1094,20 +1094,20 @@ QUnit.test(
 		let redirectedSignal: AbortSignal | null = null;
 		router.addRouteGuard("forbidden", (context: GuardContext) => {
 			redirectedSignal = context.signal;
-			return "home";
+			return "protected";
 		});
 		router.initialize();
 		await waitForRoute(router, "home");
 
 		// Navigation triggers redirect
 		router.navTo("forbidden");
-		await waitForRoute(router, "home");
+		await waitForRoute(router, "protected");
 		assert.ok(redirectedSignal, "Signal was captured from redirected navigation");
 		assert.notOk(redirectedSignal!.aborted, "Signal was not aborted after redirect");
 
 		// Subsequent navigation must not retroactively abort the old signal
-		router.navTo("protected");
-		await waitForRoute(router, "protected");
+		router.navTo("detail", { id: "1" });
+		await waitForRoute(router, "detail");
 		assert.notOk(redirectedSignal!.aborted, "Redirected signal stays clean after subsequent navigation");
 	},
 );

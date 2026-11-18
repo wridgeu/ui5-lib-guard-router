@@ -17,15 +17,6 @@ import BaseController from "./BaseController";
  * @namespace demo.app.controller
  */
 export default class ProtectedController extends BaseController {
-	/**
-	 * navTo() instead of a step back in the history: its preflight lets the leave guard block
-	 * before the hash changes. A blocked history step has already moved the browser, and the
-	 * router then overwrites the entry it moved to with the hash of this page.
-	 */
-	override onNavBack(): void {
-		this.getRouter().navTo("home");
-	}
-
 	onClearDirtyAndNavHome(): void {
 		this.getModel<JSONModel>("form").setProperty("/isDirty", false);
 		this.createScenarioRunner().recordAction("actionClearedDirty");

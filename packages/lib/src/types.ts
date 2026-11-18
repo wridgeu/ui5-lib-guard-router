@@ -27,11 +27,17 @@ export interface GuardRedirect {
  *
  * - `true`: Allow navigation to proceed.
  * - `false`: Block navigation. For programmatic `navTo()`, no hash change
- *   or history entry occurs. For browser-initiated navigation (back/forward,
- *   URL bar), the hash is restored via `replaceHash()` (best-effort repair).
- * - `string`: Redirect to this route name. For programmatic `navTo()`,
- *   navigation goes directly to the target with no intermediate history entry.
- *   For browser-initiated navigation, the redirect replaces the current entry.
+ *   or history entry occurs. A step through the browser history (back,
+ *   forward) is taken back, which leaves the history as it was. Any other
+ *   hash change (URL bar, link) has its history entry replaced with the
+ *   previous hash.
+ * - `string`: Redirect to this route name. For programmatic `navTo()`, the
+ *   guarded hash is never written: the target is, the way the call asked
+ *   for (a new history entry unless it passed `bReplace`), so that Back
+ *   returns to where the navigation started. A hash change that has reached
+ *   the browser has its history entry replaced with the target. A redirect
+ *   to the route that is displayed settles as `Redirected` without matching
+ *   the route again.
  * - `GuardRedirect`: Redirect with route name, parameters, and optional
  *   component target info. Same history semantics as string redirect.
  *
@@ -45,7 +51,13 @@ export type GuardResult = boolean | string | GuardRedirect;
  * @since 1.0.1
  */
 export interface GuardContext {
-	/** Target route name (empty string if no route matched / bypassed) @since 1.0.1 */
+	/**
+	 * Target route name (empty string if no route matched / bypassed): the first route that
+	 * matches the hash. The guards of greedy routes (`greedy: true`) that match it as well run
+	 * after those of this route, with the same context.
+	 *
+	 * @since 1.0.1
+	 */
 	toRoute: string;
 	/** Raw hash being navigated to @since 1.0.1 */
 	toHash: string;
@@ -57,7 +69,13 @@ export interface GuardContext {
 	 * @since 1.0.1
 	 */
 	toArguments: RouteInfo["arguments"];
-	/** Current route name (empty string on initial navigation) @since 1.0.1 */
+	/**
+	 * Current route name (empty string on initial navigation): the first route that matches the
+	 * current hash. The leave guards of greedy routes that match it as well run after those of
+	 * this route, with the same context.
+	 *
+	 * @since 1.0.1
+	 */
 	fromRoute: string;
 	/** Current hash @since 1.0.1 */
 	fromHash: string;
