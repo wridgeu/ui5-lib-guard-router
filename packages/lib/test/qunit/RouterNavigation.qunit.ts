@@ -409,14 +409,11 @@ QUnit.test("Multiple route guards with cross-redirects settle correctly", async 
 QUnit.module("Router - GuardRedirect with componentTargetInfo", standardHooks);
 
 QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at target", async function (assert: Assert) {
-	router.addRouteGuard(
-		"forbidden",
-		(): GuardRedirect => ({
-			route: "detail",
-			parameters: { id: "cti-1" },
-			componentTargetInfo: {},
-		}),
-	);
+	router.addRouteGuard("forbidden", (): GuardRedirect => ({
+		route: "detail",
+		parameters: { id: "cti-1" },
+		componentTargetInfo: {},
+	}));
 	router.initialize();
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
@@ -432,14 +429,11 @@ QUnit.test("GuardRedirect forwards non-empty componentTargetInfo to navTo", asyn
 	const navToSpy = sinon.spy(router, "navTo");
 
 	try {
-		router.addRouteGuard(
-			"forbidden",
-			(): GuardRedirect => ({
-				route: "detail",
-				parameters: { id: "cti-2" },
-				componentTargetInfo: expectedCTI,
-			}),
-		);
+		router.addRouteGuard("forbidden", (): GuardRedirect => ({
+			route: "detail",
+			parameters: { id: "cti-2" },
+			componentTargetInfo: expectedCTI,
+		}));
 		let targetGuardCalls = 0;
 		router.addRouteGuard("detail", () => {
 			targetGuardCalls++;
@@ -682,13 +676,10 @@ QUnit.test(
 		});
 
 		try {
-			router.addRouteGuard(
-				"forbidden",
-				(): GuardRedirect => ({
-					route: "home",
-					componentTargetInfo: expectedCTI,
-				}),
-			);
+			router.addRouteGuard("forbidden", (): GuardRedirect => ({
+				route: "home",
+				componentTargetInfo: expectedCTI,
+			}));
 			router.initialize();
 			await waitForRoute(router, "home");
 			calls.length = 0;

@@ -389,13 +389,10 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
 		matchedArgs = event.getParameter("arguments") as Record<string, string>;
 	});
-	router.addRouteGuard(
-		"forbidden",
-		(): GuardRedirect => ({
-			route: "detail",
-			parameters: { id: "error-403" },
-		}),
-	);
+	router.addRouteGuard("forbidden", (): GuardRedirect => ({
+		route: "detail",
+		parameters: { id: "error-403" },
+	}));
 	router.initialize();
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");

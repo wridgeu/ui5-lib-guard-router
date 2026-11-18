@@ -756,17 +756,17 @@ QUnit.test(
 QUnit.module("Router - AbortSignal on GuardContext", standardHooks);
 
 QUnit.test("Guard context includes an AbortSignal", async function (assert: Assert) {
-	let capturedSignal: AbortSignal | null = null;
+	const signals: AbortSignal[] = [];
 	router.addGuard((context: GuardContext) => {
-		capturedSignal = context.signal;
+		signals.push(context.signal);
 		return true;
 	});
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	assert.ok(capturedSignal, "Signal was provided");
-	assert.ok(capturedSignal! instanceof AbortSignal, "Signal is an AbortSignal");
-	assert.notOk(capturedSignal!.aborted, "Signal is not aborted after successful navigation");
+	assert.strictEqual(signals.length, 1, "Signal was provided");
+	assert.ok(signals[0] instanceof AbortSignal, "Signal is an AbortSignal");
+	assert.notOk(signals[0].aborted, "Signal is not aborted after successful navigation");
 });
 
 QUnit.test("Signal is aborted when a newer navigation supersedes", async function (assert: Assert) {

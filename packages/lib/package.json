@@ -52,8 +52,8 @@
 		"pack:check": "npm run build && npm pack --dry-run"
 	},
 	"devDependencies": {
-		"@types/qunit": "^2.19.13",
+		"@types/qunit": "^2.19.14",
 		"@ui5/cli": "^4.0.73",
-		"ui5-tooling-transpile": "^3.0.0"
+		"ui5-tooling-transpile": "^3.14.1"
 	}
 }
