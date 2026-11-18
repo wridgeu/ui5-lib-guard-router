@@ -1,7 +1,7 @@
 import Log from "sap/base/Log";
 import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
 import type { GuardFn } from "ui5/guard/router/types";
-import { createGuardContext, logMessages, type SinonTestContext } from "./testHelpers";
+import { createGuardContext, logMessages, type SinonTestContext } from "../testHelpers";
 
 const PATH = "app/guards/auth";
 const a: GuardFn = () => true;

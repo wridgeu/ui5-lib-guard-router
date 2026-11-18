@@ -11,23 +11,23 @@ interface TestPage {
 const tests: Record<string, TestPage> = {
 	GuardPipeline: {
 		title: "QUnit Tests for ui5.guard.router.GuardPipeline",
-		files: ["GuardPipeline"],
+		files: ["unit/GuardPipeline", "unit/GuardPipelineAsync"],
 	},
 	GuardConfig: {
 		title: "QUnit Tests for ui5.guard.router.GuardConfig",
-		files: ["GuardConfig"],
+		files: ["unit/GuardConfig"],
 	},
 	GuardModules: {
 		title: "QUnit Tests for ui5.guard.router.GuardModules",
-		files: ["GuardModules"],
+		files: ["unit/GuardModules"],
 	},
 	PatternTree: {
 		title: "QUnit Tests for ui5.guard.router.PatternTree",
-		files: ["PatternTree"],
+		files: ["unit/PatternTree"],
 	},
 	RouteMeta: {
 		title: "QUnit Tests for ui5.guard.router.RouteMeta",
-		files: ["RouteMeta"],
+		files: ["unit/RouteMeta"],
 	},
 	Router: {
 		title: "QUnit Tests for ui5.guard.router.Router",

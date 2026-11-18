@@ -192,11 +192,11 @@ switch (result.status) {
 
 ### Existing test updates
 
-Tests in the Router test files and `GuardPipeline.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
+Tests in the Router test files and `GuardPipelineAsync.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
 
 ### New test cases
 
-**GuardPipeline tests** (`packages/lib/test/qunit/GuardPipeline.qunit.ts`):
+**GuardPipeline tests** (`packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`):
 
 1. Sync enter guard that throws → `{ action: "error", error: <thrown> }`
 2. Async enter guard that rejects → `{ action: "error", error: <rejected> }`

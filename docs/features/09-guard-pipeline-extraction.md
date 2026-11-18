@@ -187,7 +187,7 @@ All 234 existing tests in `Router.qunit.ts` pass unchanged. The Router's public 
 
 ### New test file
 
-`packages/lib/test/qunit/GuardPipeline.qunit.ts`
+`packages/lib/test/qunit/unit/GuardPipeline.qunit.ts`
 
 Focused unit tests for the pipeline in isolation — no Router, no HashChanger, no UI5 runtime. Just `new GuardPipeline()`, add guards, call `evaluate()`, assert the decision.
 
