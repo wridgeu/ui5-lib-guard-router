@@ -55,7 +55,7 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterOptions: {
 		title: "QUnit Tests for Router Options",
-		files: ["RouterOptions"],
+		files: ["router/lifecycle/Options"],
 	},
 	RouterManifestGuards: {
 		title: "QUnit Tests for Router Manifest Guards",

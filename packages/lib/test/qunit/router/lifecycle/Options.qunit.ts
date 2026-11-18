@@ -14,7 +14,7 @@ import {
 	recordSettlements,
 	waitForRoute,
 	routerHooks,
-} from "./testHelpers";
+} from "../../testHelpers";
 
 let router: GuardRouter;
 
