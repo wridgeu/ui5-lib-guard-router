@@ -1,6 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { chromeProfileHooks } from "./wdio-chrome-profile";
 import { config as baseConfig } from "./wdio-qunit.conf";
 
 // Browsers can't read process.env, so hand Stryker's active mutant to the page before UI5 loads.
@@ -20,25 +18,13 @@ interface StrykerNamespace {
 // default of about 4 GB; the wdio run then fails and the mutant counts as killed.
 const PAGE_HEAP_LIMIT_MB = 1024;
 
-let profileDir: string | undefined;
-
 export const config: WebdriverIO.Config = {
 	...baseConfig,
-	// On Windows wdio gives Chrome a profile folder in %TEMP% that it never deletes (about 30 MB per
-	// run) and names by the millisecond, so two workers can share one. A mutation run starts
-	// hundreds of browsers, so each gets its own folder here and onComplete removes it.
-	onPrepare: (_config, capabilities) => {
-		profileDir = mkdtempSync(join(process.env.MUTATION_CHROME_PROFILES ?? tmpdir(), "chrome-"));
-		for (const capability of capabilities as WebdriverIO.Capabilities[]) {
-			capability["goog:chromeOptions"]?.args?.push(
-				`--user-data-dir=${profileDir}`,
-				`--js-flags=--max-old-space-size=${PAGE_HEAP_LIMIT_MB}`,
-			);
-		}
-	},
-	onComplete: () => {
-		if (profileDir) rmSync(profileDir, { recursive: true, force: true, maxRetries: 5 });
-	},
+	// A mutation run starts hundreds of browsers. Their profile folders go into the folder of the
+	// mutation run, which also removes the profiles of runs that Stryker kills on timeout.
+	...chromeProfileHooks(process.env.MUTATION_CHROME_PROFILES, [
+		`--js-flags=--max-old-space-size=${PAGE_HEAP_LIMIT_MB}`,
+	]),
 	before: async () => {
 		if (activeMutant === undefined) return;
 		await browser.addInitScript(

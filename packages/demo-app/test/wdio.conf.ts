@@ -1,8 +1,10 @@
 import type { wdi5Config } from "wdio-ui5-service";
+import { chromeProfileHooks } from "../../lib/test/wdio-chrome-profile";
 
 const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080/index.html";
 
 export const config: wdi5Config = {
+	...chromeProfileHooks(),
 	wdi5: {
 		logLevel: "verbose",
 		waitForUI5Timeout: 30000,
@@ -21,7 +23,6 @@ export const config: wdi5Config = {
 	],
 	logLevel: "error",
 	bail: 0,
-	specFileRetries: 1,
 	baseUrl,
 	waitforTimeout: 31000,
 	connectionRetryTimeout: 120000,

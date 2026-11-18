@@ -1,6 +1,9 @@
+import { chromeProfileHooks } from "./wdio-chrome-profile";
+
 const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080";
 
 export const config: WebdriverIO.Config = {
+	...chromeProfileHooks(),
 	runner: "local",
 	specs: [],
 	maxInstances: 1,

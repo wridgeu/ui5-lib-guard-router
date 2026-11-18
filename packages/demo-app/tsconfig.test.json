@@ -3,5 +3,5 @@
 	"compilerOptions": {
 		"types": ["@sapui5/types", "@wdio/globals/types", "mocha"]
 	},
-	"include": ["test/**/*.ts", "../lib/src/**/*.ts"]
+	"include": ["test/**/*.ts", "../lib/src/**/*.ts", "../lib/test/wdio-chrome-profile.ts"]
 }

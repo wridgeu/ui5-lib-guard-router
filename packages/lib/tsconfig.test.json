@@ -6,5 +6,5 @@
 		"types": ["@openui5/types", "@types/jquery", "@types/qunit", "@types/sinon"]
 	},
 	"include": ["src/**/*.ts", "test/**/*.ts"],
-	"exclude": ["test/**/wdio*.conf.ts"]
+	"exclude": ["test/**/wdio*.ts"]
 }
