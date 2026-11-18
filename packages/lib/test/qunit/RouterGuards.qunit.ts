@@ -8,6 +8,7 @@ import type {
 	GuardRouter,
 	LeaveGuardFn,
 	RouteGuardConfig,
+	Router$NavigationSettledEvent,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Route$PatternMatchedEvent } from "sap/ui/core/routing/Route";
@@ -20,6 +21,7 @@ import {
 	createRouter,
 	flushPromises,
 	initHashChanger,
+	recordSettlements,
 	waitForRoute,
 } from "./testHelpers";
 
@@ -422,6 +424,25 @@ QUnit.test("Blocked initial navigation falls back to the default hash", async fu
 	await waitForRoute(router, "home");
 	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Blocked initial navigation restored the default hash");
 });
+
+QUnit.test(
+	"Blocked initial navigation does not fall back when a navigationSettled handler navigated",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => false);
+		HashChanger.getInstance().setHash("protected");
+		const statuses = recordSettlements(router);
+		router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
+			if (event.getParameter("status") === NavigationOutcome.Blocked) router.navTo("forbidden");
+		});
+
+		router.initialize();
+		await waitForRoute(router, "forbidden");
+		await flushPromises();
+
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Committed]);
+		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "the handler's route is kept");
+	},
+);
 
 QUnit.test("Blocked default route on initial navigation stays blocked", async function (assert: Assert) {
 	router.addRouteGuard("home", () => false);

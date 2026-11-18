@@ -38,6 +38,11 @@ QUnit.test("array export picked by index", function (this: SinonTestContext, ass
 	const warning = this.stub(Log, "warning");
 	assert.deepEqual(resolveModuleExports([a, b], PATH, "0"), [{ name: "auth#0", fn: a }]);
 	assert.deepEqual(resolveModuleExports([a, b], PATH, "1"), [{ name: "auth#1", fn: b }]);
+	assert.deepEqual(
+		resolveModuleExports([...Array<GuardFn>(10).fill(a), b], PATH, "10"),
+		[{ name: "auth#10", fn: b }],
+		"an index of several digits",
+	);
 	assert.strictEqual(warning.callCount, 0);
 	for (const key of ["2", "-1", "x", "1x", "1.0", " 1"]) {
 		warning.resetHistory();

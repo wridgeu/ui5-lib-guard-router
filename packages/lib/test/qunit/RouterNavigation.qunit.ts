@@ -8,6 +8,7 @@ import type {
 	Router$NavigationSettledEvent,
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	assertBlocked,
 	callUnsafe,
@@ -15,6 +16,7 @@ import {
 	captureWarnings,
 	captureWarningsAsync,
 	createRouter,
+	createRouterUnsafe,
 	getHash,
 	flushPromises,
 	initHashChanger,
@@ -583,6 +585,44 @@ QUnit.test("blocked programmatic navTo does not change the hash", function (asse
 	assert.deepEqual(recorder.hashes, [], "Hash was never set by the blocked navTo");
 });
 
+QUnit.test("a blocked navTo() leaves a hash alone that the router did not parse", async function (assert) {
+	HashChanger.getInstance().setHash("forbidden");
+	router.addRouteGuard("protected", () => false);
+	router.initialize(true);
+	const recorder = recordHashChanges();
+
+	router.navTo("protected");
+	const result = await router.navigationSettled();
+	await flushPromises();
+	recorder.stop();
+
+	assert.strictEqual(result.status, NavigationOutcome.Blocked);
+	assert.deepEqual(recorder.hashes, [], "the navigation never moved the hash, so there is nothing to restore");
+	assert.strictEqual(getHash(), "forbidden");
+});
+
+QUnit.test("parse() of the committed hash does not cancel a pending navTo()", async function (assert) {
+	let allow!: (allowed: boolean) => void;
+	router.addRouteGuard(
+		"protected",
+		() =>
+			new Promise<boolean>((resolve) => {
+				allow = resolve;
+			}),
+	);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected");
+	router.parse("");
+	allow(true);
+	await flushPromises();
+
+	assert.deepEqual(statuses, [NavigationOutcome.Committed], "the navigation that had not moved the hash goes on");
+	assert.strictEqual(getHash(), "protected");
+});
+
 QUnit.test("blocked programmatic navTo settles as Blocked", async function (assert) {
 	router.addRouteGuard("protected", () => false);
 	router.initialize();
@@ -1139,6 +1179,35 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	assert.strictEqual(getHash(), "", "Hash stayed on home; guard blocked the nested navTo('protected')");
 });
 
+QUnit.test(
+	"navTo from a hashSet handler while a navigation commits still runs guards",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const matched: string[] = [];
+		router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+			matched.push(event.getParameter("name")!);
+		});
+		const statuses = recordSettlements(router);
+		// UI5 fires hashSet within navTo(), before the hash changes: the router is committing "forbidden".
+		HashChanger.getInstance().attachEventOnce("hashSet", () => {
+			router.navTo("protected");
+		});
+
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Blocked, NavigationOutcome.Committed],
+			"the guard blocked the handler's navigation",
+		);
+		assert.deepEqual(matched, ["forbidden"], "the guarded route was never displayed");
+		assert.strictEqual(getHash(), "forbidden");
+	},
+);
+
 // ============================================================
 // Module: Guards on redirect targets
 // ============================================================
@@ -1568,6 +1637,33 @@ QUnit.test(
 		assert.strictEqual(hop!.fromHash, "", "no source hash before the first navigation");
 	},
 );
+
+QUnit.test("a redirect commits the route that matches its hash, as navTo() does", async function (assert: Assert) {
+	// "items/5" is the hash of "item", but UI5 displays "list": the first route that matches wins.
+	router.destroy();
+	router = createRouterUnsafe(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "list", pattern: "items/:id:" },
+			{ name: "item", pattern: "items/{id}" },
+			{ name: "protected", pattern: "protected" },
+		],
+		{ async: true },
+	);
+	router.addRouteGuard("protected", () => ({ route: "item", parameters: { id: "5" } }));
+	router.initialize();
+	await waitForRoute(router, "home");
+	const settled: string[] = [];
+	for (const navigate of [() => router.navTo("item", { id: "5" }), () => router.navTo("protected")]) {
+		navigate();
+		await waitForRoute(router, "list");
+		settled.push((await router.navigationSettled()).route);
+		router.navTo("home");
+		await waitForRoute(router, "home");
+	}
+
+	assert.deepEqual(settled, ["list", "list"], "navTo() and the redirect are on the route that UI5 displays");
+});
 
 QUnit.test("GuardRedirect object without a mandatory parameter settles as Error", async function (assert: Assert) {
 	router.addRouteGuard("protected", async () => ({ route: "detail" }));

@@ -1174,6 +1174,35 @@ QUnit.test("an error thrown before an async-guarded navigation settled fails it"
 	}
 });
 
+QUnit.test(
+	"an error thrown before an async-guarded hash change settled fails it and restores the hash",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", async () => "forbidden");
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+		// The redirect fails to write its hash. Restoring the hash afterwards works.
+		const hashChanger = router.getHashChanger();
+		const replaceHash = hashChanger.replaceHash;
+		hashChanger.replaceHash = () => {
+			hashChanger.replaceHash = replaceHash;
+			throw new Error("hash failed");
+		};
+
+		const errors = await captureErrorsAsync(async () => {
+			HashChanger.getInstance().setHash("protected");
+			await flushPromises();
+		});
+
+		assert.deepEqual(statuses, [NavigationOutcome.Error], "the navigation settles once, as Error");
+		assert.deepEqual(
+			errors.map((e) => [e.message, e.details]),
+			[["Navigation failed after its guards had settled", "Error: hash failed"]],
+		);
+		assert.strictEqual(getHash(), "", "the hash that the failed navigation left in the URL is restored");
+	},
+);
+
 // ============================================================
 // Module: Guards that navigate
 // ============================================================

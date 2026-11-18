@@ -1,7 +1,7 @@
 import MobileRouter from "sap/m/routing/Router";
 import Log from "sap/base/Log";
 import coreLibrary from "sap/ui/core/library";
-import type { ComponentTargetParameters, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
+import type { ComponentTargetParameters, RouteInfo, Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type UIComponent from "sap/ui/core/UIComponent";
@@ -429,7 +429,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (!this._routeNames) return;
 
 		const name = oConfig.name;
-		if (typeof name !== "string") return;
 		if (this._routeNames.includes(name)) return;
 
 		this._routeNames.push(name);
@@ -756,7 +755,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._lastSettlement = result;
 		// After the call that settled: by then a commit has reached super.parse(), and a navigation
 		// that supersedes this one has started.
-		if (this._matchWaiters.length > 0) queueMicrotask(() => this._settleMatchWaiters());
+		queueMicrotask(() => this._settleMatchWaiters());
 		const resolvers = this._settlementResolvers;
 		this._settlementResolvers = [];
 		for (const resolve of resolvers) {
@@ -850,8 +849,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 
 		const targetHash = route.getURL(parameters ?? {});
-		const routeInfo = this.getRouteInfoByHash(targetHash);
-		const toRoute = routeInfo?.name ?? "";
+		const routeInfo = this._matchRoute(targetHash);
+		const toRoute = routeInfo.name;
 
 		// Same hash: no route of this router changes, so there is nothing to guard. Cancel any
 		// pending navigation and navigate natively: UI5 still sets the hashes of nested
@@ -861,9 +860,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 			// A navigationSettled handler of the cancelled navigation may have navigated on.
 			const shownHash: string | undefined = this.getHashChanger().getHash();
 			if (shownHash === undefined || shownHash === targetHash) {
-				// UI5 has reset the hash of the hash changer after a target was displayed without
-				// a route: it reports the hash again, and the route matches again.
-				this._awaitedHash = shownHash === undefined ? targetHash : null;
+				// If UI5 has reset the hash of the hash changer, after a target was displayed without
+				// a route, it reports the hash again, and the route matches again.
+				this._awaitedHash = targetHash;
 				super.navTo(routeName, parameters, componentTargetInfo, replace);
 				this._awaitedHash = null;
 			}
@@ -901,7 +900,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const attempt = this._startAttempt(targetHash, toRoute, restoreHash);
 		const { generation } = attempt;
 
-		const context = this._createGuardContext(toRoute, targetHash, routeInfo, attempt.controller.signal);
+		const context = this._createGuardContext(routeInfo, targetHash, attempt.controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
@@ -1063,8 +1062,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		const routeInfo = this.getRouteInfoByHash(newHash);
-		const toRoute = routeInfo?.name ?? "";
+		const routeInfo = this._matchRoute(newHash);
+		const toRoute = routeInfo.name;
 
 		this._cancelPendingNavigation();
 		// A navigationSettled handler that navigated on the cancellation has moved the URL on.
@@ -1073,7 +1072,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const attempt = this._startAttempt(newHash, toRoute, true);
 		const { generation } = attempt;
 
-		const context = this._createGuardContext(toRoute, newHash, routeInfo, attempt.controller.signal);
+		const context = this._createGuardContext(routeInfo, newHash, attempt.controller.signal);
 
 		const decision = this._pipeline.evaluate(context);
 
@@ -1325,16 +1324,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 		chain.visited.add(targetHash);
 
 		// Build guard context for the redirect target.
-		const routeInfo = this.getRouteInfoByHash(targetHash);
+		const routeInfo = this._matchRoute(targetHash);
+		const toRoute = routeInfo.name;
 		const context: GuardContext = {
-			toRoute: routeInfo?.name ?? "",
+			toRoute,
 			toHash: targetHash,
-			toArguments: routeInfo?.arguments ?? {},
+			toArguments: routeInfo.arguments,
 			fromRoute: chain.fromRoute,
 			fromHash: chain.fromHash,
 			signal: chain.signal,
 			bag: chain.bag,
-			toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
+			toMeta: this.getRouteMeta(toRoute),
 			fromMeta: this.getRouteMeta(chain.fromRoute),
 			ownerComponent: this._ownerComponent,
 		};
@@ -1344,14 +1344,14 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (isPromiseLike(decision)) {
 			this._applyWhenDecided(
 				decision,
-				(d) => this._applyRedirectDecision(d, target, targetHash, chain),
+				(d) => this._applyRedirectDecision(d, target, targetHash, toRoute, chain),
 				chain.attemptedHash,
 				chain.restoreHash,
 			);
 			return;
 		}
 
-		this._applyRedirectDecision(decision, target, targetHash, chain);
+		this._applyRedirectDecision(decision, target, targetHash, toRoute, chain);
 	}
 
 	/**
@@ -1363,20 +1363,21 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @param decision - Normalized guard pipeline result for this hop.
 	 * @param target - The redirect target (route name or {@link GuardRedirect}).
 	 * @param targetHash - Resolved hash for the redirect target (guaranteed non-null).
+	 * @param toRoute - Route that matches the hash, as in the hop's guard context: the route UI5 displays.
 	 * @param chain - Shared redirect chain context with visited set, signals, etc.
 	 */
 	private _applyRedirectDecision(
 		decision: GuardDecision,
 		target: string | GuardRedirect,
 		targetHash: string,
+		toRoute: string,
 		chain: RedirectChainContext,
 	): void {
 		// Superseded while the hop's guards ran: by a newer navigation, or by a guard that navigated.
 		if (chain.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow": {
-				const targetName = typeof target === "string" ? target : target.route;
-				this._phase = { kind: "committing", route: targetName, origin: "redirect" };
+				this._phase = { kind: "committing", route: toRoute, origin: "redirect" };
 				try {
 					// Writing the hash the URL already shows changes nothing, except that a nested
 					// router would add its prefix for an empty hash (see _restoreHash).
@@ -1386,7 +1387,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					} else if (!hashShown || target.componentTargetInfo) {
 						this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
 					}
-					this._commitAfterNavTo(targetHash, targetName);
+					this._commitAfterNavTo(targetHash, toRoute);
 				} finally {
 					if (this._phase.kind === "committing") {
 						this._phase = IDLE;
@@ -1406,25 +1407,26 @@ export default class Router extends MobileRouter implements GuardRouter {
 		}
 	}
 
+	/** The route that matches a hash, and its arguments. For a hash that no route matches: no route (`""`), no arguments. */
+	private _matchRoute(hash: string): RouteInfo {
+		const info = this.getRouteInfoByHash(hash);
+		return { name: info?.name ?? "", arguments: info?.arguments ?? {} };
+	}
+
 	/**
 	 * Build a guard context for a new navigation.
 	 * Called by {@link navTo} (preflight path) and {@link parse} (browser-initiated path).
 	 */
-	private _createGuardContext(
-		toRoute: string,
-		toHash: string,
-		routeInfo: { arguments: Record<string, string | Record<string, string>> } | undefined,
-		signal: AbortSignal,
-	): GuardContext {
+	private _createGuardContext(routeInfo: RouteInfo, toHash: string, signal: AbortSignal): GuardContext {
 		return {
-			toRoute,
+			toRoute: routeInfo.name,
 			toHash,
-			toArguments: routeInfo?.arguments ?? {},
+			toArguments: routeInfo.arguments,
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal,
 			bag: new Map(),
-			toMeta: this.getRouteMeta(toRoute),
+			toMeta: this.getRouteMeta(routeInfo.name),
 			fromMeta: this.getRouteMeta(this._currentRoute),
 			ownerComponent: this._ownerComponent,
 		};

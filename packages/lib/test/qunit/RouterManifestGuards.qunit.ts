@@ -652,13 +652,15 @@ QUnit.test(
 			const childRouter = getComponentRouter(getChild(probe));
 			assert.strictEqual((await childRouter.navigationSettled()).route, "list", "the child shows its empty hash");
 
-			probe.decide = (context) => (context.toRoute === "detail" ? "list" : true);
-			childRouter.navTo("detail");
-			const settled = await childRouter.navigationSettled();
+			for (const target of ["list", { route: "list" }]) {
+				probe.decide = (context) => (context.toRoute === "detail" ? target : true);
+				childRouter.navTo("detail");
+				const settled = await childRouter.navigationSettled();
 
-			assert.strictEqual(settled.status, NavigationOutcome.Redirected, "the child's guard redirected");
-			assert.strictEqual(settled.route, "list", "back to the route the child shows");
-			assert.strictEqual(getHash(), "shell", "the child's prefix is not added for its empty hash");
+				assert.strictEqual(settled.status, NavigationOutcome.Redirected, "the child's guard redirected");
+				assert.strictEqual(settled.route, "list", "back to the route the child shows");
+				assert.strictEqual(getHash(), "shell", "the child's prefix is not added for its empty hash");
+			}
 		});
 	},
 );
@@ -2279,6 +2281,43 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"block mode: initialize() again while modules load keeps the argument of the first call",
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		HashChanger.getInstance().setHash("protected");
+		router = createBlockRouter({ protected: [block] });
+		const statuses = recordSettlements(router);
+
+		router.initialize();
+		router.initialize(true);
+		await loadModule(block);
+		await flushPromises();
+
+		assert.ok(router.isInitialized(), "the router started");
+		assert.strictEqual(statuses[0], NavigationOutcome.Blocked, "the start hash was parsed and guarded");
+	},
+);
+
+QUnit.test(
+	"block mode: initialize() after stop() while modules load starts the router with its own argument",
+	async function (assert: Assert) {
+		const block = `${FIXTURES}/blockGuard`;
+		HashChanger.getInstance().setHash("protected");
+		router = createBlockRouter({ protected: [block] });
+		const statuses = recordSettlements(router);
+
+		router.initialize(true);
+		captureWarnings(() => router.stop());
+		router.initialize();
+		await loadModule(block);
+		await flushPromises();
+
+		assert.ok(router.isInitialized(), "the router started once the modules were loaded");
+		assert.strictEqual(statuses[0], NavigationOutcome.Blocked, "the start hash was parsed and guarded");
+	},
+);
+
 QUnit.test("block mode: modules that load after destroy() register no guards", async function (assert: Assert) {
 	const block = `${FIXTURES}/blockGuard`;
 	router = createBlockRouter({ nope: [block] }, "throw");
@@ -2358,14 +2397,14 @@ QUnit.test(
 	},
 );
 
-/** Resolve once the browser has fetched a file whose URL ends with `fileName`. */
-function whenFetched(fileName: string): Promise<void> {
+/** Resolve with the resource timing entry once the browser has fetched a file whose URL ends with `fileName`. */
+function whenFetched(fileName: string): Promise<PerformanceEntry> {
 	return new Promise((resolve) => {
 		const observer = new PerformanceObserver((list) => {
 			const entry = list.getEntries().find((e) => e.name.endsWith(`/${fileName}`));
 			if (entry) {
 				observer.disconnect();
-				resolve();
+				resolve(entry);
 			}
 		});
 		observer.observe({ type: "resource", buffered: true });
@@ -2381,6 +2420,18 @@ QUnit.test("lazy mode starts loading guard modules in the constructor", async fu
 
 	await fetched;
 	assert.strictEqual(router.isInitialized(), false, "the module was fetched before initialize()");
+});
+
+QUnit.test("block mode starts loading guard modules in initialize()", async function (assert: Assert) {
+	const path = `${FIXTURES}/blockDeferredGuard`;
+	const fetched = whenFetched("blockDeferredGuard.js");
+
+	router = createBlockRouter({ protected: [path] });
+	await flushPromises();
+	const initialized = performance.now();
+	router.initialize();
+
+	assert.ok((await fetched).startTime >= initialized, "the constructor did not fetch the module");
 });
 
 QUnit.test("block mode without manifest guards starts the router within initialize()", function (assert: Assert) {

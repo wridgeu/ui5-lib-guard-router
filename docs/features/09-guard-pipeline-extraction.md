@@ -161,7 +161,7 @@ const decision = this._evaluateGuards(context, controller.signal);
 to (`_createGuardContext` builds the full context: route and hash fields, `signal`, and the later additions `bag`, `toMeta`/`fromMeta` and `ownerComponent`):
 
 ```typescript
-const context = this._createGuardContext(toRoute, toHash, routeInfo, controller.signal);
+const context = this._createGuardContext(routeInfo, toHash, controller.signal);
 const decision = this._pipeline.evaluate(context);
 ```
 

@@ -443,7 +443,7 @@ Key properties:
 
 ### Pattern 5 loading
 
-- Preload hint fires in constructor for all guard module paths (not asserted: it only affects load timing, and observing it would mean spying on the global `sap.ui` object)
+- Preload hint fires in constructor for all guard module paths in lazy mode; block mode starts loading in `initialize()` (both asserted through the resource timing of a fixture module that nothing else loads)
 - `initialize()` is always synchronous in lazy mode
 - Guard available sync on first navigation when preload has completed (cache hit)
 - Guard loads async on first navigation when preload has not completed (cache miss)

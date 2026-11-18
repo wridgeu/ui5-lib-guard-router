@@ -27,7 +27,7 @@ export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 }
 
 /** How this engine prints the resolve function of a Promise: `function () { [native code] }` in V8. */
-let resolverSource = "";
+let resolverSource!: string;
 void new Promise((resolve) => {
 	resolverSource = Function.prototype.toString.call(resolve);
 });

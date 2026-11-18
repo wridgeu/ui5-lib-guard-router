@@ -54,6 +54,24 @@ QUnit.test("constructor reads unknownRouteRegistration from config", function (a
 	assert.strictEqual(warnings.length, 0, "ignore policy produces no warnings for unknown routes");
 });
 
+QUnit.test("UI5 gets the caller's config object without guardRouter", function (assert: Assert) {
+	const config: Record<string, unknown> = { async: true, guardRouter: { navToPreflight: "guard" } };
+	router = createRouterUnsafe([{ name: "home", pattern: "" }], config);
+	// The UI5-private member in which sap.ui.core.routing.Router keeps the config it was constructed with.
+	const received = Reflect.get(router, "_oConfig") as Record<string, unknown>;
+
+	assert.notOk("guardRouter" in received, "guardRouter is not in the config");
+	assert.ok("async" in received, "the caller's other properties are");
+	assert.notOk("bypassed" in received, "a property the caller did not set is not");
+	assert.deepEqual(
+		Object.getOwnPropertyNames(received),
+		Object.getOwnPropertyNames(config).filter((name) => name !== "guardRouter"),
+		"guardRouter is not among the property names",
+	);
+	config.targetParent = "rootView";
+	assert.strictEqual(received.targetParent, "rootView", "a property the caller adds later arrives");
+});
+
 QUnit.test("malformed guardRouter config warns and falls back to default behavior", function (assert: Assert) {
 	// Arrange: create router with non-object config
 	const warnings = captureWarnings(() => {

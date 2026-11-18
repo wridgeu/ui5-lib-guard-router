@@ -1332,6 +1332,38 @@ QUnit.test(
 );
 
 QUnit.test(
+	"a Promise that waits for routeMatched keeps waiting while the navigation that took over waits for guards",
+	async function (assert) {
+		let allow: (allowed: boolean) => void = () => {};
+		const pending = (): Promise<boolean> =>
+			new Promise<boolean>((resolve) => {
+				allow = resolve;
+			});
+		router.addRouteGuard("protected", pending);
+		router.addRouteGuard("forbidden", pending);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		router.navTo("protected");
+		let resolved = false;
+		void new Promise((resolve) => {
+			router.attachRouteMatched(resolve);
+		}).then(() => {
+			resolved = true;
+		});
+		router.navTo("forbidden");
+		await flushPromises();
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled], "the first navigation was cancelled");
+		assert.notOk(resolved, "the Promise still waits: the second navigation may end in a route match");
+
+		allow(false);
+		await flushPromises();
+		assert.ok(resolved, "the Promise resolved when the second navigation was blocked");
+	},
+);
+
+QUnit.test(
 	"a Promise that waits for routeMatched while no match is pending resolves with the next match",
 	async function (assert) {
 		router.addRouteGuard("forbidden", () => false);

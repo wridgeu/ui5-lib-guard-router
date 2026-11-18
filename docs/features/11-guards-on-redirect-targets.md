@@ -193,17 +193,18 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
     }
     chain.visited.add(targetHash);
 
-    // 3. Build guard context for the redirect target
-    const routeInfo = this.getRouteInfoByHash(targetHash);
+    // 3. Build guard context for the redirect target: the route that matches its hash
+    const routeInfo = this._matchRoute(targetHash);
+    const toRoute = routeInfo.name;
     const context: GuardContext = {
-        toRoute: routeInfo?.name ?? "",
+        toRoute,
         toHash: targetHash,
-        toArguments: routeInfo?.arguments ?? {},
+        toArguments: routeInfo.arguments,
         fromRoute: chain.fromRoute,    // original source, constant
         fromHash: chain.fromHash,      // original source, constant
         signal: chain.signal,          // shared signal
         bag: chain.bag,               // shared bag
-        toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
+        toMeta: this.getRouteMeta(toRoute),
         fromMeta: this.getRouteMeta(chain.fromRoute),
         ownerComponent: this._ownerComponent,
     };
@@ -213,7 +214,7 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
 
     // 6. Handle sync result
     if (!isPromiseLike(decision)) {
-        this._applyRedirectDecision(decision, target, targetHash, chain);
+        this._applyRedirectDecision(decision, target, targetHash, toRoute, chain);
         return;
     }
 
@@ -222,7 +223,7 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
     //    settles the navigation as Error if it had not settled yet.
     this._applyWhenDecided(
         decision,
-        (d) => this._applyRedirectDecision(d, target, targetHash, chain),
+        (d) => this._applyRedirectDecision(d, target, targetHash, toRoute, chain),
         chain.attemptedHash,
         chain.restoreHash,
     );
@@ -232,6 +233,7 @@ private _applyRedirectDecision(
     decision: GuardDecision,
     target: string | GuardRedirect,
     targetHash: string,
+    toRoute: string,
     chain: RedirectChainContext,
 ): void {
     switch (decision.action) {
@@ -240,8 +242,8 @@ private _applyRedirectDecision(
             // this.navTo() sees the committing/redirect phase and calls super.navTo()
             // directly (existing bypass), which changes the hash and triggers parse(),
             // which sees committing and calls _commitNavigation().
-            const targetName = typeof target === "string" ? target : target.route;
-            this._phase = { kind: "committing", route: targetName, origin: "redirect" };
+            // The committed route is the one that matches the hash, the route UI5 displays.
+            this._phase = { kind: "committing", route: toRoute, origin: "redirect" };
             if (typeof target === "string") {
                 this.navTo(target, {}, {}, true);
             } else {
@@ -249,7 +251,7 @@ private _applyRedirectDecision(
             }
             // If parse() was not reached (the hash already is the target, or component
             // targets change it later), commit the target directly:
-            // this._commitNavigation(targetHash, targetName)
+            // this._commitNavigation(targetHash, toRoute)
             break;
         }
         case "block":

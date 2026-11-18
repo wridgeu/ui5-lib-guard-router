@@ -20,6 +20,11 @@ function guardWarning(modulePath: string, detail: string): void {
 	Log.warning(`guardRouter.guards: "${modulePath}" ${detail}`, undefined, LOG_COMPONENT);
 }
 
+/** The position an export key selects: a plain non-negative integer, otherwise `NaN`. */
+function positionOf(exportKey: string): number {
+	return /^\d+$/.test(exportKey) ? Number(exportKey) : NaN;
+}
+
 /**
  * Detect the export shape of a loaded guard module and extract guard functions.
  *
@@ -31,11 +36,6 @@ function guardWarning(modulePath: string, detail: string): void {
  * When `exportKey` is set, only the matching export is returned.
  * When `exportKey` is set on a function export, the key is ignored with a debug log.
  */
-/** The position an export key selects: a plain non-negative integer, otherwise `NaN`. */
-function positionOf(exportKey: string): number {
-	return /^\d+$/.test(exportKey) ? Number(exportKey) : NaN;
-}
-
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
 	const moduleName = modulePath.slice(modulePath.lastIndexOf("/") + 1);
 
