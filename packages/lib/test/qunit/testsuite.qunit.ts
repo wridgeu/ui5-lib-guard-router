@@ -31,11 +31,16 @@ const tests: Record<string, TestPage> = {
 	},
 	Router: {
 		title: "QUnit Tests for ui5.guard.router.Router",
-		files: ["Router"],
+		files: ["router/guards/GuardApi", "router/lifecycle/Lifecycle"],
 	},
 	RouterGuards: {
 		title: "QUnit Tests for Router Guard Behavior",
-		files: ["RouterGuards"],
+		files: [
+			"router/guards/EnterGuards",
+			"router/guards/LeaveGuards",
+			"router/guards/GreedyRoutes",
+			"router/navigation/RedirectToShownRoute",
+		],
 	},
 	RouterAsync: {
 		title: "QUnit Tests for Router Async and Concurrency",
