@@ -63,7 +63,7 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterRouteMeta: {
 		title: "QUnit Tests for Router Route Metadata and Inheritance",
-		files: ["RouterRouteMeta"],
+		files: ["router/meta/RouteMetadata", "router/meta/Inheritance", "router/meta/PatternAncestry"],
 	},
 	NativeRouterCompat: {
 		title: "QUnit Tests for Native Router Compatibility",
