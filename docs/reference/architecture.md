@@ -675,6 +675,21 @@ component, it stops the routers of all cached apps. A component that implements
 `isKeepAliveSupported()` gets `deactivate()` and `activate()` instead. Its router is still
 stopped by `_disableSourceAppRouter`, but the shell does not restart it: `activate()` has to.
 
+Observed in the FLP sandbox (SAPUI5 1.144.0, `?sap-keep-alive=true`, a second app with a native
+router):
+
+- A hidden app's router does not react to the other app's hash changes, although both routers
+  share the root `RouterHashChanger`: it is stopped.
+- Returning through an intent without an inner route resumes the route on the hash `""`. A
+  `navTo()` to the route whose pattern is `""` then changes nothing, because that hash is
+  already shown. The native router behaves the same.
+- Returning from the launchpad home through a hash with an inner route (browser back, bookmark)
+  destroys the kept component and creates a new one, which starts with `initialize()`.
+- On the legacy restore flow, `initialize()` parses the hash with an empty `fromRoute`, so the
+  leave guards of the route that was current before `stop()` do not run.
+- A component with `isKeepAliveSupported()` whose `activate()` does not call
+  `initialize(true)` stays stopped: `navTo()` and hash changes do nothing.
+
 The source locations are in the [FLP evidence table](./upstream-parity.md#fiori-launchpad-sapushell).
 The FLP spec files of the demo app are listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 

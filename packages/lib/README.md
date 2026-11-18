@@ -853,7 +853,7 @@ export default class HomeController extends BaseController {
 >
 > **Controller level**: UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away. Controller-registered guards therefore persist across in-app navigations. This is typically the desired behavior for route-specific guards tied to view state.
 >
-> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps. Guards remain registered since the same instance is reused.
+> In FLP apps with `sap-keep-alive` enabled, the component persists when navigating to other apps, and its guards stay registered. Returning from the launchpad home to an inner route of the app (browser back, bookmark) creates a new component, which registers its guards again in `init`. A component that implements `isKeepAliveSupported()` must call `getRouter().initialize(true)` in `activate()`; the shell does not restart its router.
 
 ### Metadata-driven guards via manifest (legacy alternative)
 
