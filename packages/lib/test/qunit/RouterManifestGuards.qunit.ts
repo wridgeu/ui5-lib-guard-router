@@ -810,6 +810,39 @@ QUnit.test(
 	},
 );
 
+for (const [kind, target] of [
+	["a route name", "list"],
+	["a route with parameters", { route: "list", parameters: {} }],
+] as const) {
+	QUnit.test(
+		`a nested router that is redirected to its empty hash (${kind}) while the URL shows it leaves the URL as it is`,
+		async function (assert: Assert) {
+			await withNestedApp(async (parent, probe) => {
+				const { childRouter } = await showChildDetail(parent, probe);
+				// Pending for the hash change, allowed for the navTo() that supersedes it.
+				let leaveGuardCalls = 0;
+				childRouter.addLeaveGuard("detail", () =>
+					++leaveGuardCalls === 1 ? new Promise<boolean>(() => {}) : true,
+				);
+				// Global guards run before the manifest guard that blocks "locked".
+				childRouter.addGuard((context: GuardContext) => (context.toRoute === "locked" ? target : true));
+
+				// The hash of the child becomes empty: the URL shows it without the prefix of the child.
+				HashChanger.getInstance().setHash("shell");
+				childRouter.navTo("locked");
+				await flushPromises();
+
+				assert.deepEqual(
+					await childRouter.navigationSettled(),
+					{ status: NavigationOutcome.Redirected, route: "list", hash: "" },
+					"the child is on the redirect target",
+				);
+				assert.strictEqual(getHash(), "shell", "no prefix is added for the empty hash of the child");
+			});
+		},
+	);
+}
+
 QUnit.test(
 	"a parent route waits for the route that a nested component's first navigation is redirected to",
 	async function (assert: Assert) {

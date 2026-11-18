@@ -1275,6 +1275,26 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"a hash change from a guard that is blocked takes the URL back to before both hash changes",
+	async function (assert: Assert) {
+		const hashChanger = HashChanger.getInstance();
+		router.addRouteGuard("protected", () => {
+			hashChanger.setHash("forbidden");
+			return true;
+		});
+		router.addRouteGuard("forbidden", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		hashChanger.setHash("protected");
+
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Blocked]);
+		assert.strictEqual(getHash(), "", "the URL shows the committed hash, not the one the guard left");
+	},
+);
+
 // ============================================================
 // Module: Hash changes from a navigationSettled handler
 // ============================================================

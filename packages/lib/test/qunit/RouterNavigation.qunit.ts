@@ -322,6 +322,30 @@ QUnit.test("a redirect to the superseded hash commits it", async function (asser
 	assert.strictEqual(getHash(), "forbidden");
 });
 
+QUnit.test(
+	"a blocked hash change back to the URL from before restores the committed hash when the URL showed another",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		const hashChanger = HashChanger.getInstance();
+		hashChanger.setHash("protected");
+		await waitForRoute(router, "protected");
+		// A parse() call commits a hash that the URL does not show.
+		router.parse("forbidden");
+		await waitForRoute(router, "forbidden");
+		// Pending for the first hash change, blocks the second.
+		let leaveGuardCalls = 0;
+		router.addLeaveGuard("forbidden", () => (++leaveGuardCalls === 1 ? new Promise<boolean>(() => {}) : false));
+		const statuses = recordSettlements(router);
+
+		hashChanger.setHash("detail/1");
+		hashChanger.setHash("protected");
+
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Blocked]);
+		assert.strictEqual(getHash(), "forbidden", "the URL shows the hash of the route that is displayed");
+	},
+);
+
 // ============================================================
 // Module: Sequential navigation with dynamic guard state
 // ============================================================
@@ -472,6 +496,36 @@ QUnit.test(
 		assert.strictEqual(targetGuardCalls, 1, "the target's guard ran once");
 		assert.deepEqual(warnings, [], "the redirect is not reported as blocked");
 		assert.strictEqual(getHash(), "detail/cti-2");
+	},
+);
+
+QUnit.test(
+	"a redirect to the route that is shown leaves the URL to a settlement handler that navigated on",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("detail", { id: "7" });
+		await waitForRoute(router, "detail");
+		router.addRouteGuard("protected", (): GuardRedirect => ({
+			route: "detail",
+			parameters: { id: "7" },
+			componentTargetInfo: { nested: { route: "list" } },
+		}));
+		router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
+			if (event.getParameter("status") === NavigationOutcome.Redirected) router.navTo("forbidden");
+		});
+
+		router.navTo("protected");
+		// With component targets UI5 would write the hash of the redirect target in a later task.
+		await flushPromises();
+		await flushPromises();
+
+		assert.strictEqual(getHash(), "forbidden", "the URL stays where the handler navigated");
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Committed, route: "forbidden", hash: "forbidden" },
+			"the router is on the handler's route",
+		);
 	},
 );
 

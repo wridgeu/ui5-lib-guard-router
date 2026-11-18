@@ -732,6 +732,37 @@ QUnit.test("Hash change back to the current hash cancels a pending hash-change g
 	assert.strictEqual(getHash(), "");
 });
 
+QUnit.test(
+	"Hash change back to the current hash cancels a navigation that superseded another hash change",
+	async function (assert: Assert) {
+		const pendingGuard = Promise.withResolvers<boolean>();
+		router.addLeaveGuard("home", () => pendingGuard.promise);
+		router.initialize();
+		await waitForRoute(router, "home");
+		const settled = recordSettlements(router);
+
+		const hashChanger = HashChanger.getInstance();
+		hashChanger.setHash("protected");
+		hashChanger.setHash("forbidden");
+		hashChanger.setHash("");
+
+		assert.deepEqual(
+			settled,
+			[NavigationOutcome.Cancelled, NavigationOutcome.Cancelled],
+			"both pending navigations are cancelled",
+		);
+
+		pendingGuard.resolve(true);
+		await flushPromises();
+		assert.deepEqual(
+			settled,
+			[NavigationOutcome.Cancelled, NavigationOutcome.Cancelled],
+			"the stale guard results are discarded",
+		);
+		assert.strictEqual((await router.navigationSettled()).route, "home", "the router stays on its route");
+	},
+);
+
 // ============================================================
 // Module: Stop during pending async guard
 // ============================================================

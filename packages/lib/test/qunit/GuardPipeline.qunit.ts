@@ -929,6 +929,33 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"no enter guard starts on a navigation that was aborted after its async leave guard allowed",
+	async function (assert: Assert) {
+		// The abort comes a number of microtasks after the leave guard has settled.
+		for (let microtasks = 0; microtasks < 6; microtasks++) {
+			const pipeline = new GuardPipeline();
+			const controller = new AbortController();
+			const allowed = Promise.withResolvers<boolean>();
+			let startedAborted = false;
+			pipeline.addLeaveGuard("current", () => allowed.promise);
+			pipeline.addEnterGuard("target", (context) => {
+				startedAborted = context.signal.aborted;
+				return true;
+			});
+
+			const decision = pipeline.evaluate(createContext({ fromRoute: "current", signal: controller.signal }));
+			let abort: Promise<unknown> = allowed.promise;
+			for (let i = 0; i < microtasks; i++) abort = abort.then(() => {});
+			abort = abort.then(() => controller.abort());
+			allowed.resolve(true);
+			await Promise.all([decision, abort]);
+
+			assert.notOk(startedAborted, `abort ${microtasks} microtasks after the leave guard`);
+		}
+	},
+);
+
 QUnit.test("an aborted navigation runs no guard of a further route", async function (assert: Assert) {
 	const pipeline = new GuardPipeline();
 	const controller = new AbortController();

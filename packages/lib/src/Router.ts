@@ -65,9 +65,9 @@ let undoneHref: string | null = null;
 window.navigation?.addEventListener("currententrychange", (event) => {
 	const href = window.location.href;
 	if (undoneHref !== href) undoneHref = null;
-	if (event.navigationType === "traverse") {
-		const offset = (window.navigation.currentEntry?.index ?? -1) - event.from.index;
-		lastStep = { offset, href };
+	const entry = window.navigation.currentEntry;
+	if (entry && event.navigationType === "traverse") {
+		lastStep = { offset: entry.index - event.from.index, href };
 	} else if (lastStep?.href !== href) {
 		// Not an entry whose state alone is replaced, as UI5's History does after a step.
 		lastStep = null;

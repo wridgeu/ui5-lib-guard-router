@@ -467,6 +467,32 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"a blocked history step is taken back after a hash change that ended with the URL back",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		const pending = (): Promise<boolean> => new Promise(() => {});
+		router.addLeaveGuard("protected", pending);
+		// A hash change that is no history step waits for the guard, and ends when the user steps back.
+		HashChanger.getInstance().setHash("forbidden");
+		const cancelled = await historyStep(() => window.history.back());
+		assert.strictEqual(cancelled.status, NavigationOutcome.Cancelled, "the step back cancels the navigation");
+		router.removeLeaveGuard("protected", pending);
+		router.addLeaveGuard("protected", () => false);
+
+		let blocked: NavigationResult | undefined;
+		const writes = await captureHashWrites(HashChanger.getInstance(), async () => {
+			blocked = await historyStep(() => window.history.back());
+		});
+
+		assert.strictEqual(blocked?.status, NavigationOutcome.Blocked, "the next step back is blocked");
+		assert.strictEqual(getHash(), "protected", "the URL is back");
+		assert.deepEqual(writes, [], "no hash is written: the browser stepped forward again");
+	},
+);
+
 QUnit.test("stop() forgets a history step that is being taken back", async function (assert: Assert) {
 	router.initialize();
 	await waitForRoute(router, "home");
@@ -487,6 +513,39 @@ QUnit.test("stop() forgets a history step that is being taken back", async funct
 		"and is on its route",
 	);
 });
+
+// On this page because Chrome also drops hash replacements once a page has changed the hash too often.
+QUnit.test(
+	"a router that is informed third ignores every report that is out of date after two routers have redirected",
+	async function (assert: Assert) {
+		// Routers without a component share the hash changer of the root: UI5 informs them in the order they started.
+		const second = createRouter();
+		const third = createRouter();
+		const matched: string[] = [];
+		third.attachRouteMatched((event) => matched.push(String(event.getParameter("name"))));
+		try {
+			router.addRouteGuard("protected", () => "forbidden");
+			second.addRouteGuard("forbidden", () => ({ route: "detail", parameters: { id: "1" } }));
+			for (const each of [router, second, third]) each.initialize();
+			await flushPromises();
+
+			// UI5 reports "detail/1" to the third router, then "forbidden", then "protected".
+			HashChanger.getInstance().setHash("protected");
+			await flushPromises();
+
+			assert.strictEqual(getHash(), "detail/1", "the URL shows the target of the second redirect");
+			assert.deepEqual(matched, ["home", "detail"], "the third router matched no hash that was redirected");
+			assert.deepEqual(
+				await third.navigationSettled(),
+				{ status: NavigationOutcome.Committed, route: "detail", hash: "detail/1" },
+				"and is on the route that the URL shows",
+			);
+		} finally {
+			second.destroy();
+			third.destroy();
+		}
+	},
+);
 
 // Last: it loads a second copy of the library.
 QUnit.test(

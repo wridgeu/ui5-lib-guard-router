@@ -574,21 +574,26 @@ QUnit.test("destroy() twice does nothing the second time, like the base router",
 	assert.strictEqual(router.destroy(), router, "the second call returns the router and does not throw");
 });
 
-QUnit.test("destroy() destroys the base router and detaches it from hash changes", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-	let protectedMatched = false;
-	router.getRoute("protected")!.attachPatternMatched(() => {
-		protectedMatched = true;
-	});
+QUnit.test(
+	"destroy() destroys the base router and detaches it from hash changes",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		let protectedMatched = false;
+		router.getRoute("protected")!.attachPatternMatched(() => {
+			protectedMatched = true;
+		});
 
-	router.destroy();
-	assert.notOk(router.isInitialized(), "the base router is no longer initialized");
+		router.destroy();
+		assert.notOk(router.isInitialized(), "the base router is no longer initialized");
 
-	HashChanger.getInstance().setHash("protected");
-	await flushPromises();
-	assert.notOk(protectedMatched, "a hash change no longer reaches the router");
-});
+		const getHashChanger = this.spy(router, "getHashChanger");
+		HashChanger.getInstance().setHash("protected");
+		await flushPromises();
+		assert.notOk(protectedMatched, "a hash change no longer reaches the router");
+		assert.ok(getHashChanger.notCalled, "and the router does not look at its hash changer for it");
+	},
+);
 
 QUnit.test(
 	"a hash change delivered to a destroyed router only warns, like the base router",
@@ -722,6 +727,25 @@ QUnit.test(
 		);
 		assert.notOk(matched, "the guarded route was never displayed");
 		assert.strictEqual(getHash(), "");
+	},
+);
+
+QUnit.test(
+	"a stopped router does not listen to hash changes, also after initialize() was called twice",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		// UI5 warns about the second call, which must not make the router listen twice.
+		captureWarnings(() => router.initialize());
+		router.stop();
+		const statuses = recordSettlements(router);
+		const getHashChanger = this.spy(router, "getHashChanger");
+
+		HashChanger.getInstance().setHash("protected");
+		await flushPromises();
+
+		assert.deepEqual(statuses, [], "nothing settled");
+		assert.ok(getHashChanger.notCalled, "the router does not look at its hash changer for the hash change");
 	},
 );
 
