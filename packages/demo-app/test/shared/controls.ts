@@ -61,6 +61,7 @@ export const CONTROLS = {
 	protected: viewControls("demo.app.view.Protected", "protectedView", [
 		"protectedPage",
 		"dirtyCheckbox",
+		"dirtyStatus",
 		"protectedFlpDirtyProviderStatus",
 		"protectedCurrentHashText",
 		...SETTLEMENT_PANEL,
@@ -98,6 +99,48 @@ export function selectorFor(ref: ControlRef, extra: Partial<wdi5Selector["select
 		selector: { viewName: ref.viewName, id: new RegExp(`^${ref.id}$`), ...extra },
 		forceSelect: true,
 	};
+}
+
+/**
+ * Resolve a control through wdi5, or fail. wdi5 itself only logs an error when it
+ * finds no control and returns a control object without the UI5 methods.
+ */
+export async function getControl(ref: ControlRef, extra: Partial<wdi5Selector["selector"]> = {}) {
+	const control = await browser.asControl(selectorFor(ref, extra));
+	if (!control.isInitialized()) {
+		throw new Error(`Control "${ref.viewId}/${ref.id}" was not found`);
+	}
+	return control;
+}
+
+/**
+ * Click a control, or fail. This is the click that wdi5's `press()` performs, without
+ * its error handling: `press()` only logs when the control is missing or not clickable.
+ */
+export async function press(ref: ControlRef): Promise<void> {
+	const control = await getControl(ref);
+	const element = (await control.getWebElement()) as WebdriverIO.Element;
+	await element.click();
+}
+
+/** Wait until a control shows the expected text. Fails with the text (or lookup error) seen last. */
+export async function expectControlText(ref: ControlRef, expected: string, timeout = 5000): Promise<void> {
+	let seen = "(not read)";
+	try {
+		await browser.waitUntil(
+			async () => {
+				try {
+					seen = JSON.stringify(await (await getControl(ref)).getProperty("text"));
+				} catch (error) {
+					seen = `(${String(error)})`;
+				}
+				return seen === JSON.stringify(expected);
+			},
+			{ timeout },
+		);
+	} catch {
+		throw new Error(`Control "${ref.viewId}/${ref.id}" did not show text "${expected}"; last seen: ${seen}`);
+	}
 }
 
 /**

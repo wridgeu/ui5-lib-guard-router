@@ -1,32 +1,21 @@
-import { CONTROLS, selectorFor } from "../shared/controls";
+import { CONTROLS, expectControlText, press } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation, waitForReportsComponent } from "../shared/reports";
-import { expectHashToBe, fireEvent, getHistoryLength, waitForPage } from "./helpers";
+import { expectHashToBe, fireEvent, getHistoryLength, setBrowserHash, startAtHome, waitForPage } from "./helpers";
 
 const OVERVIEW_HASH = "#/reports";
 const SALES_HASH = "#/reports&/reports/sales";
 const CONFIDENTIAL_HASH = "#/reports&/reports/confidential";
 
-async function pressOnOverview(button: "navSalesBtn" | "navConfidentialBtn"): Promise<void> {
-	const control = await browser.asControl(selectorFor(CONTROLS.reportsOverview[button]));
-	await control.press();
-}
-
-async function setBrowserHash(hash: string): Promise<void> {
-	await browser.execute((value: string) => {
-		window.location.hash = value;
-	}, hash);
-}
-
 describe("Nested component with its own guard router", () => {
+	// Every test starts on the nested overview with the confidential report locked.
 	beforeEach(async () => {
-		await browser.url("#");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await startAtHome();
 
-		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navReportsBtn));
-		await navBtn.press();
+		await press(CONTROLS.home.navReportsBtn);
 		await waitForReportsComponent();
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		await setConfidentialUnlocked(false);
+		await expectControlText(CONTROLS.reportsOverview.accessStatus, "Confidential reports locked");
 	});
 
 	it("should display the nested component's initial route under the parent route", async () => {
@@ -38,7 +27,7 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should write the nested router's route under its hash prefix", async () => {
-		await pressOnOverview("navSalesBtn");
+		await press(CONTROLS.reportsOverview.navSalesBtn);
 
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
 		await expectHashToBe(SALES_HASH);
@@ -49,9 +38,12 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should redirect to the overview when the nested guard finds the report locked", async () => {
+		// The overview is also the starting state, so the outcome is read from the nested
+		// router's settlement: "committed" before the press, "redirected" after it.
+		expect((await settleReportsNavigation()).status).toBe("committed");
 		const historyBefore = await getHistoryLength();
 
-		await pressOnOverview("navConfidentialBtn");
+		await press(CONTROLS.reportsOverview.navConfidentialBtn);
 
 		const settlement = await settleReportsNavigation();
 		expect(settlement.status).toBe("redirected");
@@ -62,12 +54,10 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should open the guarded report once it is unlocked, and navigate back within the nested router", async () => {
-		const unlock = await browser.asControl(selectorFor(CONTROLS.reportsOverview.unlockCheckbox));
-		await unlock.press();
-		const status = await browser.asControl(selectorFor(CONTROLS.reportsOverview.accessStatus));
-		expect(await status.getProperty("text")).toBe("Confidential reports unlocked");
+		await press(CONTROLS.reportsOverview.unlockCheckbox);
+		await expectControlText(CONTROLS.reportsOverview.accessStatus, "Confidential reports unlocked");
 
-		await pressOnOverview("navConfidentialBtn");
+		await press(CONTROLS.reportsOverview.navConfidentialBtn);
 
 		await waitForPage(CONTROLS.reportsConfidential.confidentialPage, "Confidential Report");
 		await expectHashToBe(CONFIDENTIAL_HASH);
@@ -81,8 +71,9 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should handle browser back within the nested router and out of it", async () => {
-		await pressOnOverview("navSalesBtn");
+		await press(CONTROLS.reportsOverview.navSalesBtn);
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
+		await expectHashToBe(SALES_HASH);
 
 		await browser.back();
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
@@ -98,20 +89,27 @@ describe("Nested component with its own guard router", () => {
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await expectHashToBe("");
 
-		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navReportsBtn));
-		await navBtn.press();
+		await press(CONTROLS.home.navReportsBtn);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		await expectHashToBe(OVERVIEW_HASH);
+
+		// The overview page was still the nested container's current page. Navigating
+		// on proves that the nested router runs again.
+		await press(CONTROLS.reportsOverview.navSalesBtn);
+		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
+		await expectHashToBe(SALES_HASH);
 	});
 
 	it("should open an unguarded nested route from a deep link", async () => {
-		await browser.url("#");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await startAtHome();
 
 		await setBrowserHash(SALES_HASH);
 
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
 		await expectHashToBe(SALES_HASH);
+		const settlement = await settleReportsNavigation();
+		expect(settlement.status).toBe("committed");
+		expect(settlement.route).toBe("sales");
 	});
 
 	it("should show the nested router's bypassed target for an unknown nested route", async () => {
@@ -127,8 +125,7 @@ describe("Nested component with its own guard router", () => {
 	});
 
 	it("should redirect a deep link to the locked report to the overview", async () => {
-		await browser.url("#");
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await startAtHome();
 
 		await setBrowserHash(CONFIDENTIAL_HASH);
 
@@ -143,7 +140,7 @@ describe("Nested component with its own guard router", () => {
 	// Last test of the file: the reload drops the wdi5 bridge, so it only uses browser.execute helpers.
 	it("should guard the first display of the nested component on a fresh page load", async () => {
 		await setConfidentialUnlocked(true);
-		await pressOnOverview("navConfidentialBtn");
+		await press(CONTROLS.reportsOverview.navConfidentialBtn);
 		await waitForPage(CONTROLS.reportsConfidential.confidentialPage, "Confidential Report");
 		await expectHashToBe(CONFIDENTIAL_HASH);
 

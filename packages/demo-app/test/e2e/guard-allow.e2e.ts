@@ -1,43 +1,27 @@
-import { CONTROLS, selectorFor } from "../shared/controls";
-import { getRuntimeSettlementRevision, waitForPage, resetAuth, waitForRuntimeSettlement } from "./helpers";
+import { CONTROLS, press } from "../shared/controls";
+import {
+	expectHashToBe,
+	getRuntimeSettlementRevision,
+	startAtHome,
+	toggleLogin,
+	waitForPage,
+	waitForRuntimeSettlement,
+} from "./helpers";
 
 describe("Guard allows navigation when logged in", () => {
 	it("should allow navigation to Protected after login", async () => {
-		await browser.url("#");
-		await resetAuth();
+		await startAtHome();
+		await toggleLogin("Logged In");
 
-		// Toggle login
-		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Verify logged in
-		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
-		expect(await status.getProperty("text")).toBe("Logged In");
-
-		// Navigate to protected
-		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
 		const settlementRevision = await getRuntimeSettlementRevision();
-		await navBtn.press();
+		await press(CONTROLS.home.navProtectedBtn);
 
-		// Wait for view to load - this confirms async guard completed and navigation committed.
-		// Don't wait for hash first because it changes BEFORE async guard completes.
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
-
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Committed",
-				route: "protected",
-				hash: "protected",
-			},
-			{
-				afterRevision: settlementRevision,
-			},
+		// The hash is only written once the async guard allowed the navigation.
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: settlementRevision },
 		);
-		expect(settlement.route).toBe("protected");
-		expect(settlement.hash).toBe("protected");
-
-		// Hash should now be correct
-		const url = await browser.getUrl();
-		expect(url).toContain("#/protected");
+		await expectHashToBe("#/protected");
 	});
 });

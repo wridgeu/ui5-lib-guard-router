@@ -1,5 +1,5 @@
 import type UshellContainer from "sap/ushell/Container";
-import { CONTROLS, type ControlRef, getAppComponentId, selectorFor } from "../shared/controls";
+import { CONTROLS, type ControlRef, expectControlText, getAppComponentId, getControl, press } from "../shared/controls";
 
 type PageWaitOptions = {
 	timeout?: number;
@@ -11,33 +11,13 @@ type AppHashWaitOptions = {
 	afterRevision?: number;
 };
 
-async function getControl(ref: ControlRef, extra: Parameters<typeof selectorFor>[1] = {}) {
-	return browser.asControl(selectorFor(ref, extra));
-}
-
-async function waitForControlText(ref: ControlRef, expected: string, timeout = 5000): Promise<void> {
-	await browser.waitUntil(
-		async () => {
-			try {
-				const control = await getControl(ref);
-				return (await control.getProperty("text")) === expected;
-			} catch {
-				return false;
-			}
-		},
-		{
-			timeout,
-			timeoutMsg: `Control "${ref.viewId}/${ref.id}" did not expose text "${expected}"`,
-		},
-	);
-}
-
 export async function getRuntimeSettlementRevisionInFlp(): Promise<number> {
 	return browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const component = Component.getComponentById(componentId);
-			return Number(component?.getModel("runtime")?.getProperty("/lastSettlementRevision") ?? 0);
+			return Number(
+				Component.getComponentById(componentId).getModel("runtime").getProperty("/lastSettlementRevision"),
+			);
 		},
 		await getAppComponentId(),
 	);
@@ -69,13 +49,13 @@ export async function waitForPageInFlp(
 				return browser.execute(
 					(componentId: string, viewId: string, id: string) => {
 						const Component = sap.ui.require("sap/ui/core/Component");
-						const domRef = Component?.getComponentById(componentId)?.byId(viewId)?.byId(id)?.getDomRef();
+						const domRef = Component.getComponentById(componentId).byId(viewId).byId(id).getDomRef();
 						if (!domRef) {
 							return false;
 						}
 
-						const style = window.getComputedStyle(domRef);
-						return style.display !== "none" && style.visibility !== "hidden";
+						// Also false for a hidden ancestor: the page of a nested component whose container is hidden.
+						return domRef.checkVisibility({ visibilityProperty: true });
 					},
 					await getAppComponentId(page.appId),
 					page.viewId,
@@ -115,54 +95,50 @@ export async function launchFlpApp(): Promise<void> {
 	await resetDirtyState();
 	await navigateToRouteInFlp("home");
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home");
+	await expectAppHashToBe("");
 }
 
+/**
+ * Start a test from a known, asserted state: clean form, Home page at the empty app
+ * hash, logged out. The page is not reloaded between the tests of a spec file.
+ */
 export async function resetFlpDemo(): Promise<void> {
 	await launchFlpApp();
 
 	const authStatus = await getControl(CONTROLS.home.authStatus);
 	if ((await authStatus.getProperty("text")) === "Logged In") {
-		const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
-		await toggleLoginButton.press();
-		await waitForControlText(CONTROLS.home.authStatus, "Logged Out");
+		await press(CONTROLS.home.toggleLoginBtn);
 	}
+	await expectControlText(CONTROLS.home.authStatus, "Logged Out");
 }
 
+/** From Home, logged out: log in, press "Go to Protected Page" and assert that the navigation committed. */
 export async function loginAndGoToProtectedInFlp(): Promise<void> {
-	const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
-	await toggleLoginButton.press();
-	await waitForControlText(CONTROLS.home.authStatus, "Logged In");
+	await press(CONTROLS.home.toggleLoginBtn);
+	await expectControlText(CONTROLS.home.authStatus, "Logged In");
 
 	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
-	const navigateProtectedButton = await getControl(CONTROLS.home.navProtectedBtn);
-	await navigateProtectedButton.press();
+	await press(CONTROLS.home.navProtectedBtn);
 	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
+	await expectAppHashToBe("protected");
 }
 
+/** On Protected: set the form state through the checkbox and assert that the page shows it. */
 export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 	const dirtyCheckbox = await getControl(CONTROLS.protected.dirtyCheckbox);
 	const selected = (await dirtyCheckbox.getProperty("selected")) === true;
 
 	if (selected !== isDirty) {
-		await dirtyCheckbox.press();
+		await press(CONTROLS.protected.dirtyCheckbox);
 	}
-}
-
-export async function pressToggleLoginInFlp(): Promise<void> {
-	const toggleLoginButton = await getControl(CONTROLS.home.toggleLoginBtn);
-	await toggleLoginButton.press();
-}
-
-export async function expectControlText(ref: ControlRef, expected: string): Promise<void> {
-	await waitForControlText(ref, expected);
+	await expectControlText(CONTROLS.protected.dirtyStatus, isDirty ? "Form has unsaved changes" : "Form is clean");
 }
 
 async function resetDirtyState(): Promise<void> {
 	await browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const component = Component.getComponentById(componentId);
-			component?.getModel("form")?.setProperty("/isDirty", false);
+			Component.getComponentById(componentId).getModel("form").setProperty("/isDirty", false);
 		},
 		await getAppComponentId(),
 	);
@@ -242,7 +218,7 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 	const { record, cleanup } = installDialogHandler(false);
 	const appHashBefore = await browser.execute(() => {
 		const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
-		return String(HashChanger?.getInstance()?.getHash() ?? "");
+		return String(HashChanger.getInstance().getHash());
 	});
 
 	try {
@@ -272,22 +248,18 @@ export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<v
  * Navigate to a route programmatically via the demo app's router.
  */
 export async function navigateToRouteInFlp(routeName: string): Promise<void> {
-	const navigated = await browser.execute(
+	await browser.execute(
 		(componentId: string, route: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const component = Component.getComponentById(componentId);
-			if (!component) return false;
-
-			component.getRouter().navTo(route, {}, undefined, true);
-			return true;
+			const router = Component.getComponentById(componentId).getRouter();
+			if (!router.getRoute(route)) {
+				throw new Error(`The demo router has no route "${route}"`);
+			}
+			router.navTo(route, {}, undefined, true);
 		},
 		await getAppComponentId(),
 		routeName,
 	);
-
-	if (!navigated) {
-		throw new Error(`Demo router was not available to navigate to "${routeName}"`);
-	}
 }
 
 /**
@@ -306,8 +278,7 @@ export async function expectAppHashToBe(expected: string, options: AppHashWaitOp
 		async () => {
 			const hashMatches = await browser.execute((exp: string) => {
 				const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
-				const hash = HashChanger?.getInstance()?.getHash() ?? "";
-				return hash === exp;
+				return HashChanger.getInstance().getHash() === exp;
 			}, expected);
 
 			if (!hashMatches) {

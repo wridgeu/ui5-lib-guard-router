@@ -8,7 +8,7 @@
  * 3. We need to manipulate model state without UI interaction
  */
 
-import { type ControlRef, getAppComponentId } from "../shared/controls";
+import { CONTROLS, type ControlRef, expectControlText, getAppComponentId, press } from "../shared/controls";
 
 type SettlementSnapshot = {
 	status?: string;
@@ -195,13 +195,9 @@ export async function waitForPage(
 						return false;
 					}
 
-					// NavContainer hides non-current pages with display:none.
-					const style = window.getComputedStyle(domRef);
-					if (style.display === "none" || style.visibility === "hidden") {
-						return false;
-					}
-
-					return true;
+					// NavContainer hides non-current pages with display:none. checkVisibility() also
+					// sees a hidden ancestor: the page of a nested component whose container is hidden.
+					return domRef.checkVisibility({ visibilityProperty: true });
 				},
 				componentId,
 				page.viewId,
@@ -217,13 +213,21 @@ export async function waitForPage(
 }
 
 /**
- * Fire an event on a UI5 control, bypassing wdi5's control resolution.
+ * Fire an event on a UI5 control, bypassing wdi5's control resolution. Used for the
+ * Page nav button, which is a sub-element without an app-declared ID.
+ *
+ * Fails if the control does not exist or nothing listens to the event: firing an
+ * event without a handler would otherwise be a silent no-op.
  */
 export async function fireEvent(control: ControlRef, eventName: string): Promise<void> {
 	await browser.execute(
 		(compId: string, viewId: string, id: string, evt: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			Component?.getComponentById(compId)?.byId(viewId)?.byId(id)?.fireEvent(evt);
+			const target = Component.getComponentById(compId).byId(viewId).byId(id);
+			if (!target.hasListeners(evt)) {
+				throw new Error(`Control "${viewId}/${id}" has no listener for the event "${evt}"`);
+			}
+			target.fireEvent(evt);
 		},
 		await getAppComponentId(control.appId),
 		control.viewId,
@@ -233,18 +237,13 @@ export async function fireEvent(control: ControlRef, eventName: string): Promise
 }
 
 /**
- * Reset the auth model to logged-out state.
- *
- * browser.url("#") only performs a hash navigation and does NOT
- * reload the page, so in-memory JSONModel state persists across tests within
- * the same spec file. Call this at the start of any test that requires a
- * known auth state.
+ * Reset the auth model to logged-out state. Tests call it through {@link startAtHome}.
  */
 export async function resetAuth(): Promise<void> {
 	await browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			Component?.getComponentById(componentId)?.getModel("auth")?.setProperty("/isLoggedIn", false);
+			Component.getComponentById(componentId).getModel("auth").setProperty("/isLoggedIn", false);
 		},
 		await getAppComponentId(),
 	);
@@ -282,13 +281,13 @@ async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 	return browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const runtimeModel = Component?.getComponentById(componentId)?.getModel("runtime");
+			const runtimeModel = Component.getComponentById(componentId).getModel("runtime");
 
 			return {
-				status: String(runtimeModel?.getProperty("/lastSettlementStatus") ?? ""),
-				route: String(runtimeModel?.getProperty("/lastSettlementRoute") ?? ""),
-				hash: String(runtimeModel?.getProperty("/lastSettlementHash") ?? ""),
-				revision: Number(runtimeModel?.getProperty("/lastSettlementRevision") ?? 0),
+				status: String(runtimeModel.getProperty("/lastSettlementStatus")),
+				route: String(runtimeModel.getProperty("/lastSettlementRoute")),
+				hash: String(runtimeModel.getProperty("/lastSettlementHash")),
+				revision: Number(runtimeModel.getProperty("/lastSettlementRevision")),
 			};
 		},
 		await getAppComponentId(),
@@ -350,14 +349,59 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 	await browser.execute(
 		(dirty: boolean, componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			Component?.getComponentById(componentId)?.getModel("form")?.setProperty("/isDirty", dirty);
+			Component.getComponentById(componentId).getModel("form").setProperty("/isDirty", dirty);
 		},
 		isDirty,
 		await getAppComponentId(),
 	);
 }
 
-/** Return current window.history.length from the browser. */
+/**
+ * Return current window.history.length from the browser. Chrome caps it at 50 entries:
+ * at the cap a new entry no longer changes the length, so the comparison would prove nothing.
+ */
 export async function getHistoryLength(): Promise<number> {
-	return browser.execute(() => window.history.length);
+	const length = await browser.execute(() => window.history.length);
+	if (length >= 50) {
+		throw new Error(`window.history.length is ${length}: at the browser cap, new entries cannot be observed`);
+	}
+	return length;
+}
+
+/** Set the browser hash like a user who edits the address bar. */
+export async function setBrowserHash(hash: string): Promise<void> {
+	await browser.execute((value: string) => {
+		window.location.hash = value;
+	}, hash);
+}
+
+/**
+ * Start a test from a known, asserted state: clean form, logged out, Home page at the
+ * empty hash. The page is not reloaded between the tests of a spec file, so model state
+ * and the current route of the previous test would otherwise leak into the next one.
+ */
+export async function startAtHome(): Promise<void> {
+	// A dirty form would make the leave guard block the navigation away from Protected.
+	await setDirtyState(false);
+	await resetAuth();
+	await browser.url("#");
+	await expectHashToBe("", "Hash should be empty after navigating home");
+	await waitForPage(CONTROLS.home.homePage, "Home");
+	await expectControlText(CONTROLS.home.authStatus, "Logged Out");
+}
+
+/** Press the login toggle on Home and assert the auth state it has to lead to. */
+export async function toggleLogin(expected: "Logged In" | "Logged Out"): Promise<void> {
+	await press(CONTROLS.home.toggleLoginBtn);
+	await expectControlText(CONTROLS.home.authStatus, expected);
+}
+
+/** From Home, logged out: log in, press "Go to Protected Page" and assert that the navigation committed. */
+export async function loginAndGoToProtected(): Promise<void> {
+	await toggleLogin("Logged In");
+	const afterRevision = await getRuntimeSettlementRevision();
+	await press(CONTROLS.home.navProtectedBtn);
+	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision });
+	await waitForRuntimeSettlement({ status: "Committed", route: "protected", hash: "protected" }, { afterRevision });
+	await expectHashToBe("#/protected");
 }

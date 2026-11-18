@@ -2,6 +2,7 @@ import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	resetFlpDemo,
+	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigation,
 } from "./helpers";
 
@@ -17,7 +18,8 @@ describe("FLP clean cross-app navigation (isolated session)", () => {
 
 	it("completes clean cross-app navigation without triggering FLP dirty prompt", async () => {
 		await loginAndGoToProtectedInFlp();
-		// Form is clean (isDirty = false, the default after resetFlpDemo)
+		// Asserts that the page shows the clean state.
+		await setDirtyStateInFlp(false);
 
 		// Install a dialog handler to detect whether FLP calls confirm.
 		// With a clean form, the dirty-state provider should return false

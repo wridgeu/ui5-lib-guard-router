@@ -18,6 +18,7 @@ describe("FLP cross-app navigation (isolated session)", () => {
 
 	it("completes dirty cross-app navigation after user confirms FLP dialog", async () => {
 		await loginAndGoToProtectedInFlp();
+		// Asserts that the page shows the dirty state.
 		await setDirtyStateInFlp(true);
 
 		// Accept the FLP dirty-state confirm dialog (user confirms navigation).

@@ -1,19 +1,96 @@
 import type { GuardRouter } from "ui5/guard/router/types";
-import { CONTROLS, getAppComponentId } from "../shared/controls";
+import { CONTROLS, expectControlText, getAppComponentId, press } from "../shared/controls";
 import {
 	expectAppHashToBe,
-	expectControlText,
 	getRuntimeSettlementRevisionInFlp,
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	navigateToRouteInFlp,
-	pressToggleLoginInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigationAndExpectDirtyPrompt,
 	waitForHomePageInFlp,
 	waitForProtectedPageInFlp,
 } from "./helpers";
+
+const EMPLOYEES_META = { section: "hr", requiresAuth: true };
+const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
+
+/**
+ * On Protected with a dirty form: navigate to "home" through the router and assert that the
+ * leave guard blocked it without an FLP confirm dialog.
+ */
+async function expectInAppNavigationBlocked(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+	const { record, cleanup } = installDialogHandler(true);
+
+	try {
+		await navigateToRouteInFlp("home");
+
+		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
+		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
+		await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
+		expect(record.called).toBe(false);
+	} finally {
+		cleanup();
+	}
+}
+
+/** On Protected: navigate to "home" through the router and assert that the navigation committed. */
+async function expectInAppNavigationToHome(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+
+	await navigateToRouteInFlp("home");
+
+	await waitForHomePageInFlp({ afterRevision: settlementRevision });
+	await expectAppHashToBe("");
+	await expectControlText(CONTROLS.home.settlementStatus, "Committed");
+}
+
+/** On Protected: go back in the browser history and assert that the navigation to Home committed. */
+async function browserBackToHome(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevisionInFlp();
+
+	await browser.back();
+
+	await waitForHomePageInFlp({ afterRevision: settlementRevision });
+	await expectAppHashToBe("");
+	await expectControlText(CONTROLS.home.settlementStatus, "Committed");
+}
+
+/** Assert that the navigation started after `afterRevision` was redirected to Home, where the test started. */
+async function expectRedirectedHome(afterRevision: number): Promise<void> {
+	await waitForHomePageInFlp({ afterRevision });
+	await expectAppHashToBe("", { afterRevision });
+	await expectControlText(CONTROLS.home.settlementStatus, "Redirected");
+	await expectControlText(CONTROLS.home.settlementRouteText, "home");
+}
+
+async function getRouteMetaInFlp(routeName: string): Promise<Record<string, unknown>> {
+	return browser.execute(
+		(componentId: string, route: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const router: GuardRouter = Component.getComponentById(componentId).getRouter();
+			return { ...router.getRouteMeta(route) };
+		},
+		await getAppComponentId(),
+		routeName,
+	);
+}
+
+async function setRouteMetaInFlp(routeName: string, meta: Record<string, unknown>): Promise<void> {
+	await browser.execute(
+		(componentId: string, route: string, value: Record<string, unknown>) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const router: GuardRouter = Component.getComponentById(componentId).getRouter();
+			router.setRouteMeta(route, value);
+		},
+		await getAppComponentId(),
+		routeName,
+		meta,
+	);
+}
 
 describe("FLP preview integration", () => {
 	beforeEach(async () => {
@@ -44,25 +121,14 @@ describe("FLP preview integration", () => {
 		await setDirtyStateInFlp(true);
 
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+		await waitForProtectedPageInFlp();
 	});
 
 	it("blocks dirty in-app navigation via leave guard without triggering FLP confirm", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 
-		const { record, cleanup } = installDialogHandler(true);
-
-		try {
-			await navigateToRouteInFlp("home");
-
-			await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
-			await expectAppHashToBe("protected", { afterRevision: settlementRevision });
-			await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
-			expect(record.called).toBe(false);
-		} finally {
-			cleanup();
-		}
+		await expectInAppNavigationBlocked();
 	});
 
 	it("proves leave guard and FLP dirty provider operate independently on the same dirty state", async () => {
@@ -70,21 +136,11 @@ describe("FLP preview integration", () => {
 		await setDirtyStateInFlp(true);
 
 		// PART 1: In-app navigation. Leave guard blocks, no FLP confirm.
-		const { record: inAppRecord, cleanup: inAppCleanup } = installDialogHandler(true);
-		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
-
-		try {
-			await navigateToRouteInFlp("home");
-
-			await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
-			await expectAppHashToBe("protected", { afterRevision: settlementRevision });
-			expect(inAppRecord.called).toBe(false);
-		} finally {
-			inAppCleanup();
-		}
+		await expectInAppNavigationBlocked();
 
 		// PART 2: Same dirty state, cross-app navigation. FLP confirm fires.
 		await triggerFlpCrossAppNavigationAndExpectDirtyPrompt();
+		await waitForProtectedPageInFlp();
 	});
 });
 
@@ -94,42 +150,28 @@ describe("FLP route metadata and inheritance", () => {
 	});
 
 	it("getRouteMeta returns inherited metadata under FLP", async () => {
-		await navigateToRouteInFlp("employees");
-
-		const meta = (await browser.execute(
-			(componentId: string, routeName: string) => {
-				const Component = sap.ui.require("sap/ui/core/Component");
-				const component = Component.getComponentById(componentId);
-				if (!component) return null;
-				const router: GuardRouter = component.getRouter();
-				return router.getRouteMeta(routeName);
-			},
-			await getAppComponentId(),
-			"employee",
-		)) as Record<string, unknown> | null;
-
-		expect(meta).not.toBeNull();
-		expect(meta!.section).toBe("hr");
-		expect(meta!.requiresAuth).toBe(true);
-		expect(meta!.detail).toBe(true);
+		expect(await getRouteMetaInFlp("employees")).toEqual(EMPLOYEES_META);
+		expect(await getRouteMetaInFlp("employee")).toEqual(EMPLOYEE_META);
 	});
 
 	it("setRouteMeta invalidates cache and propagates under FLP", async () => {
-		const childMeta = (await browser.execute(
-			(componentId: string) => {
-				const Component = sap.ui.require("sap/ui/core/Component");
-				const component = Component.getComponentById(componentId);
-				if (!component) return null;
-				const router: GuardRouter = component.getRouter();
-				router.setRouteMeta("employees", { section: "engineering", requiresAuth: true });
-				return router.getRouteMeta("employee");
-			},
-			await getAppComponentId(),
-		)) as Record<string, unknown> | null;
+		// Resolve the inherited metadata before the update, so that the update has to
+		// replace an already computed result.
+		expect(await getRouteMetaInFlp("employee")).toEqual(EMPLOYEE_META);
 
-		expect(childMeta).not.toBeNull();
-		expect(childMeta!.section).toBe("engineering");
-		expect(childMeta!.detail).toBe(true);
+		try {
+			await setRouteMetaInFlp("employees", { section: "engineering", requiresAuth: true });
+
+			expect(await getRouteMetaInFlp("employee")).toEqual({
+				section: "engineering",
+				requiresAuth: true,
+				detail: true,
+			});
+		} finally {
+			// The page is not reloaded between tests: put the manifest metadata back.
+			await setRouteMetaInFlp("employees", EMPLOYEES_META);
+		}
+		expect(await getRouteMetaInFlp("employee")).toEqual(EMPLOYEE_META);
 	});
 });
 
@@ -140,27 +182,25 @@ describe("FLP guard router hardening", () => {
 
 	// --- Enter guard tests ---
 
-	it("blocks navigation to protected route when logged out", async () => {
-		// Logged out (resetFlpDemo ensures this). Try to navigate to protected.
+	it("redirects navigation to protected route to home when logged out", async () => {
+		// Logged out (resetFlpDemo asserts this). Try to navigate to protected.
 		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await navigateToRouteInFlp("protected");
 
-		// Guard should redirect back to home.
-		await waitForHomePageInFlp({ afterRevision: settlementRevision });
-		await expectAppHashToBe("", { afterRevision: settlementRevision });
+		await expectRedirectedHome(settlementRevision);
 	});
 
 	it("redirects forbidden route to home", async () => {
 		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await navigateToRouteInFlp("forbidden");
 
-		await waitForHomePageInFlp({ afterRevision: settlementRevision });
-		await expectAppHashToBe("", { afterRevision: settlementRevision });
+		await expectRedirectedHome(settlementRevision);
 	});
 
 	it("allows navigation to protected route when logged in", async () => {
 		await loginAndGoToProtectedInFlp();
-		await expectAppHashToBe("protected");
+		await expectControlText(CONTROLS.protected.settlementStatus, "Committed");
+		await expectControlText(CONTROLS.protected.settlementRouteText, "protected");
 	});
 
 	// --- Leave guard tests ---
@@ -169,21 +209,19 @@ describe("FLP guard router hardening", () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(false);
 
-		await navigateToRouteInFlp("home");
-
-		await waitForHomePageInFlp();
-		await expectAppHashToBe("");
+		await expectInAppNavigationToHome();
 	});
 
 	it("allows leaving after clearing dirty state", async () => {
 		await loginAndGoToProtectedInFlp();
+
+		// The dirty state has to be in effect first: the same navigation is blocked.
 		await setDirtyStateInFlp(true);
+		await expectInAppNavigationBlocked();
+
 		await setDirtyStateInFlp(false);
 
-		await navigateToRouteInFlp("home");
-
-		await waitForHomePageInFlp();
-		await expectAppHashToBe("");
+		await expectInAppNavigationToHome();
 	});
 
 	// --- Browser history tests ---
@@ -191,9 +229,7 @@ describe("FLP guard router hardening", () => {
 	it("handles browser back from protected to home", async () => {
 		await loginAndGoToProtectedInFlp();
 
-		await browser.back();
-
-		await waitForHomePageInFlp();
+		await browserBackToHome();
 	});
 
 	it("blocks browser back when form is dirty", async () => {
@@ -206,42 +242,35 @@ describe("FLP guard router hardening", () => {
 		// Leave guard blocks. Page stays on protected.
 		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
 		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
+		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
 	});
 
 	it("re-evaluates enter guard on browser forward after logout", async () => {
-		// Login and navigate to protected.
 		await loginAndGoToProtectedInFlp();
-
-		// Go back to home.
-		await browser.back();
-		await waitForHomePageInFlp();
+		await browserBackToHome();
 
 		// Logout.
-		await pressToggleLoginInFlp();
+		await press(CONTROLS.home.toggleLoginBtn);
 		await expectControlText(CONTROLS.home.authStatus, "Logged Out");
 
 		// Browser forward toward previously visited #/protected.
 		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await browser.forward();
 
-		// Enter guard should block and redirect back to home.
-		await waitForHomePageInFlp({ afterRevision: settlementRevision });
-		await expectAppHashToBe("", { afterRevision: settlementRevision });
+		// Enter guard redirects back to home.
+		await expectRedirectedHome(settlementRevision);
 	});
 
 	it("handles back/forward cycles with guards", async () => {
 		await loginAndGoToProtectedInFlp();
-
-		// Back to home
-		await browser.back();
-		await waitForHomePageInFlp();
+		await browserBackToHome();
 
 		// Forward to protected (still logged in, guard allows)
+		const settlementRevision = await getRuntimeSettlementRevisionInFlp();
 		await browser.forward();
-		await waitForProtectedPageInFlp();
+		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("protected");
 
-		// Back to home again
-		await browser.back();
-		await waitForHomePageInFlp();
+		await browserBackToHome();
 	});
 });

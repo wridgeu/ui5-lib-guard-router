@@ -1,8 +1,7 @@
-import { CONTROLS, type ControlRef, selectorFor } from "../shared/controls";
+import { CONTROLS, expectControlText, press } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
 import {
 	expectAppHashToBe,
-	expectControlText,
 	navigateToRouteInFlp,
 	resetFlpDemo,
 	waitForHomePageInFlp,
@@ -14,11 +13,6 @@ const OVERVIEW_APP_HASH = "reports";
 const SALES_APP_HASH = "reports&/reports/sales";
 const CONFIDENTIAL_APP_HASH = "reports&/reports/confidential";
 
-async function press(ref: ControlRef): Promise<void> {
-	const control = await browser.asControl(selectorFor(ref));
-	await control.press();
-}
-
 async function openReportsInFlp(): Promise<void> {
 	await press(CONTROLS.home.navReportsBtn);
 	await waitForPageInFlp(CONTROLS.reportsOverview.overviewPage, "Reports");
@@ -26,10 +20,12 @@ async function openReportsInFlp(): Promise<void> {
 }
 
 describe("FLP nested component with its own guard router", () => {
+	// Every test starts on the nested overview with the confidential report locked.
 	beforeEach(async () => {
 		await resetFlpDemo();
 		await openReportsInFlp();
 		await setConfidentialUnlocked(false);
+		await expectControlText(CONTROLS.reportsOverview.accessStatus, "Confidential reports locked");
 	});
 
 	it("writes the nested router's route behind the shell intent and the parent route", async () => {
@@ -46,6 +42,10 @@ describe("FLP nested component with its own guard router", () => {
 	});
 
 	it("redirects to the overview when the nested guard finds the report locked", async () => {
+		// The overview is also the starting state, so the outcome is read from the nested
+		// router's settlement: "committed" before the press, "redirected" after it.
+		expect((await settleReportsNavigation()).status).toBe("committed");
+
 		await press(CONTROLS.reportsOverview.navConfidentialBtn);
 
 		const settlement = await settleReportsNavigation();
@@ -63,11 +63,15 @@ describe("FLP nested component with its own guard router", () => {
 
 		await waitForPageInFlp(CONTROLS.reportsConfidential.confidentialPage, "Confidential Report");
 		await expectAppHashToBe(CONFIDENTIAL_APP_HASH);
+		const settlement = await settleReportsNavigation();
+		expect(settlement.status).toBe("committed");
+		expect(settlement.route).toBe("confidential");
 	});
 
 	it("handles browser back within the nested router and out of it", async () => {
 		await press(CONTROLS.reportsOverview.navSalesBtn);
 		await waitForPageInFlp(CONTROLS.reportsSales.salesPage, "Sales Report");
+		await expectAppHashToBe(SALES_APP_HASH);
 
 		await browser.back();
 		await waitForPageInFlp(CONTROLS.reportsOverview.overviewPage, "Reports");
@@ -81,6 +85,7 @@ describe("FLP nested component with its own guard router", () => {
 	it("displays the nested component again after the parent left its route", async () => {
 		await press(CONTROLS.reportsOverview.navSalesBtn);
 		await waitForPageInFlp(CONTROLS.reportsSales.salesPage, "Sales Report");
+		await expectAppHashToBe(SALES_APP_HASH);
 
 		await navigateToRouteInFlp("home");
 		await waitForHomePageInFlp();

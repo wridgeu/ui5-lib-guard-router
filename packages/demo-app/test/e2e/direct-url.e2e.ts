@@ -1,184 +1,104 @@
-import { CONTROLS, selectorFor } from "../shared/controls";
+import { CONTROLS, expectControlText } from "../shared/controls";
 import {
-	getRuntimeSettlementRevision,
-	waitForPage,
-	resetAuth,
 	expectHashToBe,
+	getRuntimeSettlementRevision,
+	setBrowserHash,
+	startAtHome,
+	toggleLogin,
+	waitForPage,
 	waitForRuntimeSettlement,
 } from "./helpers";
 
+/**
+ * Assert that the hash change made after `afterRevision` did not leave Home: the guard
+ * settled it with `status` and the router restored the empty hash. Home and the empty
+ * hash are also the starting state, so the fresh settlement is what proves the outcome.
+ */
+async function expectKeptOnHome(status: "Redirected" | "Blocked", afterRevision: number): Promise<void> {
+	await waitForRuntimeSettlement({ status, route: "home", hash: "(empty hash)" }, { afterRevision });
+	await expectHashToBe("", "Hash should be restored to home");
+	await waitForPage(CONTROLS.home.homePage, "Home");
+}
+
 describe("Direct URL navigation with guards", () => {
+	beforeEach(async () => {
+		await startAtHome();
+	});
+
 	it("should redirect to Home when accessing #/protected directly while logged out", async () => {
-		await browser.url("#");
-		await resetAuth();
-		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
-		await browser.execute(() => {
-			window.location.hash = "#/protected";
-		});
 
-		// Wait for hash to settle after async guard redirects
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after guard redirect",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		await setBrowserHash("#/protected");
 
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{
-				afterRevision: settlementRevision,
-			},
-		);
-		expect(settlement.route).toBe("home");
-		expect(settlement.hash).toBe("(empty hash)");
+		await expectKeptOnHome("Redirected", settlementRevision);
 	});
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
-		await browser.url("#");
-		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
-		await browser.execute(() => {
-			window.location.hash = "#/forbidden";
-		});
 
-		// Wait for hash to settle after sync guard redirects
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after guard redirect",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
+		await setBrowserHash("#/forbidden");
 
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{
-				afterRevision: settlementRevision,
-			},
-		);
-		expect(settlement.route).toBe("home");
-		expect(settlement.hash).toBe("(empty hash)");
+		await expectKeptOnHome("Redirected", settlementRevision);
 	});
 
 	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
-		await browser.url("#");
-		await resetAuth();
-		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 
-		await browser.execute(() => {
-			window.location.hash = "#/blocked";
-		});
+		await setBrowserHash("#/blocked");
 
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after enter guard blocks",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
-
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Blocked",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{
-				afterRevision: settlementRevision,
-			},
-		);
-		expect(settlement.route).toBe("home");
-		expect(settlement.hash).toBe("(empty hash)");
+		await expectKeptOnHome("Blocked", settlementRevision);
 	});
 
 	it("should load Protected page when accessing #/protected directly while logged in", async () => {
-		await browser.url("#");
-		await resetAuth();
+		await toggleLogin("Logged In");
+		const settlementRevision = await getRuntimeSettlementRevision();
 
-		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
+		await setBrowserHash("#/protected");
 
-		await browser.execute(() => {
-			window.location.hash = "#/protected";
-		});
-
-		// Wait for view to load - confirms async guard completed
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: settlementRevision },
+		);
+		await expectHashToBe("#/protected");
 	});
 
 	it("should show Not Found page for a nonexistent route hash", async () => {
-		await browser.url("#");
-		await resetAuth();
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		const settlementRevision = await getRuntimeSettlementRevision();
 
-		await browser.execute(() => {
-			window.location.hash = "#/this/does/not/exist";
-		});
+		await setBrowserHash("#/this/does/not/exist");
 
-		await browser.waitUntil(
-			async () => {
-				const url = await browser.getUrl();
-				return url.includes("#/this/does/not/exist");
-			},
-			{ timeout: 5000, timeoutMsg: "Hash did not settle to nonexistent route" },
-		);
-
-		// Verify the Not Found page is displayed
-		await waitForPage(CONTROLS.notFound.notFoundPage, "Not Found");
-
-		const settlementStatus = await browser.asControl(selectorFor(CONTROLS.notFound.settlementStatus));
-		expect(await settlementStatus.getProperty("text")).toBe("Bypassed");
-
-		const settlementRoute = await browser.asControl(selectorFor(CONTROLS.notFound.settlementRouteText));
-		expect(await settlementRoute.getProperty("text")).toBe("(no match)");
-
-		const settlementHash = await browser.asControl(selectorFor(CONTROLS.notFound.settlementHashText));
-		expect(await settlementHash.getProperty("text")).toBe("this/does/not/exist");
+		await waitForPage(CONTROLS.notFound.notFoundPage, "Not Found", { afterRevision: settlementRevision });
+		await expectHashToBe("#/this/does/not/exist");
+		await expectControlText(CONTROLS.notFound.settlementStatus, "Bypassed");
+		await expectControlText(CONTROLS.notFound.settlementRouteText, "(no match)");
+		await expectControlText(CONTROLS.notFound.settlementHashText, "this/does/not/exist");
 
 		// Verify the app recovers by navigating back to a known route
-		await browser.execute(() => {
-			window.location.hash = "#/";
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home");
+		const recoveryRevision = await getRuntimeSettlementRevision();
+		await setBrowserHash("#/");
+		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: recoveryRevision });
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "home", hash: "(empty hash)" },
+			{ afterRevision: recoveryRevision },
+		);
 	});
 
 	it("should handle rapid hash changes in the address bar", async () => {
-		await browser.url("#");
-		await resetAuth();
-		await waitForPage(CONTROLS.home.homePage, "Home");
 		const settlementRevision = await getRuntimeSettlementRevision();
 
 		// Rapidly change the hash multiple times
-		await browser.execute(() => {
-			window.location.hash = "#/protected";
-		});
-		await browser.execute(() => {
-			window.location.hash = "#/forbidden";
-		});
-		await browser.execute(() => {
-			window.location.hash = "#/protected";
-		});
+		await setBrowserHash("#/protected");
+		await setBrowserHash("#/forbidden");
+		await setBrowserHash("#/protected");
 
-		// Should end up on Home (all guarded while logged out).
-		// waitForPage calls navigationSettled() then checks DOM visibility.
+		// All three are guarded while logged out. waitForPage first waits for the pending
+		// guard pipeline of the last hash, so the settlement read below is the final one.
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
+			{ status: "Redirected", route: "home", hash: "(empty hash)" },
 			{ afterRevision: settlementRevision },
 		);
-
-		// Verify hash settled to a home-route value (not stuck on a guarded route)
-		const hash = await browser.execute(() => window.location.hash);
-		expect(["", "#", "#/"].includes(hash)).toBe(true);
+		await expectHashToBe("", "Hash should not stay on a guarded route");
 	});
 });

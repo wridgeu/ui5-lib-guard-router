@@ -1,151 +1,62 @@
-import { CONTROLS, selectorFor } from "../shared/controls";
+import { CONTROLS, press } from "../shared/controls";
 import {
-	getRuntimeSettlementRevision,
-	waitForPage,
-	fireEvent,
-	resetAuth,
 	expectHashToBe,
+	fireEvent,
+	getRuntimeSettlementRevision,
+	loginAndGoToProtected,
+	startAtHome,
+	toggleLogin,
+	waitForPage,
 	waitForRuntimeSettlement,
 } from "./helpers";
 
+/** On Protected: press the Page nav button and assert that the navigation to Home committed. */
+async function navBackToHome(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevision();
+	await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+
+	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
+	await expectHashToBe("");
+}
+
+/**
+ * On Home: press a navigation button whose guard redirects to Home. Home and the empty
+ * hash are also the starting state, so the fresh settlement is what proves the redirect.
+ */
+async function pressAndExpectRedirectHome(button: "navProtectedBtn" | "navForbiddenBtn"): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevision();
+	await press(CONTROLS.home[button]);
+
+	await waitForRuntimeSettlement(
+		{ status: "Redirected", route: "home", hash: "(empty hash)" },
+		{ afterRevision: settlementRevision },
+	);
+	await expectHashToBe("", "Hash should settle to home after guard redirect");
+	await waitForPage(CONTROLS.home.homePage, "Home");
+}
+
 describe("Multi-route navigation sequences", () => {
+	beforeEach(async () => {
+		await startAtHome();
+		await loginAndGoToProtected();
+		await navBackToHome();
+	});
+
 	it("should handle Home -> Protected -> Home -> Forbidden (redirected) -> Home sequence", async () => {
-		await browser.url("#");
-		await resetAuth();
-
-		// Login
-		const toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Go to Protected (allowed)
-		const navProtected = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		await navProtected.press();
-
-		// Wait for view - confirms async guard completed
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
-
-		// Nav back to Home
-		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
-		await waitForPage(CONTROLS.home.homePage, "Home");
-
-		// Try Forbidden (always redirects to Home)
-		const navForbidden = await browser.asControl(selectorFor(CONTROLS.home.navForbiddenBtn));
-		const settlementRevision = await getRuntimeSettlementRevision();
-		await navForbidden.press();
-
-		// Wait for hash to settle after redirect
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after guard redirect",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
-		await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{ afterRevision: settlementRevision },
-		);
+		await pressAndExpectRedirectHome("navForbiddenBtn");
 	});
 
 	it("should redirect protected to Home after mid-session logout", async () => {
-		await browser.url("#");
-		await resetAuth();
+		await toggleLogin("Logged Out");
 
-		// Login
-		let toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Navigate to Protected (allowed)
-		const navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		await navBtn.press();
-
-		// Wait for view - confirms async guard completed
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
-		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
-		await waitForPage(CONTROLS.home.homePage, "Home");
-
-		// Logout (re-retrieve control with forceSelect after navigation)
-		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Verify logged out
-		const status = await browser.asControl(selectorFor(CONTROLS.home.authStatus));
-		expect(await status.getProperty("text")).toBe("Logged Out");
-
-		// Try Protected again (should now redirect home)
-		const navBtn2 = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		const settlementRevision = await getRuntimeSettlementRevision();
-		await navBtn2.press();
-
-		// Wait for hash to settle after guard redirects
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after guard redirect",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
-		await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{ afterRevision: settlementRevision },
-		);
+		await pressAndExpectRedirectHome("navProtectedBtn");
 	});
 
 	it("should handle login -> protected -> logout -> protected (redirected) -> login -> protected (allowed)", async () => {
-		await browser.url("#");
-		await resetAuth();
+		await toggleLogin("Logged Out");
+		await pressAndExpectRedirectHome("navProtectedBtn");
 
-		// Login
-		let toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Protected (allowed)
-		let navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		await navBtn.press();
-
-		// Wait for view - confirms async guard completed
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
-
-		// Back to home
-		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
-		await waitForPage(CONTROLS.home.homePage, "Home");
-
-		// Logout
-		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Try Protected (redirected)
-		navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		const settlementRevision = await getRuntimeSettlementRevision();
-		await navBtn.press();
-
-		await expectHashToBe("", {
-			timeoutMsg: "Hash should settle to home after guard redirect",
-			afterRevision: settlementRevision,
-		});
-		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
-		await waitForRuntimeSettlement(
-			{
-				status: "Redirected",
-				route: "home",
-				hash: "(empty hash)",
-			},
-			{ afterRevision: settlementRevision },
-		);
-
-		// Login again
-		toggleBtn = await browser.asControl(selectorFor(CONTROLS.home.toggleLoginBtn));
-		await toggleBtn.press();
-
-		// Protected (allowed again)
-		navBtn = await browser.asControl(selectorFor(CONTROLS.home.navProtectedBtn));
-		await navBtn.press();
-
-		// Wait for view - confirms async guard completed
-		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+		// Login again: Protected is allowed again
+		await loginAndGoToProtected();
 	});
 });
