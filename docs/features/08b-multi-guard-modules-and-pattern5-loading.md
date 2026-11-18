@@ -255,13 +255,7 @@ No change. All config values are case-sensitive, consistent with how UI5 handles
 
 ## 6. Execution Order
 
-Within a single navigation pipeline:
-
-1. **Leave guards** (current route) — registration order
-2. **Global enter guards** (`"*"`) — registration order
-3. **Route-specific enter guards** — registration order
-
-Manifest guards are registered in declaration order during `initialize()` (in `"block"` mode once all modules have loaded), so they run after imperative guards added before `initialize()` and before imperative guards added after it or, in `"block"` mode, after loading has finished.
+The phase order and the position of manifest guards are documented in the library README, [Execution order](../../packages/lib/README.md#execution-order) and [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards). Multi-guard modules add the following.
 
 For multi-guard modules registered via bare path (no cherry-pick), all guards from the module are inserted at the position where the module appears in the manifest array, in their internal order (array index / object key order).
 

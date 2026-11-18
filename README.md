@@ -25,7 +25,7 @@ UI5's native router has no way to block or redirect navigation before views are 
 > [!IMPORTANT]
 > **Shipped UI5 baseline: 1.144.0**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that shipped baseline. In addition, CI runs the library QUnit suite against OpenUI5 `1.120.0` as a compatibility lane for the core router implementation. The compatibility baseline is 1.120 because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. The shipped baseline also carries a dedicated vendored OpenUI5 router parity lane, which compares selected upstream `sap.m.routing.Router` behaviors against `ui5.guard.router.Router` when no guards are active.
+> The published package declares `minUI5Version: 1.144.0`. The core router is also tested on OpenUI5 `1.120.0`. See [Compatibility](packages/lib/README.md#compatibility).
 
 ## Quick start
 

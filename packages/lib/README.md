@@ -285,7 +285,7 @@ Before `initialize()`, while `guardLoading: "block"` modules load, and after `st
 
 With `guardLoading: "block"`, the router starts once the manifest guard modules have loaded. Until then `isInitialized()` is `false`, a second `initialize()` changes nothing, and `stop()` cancels the pending start until `initialize()` is called again. Guard modules that finish loading after `destroy()` register nothing.
 
-The Fiori launchpad stops the router of a keep-alive app when the user leaves it and calls `initialize(true)` on return; the router resumes the route the app was on.
+The Fiori launchpad stops the app router when the user leaves the app and calls `initialize(true)` when it puts the app back: after the data-loss prompt, and when a keep-alive app is shown again. The router resumes the route the app was on. See [FLP Integration](../../docs/reference/architecture.md#flp-integration).
 
 ### Navigation settlement
 
@@ -895,7 +895,7 @@ This keeps guard logic in one place and route annotations in the manifest where 
 
 If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
 
-**`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog when the user attempts cross-app navigation (home button, other tiles), browser back/forward out of the app, or page refresh/close:
+**`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog on every hash change, in-app ones included, and the browser's leave-page dialog on refresh/close. An in-app `navTo()` that the shell holds back for the dialog settles as `Blocked`; if the user confirms, the shell sets the hash again and the router runs the guards for it:
 
 ```typescript
 sap.ushell.Container.setDirtyFlag(true); // mark unsaved changes
@@ -917,7 +917,7 @@ sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 ```
 
-> **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. FLP internally uses `getDirtyFlagsAsync()` (private) which combines the flag with all registered providers. The synchronous `getDirtyFlag()` still works but should not be relied upon in new code.
+> **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. It still returns the flag combined with all registered providers.
 
 #### Combining leave guards with FLP dirty-state protection
 
@@ -926,7 +926,7 @@ When you use both a route leave guard and `registerDirtyStateProvider`, the two 
 - **Leave guard** protects **in-app** navigation (route to route within your app)
 - **Dirty-state provider** protects **cross-app** navigation (shell home, other tiles, browser close)
 
-In production FLP, `ShellNavigationHashChanger` intercepts cross-app navigation **before** it reaches the app router, so the leave guard never runs for cross-app hashes. The two mechanisms never overlap:
+`ShellNavigationHashChanger` never passes a cross-app hash to the app router, so the leave guard never runs for it. The provider returns `false` for in-app navigation, so the shell does not prompt for it. The two mechanisms never overlap:
 
 ```typescript
 // 1. Leave guard: blocks in-app navigation when dirty
@@ -944,7 +944,7 @@ const dirtyProvider = (navigationContext) => {
 sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
 ```
 
-No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is handled by the shell in both production and the FLP sandbox, so the leave guard never runs for cross-app hashes. The leave guard protects in-app route changes; the FLP dirty-state provider protects cross-app navigation, browser close, and the shell home button.
+No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is handled by the shell in both production and the FLP sandbox.
 
 > [!TIP]
 > **Testing with the FLP preview**: The `fiori-tools-preview` middleware supports `enhancedHomePage: true` (UI5 >= 1.123.0), which uses CDM-based bootstrap for a more complete UShell service layer. This is recommended for testing dirty-state provider integration, as it provides `ShellNavigationHashChanger` and `Navigation` service behavior closer to production FLP.
@@ -988,6 +988,8 @@ The router relies on two UI5 internals for this, see [Compatibility](#compatibil
 ### One guard router per hash changer
 
 Each guard router needs a hash changer of its own: the app's root router and each nested component's router get one from UI5. Two guard routers on the same hash changer do not coordinate: when the first blocks a hash and restores the previous one, the second can briefly accept the hash the first blocked.
+
+In the Fiori launchpad the root routers of all apps share one hash changer. This works because the shell stops the router of every app it leaves or hides, so only the router of the visible app listens. For a component that implements `isKeepAliveSupported()` the shell calls `deactivate()` and `activate()` instead and does not restart the router: `activate()` has to call `initialize(true)`.
 
 ### Targets displayed without a route
 

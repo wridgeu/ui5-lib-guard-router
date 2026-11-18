@@ -168,7 +168,7 @@ UI5's router stays stopped after `stop()` until `initialize()` is called again, 
 
 - `stop()` clears `start`. The guards are still registered when loading finishes, but the router does not start.
 - `initialize()` sets `start` and returns. A second call while loading therefore does not start the router before its manifest guards exist, and a call after `stop()` restores the pending start. The call that sets `start` also decides `bIgnoreInitialHash` for the deferred `super.initialize()`.
-- `navTo()` while loading only sets the hash, like the native router before `initialize()`. The guards, including the manifest guards, run when the load callback initializes the router and it parses that hash.
+- `navTo()` while loading is not intercepted (see the library README, [Lifecycle](../../packages/lib/README.md#lifecycle)). The load callback starts the router, which parses that hash through all guards.
 
 ### destroy() twice
 

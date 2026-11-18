@@ -91,13 +91,7 @@ router.removeLeaveGuard("editOrder", dirtyFormGuard);
 
 ## Execution Order
 
-The full guard pipeline becomes:
-
-1. **Leave guards** for `fromRoute` (NEW)
-2. **Global enter guards** (existing `_globalGuards`)
-3. **Route-specific enter guards** for `toRoute` (existing `_enterGuards`)
-
-If any leave guard returns `false`, the entire pipeline short-circuits and the hash is restored. Enter guards never run.
+Leave guards form the first phase of the pipeline, before the global and route-specific enter guards. The order is documented in the library README, [Execution order](../../packages/lib/README.md#execution-order).
 
 ## Implementation Sketch
 

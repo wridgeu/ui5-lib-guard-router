@@ -73,7 +73,7 @@ The `guardRouter` block also holds the `guards` and `routeMeta` maps, which are 
 - Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)).
 - A module entry may include a `#` cherry-pick suffix to select a single export: `"guards.security#checkAuth"` (see [Cherry-Pick Syntax](#cherry-pick-syntax)).
 - Array order defines execution order within a route.
-- Manifest guards are registered in `initialize()`, so they run after imperative guards added before `initialize()` and before those added after it (see [Execution Order](#execution-order)).
+- Manifest guards are registered in `initialize()` (see [Execution Order](#execution-order)).
 
 ### Guard Module Format
 
@@ -197,9 +197,7 @@ initialize()
   │     → Register resolved functions through _registerManifestGuard
   │       (addGuard / addRouteGuard / leave guard registration)
   │     → Then call super.initialize()
-  │     A router destroyed while loading registers nothing and does not start;
-  │     after stop() the guards are registered but super.initialize() waits
-  │     for the next initialize() call
+  │     (destroy() and stop() while loading: see module-loading reference)
   ├── If guardLoading === "lazy" (default) and pending guards exist:
   │     Create guards per descriptor (GuardModules.createLazyGuards),
   │     register them through _registerManifestGuard
@@ -215,7 +213,7 @@ initialize()
         Call super.initialize() directly
 ```
 
-The `initialize()` override delays the first `parse()` call (triggered by the HashChanger listener) until guards are loaded (`"block"`) or registers lazy wrappers (`"lazy"`). In `"lazy"` mode `initialize()` is always synchronous — the preload hint fired in the constructor makes cache hits the common case. This is safe because `initialize()` is the entry point for hash listening.
+The `initialize()` override delays the first `parse()` call (triggered by the HashChanger listener) until guards are loaded (`"block"`) or registers lazy wrappers (`"lazy"`). In `"lazy"` mode `initialize()` is always synchronous — the preload hint fired in the constructor makes cache hits the common case. This is safe because `initialize()` is the entry point for hash listening. How `destroy()`, `stop()` and `navTo()` behave while block-mode modules load is described in the library README, [Lifecycle](../../packages/lib/README.md#lifecycle), and implemented as described in [Module Loading and Destroy Safety](../reference/module-loading-and-destroy-safety.md#stop-and-initialize-while-modules-load).
 
 ## navTo() with Preflight Modes
 
@@ -355,13 +353,7 @@ No `_guardsBypassedHash` field is needed. Both `"bypass"` mode and `skipGuards: 
 
 ## Execution Order
 
-Within a single navigation pipeline:
-
-1. Leave guards (current route) — registration order
-2. Global enter guards (`"*"`) — registration order
-3. Route-specific enter guards — registration order
-
-Manifest guards are registered during `initialize()`, before `super.initialize()` triggers the first navigation. In `"lazy"` mode this happens synchronously; in `"block"` mode it happens once all modules have loaded. Manifest guards therefore run after imperative guards registered before `router.initialize()` (for example in `Component.init()`), and before imperative guards registered after it (for example in controller `onInit` hooks, which run after the root view is created by `super.initialize()`). In `"block"` mode, imperative guards added after `initialize()` but before the modules finish loading also run before the manifest guards.
+The phase order and the position of manifest guards relative to imperative ones are documented in the library README, [Execution order](../../packages/lib/README.md#execution-order) and [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards). Manifest guards are registered in `initialize()` so that they exist before `super.initialize()` triggers the first navigation; imperative guards added in a controller's `onInit` therefore run after them, because the root view is created by `super.initialize()`.
 
 ## Guard Loading Strategies
 

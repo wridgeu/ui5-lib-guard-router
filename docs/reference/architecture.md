@@ -337,12 +337,9 @@ reset to idle, so the next hash change runs its guards instead of being committe
 already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` in the idle
 phase and `parse()` evaluates the guards.
 
-The preflight needs a router that listens to hash changes. While `isInitialized()` is false
-(before `initialize()`, while block-mode guard modules load, after `stop()`), `navTo()` only
-calls `super.navTo()`: the native router sets the hash, or does nothing when stopped. No guard
-runs and nothing commits, because the manifest guards may not be registered yet and the
-router would not see the hash change. `initialize()` parses the hash later, through the
-guards.
+The preflight needs a router that listens to hash changes. While `isInitialized()` is false,
+`navTo()` only calls `super.navTo()` (behavior: library README, [Lifecycle](../../packages/lib/README.md#lifecycle)):
+the manifest guards may not be registered yet, and the router would not see the hash change.
 
 ### stop() and initialize()
 
@@ -356,10 +353,11 @@ start goes through `_start()`, which calls `super.initialize()`:
   shows now, as the native router keeps its current route. Its leave guards run on the next
   navigation, and a blocked hash change returns to it.
 
-The Fiori launchpad relies on the second form: with `sap-keep-alive` it stops the router of an
-app it leaves and calls `initialize(true)` when the user returns, also when the user cancels a
-cross-app navigation in the data-loss prompt. A router that has not committed a navigation
-before `stop()` remembers no route.
+The Fiori launchpad relies on the second form. It stops the router of the current app on every
+cross-app hash change and restarts it with `initialize(true)` when it puts the app's hash back
+(see [FLP Integration](#flp-integration)). With `sap-keep-alive` it stops the router of an app
+it hides and calls `initialize(true)` when the app is shown again. A router that has not
+committed a navigation before `stop()` remembers no route.
 
 A redirect commits the same way: `_applyRedirectDecision()` enters the committing/redirect
 phase and calls `navTo(target, replace=true)`. The route it commits is the one that matches
@@ -414,8 +412,8 @@ all navigation paths the `navTo()` preflight cannot reach.
 
 ## Guard Execution Pipeline
 
-Guards run in three phases: leave guards first, then global enter guards, then
-route-specific enter guards. Evaluation stays synchronous until a guard returns a
+Guards run in three phases, in the order given in the library README,
+[Execution order](../../packages/lib/README.md#execution-order). Evaluation stays synchronous until a guard returns a
 Promise, then switches to async for the rest of the navigation, including all later
 phases.
 
@@ -636,16 +634,48 @@ mechanisms coexist:
 | `registerDirtyStateProvider` | Cross-app (FLP)   | Native FLP confirmation popup |
 
 The two handle different scopes and do not need to coordinate in application code.
-Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is
-handled by the shell, in production and in the `fiori-tools-preview` sandbox alike, so the
-app router's `parse()` never sees a cross-app hash. If the app is dirty, the shell asks the
-dirty-state provider and shows its own confirm dialog. While it asks, the shell refuses the
-hash change, so a `navTo()` in that moment settles as `Blocked`. If the user cancels, the
-shell restarts the app's router with `initialize(true)`, which resumes the current route
-(see [stop() and initialize()](#stop-and-initialize)).
-
 The application-side setup is in the library README, [Combining leave guards with FLP
 dirty-state protection](../../packages/lib/README.md#combining-leave-guards-with-flp-dirty-state-protection).
+
+The launchpad replaces the global `HashChanger` with its `ShellNavigationHashChanger`. The root
+router of every app component gets the one `RouterHashChanger` that this hash changer creates
+and caches, so all apps, including those kept alive in the background, share it. The shell
+keeps the routers of inactive apps from reacting by stopping them.
+
+Every hash change, in-app or cross-app, first runs the shell's navigation filters
+(`ShellNavigationHashChanger#treatHashChanged`). A filter that takes over the navigation ends
+it there: no `hashChanged` event reaches the app router. Otherwise an in-app change fires
+`hashChanged` with the app part of the hash, and a cross-app change fires `shellHashChanged`,
+which updates the app router's hash changer without firing `hashChanged`, so `parse()` never
+sees a cross-app hash. In SAPUI5 1.144.0 and 1.149.0 (`sap/ushell/renderer/Shell.controller.js`):
+
+- `_disableSourceAppRouter` calls `stop()` on the router of the current app for every
+  cross-app hash change, before the data-loss check.
+- `_handleDataLoss` asks the dirty flag and the dirty-state providers (in-app changes
+  included; a provider tells them apart by `isCrossAppNavigation`). If the app is dirty, it
+  puts the previous hash back, restarts the app router with `initialize(true)`, which resumes
+  the current route (see [stop() and initialize()](#stop-and-initialize)), and then shows the
+  browser's `confirm()` dialog. If the user confirms, the shell sets the target hash again. If
+  the user cancels, the app stays on its route with its router running.
+- The same `initialize(true)` restart runs when a navigation fails and the shell goes back to
+  the previous app, and when the target app opens in a new window.
+
+A hash change that the shell takes over never reaches `parse()`. A `navTo()` whose hash write
+is taken over settles as `Blocked`, because the hash changer still shows the old hash. This
+happens to an in-app `navTo()` while the dirty check is true for in-app navigation
+(`setDirtyFlag(true)`, or a provider that does not return `false` for
+`isCrossAppNavigation: false`), and to the first hash change after the shell has put a hash
+back, until the browser reports that change. While the `confirm()` dialog is open, no
+application code runs.
+
+Keep-alive (`sap/ushell/appIntegration/contracts/EmbeddedUI5Handler.js`): when the shell hides
+an app it calls `stop()` on its router, and `initialize(true)` when it shows the app again
+(`initialize()` for an app that uses the legacy restore flow). Before it creates a new app
+component, it stops the routers of all cached apps. A component that implements
+`isKeepAliveSupported()` gets `deactivate()` and `activate()` instead. Its router is still
+stopped by `_disableSourceAppRouter`, but the shell does not restart it: `activate()` has to.
+
+The source locations are in the [FLP evidence table](./upstream-parity.md#fiori-launchpad-sapushell).
 The FLP spec files of the demo app are listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 
 ## UI5 Internals the Router Relies On

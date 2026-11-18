@@ -236,6 +236,32 @@ Procedure:
    architecture section.
 7. Run both QUnit lanes.
 
+### Fiori launchpad (sap.ushell)
+
+Where the launchpad stops and restarts app routers and holds back hash changes, as described in
+[FLP Integration](./architecture.md#flp-integration). Paths are relative to `sap/ushell/` in the
+SAPUI5 sources; the `sap/ui/core` rows are from OpenUI5.
+
+| Location                                                                              | SAPUI5 1.144.0                                                  | SAPUI5 1.149.0                                                  |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| `ShellNavigationInternal` replaces the global hash changer                            | `services/ShellNavigationInternal.js` line 373                  | `services/ShellNavigationInternal.js` line 373                  |
+| `HashChanger#createRouterHashChanger` creates and caches one `RouterHashChanger`      | `sap/ui/core/routing/HashChanger.js` lines 90-108 (OpenUI5)     | same file and lines in OpenUI5 1.149.0                          |
+| `treatHashChanged` runs the navigation filters; `Custom` ends the flow without events | `services/ShellNavigationHashChanger.js` lines 805, 815-825     | `services/ShellNavigationHashChanger.js` lines 809, 819-829     |
+| In-app change fires `hashChanged`                                                     | `services/ShellNavigationHashChanger.js` line 891               | `services/ShellNavigationHashChanger.js` line 895               |
+| Cross-app change fires `shellHashChanged` (`updateHashOnly: true`)                    | `services/ShellNavigationHashChanger.js` lines 70, 928          | `services/ShellNavigationHashChanger.js` lines 72, 932          |
+| Filter order: `_disableSourceAppRouter` before `_handleDataLoss`                      | `renderer/Shell.controller.js` lines 419, 421                   | `renderer/Shell.controller.js` lines 434, 436                   |
+| `_disableSourceAppRouter` calls `stop()` on a cross-app change                        | `renderer/Shell.controller.js` line 895                         | `renderer/Shell.controller.js` line 926                         |
+| `_resumeAppRouterIgnoringCurrentHash` calls `initialize(true)`                        | `renderer/Shell.controller.js` line 911                         | `renderer/Shell.controller.js` line 942                         |
+| `_handleDataLoss` reads the dirty state, for in-app changes too                       | `renderer/Shell.controller.js` line 987                         | `renderer/Shell.controller.js` line 1015                        |
+| `_handleDataLoss` swallows the change that puts the hash back                         | `renderer/Shell.controller.js` line 953                         | `renderer/Shell.controller.js` line 984                         |
+| `_handleDataLoss` puts the hash back and returns `Custom`                             | `renderer/Shell.controller.js` line 1057                        | `renderer/Shell.controller.js` line 1074                        |
+| `_restoreHashUsingAction` restarts the router                                         | `renderer/Shell.controller.js` line 1124                        | `renderer/Shell.controller.js` line 1141                        |
+| `window.confirm()` of the data-loss prompt                                            | `renderer/Shell.controller.js` line 1097                        | `renderer/Shell.controller.js` line 1114                        |
+| Restart after opening the app in a new window, after a failed navigation              | `renderer/Shell.controller.js` lines 1934, 2031                 | `renderer/Shell.controller.js` lines 1855, 1938                 |
+| Keep-alive: routers of cached apps stopped before a new app is created                | `appIntegration/contracts/EmbeddedUI5Handler.js` line 33        | `appIntegration/contracts/EmbeddedUI5Handler.js` line 58        |
+| Keep-alive: hide calls `stop()`, unless `isKeepAliveSupported()`                      | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 88, 100  | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 138, 150 |
+| Keep-alive: show calls `initialize(true)`, unless `isKeepAliveSupported()`            | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 112, 128 | `appIntegration/contracts/EmbeddedUI5Handler.js` lines 170, 186 |
+
 ## Current Scope
 
 The initial implementation vendors the `Router.qunit.js` entrypoint from the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports a small first batch of parity cases through the local harness.
