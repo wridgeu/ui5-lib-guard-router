@@ -13,20 +13,17 @@ import {
 	recordHashChanges,
 	recordSettlements,
 	waitForRoute,
+	routerHooks,
 } from "./testHelpers";
 
 let router: GuardRouter;
 
-const standardHooks = {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
+const standardHooks = routerHooks(
+	(created) => {
+		router = created;
 	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-};
+	() => router,
+);
 
 // ============================================================
 // Module: Router options: constructor

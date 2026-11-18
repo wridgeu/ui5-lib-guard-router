@@ -12,28 +12,23 @@ import type { Router$BypassedEvent, Router$RouteMatchedEvent } from "sap/ui/core
 import {
 	captureErrors,
 	captureErrorsAsync,
-	createRouter,
 	flushPromises,
 	getHash,
-	initHashChanger,
 	recordHashChanges,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
+	routerHooks,
 } from "./testHelpers";
 
 let router: GuardRouter;
 
-const standardHooks = {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
+const standardHooks = routerHooks(
+	(created) => {
+		router = created;
 	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-};
+	() => router,
+);
 
 // ============================================================
 // Module: navigationSettled()

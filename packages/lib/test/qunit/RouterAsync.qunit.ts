@@ -9,28 +9,23 @@ import {
 	assertBlocked,
 	captureErrorsAsync,
 	captureUnhandledRejections,
-	createRouter,
 	flushPromises,
 	getHash,
-	initHashChanger,
 	isMatching,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
+	routerHooks,
 } from "./testHelpers";
 
 let router: GuardRouter;
 
-const standardHooks = {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
+const standardHooks = routerHooks(
+	(created) => {
+		router = created;
 	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-};
+	() => router,
+);
 
 // ============================================================
 // Module: Sync until a guard returns a Promise

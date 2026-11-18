@@ -67,6 +67,27 @@ export function createRouterWithOptions(guardRouter: GuardRouterOptions): GuardR
 	return new GuardRouterClass(TEST_ROUTES, { async: true, guardRouter });
 }
 
+/**
+ * QUnit module hooks for a test file that keeps its router in a variable. Before each test the
+ * hash is reset and `use` receives a new router on the standard routes. After each test the
+ * router that `current` returns is destroyed: a test may have replaced the one it was given.
+ */
+export function routerHooks(
+	use: (router: GuardRouter) => void,
+	current: () => GuardRouter,
+): { beforeEach: () => void; afterEach: () => void } {
+	return {
+		beforeEach: () => {
+			initHashChanger();
+			use(createRouter());
+		},
+		afterEach: () => {
+			current().destroy();
+			HashChanger.getInstance().setHash("");
+		},
+	};
+}
+
 /** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
 export function createRouterUnsafe(routes: object[], config: unknown): GuardRouter {
 	return Reflect.construct(GuardRouterClass, [routes, config]);

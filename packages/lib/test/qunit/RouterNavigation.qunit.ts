@@ -15,29 +15,24 @@ import {
 	captureHashWrites,
 	captureWarnings,
 	captureWarningsAsync,
-	createRouter,
 	createRouterUnsafe,
 	getHash,
 	flushPromises,
-	initHashChanger,
 	recordHashChanges,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
+	routerHooks,
 } from "./testHelpers";
 
 let router: GuardRouter;
 
-const standardHooks = {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
+const standardHooks = routerHooks(
+	(created) => {
+		router = created;
 	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-};
+	() => router,
+);
 
 // ============================================================
 // Module: Hash change simulation (direct URL entry)
