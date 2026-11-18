@@ -75,7 +75,14 @@ const tests: Record<string, TestPage> = {
 	},
 	RouterManifestGuards: {
 		title: "QUnit Tests for Router Manifest Guards",
-		files: ["RouterManifestGuards"],
+		files: [
+			"router/manifest/DeclarativeGuards",
+			"router/manifest/Instantiation",
+			"router/manifest/CherryPick",
+			"router/manifest/MultiGuardModules",
+			"router/manifest/InvalidConfig",
+			"router/manifest/GuardOrder",
+		],
 	},
 	RouterRouteMeta: {
 		title: "QUnit Tests for Router Route Metadata and Inheritance",

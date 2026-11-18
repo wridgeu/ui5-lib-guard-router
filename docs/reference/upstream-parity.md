@@ -145,7 +145,7 @@ for the child's first page; the one for the parent's first page depends on timin
 
 These behaviors exist only with guards that block, redirect or decide asynchronously. They are
 not compared with the native router. The tests that pin them are in
-`packages/lib/test/qunit/RouterManifestGuards.qunit.ts`, module "Router - Manifest-driven
+`packages/lib/test/qunit/router/manifest/Instantiation.qunit.ts`, module "Router - Manifest-driven
 instantiation".
 
 | Behavior of the guard router                                                                                                                                                                    | Native router                                                        | Reason                                                                                                                                             |
@@ -162,7 +162,7 @@ events fire or in which order. The `allow` flavor asserts that.
 
 A browser hash change that the parent blocks, or redirects to the route it shows, is undone
 with the whole previous hash, the child's part included (tests "a hash change that the parent
-blocks ... is undone with the hash of the nested component" in `RouterManifestGuards.qunit.ts`).
+blocks ... is undone with the hash of the nested component" in `Instantiation.qunit.ts`).
 The child ends on its previous route. UI5 reports every hash change to the child router
 whatever the parent decides, so the child first receives its part of the refused hash and
 matches a route for it, then its previous hash. A native app has no such round trip, because
@@ -239,7 +239,7 @@ Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:c
 
 - `packages/lib/test/qunit/router/async/AsyncGuards.qunit.ts`, module "Router - Native matching flag"
 - `packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`, module "GuardPipeline - Promise resolve functions"
-- `packages/lib/test/qunit/RouterManifestGuards.qunit.ts`, module "Router - Manifest-driven instantiation",
+- `packages/lib/test/qunit/router/manifest/Instantiation.qunit.ts`, module "Router - Manifest-driven instantiation",
   the tests on a component loaded as a routing target and on parent routes of a nested component
 
 What fails when UI5 or the browser changes:
