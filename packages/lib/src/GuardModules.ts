@@ -4,13 +4,18 @@
  */
 import Log from "sap/base/Log";
 import type { GuardContext, GuardFn, GuardResult } from "./types";
-import { isGuardFn, isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
+import { isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord } from "./GuardConfig";
 
 /** A guard function from a module, with the name its log messages show. */
 interface NamedGuard {
 	readonly name: string;
 	readonly fn: GuardFn;
+}
+
+/** A guard as a module exports it: any function. Its result is checked when it runs. */
+function isGuardFn(value: unknown): value is GuardFn {
+	return typeof value === "function";
 }
 
 /** Log a warning about a guard module entry in the manifest. */

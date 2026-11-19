@@ -201,6 +201,7 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 /** Parse the `routeMeta` block: one frozen plain object per route name. */
 function parseRouteMeta(raw: unknown): Map<string, Readonly<Record<string, unknown>>> {
 	const routeMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	if (raw === undefined) return routeMeta;
 	if (!isRecord(raw)) {
 		Log.warning("guardRouter.routeMeta: expected object, skipping", JSON.stringify(raw), LOG_COMPONENT);
 		return routeMeta;
@@ -232,10 +233,10 @@ interface ParsedGuardRouterConfig {
  */
 export function parseGuardRouterConfig(raw: unknown, componentNamespace: string): ParsedGuardRouterConfig {
 	const options = normalizeGuardRouterOptions(raw);
-	if (!isRecord(raw)) return { options, routeMeta: parseRouteMeta({}), guards: [] };
+	if (!isRecord(raw)) return { options, routeMeta: new Map(), guards: [] };
 	return {
 		options,
-		routeMeta: parseRouteMeta(raw.routeMeta === undefined ? {} : raw.routeMeta),
+		routeMeta: parseRouteMeta(raw.routeMeta),
 		guards: raw.guards === undefined ? [] : parseGuardDescriptors(raw.guards, componentNamespace),
 	};
 }

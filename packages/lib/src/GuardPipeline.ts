@@ -12,11 +12,6 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
 	return "route" in value && typeof value.route === "string" && value.route.length > 0;
 }
 
-/** A guard as a module exports it: any function. Its arguments and its result are checked when it runs. */
-export function isGuardFn(value: unknown): value is GuardFn {
-	return typeof value === "function";
-}
-
 /**
  * Promises/A+ thenable detection via duck typing.
  *
