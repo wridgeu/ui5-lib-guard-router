@@ -70,7 +70,9 @@
 				"packages/lib/test/qunit/{unit,router,parity,fixtures}/**/*.ts",
 				"packages/lib/test/qunit/upstream-parity/*.ts",
 				"packages/lib/test/qunit/upstream-parity/adapters/**/*.ts",
-				"packages/demo-app/webapp/**/*.ts"
+				"packages/demo-app/**/*.{ts,js}",
+				"scripts/**/*.mjs",
+				"tools/**/*.{mjs,ts}"
 			],
 			"rules": {
 				"typescript/no-unsafe-argument": "error",

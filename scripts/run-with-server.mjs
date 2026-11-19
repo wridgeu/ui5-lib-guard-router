@@ -1,19 +1,24 @@
 import { spawn, execFileSync } from "node:child_process";
-import { once } from "node:events";
 import { createServer } from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { npmArgs } from "./npm-command.mjs";
 
+/** @import { ChildProcess, SpawnOptions } from "node:child_process" */
+
 const DEFAULT_TIMEOUT_MS = 120000;
+/** @type {Partial<Record<NodeJS.Signals, number>>} */
 const SIGNAL_EXIT_CODES = {
 	SIGINT: 130,
 	SIGTERM: 143,
 };
 
+/** @type {ChildProcess | null} */
 let activeServer = null;
+/** @type {Promise<void> | null} */
 let stopActiveServerPromise = null;
 
+/** @param {string} name */
 function getOption(name) {
 	const index = process.argv.indexOf(name);
 	if (index === -1 || index + 1 >= process.argv.length) {
@@ -22,11 +27,22 @@ function getOption(name) {
 	return process.argv[index + 1];
 }
 
-async function waitForExit(child) {
-	const [code, signal] = await once(child, "exit");
-	return { code, signal };
+/**
+ * @param {ChildProcess} child
+ * @returns {Promise<{ code: number | null, signal: NodeJS.Signals | null }>}
+ */
+function waitForExit(child) {
+	return new Promise((resolve, reject) => {
+		child.once("exit", (code, signal) => resolve({ code, signal }));
+		child.once("error", reject);
+	});
 }
 
+/**
+ * @param {string} script
+ * @param {SpawnOptions} extra
+ * @param {string[]} scriptArgs
+ */
 function spawnNpmScript(script, extra = {}, scriptArgs = []) {
 	const [command, args] = npmArgs();
 
@@ -38,6 +54,11 @@ function spawnNpmScript(script, extra = {}, scriptArgs = []) {
 	});
 }
 
+/**
+ * @param {string} script
+ * @param {SpawnOptions} extra
+ * @param {string[]} scriptArgs
+ */
 async function runNpmScript(script, extra = {}, scriptArgs = []) {
 	const child = spawnNpmScript(script, extra, scriptArgs);
 	const { code, signal } = await waitForExit(child);
@@ -46,6 +67,12 @@ async function runNpmScript(script, extra = {}, scriptArgs = []) {
 	}
 }
 
+/**
+ * @param {string} url
+ * @param {number} timeoutMs
+ * @param {string} serverScript
+ * @param {ChildProcess} server
+ */
 async function waitForUrl(url, timeoutMs, serverScript, server) {
 	const deadline = Date.now() + timeoutMs;
 
@@ -69,6 +96,7 @@ async function waitForUrl(url, timeoutMs, serverScript, server) {
 	throw new Error(`Timed out waiting for ${url}`);
 }
 
+/** @param {ChildProcess} server */
 async function stopServer(server) {
 	if (!server.pid || server.exitCode !== null) {
 		return;
@@ -113,6 +141,7 @@ async function stopActiveServer() {
 }
 
 function registerSignalHandlers() {
+	/** @param {NodeJS.Signals} signal */
 	const stopAndExit = (signal) => {
 		void stopActiveServer().finally(() => {
 			process.exit(SIGNAL_EXIT_CODES[signal] ?? 1);
@@ -123,6 +152,10 @@ function registerSignalHandlers() {
 	process.once("SIGTERM", stopAndExit);
 }
 
+/**
+ * @param {number} port
+ * @returns {Promise<boolean>}
+ */
 function isPortFree(port) {
 	return new Promise((resolve) => {
 		const server = createServer();
@@ -133,11 +166,13 @@ function isPortFree(port) {
 	});
 }
 
+/** @param {number} port */
 function findPidsOnPort(port) {
 	const portStr = String(port);
 	try {
 		if (process.platform === "win32") {
 			const output = execFileSync("netstat", ["-ano"], { encoding: "utf8", stdio: "pipe" });
+			/** @type {Set<string>} */
 			const pids = new Set();
 			for (const line of output.split("\n")) {
 				if (!line.includes("LISTENING")) continue;
@@ -162,6 +197,7 @@ function findPidsOnPort(port) {
 	}
 }
 
+/** @param {number} port */
 async function freePort(port) {
 	if (await isPortFree(port)) return;
 
@@ -204,7 +240,7 @@ async function main() {
 
 	const port = new URL(readyUrl).port;
 	if (port) {
-		await freePort(port);
+		await freePort(Number(port));
 	}
 
 	activeServer = spawnNpmScript(serverScript, {

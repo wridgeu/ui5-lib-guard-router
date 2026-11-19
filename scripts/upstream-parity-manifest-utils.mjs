@@ -13,23 +13,80 @@ const allowedFileKeys = new Set([
 ]);
 const allowedStatuses = new Set(["ported", "ported-subset"]);
 
-function isRecord(value) {
+/**
+ * The upstream version the vendored files are taken from.
+ *
+ * @typedef {{ repo: string, tag: string, commitSha: string }} ManifestUpstream
+ */
+
+/**
+ * One vendored upstream file and its port.
+ *
+ * @typedef {object} ManifestFile
+ * @property {string} id
+ * @property {string} sourcePath
+ * @property {string} rawFilePath
+ * @property {string} contentSha256
+ * @property {string} portFilePath
+ * @property {string} status
+ * @property {string[]} adaptations
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+export function isRecord(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * @param {Record<string, unknown>} upstream
+ * @returns {upstream is ManifestUpstream}
+ */
+function isManifestUpstream(upstream) {
+	return [upstream.repo, upstream.tag, upstream.commitSha].every((value) => typeof value === "string");
+}
+
+/**
+ * @param {Record<string, unknown>} file
+ * @returns {file is ManifestFile}
+ */
+function isManifestFile(file) {
+	const { id, sourcePath, rawFilePath, contentSha256, portFilePath, status, adaptations } = file;
+	return (
+		[id, sourcePath, rawFilePath, contentSha256, portFilePath, status].every(
+			(value) => typeof value === "string",
+		) && Array.isArray(adaptations)
+	);
+}
+
+/** @param {string} contents */
 export function computeSha256(contents) {
 	return createHash("sha256").update(contents).digest("hex");
 }
 
+/**
+ * Validates the parsed vendor manifest. `files` and `upstream` are the entries of `manifest`
+ * itself, so a caller can change them and write the manifest back.
+ *
+ * @param {unknown} manifest
+ * @returns {{ errors: string[], files: ManifestFile[], upstream: ManifestUpstream | undefined }}
+ */
 export function validateUpstreamParityManifest(manifest) {
+	/** @type {string[]} */
 	const errors = [];
+	/** @type {ManifestFile[]} */
 	const validFiles = [];
-	const manifestFiles = Array.isArray(manifest?.files) ? manifest.files : [];
+	/** @type {ManifestUpstream | undefined} */
+	let upstream;
 
 	if (!isRecord(manifest)) {
 		errors.push("Manifest root must be an object");
-		return { errors, files: validFiles };
+		return { errors, files: validFiles, upstream };
 	}
+	/** @type {unknown[]} */
+	const manifestFiles = Array.isArray(manifest.files) ? manifest.files : [];
 
 	for (const key of Object.keys(manifest)) {
 		if (!allowedManifestKeys.has(key)) {
@@ -61,6 +118,8 @@ export function validateUpstreamParityManifest(manifest) {
 		if (typeof manifest.upstream.commitSha !== "string" || !/^[a-f0-9]{40}$/.test(manifest.upstream.commitSha)) {
 			errors.push(`Manifest upstream commitSha is invalid: ${String(manifest.upstream.commitSha)}`);
 		}
+
+		if (isManifestUpstream(manifest.upstream)) upstream = manifest.upstream;
 	}
 
 	for (const [index, file] of manifestFiles.entries()) {
@@ -71,7 +130,8 @@ export function validateUpstreamParityManifest(manifest) {
 
 		for (const key of Object.keys(file)) {
 			if (!allowedFileKeys.has(key)) {
-				errors.push(`Manifest file entry '${String(file.id ?? index)}' contains unsupported key '${key}'`);
+				const entry = typeof file.id === "string" ? file.id : index;
+				errors.push(`Manifest file entry '${entry}' contains unsupported key '${key}'`);
 			}
 		}
 
@@ -91,23 +151,26 @@ export function validateUpstreamParityManifest(manifest) {
 			continue;
 		}
 
-		if (!Array.isArray(file.adaptations) || file.adaptations.some((item) => typeof item !== "string")) {
+		/** @type {unknown} */
+		const adaptations = file.adaptations;
+		if (!Array.isArray(adaptations) || adaptations.some((item) => typeof item !== "string")) {
 			errors.push(`Manifest entry has invalid adaptations array: ${file.id}`);
 			continue;
 		}
 
-		if (!/^([a-f0-9]{64})$/.test(String(file.contentSha256))) {
+		if (typeof file.contentSha256 !== "string" || !/^([a-f0-9]{64})$/.test(file.contentSha256)) {
 			errors.push(`Manifest entry has invalid contentSha256: ${file.id}`);
 			continue;
 		}
 
-		if (!allowedStatuses.has(String(file.status))) {
-			errors.push(`Manifest entry has unsupported status '${String(file.status)}': ${file.id}`);
+		if (typeof file.status !== "string" || !allowedStatuses.has(file.status)) {
+			const status = typeof file.status === "string" ? file.status : JSON.stringify(file.status);
+			errors.push(`Manifest entry has unsupported status '${status}': ${file.id}`);
 			continue;
 		}
 
-		validFiles.push(file);
+		if (isManifestFile(file)) validFiles.push(file);
 	}
 
-	return { errors, files: validFiles };
+	return { errors, files: validFiles, upstream };
 }

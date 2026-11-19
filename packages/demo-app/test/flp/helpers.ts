@@ -153,7 +153,7 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 	const { record, cleanup } = installDialogHandler(false);
 	const appHashBefore = await browser.execute(() => {
 		const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
-		return String(HashChanger.getInstance().getHash());
+		return HashChanger.getInstance().getHash();
 	});
 
 	try {

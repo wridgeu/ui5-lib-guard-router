@@ -7,11 +7,14 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
 
 async function main() {
-	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-	const { errors, files: manifestFiles } = validateUpstreamParityManifest(manifest);
+	const {
+		errors,
+		files: manifestFiles,
+		upstream,
+	} = validateUpstreamParityManifest(JSON.parse(await readFile(manifestPath, "utf8")));
 	const currentEntryPointPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/Current.qunit.ts");
 
-	if (errors.length > 0) {
+	if (errors.length > 0 || !upstream) {
 		for (const error of errors) {
 			console.error(error);
 		}
@@ -53,10 +56,8 @@ async function main() {
 	}
 
 	for (const file of manifestFiles) {
-		if (!file.rawFilePath.includes(`/${manifest.upstream.tag}/`)) {
-			errors.push(
-				`Raw file path does not match active upstream version ${manifest.upstream.tag}: ${file.rawFilePath}`,
-			);
+		if (!file.rawFilePath.includes(`/${upstream.tag}/`)) {
+			errors.push(`Raw file path does not match active upstream version ${upstream.tag}: ${file.rawFilePath}`);
 		}
 
 		if (!file.rawFilePath.endsWith(file.sourcePath)) {
@@ -83,10 +84,8 @@ async function main() {
 			errors.push(`Missing executable port file: ${file.portFilePath}`);
 		}
 
-		if (!file.portFilePath.includes(`/${manifest.upstream.tag}/`)) {
-			errors.push(
-				`Port file path does not match active upstream version ${manifest.upstream.tag}: ${file.portFilePath}`,
-			);
+		if (!file.portFilePath.includes(`/${upstream.tag}/`)) {
+			errors.push(`Port file path does not match active upstream version ${upstream.tag}: ${file.portFilePath}`);
 		}
 	}
 
@@ -99,7 +98,7 @@ async function main() {
 	}
 
 	console.log(
-		`Verified ${manifestFiles.length} vendored OpenUI5 router file entries for ${manifest.upstream.tag} (${manifest.upstream.commitSha})`,
+		`Verified ${manifestFiles.length} vendored OpenUI5 router file entries for ${upstream.tag} (${upstream.commitSha})`,
 	);
 }
 

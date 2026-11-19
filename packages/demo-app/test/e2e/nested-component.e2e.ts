@@ -1,4 +1,3 @@
-import type StandardListItem from "sap/m/StandardListItem";
 import {
 	CONTROLS,
 	REPORTS_APP_ID,
@@ -57,12 +56,19 @@ describe("Nested component with its own guard router", () => {
 			browser.execute(
 				(componentId: string, view: string, list: string) => {
 					const Component = sap.ui.require("sap/ui/core/Component");
-					const items: StandardListItem[] = Component.getComponentById(componentId)
-						.byId(view)
-						.byId(list)
-						.getItems();
-					// The number format separates amount and currency with a no-break space.
-					return items.map((item) => `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " "));
+					const List = sap.ui.require("sap/m/List");
+					const StandardListItem = sap.ui.require("sap/m/StandardListItem");
+					const control = Component.getComponentById(componentId).byId(view)?.byId(list);
+					if (!(control instanceof List)) {
+						throw new Error(`Control "${view}/${list}" is no list`);
+					}
+					return control.getItems().map((item) => {
+						if (!(item instanceof StandardListItem)) {
+							throw new Error(`"${view}/${list}" has an item that is no StandardListItem`);
+						}
+						// The number format separates amount and currency with a no-break space.
+						return `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " ");
+					});
 				},
 				await getAppComponentId(REPORTS_APP_ID),
 				viewId,

@@ -8,6 +8,7 @@ import { parseHTML } from "linkedom";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LIB_SRC = "packages/lib/src";
+/** @param {string} file */
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 
 // Mermaid sanitizes labels with DOMPurify, which takes the DOM from `window` when it is loaded.

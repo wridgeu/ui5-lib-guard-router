@@ -4,10 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { npmArgs } from "./npm-command.mjs";
+import { isRecord } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const libDir = path.join(repoRoot, "packages", "lib");
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string }} options
+ */
 function run(command, args, options = {}) {
 	execFileSync(command, args, {
 		cwd: repoRoot,
@@ -17,6 +23,11 @@ function run(command, args, options = {}) {
 	});
 }
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string }} options
+ */
 function runAndCapture(command, args, options = {}) {
 	return execFileSync(command, args, {
 		cwd: repoRoot,
@@ -28,7 +39,15 @@ function runAndCapture(command, args, options = {}) {
 }
 
 async function main() {
+	/** @type {unknown} */
 	const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+	/** @param {string} name */
+	const devDependency = (name) => {
+		const version =
+			isRecord(rootPackage) && isRecord(rootPackage.devDependencies) && rootPackage.devDependencies[name];
+		if (typeof version !== "string") throw new Error(`package.json has no devDependency ${name}`);
+		return version;
+	};
 	const tempDir = await mkdtemp(path.join(os.tmpdir(), "ui5-guard-pack-"));
 	let tarballPath = "";
 	const [npmCommand, npmBaseArgs] = npmArgs();
@@ -37,7 +56,7 @@ async function main() {
 		await stat(path.join(libDir, "dist", "index.d.ts"));
 
 		const tarballName = runAndCapture(npmCommand, [...npmBaseArgs, "pack", "--silent"], { cwd: libDir });
-		tarballPath = path.join(libDir, tarballName.split(/\r?\n/u).at(-1));
+		tarballPath = path.join(libDir, tarballName.slice(tarballName.lastIndexOf("\n") + 1));
 
 		await writeFile(
 			path.join(tempDir, "package.json"),
@@ -140,8 +159,8 @@ async function main() {
 				...npmBaseArgs,
 				"install",
 				tarballPath,
-				`@openui5/types@${rootPackage.devDependencies["@openui5/types"]}`,
-				`typescript@${rootPackage.devDependencies.typescript}`,
+				`@openui5/types@${devDependency("@openui5/types")}`,
+				`typescript@${devDependency("typescript")}`,
 			],
 			{ cwd: tempDir },
 		);

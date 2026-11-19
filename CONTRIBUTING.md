@@ -75,14 +75,14 @@ Rules that keep the layout working:
 - **QUnit module names** are `"<Area> - <topic>"`, unique, and never shared by two files: a failing test is found by its module name.
 - **Helpers**: used by one file, they stay in the file; by one folder, in `<folder>/<folder>Helpers.ts`; by several folders, in `testHelpers.ts`; by the sub-pages of one parent folder, in that parent folder (`parity/parityRecorder.ts`, `parity/nestedParityHarness.ts`). A module with tests that share one router gets its hooks from `routerHooks()`.
 - **Fixtures** are in `fixtures/<kind>/`; the `sap.app.id` of a fixture component matches its folder path.
-- **Demo tests**: selectors and model access shared by the standalone and the FLP suite are in `packages/demo-app/test/shared/`.
+- **Demo tests**: selectors and model access shared by the standalone and the FLP suite are in `packages/demo-app/test/shared/`. Code that runs in the browser through `browser.execute()` reads UI5 modules with `sap.ui.require(name)`; `packages/demo-app/test/browser-modules.ts` declares the type of each module read that way.
 - A test that the docs cite by file and title (the "Proven by" column of the compatibility table in the library README) is renamed or moved together with its citation; `npm run check:layout` fails for a citation that names no test.
 
 ## Quality checks
 
 ```bash
 npm run typecheck    # TypeScript strict mode
-npm run lint         # oxlint, with type-aware rules
+npm run lint         # oxlint, with type-aware rules; `any` may not be used unchecked (the no-unsafe-* rules)
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
 npm run check:diagrams # every Mermaid block in the docs parses; a name in backticks in a block exists in packages/lib/src

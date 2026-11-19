@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
+/** @param {string} repo */
 const repoErrors = (repo) =>
 	validateUpstreamParityManifest({
 		upstream: { repo, tag: "1.144.0", commitSha: "a".repeat(40) },

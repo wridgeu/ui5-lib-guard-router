@@ -11,7 +11,10 @@ export async function fireEvent(control: ControlRef, eventName: string): Promise
 	await browser.execute(
 		(compId: string, viewId: string, id: string, evt: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const target = Component.getComponentById(compId).byId(viewId).byId(id);
+			const target = Component.getComponentById(compId).byId(viewId)?.byId(id);
+			if (!target) {
+				throw new Error(`Control "${viewId}/${id}" does not exist`);
+			}
 			if (!target.hasListeners(evt)) {
 				throw new Error(`Control "${viewId}/${id}" has no listener for the event "${evt}"`);
 			}

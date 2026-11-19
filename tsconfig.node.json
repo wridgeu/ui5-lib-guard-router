@@ -2,6 +2,8 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"allowJs": true,
+		"checkJs": true,
+		"allowImportingTsExtensions": true,
 		"emitDeclarationOnly": true,
 		"types": ["node", "@wdio/globals/types"]
 	},

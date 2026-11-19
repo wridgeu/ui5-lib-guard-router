@@ -1,15 +1,17 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { computeSha256, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
+import { computeSha256, isRecord, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
 
+/** @param {string} name */
 function getFlag(name) {
 	return process.argv.includes(name);
 }
 
+/** @param {string} name */
 function getOption(name) {
 	const index = process.argv.indexOf(name);
 	if (index === -1 || index + 1 >= process.argv.length) {
@@ -18,11 +20,18 @@ function getOption(name) {
 	return process.argv[index + 1];
 }
 
+/** @returns {Promise<unknown>} */
 async function readManifest() {
 	return JSON.parse(await readFile(manifestPath, "utf8"));
 }
 
-async function fetchJson(url) {
+/**
+ * The object a git ref or an annotated tag of the GitHub API points to.
+ *
+ * @param {string} url
+ * @returns {Promise<{ type: string, sha: string, url: string }>}
+ */
+async function fetchGitObject(url) {
 	const response = await fetch(url, {
 		headers: {
 			accept: "application/vnd.github+json",
@@ -36,9 +45,20 @@ async function fetchJson(url) {
 		throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}${hint}`);
 	}
 
-	return response.json();
+	/** @type {unknown} */
+	const data = await response.json();
+	const object = isRecord(data) ? data.object : undefined;
+	if (!isRecord(object)) {
+		throw new Error(`Unexpected response from ${url}: no object`);
+	}
+	const { type, sha, url: objectUrl } = object;
+	if (typeof type !== "string" || typeof sha !== "string" || typeof objectUrl !== "string") {
+		throw new Error(`Unexpected response from ${url}: object without type, sha or url`);
+	}
+	return { type, sha, url: objectUrl };
 }
 
+/** @param {string} url */
 async function fetchText(url) {
 	const response = await fetch(url, {
 		headers: {
@@ -54,6 +74,11 @@ async function fetchText(url) {
 	return response.text();
 }
 
+/**
+ * @param {string} repo
+ * @param {string} tag
+ * @param {string | null} sha
+ */
 async function resolveCommitSha(repo, tag, sha) {
 	if (sha) {
 		return sha;
@@ -63,23 +88,31 @@ async function resolveCommitSha(repo, tag, sha) {
 		throw new Error("Provide --tag or --sha");
 	}
 
-	const refData = await fetchJson(`https://api.github.com/repos/${repo}/git/ref/tags/${tag}`);
-	if (refData.object.type === "commit") {
-		return refData.object.sha;
+	const ref = await fetchGitObject(`https://api.github.com/repos/${repo}/git/ref/tags/${tag}`);
+	if (ref.type === "commit") {
+		return ref.sha;
 	}
 
-	const tagData = await fetchJson(refData.object.url);
-	if (tagData.object.type !== "commit") {
+	const tagged = await fetchGitObject(ref.url);
+	if (tagged.type !== "commit") {
 		throw new Error(`Tag ${tag} did not resolve to a commit`);
 	}
 
-	return tagData.object.sha;
+	return tagged.sha;
 }
 
+/**
+ * @param {string} tag
+ * @param {string} sourcePath
+ */
 function buildRawFilePath(tag, sourcePath) {
 	return path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor/openui5", tag, "raw", sourcePath);
 }
 
+/**
+ * @param {string} tag
+ * @param {string} sourcePath
+ */
 function buildRawFilePathForManifest(tag, sourcePath) {
 	return path.posix.join(
 		"packages/lib/test/qunit/upstream-parity/vendor/openui5",
@@ -91,17 +124,17 @@ function buildRawFilePathForManifest(tag, sourcePath) {
 
 async function main() {
 	const manifest = await readManifest();
-	const { errors: manifestErrors, files: manifestFiles } = validateUpstreamParityManifest(manifest);
-	if (manifestErrors.length > 0) {
+	const { errors: manifestErrors, files: manifestFiles, upstream } = validateUpstreamParityManifest(manifest);
+	if (manifestErrors.length > 0 || !upstream) {
 		throw new Error(`Manifest is invalid before vendoring: ${manifestErrors.join("; ")}`);
 	}
 
 	const requestedTag = getOption("--tag");
 	const sha = getOption("--sha");
-	const targetVersion = requestedTag ?? sha ?? manifest.upstream.tag;
+	const targetVersion = requestedTag ?? sha ?? upstream.tag;
 	const dryRun = getFlag("--dry-run");
 	const writeManifest = getFlag("--write-manifest");
-	const repo = manifest.upstream.repo;
+	const repo = upstream.repo;
 
 	if (writeManifest && !requestedTag) {
 		throw new Error(
@@ -110,7 +143,7 @@ async function main() {
 	}
 
 	const commitSha = await resolveCommitSha(repo, targetVersion, sha);
-	const isVersionChange = targetVersion !== manifest.upstream.tag;
+	const isVersionChange = targetVersion !== upstream.tag;
 
 	if (writeManifest && isVersionChange) {
 		const unmigratedPortEntry = manifestFiles.find((file) => !file.portFilePath.includes(`/${targetVersion}/`));
@@ -143,8 +176,8 @@ async function main() {
 	}
 
 	if (!dryRun && writeManifest) {
-		manifest.upstream.tag = targetVersion;
-		manifest.upstream.commitSha = commitSha;
+		upstream.tag = targetVersion;
+		upstream.commitSha = commitSha;
 		for (const file of manifestFiles) {
 			file.rawFilePath = buildRawFilePathForManifest(targetVersion, file.sourcePath);
 		}

@@ -9,6 +9,16 @@
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
+import { definePlugin, defineRule } from "@oxlint/plugins";
+
+/** @import { Comment, ESTree } from "@oxlint/plugins" */
+
+/**
+ * What the AST holds under the properties of a node: a node, a token or a comment.
+ *
+ * @typedef {{ type: string }} Typed
+ */
+
 // Shared helpers
 
 /**
@@ -27,6 +37,9 @@ const EXPLAINS_WHY_RE =
 
 /**
  * Returns the trimmed text of a comment node, collapsing whitespace.
+ *
+ * @param {Comment} node
+ * @returns {string}
  */
 function commentText(node) {
 	return node.value
@@ -36,30 +49,54 @@ function commentText(node) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {value is Typed}
+ */
+function isTyped(value) {
+	return typeof value === "object" && value !== null && "type" in value && typeof value.type === "string";
+}
+
+/**
+ * The children of a node: what its properties hold, apart from `parent`.
+ *
+ * @param {Typed} node
+ * @returns {Typed[]}
+ */
+function childrenOf(node) {
+	const children = [];
+	for (const [key, value] of Object.entries(node)) {
+		if (key === "parent" || key === "type") continue;
+		/** @type {unknown[]} */
+		const items = Array.isArray(value) ? value : [value];
+		for (const item of items) {
+			if (isTyped(item)) children.push(item);
+		}
+	}
+	return children;
+}
+
+/**
  * Collects all Identifier names reachable from a node (shallow, max 1 level
  * of nesting). Used to extract the "vocabulary" of a code statement.
+ *
+ * @param {Typed} node
+ * @returns {Set<string>}
  */
 function collectIdentifiers(node) {
+	/** @type {Set<string>} */
 	const ids = new Set();
-	if (!node) return ids;
 
+	/**
+	 * @param {Typed} n
+	 * @param {number} depth
+	 */
 	function walk(n, depth) {
-		if (!n || depth > 3) return;
+		if (depth > 3) return;
 		if (n.type === "Identifier") {
-			ids.add(n.name.toLowerCase());
+			if ("name" in n && typeof n.name === "string") ids.add(n.name.toLowerCase());
 			return;
 		}
-		for (const key of Object.keys(n)) {
-			if (key === "parent" || key === "type") continue;
-			const child = n[key];
-			if (Array.isArray(child)) {
-				for (const item of child) {
-					if (item && typeof item.type === "string") walk(item, depth + 1);
-				}
-			} else if (child && typeof child.type === "string") {
-				walk(child, depth + 1);
-			}
-		}
+		for (const child of childrenOf(n)) walk(child, depth + 1);
 	}
 
 	walk(node, 0);
@@ -67,7 +104,18 @@ function collectIdentifiers(node) {
 }
 
 /**
+ * @param {Typed} node
+ * @returns {node is ESTree.Program | ESTree.BlockStatement}
+ */
+function hasStatements(node) {
+	return node.type === "Program" || node.type === "BlockStatement";
+}
+
+/**
  * Splits a comment into lowercase "words" (strips non-alpha).
+ *
+ * @param {string} text
+ * @returns {string[]}
  */
 function commentWords(text) {
 	return text
@@ -119,7 +167,7 @@ const FILLER_WORDS = new Set([
  * Skips JSDoc (block comments starting with `*`), multi-sentence
  * comments, and comments containing "why" explanations.
  */
-const noObviousComment = {
+const noObviousComment = defineRule({
 	meta: {
 		type: "suggestion",
 		docs: {
@@ -139,22 +187,14 @@ const noObviousComment = {
 				// Collect every statement-bearing body array from the AST so
 				// we can match each comment to its enclosing scope, not just
 				// the top-level Program.body.
-				const bodies = [];
+				/** @type {(ESTree.Program | ESTree.BlockStatement)[]} */
+				const bodies = [programNode];
 
+				/** @param {Typed} node */
 				function collectBodies(node) {
-					if (node.type === "Program" || node.type === "BlockStatement") {
-						bodies.push({ body: node.body, start: node.start, end: node.end });
-					}
-					for (const key of Object.keys(node)) {
-						if (key === "parent" || key === "type") continue;
-						const child = node[key];
-						if (Array.isArray(child)) {
-							for (const item of child) {
-								if (item && typeof item.type === "string") collectBodies(item);
-							}
-						} else if (child && typeof child.type === "string") {
-							collectBodies(child);
-						}
+					for (const child of childrenOf(node)) {
+						if (hasStatements(child)) bodies.push(child);
+						collectBodies(child);
 					}
 				}
 
@@ -204,7 +244,7 @@ const noObviousComment = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Flags preamble comments like "This function/method/class handles..."
@@ -215,7 +255,7 @@ const noObviousComment = {
 const NARRATOR_RE =
 	/^\s*this\s+(?:function|method|class|component|hook|module|handler|helper|utility|service|controller|provider|manager|resolver|wrapper|plugin|factory)\s+(?:is\s+(?:responsible\s+for|used\s+(?:to|for))|(?:will|should|can)\s+(?:handle|create|process|manage|return|generate|provide)|handles|creates|initializes|processes|manages|controls|provides|returns|generates|validates|renders|transforms|computes)/i;
 
-const noNarratorComment = {
+const noNarratorComment = defineRule({
 	meta: {
 		type: "suggestion",
 		docs: {
@@ -241,7 +281,7 @@ const noNarratorComment = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Flags decorative section-divider comments made of repeated symbols
@@ -249,7 +289,7 @@ const noNarratorComment = {
  */
 const SECTION_DIVIDER_RE = /^[-=*#~_/\\]{3,}(?:\s*[^\W_]+(?:_+[^\W_]+)*(?:\s+[^\W_]+(?:_+[^\W_]+)*)*\s*[-=*#~_/\\]*)?$/;
 
-const noSectionDivider = {
+const noSectionDivider = defineRule({
 	meta: {
 		type: "suggestion",
 		docs: {
@@ -275,7 +315,7 @@ const noSectionDivider = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Flags placeholder comments indicating incomplete or omitted code.
@@ -283,7 +323,7 @@ const noSectionDivider = {
 const PLACEHOLDER_RE =
 	/(?:\.{3}\s*(?:rest|more|other|remaining|additional)|omitted\s+for\s+brevity|replace\s+(?:this|the\s+above)\s+with|your\s+(?:actual|real)\s+(?:implementation|code|logic)|add\s+(?:your|the\s+rest)\s+(?:implementation|code|logic)|implement\s+(?:this|here)|not\s+yet\s+implemented)/i;
 
-const noPlaceholderComment = {
+const noPlaceholderComment = defineRule({
 	meta: {
 		type: "problem",
 		docs: {
@@ -307,7 +347,7 @@ const noPlaceholderComment = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Flags hedging language that signals low-confidence AI generation.
@@ -317,7 +357,7 @@ const noPlaceholderComment = {
 const HEDGING_RE =
 	/(?:hopefully|probably\s+(?:fine|works?|correct|ok|okay)|not\s+sure\s+(?:if|why|whether|about)|i\s+think\s+this|good\s+enough\s+for\s+now|fix\s+(?:this\s+)?later|quick\s+(?:hack|fix|workaround)|temporary\s+(?:fix|hack|workaround|solution))/i;
 
-const noHedgingComment = {
+const noHedgingComment = defineRule({
 	meta: {
 		type: "suggestion",
 		docs: {
@@ -345,10 +385,9 @@ const noHedgingComment = {
 			},
 		};
 	},
-};
+});
 
-/** @type {import('eslint').ESLint.Plugin} */
-export default {
+export default definePlugin({
 	meta: { name: "comment-quality" },
 	rules: {
 		"no-obvious-comment": noObviousComment,
@@ -357,4 +396,4 @@ export default {
 		"no-placeholder-comment": noPlaceholderComment,
 		"no-hedging-comment": noHedgingComment,
 	},
-};
+});

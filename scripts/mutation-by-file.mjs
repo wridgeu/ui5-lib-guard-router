@@ -44,6 +44,7 @@ const force = args.includes("--force");
 const requested = args.filter((arg) => arg !== "--force").map((file) => path.normalize(file));
 const files = (requested.length > 0 ? requested : allFiles).map((file) => file.split(path.sep).join("/")).toSorted();
 // A run limited to line ranges gets its own name, so its results and report never replace the whole file's.
+/** @param {string} file */
 function runName(file) {
 	const [source, ...ranges] = file.split(":");
 	const name = path.basename(source, ".ts");

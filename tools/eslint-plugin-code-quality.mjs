@@ -8,6 +8,10 @@
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
+import { definePlugin, defineRule } from "@oxlint/plugins";
+
+/** @import { ESTree, Visitor } from "@oxlint/plugins" */
+
 /**
  * Detects catch blocks where the only statement is a console call.
  *
@@ -16,7 +20,7 @@
  * should either re-throw, return an error value, or do meaningful
  * recovery.
  */
-const noConsoleOnlyCatch = {
+const noConsoleOnlyCatch = defineRule({
 	meta: {
 		type: "problem",
 		docs: {
@@ -32,7 +36,7 @@ const noConsoleOnlyCatch = {
 		return {
 			CatchClause(node) {
 				const body = node.body;
-				if (!body || body.body.length !== 1) return;
+				if (body.body.length !== 1) return;
 
 				const stmt = body.body[0];
 				if (stmt.type !== "ExpressionStatement") return;
@@ -51,7 +55,7 @@ const noConsoleOnlyCatch = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Detects `if (cond) { return true; } else { return false; }` and
@@ -61,7 +65,7 @@ const noConsoleOnlyCatch = {
  * Same-value branches (true/true or false/false) are dead code:
  * reported without auto-fix so the developer decides what was intended.
  */
-const noRedundantBooleanReturn = {
+const noRedundantBooleanReturn = defineRule({
 	meta: {
 		type: "suggestion",
 		fixable: "code",
@@ -103,11 +107,14 @@ const noRedundantBooleanReturn = {
 			},
 		};
 	},
-};
+});
 
 /**
  * Extracts the return argument from a single-statement block or bare
  * return statement. Returns `undefined` when the shape doesn't match.
+ *
+ * @param {ESTree.Statement} node
+ * @returns {ESTree.Expression | null | undefined}
  */
 function unwrapSingleReturn(node) {
 	if (node.type === "ReturnStatement") return node.argument;
@@ -118,6 +125,10 @@ function unwrapSingleReturn(node) {
 	return undefined;
 }
 
+/**
+ * @param {ESTree.Expression | null | undefined} node
+ * @returns {node is ESTree.BooleanLiteral}
+ */
 function isBooleanLiteral(node) {
 	return node?.type === "Literal" && typeof node.value === "boolean";
 }
@@ -135,7 +146,7 @@ const EM_DASH_RE = new RegExp(EM_DASH, "g");
  *
  * Auto-fix: replaces with `-` in strings, `--` in comments.
  */
-const noEmDash = {
+const noEmDash = defineRule({
 	meta: {
 		type: "suggestion",
 		fixable: "code",
@@ -158,10 +169,12 @@ const noEmDash = {
 		],
 	},
 	create(context) {
-		const opts = context.options[0] || {};
+		const [first] = context.options;
+		const opts = typeof first === "object" && first !== null && !Array.isArray(first) ? first : {};
 		const checkStrings = opts.checkStrings !== false;
 		const checkComments = opts.checkComments !== false;
 
+		/** @type {Visitor} */
 		const visitors = {};
 
 		if (checkStrings) {
@@ -218,14 +231,13 @@ const noEmDash = {
 
 		return visitors;
 	},
-};
+});
 
-/** @type {import('eslint').ESLint.Plugin} */
-export default {
+export default definePlugin({
 	meta: { name: "code-quality" },
 	rules: {
 		"no-console-only-catch": noConsoleOnlyCatch,
 		"no-redundant-boolean-return": noRedundantBooleanReturn,
 		"no-em-dash": noEmDash,
 	},
-};
+});

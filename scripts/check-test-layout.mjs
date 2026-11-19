@@ -3,16 +3,18 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import suite from "../packages/lib/test/qunit/testsuite.qunit.ts";
 import { testTitles } from "./test-titles.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const QUNIT = "packages/lib/test/qunit";
+/** @param {string} file */
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
+/** @param {string} file */
 const posix = (file) => file.split(path.sep).join("/");
+/** @type {string[]} */
 const errors = [];
-
-const { default: suite } = await import(pathToFileURL(path.join(repoRoot, QUNIT, "testsuite.qunit.ts")).href);
 
 // Rule 1: the test files on disk are the files the test suite registers, each on one page.
 // Rule 2: a page is a folder, so a page only lists files of its own folder.
@@ -80,6 +82,7 @@ for (const doc of docs) {
 const E2E = "packages/demo-app/test";
 const e2eFiles = globSync("**/*.e2e.ts", { cwd: path.join(repoRoot, E2E) }).map((file) => `${E2E}/${posix(file)}`);
 const testFiles = [...[...onDisk, ...ports].map((file) => `${QUNIT}/${file}`), ...e2eFiles];
+/** @param {string} file */
 const titlesOf = (file) => testTitles(read(file));
 const citation = /`([^`\s]+\.(?:qunit|e2e)\.ts): ([^`]+)`/g;
 // The same for a module: `<test file>`, module "<name>", or: module "<name>" of `<test file>`.
@@ -87,6 +90,10 @@ const moduleCitations = [
 	/`(?<cited>[^`\s]+\.qunit\.ts)`, module "(?<name>[^"]+)"/g,
 	/\bmodule "(?<name>[^"]+)" of `(?<cited>[^`\s]+\.qunit\.ts)`/gi,
 ];
+/**
+ * @param {string} doc
+ * @param {string} cited
+ */
 function citedFile(doc, cited) {
 	const files = testFiles.filter(
 		(file) => file === cited || file === `${QUNIT}/${cited}` || path.posix.basename(file) === cited,
@@ -105,6 +112,7 @@ for (const doc of docs) {
 	}
 	for (const pattern of moduleCitations) {
 		for (const { groups } of text.matchAll(pattern)) {
+			if (!groups) continue;
 			const file = citedFile(doc, groups.cited);
 			if (file && `${QUNIT}/${moduleFiles.get(groups.name)}` !== file) {
 				errors.push(`${doc} cites a module that ${file} does not have: "${groups.name}"`);

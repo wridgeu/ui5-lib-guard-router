@@ -1,46 +1,49 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { describe, it } from "node:test";
+import { RuleTester } from "oxlint/plugins-dev";
 import plugin from "./eslint-plugin-comment-quality.mjs";
 
-/** Runs one rule over line comments and returns the texts of the reported ones. */
-function reported(ruleName, ...values) {
-	const reports = [];
-	const context = {
-		sourceCode: { getAllComments: () => values.map((value) => ({ type: "Line", value })) },
-		report: ({ node }) => reports.push(node.value),
-	};
-	plugin.rules[ruleName].create(context).Program();
-	return reports;
-}
+// Every case has to finish within a second: a pattern that backtracks takes many seconds for the long comments below.
+RuleTester.describe = (name, run) => {
+	void describe(name, run);
+};
+RuleTester.it = (name, run) => {
+	void it(name, () => {
+		const start = performance.now();
+		run();
+		assert.ok(performance.now() - start < 1000, "the case is linted within a second");
+	});
+};
 
-/** The time one rule takes for one comment, in milliseconds. */
-function elapsed(ruleName, value) {
-	const start = performance.now();
-	reported(ruleName, value);
-	return performance.now() - start;
-}
+const tester = new RuleTester();
+/** @param {string} comment */
+const code = (comment) => `${comment}\nlet a;`;
+/** @param {string} comment */
+const divider = (comment) => ({ code: code(comment), errors: [{ messageId: "noSectionDivider" }] });
 
-await test("no-section-divider takes linear time for underscores that end in no label", () => {
-	const adversarial = `---${"_".repeat(5000)}!`;
-	assert.ok(elapsed("no-section-divider", adversarial) < 1000, "5000 underscores are checked within a second");
-	assert.deepEqual(reported("no-section-divider", adversarial), []);
-	const dividers = [" --- Helpers ---", " =====", " ### Route guards", " --- snake_case label ___"];
-	assert.deepEqual(reported("no-section-divider", ...dividers, " --- not a divider!", " plain text"), dividers);
+tester.run("no-section-divider", plugin.rules["no-section-divider"], {
+	valid: [
+		{ name: "5000 underscores that end in no label", code: code(`// ---${"_".repeat(5000)}!`) },
+		{ name: "150000 empty lines", code: code(`/*${"\n".repeat(150000)}x*/`) },
+		code("// --- not a divider!"),
+		code("// plain text"),
+	],
+	invalid: [
+		divider("// --- Helpers ---"),
+		divider("// ====="),
+		divider("// ### Route guards"),
+		divider("// --- snake_case label ___"),
+		divider("/*\n * ---- Helpers ----\n */"),
+	],
 });
 
-await test("the comment text is read in linear time for a comment of empty lines", () => {
-	const adversarial = `${"\n".repeat(150000)}x`;
-	assert.ok(elapsed("no-section-divider", adversarial) < 1000, "150000 empty lines are read within a second");
-	assert.deepEqual(reported("no-section-divider", "*\n * ---- Helpers ----\n "), ["*\n * ---- Helpers ----\n "]);
-});
-
-await test("a word that only starts like a directive does not exempt a comment", () => {
-	assert.deepEqual(reported("no-hedging-comment", " hopefully the performance is ok"), [
-		" hopefully the performance is ok",
-	]);
-	assert.deepEqual(
-		reported("no-hedging-comment", " PERF: hopefully fast", " @typedef {string} Hopefully", " TODO fix this later"),
-		[],
-		"a directive still does",
-	);
+tester.run("no-hedging-comment", plugin.rules["no-hedging-comment"], {
+	valid: [code("// PERF: hopefully fast"), code("// @typedef {string} Hopefully"), code("// TODO fix this later")],
+	invalid: [
+		{
+			name: "a word that only starts like a directive does not exempt a comment",
+			code: code("// hopefully the performance is ok"),
+			errors: [{ messageId: "noHedgingComment" }],
+		},
+	],
 });

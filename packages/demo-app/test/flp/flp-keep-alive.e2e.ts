@@ -34,7 +34,8 @@ async function isFormDirty(): Promise<unknown> {
 	return browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			return Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
+			const isDirty: unknown = Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
+			return isDirty;
 		},
 		await getAppComponentId(),
 	);

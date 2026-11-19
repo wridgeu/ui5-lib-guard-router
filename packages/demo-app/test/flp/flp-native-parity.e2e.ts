@@ -1,4 +1,3 @@
-import type UshellContainer from "sap/ushell/Container";
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
 import { installDialogHandler, triggerFlpCrossAppNavigation } from "./helpers";
@@ -75,7 +74,10 @@ async function navTo(app: App, route: string, parameters: Record<string, string>
 
 async function setDirtyFlag(dirty: boolean): Promise<void> {
 	await browser.execute((flag: boolean) => {
-		const Container: typeof UshellContainer = sap.ui.require("sap/ushell/Container");
+		const Container = sap.ui.require("sap/ushell/Container");
+		if (!Container) {
+			throw new Error("FLP container is not available");
+		}
 		Container.setDirtyFlag(flag);
 	}, dirty);
 }
