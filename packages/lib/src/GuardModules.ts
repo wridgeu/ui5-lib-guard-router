@@ -34,7 +34,8 @@ function positionOf(exportKey: string): number {
  * Shapes and the names they get (`moduleName` is the last path segment):
  * - function        → single guard, named `moduleName` (or the export key when one is given)
  * - Array           → ordered guards, named `moduleName#index` (non-functions warned and skipped)
- * - plain object    → guards in key order, named by key (non-functions warned and skipped)
+ * - plain object    → guards in key order, named by key (non-functions warned and skipped);
+ *                     the named exports of a transpiled ES module are such an object
  *
  * When `exportKey` is set, only the matching export is returned.
  * When `exportKey` is set on a function export, the key is ignored with a debug log.
@@ -86,7 +87,8 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 	}
 
 	if (isRecord(moduleExport)) {
-		const entries = Object.entries(moduleExport);
+		// A transpiled ES module with named exports is such an object, with the marker `__esModule` as its first key.
+		const entries = Object.entries(moduleExport).filter(([key]) => key !== "__esModule");
 		if (entries.length === 0) {
 			guardWarning(modulePath, "exported an empty object, skipping");
 			return [];
@@ -175,9 +177,9 @@ function loadGuardModule(modulePath: string, failure: string): Promise<unknown> 
  * only skips that descriptor (with a warning) instead of failing the batch.
  * Results keep declaration order.
  */
-export function loadGuardModules(
-	descriptors: GuardDescriptor[],
-): Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }[]> {
+export function loadGuardModules<T extends GuardDescriptor>(
+	descriptors: T[],
+): Promise<{ descriptor: T; guards: GuardFn[] }[]> {
 	return Promise.all(
 		descriptors.map(async (descriptor) => {
 			const { modulePath, exportKey } = descriptor;

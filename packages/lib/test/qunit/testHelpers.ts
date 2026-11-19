@@ -14,9 +14,6 @@ export interface CapturedLogEntry {
 	details?: string;
 }
 
-/** @deprecated Use {@link CapturedLogEntry} instead. */
-export type CapturedWarning = CapturedLogEntry;
-
 export const GuardRouterClass = Router;
 
 /**
@@ -81,6 +78,20 @@ export function routerHooks(
 			initHashChanger();
 			use(createRouter());
 		},
+		afterEach: () => {
+			current().destroy();
+			HashChanger.getInstance().setHash("");
+		},
+	};
+}
+
+/**
+ * QUnit module hooks for tests that create their router themselves: the hash is reset before
+ * each test, the router that `current` returns is destroyed after it.
+ */
+export function createdRouterHooks(current: () => GuardRouter): { beforeEach: () => void; afterEach: () => void } {
+	return {
+		beforeEach: initHashChanger,
 		afterEach: () => {
 			current().destroy();
 			HashChanger.getInstance().setHash("");
@@ -329,7 +340,7 @@ export function logMessages(stub: sinon.SinonStub): string[] {
  * Capture `Log.warning` calls during `fn` using a Sinon stub.
  * The stub is restored automatically via `finally` to prevent leaks.
  */
-export function captureWarnings(fn: () => void): CapturedWarning[] {
+export function captureWarnings(fn: () => void): CapturedLogEntry[] {
 	const stub = sinon.stub(Log, "warning");
 	try {
 		fn();
@@ -343,7 +354,7 @@ export function captureWarnings(fn: () => void): CapturedWarning[] {
  * Async variant of {@link captureWarnings} for tests that `await` inside
  * the capture window.
  */
-export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedWarning[]> {
+export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
 	const stub = sinon.stub(Log, "warning");
 	try {
 		await fn();
@@ -353,22 +364,15 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
 }
 
-/**
- * Capture `Log.error` calls during `fn`, restoring the original in a
- * `finally` block so the stub never leaks to subsequent tests.
- */
+/** {@link captureWarnings} for `Log.error` calls. */
 export function captureErrors(fn: () => void): CapturedLogEntry[] {
-	const errors: CapturedLogEntry[] = [];
-	const original = Log.error;
-	Log.error = (message: string, details?: unknown) => {
-		errors.push(toLogEntry(message, details));
-	};
+	const stub = sinon.stub(Log, "error");
 	try {
 		fn();
 	} finally {
-		Log.error = original;
+		stub.restore();
 	}
-	return errors;
+	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
 }
 
 /**
@@ -376,17 +380,13 @@ export function captureErrors(fn: () => void): CapturedLogEntry[] {
  * the capture window.
  */
 export async function captureErrorsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
-	const errors: CapturedLogEntry[] = [];
-	const original = Log.error;
-	Log.error = (message: string, details?: unknown) => {
-		errors.push(toLogEntry(message, details));
-	};
+	const stub = sinon.stub(Log, "error");
 	try {
 		await fn();
 	} finally {
-		Log.error = original;
+		stub.restore();
 	}
-	return errors;
+	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
 }
 
 /** Routes forming a URL tree: `employees` → `employees/{id}` → `employees/{id}/resume`. */

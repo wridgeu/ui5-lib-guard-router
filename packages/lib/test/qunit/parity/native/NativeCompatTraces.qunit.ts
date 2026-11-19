@@ -57,7 +57,7 @@ async function traceRouterWith(
 			trace.push(`step ${index}`);
 			step(router, trace);
 			await settle(trace);
-			trace.push(`hash "${HashChanger.getInstance().getHash()}"`);
+			trace.push(`hash "${getHash()}"`);
 		}
 		return trace;
 	} finally {

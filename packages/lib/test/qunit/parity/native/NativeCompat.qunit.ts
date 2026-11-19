@@ -28,7 +28,7 @@ function createRouterConfig(): ConstructorParameters<typeof MobileRouter> {
 let extRouter: GuardRouter;
 let nativeRouter: MobileRouter;
 
-QUnit.module("NativeCompat - API parity", {
+const routerPairHooks = {
 	beforeEach: function () {
 		initHashChanger();
 		const [routes, config] = createRouterConfig();
@@ -40,7 +40,9 @@ QUnit.module("NativeCompat - API parity", {
 		nativeRouter.destroy();
 		HashChanger.getInstance().setHash("");
 	},
-});
+};
+
+QUnit.module("NativeCompat - API parity", routerPairHooks);
 
 QUnit.test("Both routers are instances of sap.m.routing.Router", function (assert: Assert) {
 	assert.ok(extRouter.isA("sap.m.routing.Router"), "ext router isA sap.m.routing.Router");
@@ -60,19 +62,7 @@ QUnit.test("ext router has additional guard methods", function (assert: Assert) 
 // ============================================================
 // Module: Route matching parity
 // ============================================================
-QUnit.module("NativeCompat - Route matching", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - Route matching", routerPairHooks);
 
 QUnit.test("match() returns identical results for known hashes", function (assert: Assert) {
 	const knownHashes = ["", "page1", "detail/123", "category/1/product/2"];
@@ -100,19 +90,7 @@ QUnit.test("getRouteInfoByHash returns identical info", function (assert: Assert
 // ============================================================
 // Module: Navigation behavior parity
 // ============================================================
-QUnit.module("NativeCompat - Navigation behavior", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - Navigation behavior", routerPairHooks);
 
 QUnit.test("getRoute returns routes with the same pattern", function (assert: Assert) {
 	const pattern = (router: MobileRouter, name: string): string | undefined => router.getRoute(name)?.getPattern();
@@ -170,19 +148,7 @@ QUnit.test("stop + initialize fires routeMatched identically", async function (a
 // ============================================================
 // Module: Event firing parity
 // ============================================================
-QUnit.module("NativeCompat - Event firing", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - Event firing", routerPairHooks);
 
 QUnit.test("bypassed event fires identically for unknown routes", async function (assert: Assert) {
 	const done = assert.async();
@@ -220,19 +186,7 @@ QUnit.test("bypassed event fires identically for unknown routes", async function
 // ============================================================
 // Module: URL generation parity
 // ============================================================
-QUnit.module("NativeCompat - URL generation", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - URL generation", routerPairHooks);
 
 QUnit.test("getURL generates identical URLs for routes without parameters", function (assert: Assert) {
 	const extUrl = extRouter.getURL("home");
@@ -266,19 +220,7 @@ QUnit.test("getURL returns undefined for unknown routes", function (assert: Asse
 // ============================================================
 // Module: navTo with replace parity
 // ============================================================
-QUnit.module("NativeCompat - navTo with replace", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - navTo with replace", routerPairHooks);
 
 QUnit.test("navTo with replace=true updates hash without history entry", async function (assert: Assert) {
 	extRouter.initialize();
@@ -324,19 +266,7 @@ QUnit.test("navTo with replace=false creates history entry (default)", async fun
 // ============================================================
 // Module: Hash change direction handling
 // ============================================================
-QUnit.module("NativeCompat - Hash change direction", {
-	beforeEach: function () {
-		initHashChanger();
-		const [routes, config] = createRouterConfig();
-		extRouter = new GuardRouterClass(routes, config);
-		nativeRouter = new MobileRouter(routes, config);
-	},
-	afterEach: function () {
-		extRouter.destroy();
-		nativeRouter.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module("NativeCompat - Hash change direction", routerPairHooks);
 
 QUnit.test("Direct hash changes fire events identically", async function (assert: Assert) {
 	const done = assert.async();

@@ -422,7 +422,7 @@ QUnit.test("redirect to nonexistent via setHash restores the hash", async functi
 
 	HashChanger.getInstance().setHash("protected");
 	await router.navigationSettled();
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after block");
+	assert.strictEqual(getHash(), "", "Hash was restored after block");
 });
 
 QUnit.test("redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {

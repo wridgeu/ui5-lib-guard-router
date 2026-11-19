@@ -36,6 +36,7 @@ QUnit.test("resolving orphaned guard after stop() has no side effect", async fun
 			resolveGuard = resolve;
 		});
 	router.addGuard(guard);
+	const statuses = recordSettlements(router);
 
 	router.navTo("protected");
 	router.stop();
@@ -44,11 +45,8 @@ QUnit.test("resolving orphaned guard after stop() has no side effect", async fun
 	resolveGuard(true);
 	await flushPromises();
 
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"",
-		"Hash was not changed by stale guard resolution after stop",
-	);
+	assert.deepEqual(statuses, [NavigationOutcome.Cancelled], "Only stop() settled the navigation");
+	assert.strictEqual(getHash(), "", "Hash was not changed by stale guard resolution after stop");
 });
 
 QUnit.test("settlement outcome reflects redirect origin", async function (assert: Assert) {
@@ -157,7 +155,7 @@ QUnit.test("navigationSettled event carries error field", async function (assert
 	let eventError: unknown;
 	let eventStatus: string | undefined;
 	router.attachNavigationSettled((event) => {
-		eventStatus = event.getParameter("status") as string;
+		eventStatus = event.getParameter("status");
 		eventError = event.getParameter("error");
 	});
 

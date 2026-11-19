@@ -5,15 +5,15 @@ import {
 	captureWarningsAsync,
 	flushPromises,
 	GuardRouterClass,
-	initHashChanger,
 	getHash,
 	waitForRoute,
+	createdRouterHooks,
 } from "../../testHelpers";
-import { FIXTURES, manifestHooks } from "./manifestHelpers";
+import { FIXTURES } from "./manifestHelpers";
 
 let router: GuardRouter;
 
-const hooks = manifestHooks(() => router);
+const hooks = createdRouterHooks(() => router);
 
 // ============================================================
 // Module: Declarative manifest guards: block loading
@@ -32,7 +32,7 @@ QUnit.test("guards from config are registered and functional (block mode)", asyn
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					protected: [`${FIXTURES}/blockGuard`],
 				},
 			},
 		},
@@ -100,7 +100,7 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
+					"*": [`${FIXTURES}/bagWriterGuard`],
 				},
 			},
 		},
@@ -136,7 +136,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
+					"*": [`${FIXTURES}/bagWriterGuard`],
 				},
 			},
 		},
@@ -174,10 +174,7 @@ QUnit.test("manifest guards share bag across pipeline (bagWriter → bagReader)"
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					"*": [
-						"ui5/guard/router/qunit/fixtures/guards/bagWriterGuard",
-						"ui5/guard/router/qunit/fixtures/guards/bagReaderGuard",
-					],
+					"*": [`${FIXTURES}/bagWriterGuard`, `${FIXTURES}/bagReaderGuard`],
 				},
 			},
 		},
@@ -224,7 +221,7 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	});
 	await flushPromises();
 
-	// UI5's destroy() resets _bIsInitialized to false. If the .then()
+	// UI5's destroy() deletes _bIsInitialized. If the .then()
 	// callback ignored the _destroyed flag and called super.initialize(),
 	// _bIsInitialized would be true again.
 	assert.notOk(router.isInitialized(), "Router was not re-initialized after destroy() during block loading");
@@ -247,7 +244,7 @@ QUnit.test("lazy manifest guard blocks navigation", async function (assert: Asse
 				guardLoading: "lazy",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					protected: [`${FIXTURES}/blockGuard`],
 				},
 			},
 		},
@@ -274,7 +271,7 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 				// No guardLoading specified; should default to "lazy"
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					protected: [`${FIXTURES}/blockGuard`],
 				},
 			},
 		},
@@ -297,7 +294,6 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 QUnit.module("Router - Manifest guard module path resolution", hooks);
 
 QUnit.test('"module:" prefix bypasses namespace resolution', async function (assert: Assert) {
-	initHashChanger();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -325,7 +321,6 @@ QUnit.test('"module:" prefix bypasses namespace resolution', async function (ass
 });
 
 QUnit.test('"module:" prefix with slash notation (UI5 convention)', async function (assert: Assert) {
-	initHashChanger();
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -337,7 +332,7 @@ QUnit.test('"module:" prefix with slash notation (UI5 convention)', async functi
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["module:ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					protected: [`module:${FIXTURES}/blockGuard`],
 				},
 			},
 		},

@@ -1,6 +1,5 @@
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
-import { GuardRouterClass, initHashChanger, loadModule } from "../../testHelpers";
+import { GuardRouterClass, loadModule } from "../../testHelpers";
 
 export const FIXTURES = "ui5/guard/router/qunit/fixtures/guards";
 
@@ -27,18 +26,4 @@ export async function loadProbe(): Promise<LazyProbe> {
 	probe.calls.length = 0;
 	probe.behaviors = [];
 	return probe;
-}
-
-/**
- * QUnit module hooks for tests that create their router themselves: the hash is reset before
- * each test, the router that `current` returns is destroyed after it.
- */
-export function manifestHooks(current: () => GuardRouter): { beforeEach: () => void; afterEach: () => void } {
-	return {
-		beforeEach: initHashChanger,
-		afterEach: () => {
-			current().destroy();
-			HashChanger.getInstance().setHash("");
-		},
-	};
 }

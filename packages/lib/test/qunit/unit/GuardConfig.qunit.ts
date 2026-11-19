@@ -149,6 +149,30 @@ QUnit.test("invalid entries are skipped with a warning", function (this: SinonTe
 	]);
 });
 
+QUnit.test(
+	"object-form values that are not arrays, and unknown keys, are skipped with a warning",
+	function (this: SinonTestContext, assert) {
+		const warning = this.stub(Log, "warning");
+		const info = this.stub(Log, "info");
+		const guards = {
+			admin: { enter: "g.a" },
+			edit: { leave: "g.b" },
+			detail: { beforeEnter: ["g.c"], enter: ["g.d"] },
+			"*": { enter: "g.e" },
+		};
+		assert.deepEqual(parseGuardRouterConfig({ guards }, "").guards, [
+			{ route: "detail", type: "enter", modulePath: "g/d", exportKey: undefined },
+		]);
+		assert.deepEqual(logMessages(warning), [
+			'guardRouter.guards["admin"].enter: expected string[], skipping',
+			'guardRouter.guards["edit"].leave: expected string[], skipping',
+			'guardRouter.guards["detail"].beforeEnter: unknown key, expected enter or leave, skipping',
+			'guardRouter.guards["*"].enter: expected string[], skipping',
+		]);
+		assert.strictEqual(info.callCount, 0, "no enter guard is announced as global");
+	},
+);
+
 QUnit.test("a guards block that is not an object is skipped", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
 	assert.deepEqual(parseGuardRouterConfig({ guards: ["g.a"] }, "").guards, []);

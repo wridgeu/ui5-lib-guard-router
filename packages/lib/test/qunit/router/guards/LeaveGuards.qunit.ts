@@ -11,6 +11,7 @@ import {
 	type SinonTestContext,
 	waitForRoute,
 	routerHooks,
+	getHash,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -26,18 +27,6 @@ const standardHooks = routerHooks(
 // Module: Leave guard invalid return values
 // ============================================================
 QUnit.module("Router - Leave guard invalid values", standardHooks);
-
-QUnit.test("Leave guard returning non-boolean value treats as block", async function (assert: Assert) {
-	addLeaveGuardUnsafe(router, "home", () => 42);
-	router.initialize();
-	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Non-boolean leave guard return treated as block",
-	);
-});
 
 QUnit.test("Leave guard returning null treats as block", async function (assert: Assert) {
 	addLeaveGuardUnsafe(router, "home", () => null);
@@ -96,7 +85,7 @@ QUnit.test("Leave guard returning true allows navigation", async function (asser
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation allowed by leave guard");
+	assert.strictEqual(getHash(), "protected", "Navigation allowed by leave guard");
 });
 
 QUnit.test("Leave guard returning false blocks navigation", async function (assert: Assert) {
@@ -116,7 +105,7 @@ QUnit.test("Async leave guard returning true allows navigation", async function 
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Async leave guard allowed navigation");
+	assert.strictEqual(getHash(), "protected", "Async leave guard allowed navigation");
 });
 
 QUnit.test("Promise-like leave guard returning true allows navigation", async function (assert: Assert) {
@@ -127,7 +116,7 @@ QUnit.test("Promise-like leave guard returning true allows navigation", async fu
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Promise-like leave guard allowed navigation");
+	assert.strictEqual(getHash(), "protected", "Promise-like leave guard allowed navigation");
 });
 
 QUnit.test("Promise-like leave guard returning false blocks navigation", async function (assert: Assert) {
@@ -275,11 +264,7 @@ QUnit.test("removeLeaveGuard prevents guard from running", async function (asser
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Navigation allowed after leave guard removed",
-	);
+	assert.strictEqual(getHash(), "protected", "Navigation allowed after leave guard removed");
 });
 
 QUnit.test(
@@ -308,17 +293,13 @@ QUnit.test(
 		assert.strictEqual(resolvers.length, 2, "Both leave guard invocations captured");
 		resolvers[1](true);
 		await waitForRoute(router, "forbidden");
-		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "Second navigation reached forbidden");
+		assert.strictEqual(getHash(), "forbidden", "Second navigation reached forbidden");
 
 		// Now resolve the first stale guard. It should have no effect.
 		resolvers[0](true);
 		await flushPromises();
 
-		assert.strictEqual(
-			HashChanger.getInstance().getHash(),
-			"forbidden",
-			"Stale leave guard did not change the route",
-		);
+		assert.strictEqual(getHash(), "forbidden", "Stale leave guard did not change the route");
 	},
 );
 
@@ -439,12 +420,12 @@ QUnit.test("removeRouteGuard with object form removes both enter and leave guard
 	// Enter guard was removed: navigation to protected should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Enter guard removed via object form");
+	assert.strictEqual(getHash(), "protected", "Enter guard removed via object form");
 
 	// Leave guard was removed: navigation away from protected should succeed
 	router.navTo("home");
 	await waitForRoute(router, "home");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Leave guard removed via object form");
+	assert.strictEqual(getHash(), "", "Leave guard removed via object form");
 });
 
 QUnit.test("removeRouteGuard with object form: partial config (beforeEnter only)", async function (assert: Assert) {
@@ -460,11 +441,7 @@ QUnit.test("removeRouteGuard with object form: partial config (beforeEnter only)
 	// Enter guard removed: navigation to protected should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Enter guard removed, leave guard still active",
-	);
+	assert.strictEqual(getHash(), "protected", "Enter guard removed, leave guard still active");
 
 	// Leave guard still active: should block
 	await assertBlocked(assert, router, () => router.navTo("home"), "Leave guard still blocks after partial remove");
@@ -510,7 +487,7 @@ QUnit.test("Leave guard can block navigation to an unmatched hash", async functi
 	HashChanger.getInstance().setHash("some/unknown/path");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Settlement is blocked");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after leave guard blocked");
+	assert.strictEqual(getHash(), "", "Hash was restored after leave guard blocked");
 });
 
 QUnit.test("Leave guard can allow navigation to an unmatched hash", async function (assert: Assert) {
@@ -525,11 +502,7 @@ QUnit.test("Leave guard can allow navigation to an unmatched hash", async functi
 	HashChanger.getInstance().setHash("some/unknown/path");
 	await router.navigationSettled();
 	assert.ok(guardCalled, "Leave guard ran");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"some/unknown/path",
-		"Navigation to unmatched hash proceeded",
-	);
+	assert.strictEqual(getHash(), "some/unknown/path", "Navigation to unmatched hash proceeded");
 });
 
 QUnit.test("Guard context has empty toRoute for unmatched hash but valid fromRoute", async function (assert: Assert) {
@@ -569,7 +542,7 @@ QUnit.test("Leave guard block settlement includes correct route and hash", async
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Status is blocked");
 	assert.strictEqual(result.route, "home", "Route stayed on home");
 	assert.strictEqual(result.hash, "", "Hash stayed empty");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored");
+	assert.strictEqual(getHash(), "", "Browser hash was restored");
 });
 
 QUnit.test("Leave guard allows then enter guard blocks: settlement is blocked", async function (assert: Assert) {

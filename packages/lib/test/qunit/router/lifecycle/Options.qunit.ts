@@ -14,6 +14,7 @@ import {
 	recordSettlements,
 	waitForRoute,
 	routerHooks,
+	createdRouterHooks,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -28,15 +29,10 @@ const standardHooks = routerHooks(
 // ============================================================
 // Module: Router options: constructor
 // ============================================================
-QUnit.module("Router - Router options - constructor", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Router options - constructor",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test("UI5 gets the caller's config object without guardRouter", function (assert: Assert) {
 	const config: Record<string, unknown> = { async: true, guardRouter: { navToPreflight: "guard" } };
@@ -97,15 +93,10 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 // ============================================================
 // Module: Router options: unknownRouteRegistration
 // ============================================================
-QUnit.module("Router - unknownRouteRegistration", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - unknownRouteRegistration",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test('"ignore" registers silently for unknown routes', function (assert: Assert) {
 	// Arrange
@@ -121,48 +112,60 @@ QUnit.test('"ignore" registers silently for unknown routes', function (assert: A
 	assert.strictEqual(warnings.length, 0, "no warnings logged");
 });
 
-QUnit.test('"throw" prevents registration and throws', function (assert: Assert) {
+/** Add the route that the throwing calls named, and enter and leave it: a guard they had registered would block. */
+async function assertNoGuardRegistered(assert: Assert): Promise<void> {
+	router.addRoute({ name: "nonexistent", pattern: "nonexistent" });
+	router.initialize();
+	await waitForRoute(router, "home");
+	const statuses = recordSettlements(router);
+	router.navTo("nonexistent");
+	router.navTo("home");
+	assert.deepEqual(
+		statuses,
+		[NavigationOutcome.Committed, NavigationOutcome.Committed],
+		"the route is entered and left: the calls registered no guard",
+	);
+}
+
+QUnit.test('"throw" prevents registration and throws', async function (assert: Assert) {
 	// Arrange
 	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
 	// Act & Assert: both registration methods throw
 	assert.throws(
-		() => router.addRouteGuard("nonexistent", () => true),
+		() => router.addRouteGuard("nonexistent", () => false),
 		/^Error: addRouteGuard called for unknown route "nonexistent"\. Set guardRouter\.unknownRouteRegistration to "warn" or "ignore" to allow this\.$/,
 		"addRouteGuard throws for unknown route and says how to allow it",
 	);
 
 	assert.throws(
-		() => router.addLeaveGuard("nonexistent", () => true),
+		() => router.addLeaveGuard("nonexistent", () => false),
 		/unknown route/i,
 		"addLeaveGuard throws for unknown route",
 	);
+	await assertNoGuardRegistered(assert);
 });
 
-QUnit.test('"throw" with config object is all-or-nothing', function (assert: Assert) {
+QUnit.test('"throw" with config object is all-or-nothing', async function (assert: Assert) {
 	// Arrange
 	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
 	// Act & Assert: config form also throws
 	assert.throws(
-		() => router.addRouteGuard("nonexistent", { beforeEnter: () => true, beforeLeave: () => true }),
+		() => router.addRouteGuard("nonexistent", { beforeEnter: () => false, beforeLeave: () => false }),
 		/unknown route/i,
 		"config form also throws for unknown route",
 	);
+	await assertNoGuardRegistered(assert);
 });
 
 // ============================================================
 // Module: Router options: navToPreflight
 // ============================================================
-QUnit.module("Router - navToPreflight", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - navToPreflight",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test('"bypass" skips guards for programmatic navTo', async function (assert: Assert) {
 	router = createRouterWithOptions({ navToPreflight: "bypass" });
@@ -208,6 +211,39 @@ QUnit.test('"off" defers guard evaluation to parse() fallback', async function (
 	assert.ok(recorder.hashes.includes("protected"), "navTo changed the hash before the guard ran");
 	assert.strictEqual(getHash(), "", "hash restored to previous hash after block");
 });
+
+QUnit.test(
+	'"off": a blocked navTo() that supersedes a pending hash change puts the URL back on the committed hash',
+	async function (assert: Assert) {
+		router = createRouterWithOptions({ navToPreflight: "off" });
+		router.initialize();
+		await waitForRoute(router, "home");
+		const pending = Promise.withResolvers<boolean>();
+		let protectedGuardCalls = 0;
+		router.addRouteGuard("protected", () => {
+			protectedGuardCalls++;
+			return pending.promise;
+		});
+		router.addRouteGuard("forbidden", () => false);
+		const statuses = recordSettlements(router);
+
+		HashChanger.getInstance().setHash("protected");
+		router.navTo("forbidden");
+
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Blocked, route: "home", hash: "" },
+			"the router stays on the committed route and hash",
+		);
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Blocked]);
+		assert.strictEqual(getHash(), "", "the URL shows the committed hash, not the superseded one");
+
+		router.navTo("protected");
+		assert.strictEqual(protectedGuardCalls, 2, "the superseded route is still guarded");
+		pending.resolve(false);
+		await router.navigationSettled();
+	},
+);
 
 // ============================================================
 // Module: Router options: skipGuards

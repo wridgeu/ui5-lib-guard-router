@@ -6,12 +6,13 @@ import {
 	createRouterUnsafe,
 	GuardRouterClass,
 	waitForRoute,
+	createdRouterHooks,
 } from "../../testHelpers";
-import { manifestHooks } from "./manifestHelpers";
+import { FIXTURES } from "./manifestHelpers";
 
 let router: GuardRouter;
 
-const hooks = manifestHooks(() => router);
+const hooks = createdRouterHooks(() => router);
 
 // ============================================================
 // Module: Invalid manifest guard config
@@ -78,8 +79,8 @@ QUnit.test("'*' with object form warns about leave and still registers enter gua
 					unknownRouteRegistration: "ignore",
 					guards: {
 						"*": {
-							enter: ["ui5/guard/router/qunit/fixtures/guards/bagWriterGuard"],
-							leave: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+							enter: [`${FIXTURES}/bagWriterGuard`],
+							leave: [`${FIXTURES}/blockGuard`],
 						},
 					},
 				},
@@ -125,7 +126,7 @@ QUnit.test("module exporting a primitive warns and is skipped", async function (
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/primitiveExportGuard"],
+						protected: [`${FIXTURES}/primitiveExportGuard`],
 					},
 				},
 			},
@@ -161,7 +162,7 @@ QUnit.test(
 						guardLoading: "block",
 						unknownRouteRegistration: "ignore",
 						guards: {
-							protected: ["ui5/guard/router/qunit/fixtures/guards/mixedArrayGuard"],
+							protected: [`${FIXTURES}/mixedArrayGuard`],
 						},
 					},
 				},
@@ -173,9 +174,7 @@ QUnit.test(
 
 		assert.deepEqual(
 			warnings.filter((w) => w.message.includes("mixedArrayGuard")).map((w) => w.message),
-			[
-				'guardRouter.guards: "ui5/guard/router/qunit/fixtures/guards/mixedArrayGuard" [1] is not a function, skipping',
-			],
+			[`guardRouter.guards: "${FIXTURES}/mixedArrayGuard" [1] is not a function, skipping`],
 			"only the non-function entry at index 1 warns",
 		);
 
@@ -203,7 +202,7 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#99"],
+						protected: [`${FIXTURES}/arrayGuard#99`],
 					},
 				},
 			},

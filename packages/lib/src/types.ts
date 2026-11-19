@@ -213,9 +213,12 @@ export type Inheritance = "none" | "pattern-tree";
  * @since 1.5.0
  */
 export interface ManifestRouteGuardConfig {
-	/** Enter guard module paths (dot notation, relative to component namespace). */
+	/**
+	 * Enter guard module paths: in dot notation relative to the component namespace, or absolute
+	 * with a `module:` prefix. An optional `#export` suffix picks one export of the module.
+	 */
 	enter?: string[];
-	/** Leave guard module paths (dot notation, relative to component namespace). */
+	/** Leave guard module paths, in the same forms as `enter`. */
 	leave?: string[];
 }
 
@@ -458,7 +461,8 @@ export interface GuardRouter extends MobileRouter {
 	 * If no navigation is pending, this resolves immediately with the most
 	 * recent settlement result. Before any navigation has settled, it falls back
 	 * to a synthetic `Committed` result derived from the router's current route/hash state.
-	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles.
+	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles,
+	 * or `initialize(true)` resumes the route.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 * @since 1.2.0

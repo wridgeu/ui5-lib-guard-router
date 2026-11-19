@@ -13,6 +13,7 @@ It does **not** verify guard-specific behavior.
 
 ```text
 upstream-parity/
+  Current.qunit.ts       test page entry; imports the current port set
   adapters/              shared local harness helpers
   vendor-manifest.json   pinned upstream provenance and raw-to-port mapping
   ports/                 executable local ports/wrappers

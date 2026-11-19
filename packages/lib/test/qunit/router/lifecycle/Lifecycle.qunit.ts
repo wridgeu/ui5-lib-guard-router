@@ -525,20 +525,23 @@ QUnit.test(
 // ============================================================
 QUnit.module("Router - navigationSettled after destroy", standardHooks);
 
-QUnit.test("navigationSettled called after destroy resolves immediately", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"navigationSettled() after destroy() reports the route and hash the router was on",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => true);
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	await router.navigationSettled();
-	router.destroy();
+		router.navTo("protected");
+		await router.navigationSettled();
+		router.destroy();
 
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Committed, "Returns default Committed status");
-	assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
-	assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
-});
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Returns default Committed status");
+		assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
+		assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
+	},
+);
 
 // ============================================================
 // Module: The global hash changer is replaced while the router runs

@@ -1,4 +1,5 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import type { HashChangerBase$HashChangedEvent } from "sap/ui/core/routing/HashChangerBase";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
@@ -7,6 +8,7 @@ import {
 	captureErrorsAsync,
 	captureHashWrites,
 	captureWarningsAsync,
+	createRouterUnsafe,
 	getHash,
 	flushPromises,
 	recordSettlements,
@@ -52,7 +54,7 @@ QUnit.test("Direct hash change to unguarded route proceeds", async function (ass
 	// Direct hash change to home (unguarded) should proceed
 	HashChanger.getInstance().setHash("");
 	await waitForRoute(router, "home");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Unguarded route matched via hash change");
+	assert.strictEqual(getHash(), "", "Unguarded route matched via hash change");
 });
 
 QUnit.test("Direct hash change with redirect restores correct hash", async function (assert: Assert) {
@@ -70,7 +72,7 @@ QUnit.test("Direct hash change with redirect restores correct hash", async funct
 	);
 	await flushPromises();
 
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored to home route");
+	assert.strictEqual(getHash(), "", "Hash was restored to home route");
 	assert.deepEqual(matched, [], "the route that is shown does not match again");
 });
 
@@ -352,7 +354,7 @@ QUnit.test("Guard state change between navigations is respected", async function
 	allowNavigation = true;
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Second attempt allowed after state change");
+	assert.strictEqual(getHash(), "protected", "Second attempt allowed after state change");
 });
 
 QUnit.test("Adding guard mid-session blocks subsequent navigations", async function (assert: Assert) {
@@ -384,7 +386,7 @@ QUnit.test("Removing guard mid-session allows subsequent navigations", async fun
 
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation allowed after guard removed");
+	assert.strictEqual(getHash(), "protected", "Navigation allowed after guard removed");
 });
 
 // ============================================================
@@ -414,7 +416,7 @@ QUnit.test("Multiple route guards with cross-redirects settle correctly", async 
 
 	router.navTo("forbidden");
 	await waitForRoute(router, "home");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Cross-redirect chain followed to home");
+	assert.strictEqual(getHash(), "", "Cross-redirect chain followed to home");
 });
 
 // ============================================================
@@ -519,7 +521,7 @@ QUnit.test("an allowed navTo matches its route while the hash change is dispatch
 QUnit.module("Router - Deferred hash change of component targets", standardHooks);
 
 QUnit.test(
-	"the deferred hash change of a committed navigation does not cancel a navTo() started meanwhile",
+	"a navTo() with component targets that is superseded is cancelled, and its deferred hash change is a navigation of its own",
 	async function (assert: Assert) {
 		let allow!: (allowed: boolean) => void;
 		router.addRouteGuard(
@@ -537,6 +539,11 @@ QUnit.test(
 		router.navTo("detail", { id: "1" }, { detail: { route: "sub", parameters: { subId: "x" } } });
 		assert.strictEqual(getHash(), "", "the hash change is still on its way");
 		router.navTo("protected");
+		assert.deepEqual(
+			statuses,
+			[NavigationOutcome.Cancelled],
+			"the navigation that waited for its hash is cancelled",
+		);
 		await flushPromises();
 		await flushPromises();
 		assert.strictEqual(getHash(), "detail/1", "the deferred hash change arrived");
@@ -544,14 +551,131 @@ QUnit.test(
 		allow(true);
 		await flushPromises();
 
+		// As with the native router, the hash that is written last decides.
 		assert.deepEqual(
 			statuses,
-			[NavigationOutcome.Committed, NavigationOutcome.Committed],
-			"the pending navigation was not cancelled",
+			[NavigationOutcome.Cancelled, NavigationOutcome.Cancelled, NavigationOutcome.Committed],
+			"the hash change supersedes the navigation that was pending, like any other hash change",
 		);
-		assert.strictEqual(getHash(), "protected");
+		assert.deepEqual(await router.navigationSettled(), {
+			status: NavigationOutcome.Committed,
+			route: "detail",
+			hash: "detail/1",
+		});
+		assert.strictEqual(getHash(), "detail/1");
 	},
 );
+
+QUnit.test("a navTo() with component targets commits when UI5 writes the hash", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected", {}, { nested: { route: "list" } });
+	assert.deepEqual(statuses, [], "nothing settles while the hash change is on its way");
+
+	assert.deepEqual(await router.navigationSettled(), {
+		status: NavigationOutcome.Committed,
+		route: "protected",
+		hash: "protected",
+	});
+	assert.strictEqual(getHash(), "protected", "the hash is written by then");
+});
+
+QUnit.test(
+	"a navTo() with component targets whose hash UI5 never writes does not commit",
+	async function (this: SinonTestContext, assert: Assert) {
+		let leftRoute: string | undefined;
+		router.addRouteGuard("forbidden", (context) => {
+			leftRoute = context.fromRoute;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		// UI5 does not write the hash if a nested component fails to load, or if the hash changer refuses it.
+		const setHash = this.stub(router.getHashChanger(), "setHash");
+		router.navTo("protected", {}, { nested: { route: "list" } });
+		await flushPromises();
+		setHash.restore();
+		assert.deepEqual(statuses, [], "the navigation is still pending");
+
+		router.navTo("forbidden");
+		await waitForRoute(router, "forbidden");
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Committed]);
+		assert.strictEqual(leftRoute, "home", "the next navigation leaves the route that is shown");
+	},
+);
+
+QUnit.test("a navTo() with component targets on a router that is not async does not commit", function (assert: Assert) {
+	router.destroy();
+	// UI5 rejects component targets on such a router: it logs an error and writes no hash.
+	router = createRouterUnsafe(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "forbidden", pattern: "forbidden" },
+		],
+		{ async: false },
+	);
+	let leftRoute: string | undefined;
+	router.addRouteGuard("forbidden", (context) => {
+		leftRoute = context.fromRoute;
+		return true;
+	});
+	router.initialize();
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected", {}, { nested: { route: "list" } });
+	assert.deepEqual(statuses, [], "the navigation is pending");
+
+	router.navTo("forbidden");
+	assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Committed]);
+	assert.strictEqual(leftRoute, "home", "the next navigation leaves the route that is shown");
+});
+
+// ============================================================
+// Module: Hash replaced by another listener of the hash change
+// ============================================================
+QUnit.module("Router - Hash replaced by another listener of the hash change", standardHooks);
+
+for (const [decision, allowed, expected] of [
+	["allow", true, { status: NavigationOutcome.Committed, route: "detail", hash: "detail/1" }],
+	["block", false, { status: NavigationOutcome.Blocked, route: "home", hash: "" }],
+] as const) {
+	// A router that shares the hash changer and is informed first can redirect the hash like that.
+	QUnit.test(
+		`the hash that replaces the one navTo() wrote is guarded as a navigation of its own (guards ${decision})`,
+		async function (assert: Assert) {
+			let detailGuardCalls = 0;
+			router.addRouteGuard("detail", () => {
+				detailGuardCalls++;
+				return allowed;
+			});
+			const hashChanger = router.getHashChanger();
+			const replaceProtected = (event: HashChangerBase$HashChangedEvent): void => {
+				// The UI5 types declare the hash as an object.
+				if (String(event.getParameter("newHash")) === "protected")
+					hashChanger.replaceHash("detail/1", "Unknown");
+			};
+			// Before the router starts to listen.
+			hashChanger.attachEvent("hashChanged", replaceProtected);
+			router.initialize();
+			await waitForRoute(router, "home");
+			const statuses = recordSettlements(router);
+
+			router.navTo("protected");
+			const result = await router.navigationSettled();
+			hashChanger.detachEvent("hashChanged", replaceProtected);
+
+			assert.deepEqual(result, expected, "the router is on the route that UI5 displays");
+			assert.deepEqual(statuses, [expected.status], "the navigation settles once");
+			assert.strictEqual(detailGuardCalls, 1, "the guard of the route that matches the hash ran");
+			assert.strictEqual(getHash(), expected.hash);
+		},
+	);
+}
 
 // ============================================================
 // Module: Hash change refused by the hash changer

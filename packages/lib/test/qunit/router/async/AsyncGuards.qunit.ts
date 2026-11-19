@@ -188,11 +188,7 @@ QUnit.test("Sync global guard allows, async route guard allows", async function 
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Navigation allowed through sync global + async route guard",
-	);
+	assert.strictEqual(getHash(), "protected", "Navigation allowed through sync global + async route guard");
 });
 
 QUnit.test("Sync global guard allows, async route guard blocks", async function (assert: Assert) {
@@ -213,11 +209,7 @@ QUnit.test("Async global guard allows, sync route guard allows", async function 
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Navigation allowed through async global + sync route guard",
-	);
+	assert.strictEqual(getHash(), "protected", "Navigation allowed through async global + sync route guard");
 });
 
 QUnit.test("Async global guard allows, sync route guard blocks", async function (assert: Assert) {

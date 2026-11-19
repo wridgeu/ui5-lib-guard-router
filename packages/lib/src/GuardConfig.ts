@@ -75,7 +75,7 @@ function parseGuardEntry(entry: string, componentNamespace: string): { modulePat
  * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
  * - `"*"` with object form -> warn, treat enter as global
  * - `"*"` leave -> warn, skip (global leave guards not supported)
- * - Invalid entries -> warn, skip
+ * - Invalid entries, object values that are not arrays, unknown object keys -> warn, skip
  */
 function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
 	if (!isRecord(guards)) {
@@ -112,16 +112,34 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				);
 			}
 
-			if (key === "*" && value.enter !== undefined) {
-				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
+			for (const name of Object.keys(value)) {
+				if (name === "enter" || name === "leave") continue;
+				Log.warning(
+					`guardRouter.guards["${key}"].${name}: unknown key, expected enter or leave, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
 			}
 
-			if (Array.isArray(value.enter)) {
-				pushEntries(value.enter, key, "enter", `["${key}"].enter`);
-			}
-
-			if (key !== "*" && Array.isArray(value.leave)) {
-				pushEntries(value.leave, key, "leave", `["${key}"].leave`);
+			for (const type of ["enter", "leave"] as const) {
+				const entries = value[type];
+				if (entries === undefined || (key === "*" && type === "leave")) continue;
+				if (!Array.isArray(entries)) {
+					Log.warning(
+						`guardRouter.guards["${key}"].${type}: expected string[], skipping`,
+						JSON.stringify(entries),
+						LOG_COMPONENT,
+					);
+					continue;
+				}
+				if (key === "*") {
+					Log.info(
+						'guardRouter.guards["*"]: object form; treating enter as global',
+						undefined,
+						LOG_COMPONENT,
+					);
+				}
+				pushEntries(entries, key, type, `["${key}"].${type}`);
 			}
 		} else {
 			Log.warning(

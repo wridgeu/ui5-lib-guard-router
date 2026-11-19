@@ -96,11 +96,7 @@ QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at targ
 	router.initialize();
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"detail/cti-1",
-		"Redirect with componentTargetInfo landed with correct params",
-	);
+	assert.strictEqual(getHash(), "detail/cti-1", "Redirect with componentTargetInfo landed with correct params");
 });
 
 QUnit.test(
@@ -227,8 +223,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	const handler = (evt: Router$NavigationSettledEvent): void => {
 		if (evt.getParameter("status") === NavigationOutcome.Redirected && !nestedNavFired) {
 			nestedNavFired = true;
-			// This fires synchronously during _flushSettlement while _phase is idle.
-			// The guard should still block this navTo, but the bug bypasses it.
+			// Fires synchronously within _flushSettlement: the phase is idle already, so the guards run.
 			router.navTo("protected");
 		}
 	};

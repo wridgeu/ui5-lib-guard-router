@@ -1,11 +1,11 @@
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardRouter } from "ui5/guard/router/types";
-import { captureWarningsAsync, GuardRouterClass, waitForRoute } from "../../testHelpers";
-import { manifestHooks } from "./manifestHelpers";
+import { captureWarningsAsync, GuardRouterClass, waitForRoute, createdRouterHooks } from "../../testHelpers";
+import { FIXTURES } from "./manifestHelpers";
 
 let router: GuardRouter;
 
-const hooks = manifestHooks(() => router);
+const hooks = createdRouterHooks(() => router);
 
 // ============================================================
 // Module: Cherry-pick syntax
@@ -24,7 +24,7 @@ QUnit.test("cherry-pick by name from object module registers only that guard", a
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkAuth"],
+					protected: [`${FIXTURES}/objectGuard#checkAuth`],
 				},
 			},
 		},
@@ -55,7 +55,7 @@ QUnit.test("cherry-pick by name selects blocking guard", async function (assert:
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+					protected: [`${FIXTURES}/objectGuard#checkRole`],
 				},
 			},
 		},
@@ -86,7 +86,7 @@ QUnit.test("cherry-pick by index from array module", async function (assert: Ass
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard#1"],
+					protected: [`${FIXTURES}/arrayGuard#1`],
 				},
 			},
 		},
@@ -121,7 +121,7 @@ QUnit.test(
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#1"],
+						protected: [`${FIXTURES}/objectGuard#1`],
 					},
 				},
 			},
@@ -156,7 +156,7 @@ QUnit.test("cherry-pick by numeric index 0 from object module resolves first ent
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#0"],
+						protected: [`${FIXTURES}/objectGuard#0`],
 					},
 				},
 			},
@@ -189,7 +189,7 @@ QUnit.test("cherry-pick from single-function module ignores # and still works", 
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/blockGuard#nonexistent"],
+					protected: [`${FIXTURES}/blockGuard#nonexistent`],
 				},
 			},
 		},
@@ -216,7 +216,7 @@ QUnit.test("invalid cherry-pick key warns and skips", async function (assert: As
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#doesNotExist"],
+						protected: [`${FIXTURES}/objectGuard#doesNotExist`],
 					},
 				},
 			},
@@ -244,7 +244,7 @@ QUnit.test("global '*' with cherry-pick works", async function (assert: Assert) 
 				guardLoading: "lazy",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					"*": ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+					"*": [`${FIXTURES}/objectGuard#checkRole`],
 				},
 			},
 		},

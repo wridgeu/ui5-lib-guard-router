@@ -1,4 +1,3 @@
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
@@ -6,9 +5,9 @@ import {
 	createHierarchicalRouter,
 	GuardRouterClass,
 	HIERARCHICAL_ROUTES,
-	initHashChanger,
 	getHash,
 	waitForRoute,
+	createdRouterHooks,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -17,15 +16,10 @@ let router: GuardRouter;
 // Module: Router - Guard and metadata inheritance
 // ============================================================
 
-QUnit.module("Router - Guard and metadata inheritance", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Guard and metadata inheritance",
+	createdRouterHooks(() => router),
+);
 
 // === Guard inheritance ======================================================
 
@@ -348,15 +342,10 @@ QUnit.test("metadata propagates when all routes are added after construction", f
 // Module: Root-pattern route ("") as universal ancestor
 // ============================================================
 
-QUnit.module("Router - Root-pattern route as universal ancestor", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Root-pattern route as universal ancestor",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test("a route without a pattern is left out of pattern-tree inheritance", function (assert: Assert) {
 	router = new GuardRouterClass([...HIERARCHICAL_ROUTES, { name: "loose" }], {
@@ -491,15 +480,10 @@ QUnit.test("root-pattern metadata is the shallowest layer in multi-level merge",
 // ============================================================
 // Module: Dynamic addRoute() with inheritance
 // ============================================================
-QUnit.module("Router - Dynamic addRoute() with inheritance", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Dynamic addRoute() with inheritance",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test(
 	"addRoute() after initialize makes new route visible to metadata inheritance",

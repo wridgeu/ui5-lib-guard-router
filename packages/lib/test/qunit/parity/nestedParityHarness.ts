@@ -17,7 +17,7 @@ import {
 	settle,
 	until,
 } from "./parityRecorder";
-import { GuardRouterClass, initHashChanger, loadModule } from "../testHelpers";
+import { GuardRouterClass, initHashChanger, loadModule, getHash } from "../testHelpers";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -149,7 +149,7 @@ export async function run(
 	const snapshot = (label: string): void => {
 		const [parent, child] = components;
 		const state = {
-			hash: HashChanger.getInstance().getHash(),
+			hash: getHash(),
 			parent: { pages: navState(parent), router: routerState(parent) },
 			child: { pages: navState(child), router: routerState(child) },
 		};

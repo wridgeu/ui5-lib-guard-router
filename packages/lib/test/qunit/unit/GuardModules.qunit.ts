@@ -1,7 +1,7 @@
 import Log from "sap/base/Log";
 import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
 import type { GuardFn } from "ui5/guard/router/types";
-import { createGuardContext, logMessages, type SinonTestContext } from "../testHelpers";
+import { createGuardContext, loadModule, logMessages, type SinonTestContext } from "../testHelpers";
 
 const PATH = "app/guards/auth";
 const a: GuardFn = () => true;
@@ -80,6 +80,28 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 	assert.deepEqual(resolveModuleExports({ first: a, bad: 1 }, PATH, "bad"), []);
 	assert.deepEqual(logMessages(warning), warned("#bad is not a function, skipping"));
 });
+
+QUnit.test(
+	"named exports of a transpiled module are picked by key or index",
+	async function (this: SinonTestContext, assert) {
+		const warning = this.stub(Log, "warning");
+		const path = "ui5/guard/router/qunit/fixtures/guards/namedExportGuard";
+		const mod = await loadModule<{ namedFirst: GuardFn; namedSecond: GuardFn }>(path);
+		assert.strictEqual(
+			Reflect.get(mod, "__esModule"),
+			true,
+			"the module object holds the marker of the transpiler",
+		);
+
+		const first = { name: "namedFirst", fn: mod.namedFirst };
+		const second = { name: "namedSecond", fn: mod.namedSecond };
+		assert.deepEqual(resolveModuleExports(mod, path), [first, second], "the marker is no guard");
+		assert.deepEqual(resolveModuleExports(mod, path, "0"), [first], "nor does it take a position");
+		assert.deepEqual(resolveModuleExports(mod, path, "1"), [second]);
+		assert.deepEqual(resolveModuleExports(mod, path, "namedSecond"), [second]);
+		assert.strictEqual(warning.callCount, 0);
+	},
+);
 
 QUnit.test("empty and unsupported exports", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
