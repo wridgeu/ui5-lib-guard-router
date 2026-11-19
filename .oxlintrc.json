@@ -60,6 +60,16 @@
 			}
 		},
 		{
+			"files": [
+				"packages/lib/test/qunit/unit/**/*.qunit.ts",
+				"packages/lib/test/qunit/router/**/*.qunit.ts",
+				"packages/lib/test/qunit/parity/**/*.qunit.ts"
+			],
+			"rules": {
+				"max-lines": ["error", { "max": 800 }]
+			}
+		},
+		{
 			"files": ["packages/*/test/e2e/**/*.ts", "packages/*/test/flp/**/*.ts"],
 			"rules": {
 				"test-guardrails/no-hard-wait": "error"
