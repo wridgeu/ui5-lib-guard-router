@@ -772,12 +772,12 @@ flowchart TD
     push -. "flushed by" .-> actions
 
     subgraph actions ["Terminal actions"]
-        direction LR
-        commit["_commitNavigation()"] --> fcommit(["Committed, Bypassed<br/>or Redirected"])
-        block["_blockNavigation()<br/>also from _redirect(): unknown<br/>target, loop or depth cap"] --> fblock(["Blocked"])
-        errornav["_errorNavigation()<br/>also from _redirect(): target<br/>without valid hash"] --> ferror(["Error"])
-        settle["_settleUncommitted()<br/>redirect to the shown route"] --> fredirect(["Redirected"])
-        cancel["_cancelPendingNavigation()<br/>if a navigation is pending"] --> fcancel(["Cancelled,<br/>while restoring: its result"])
+        commit["_commitNavigation():<br/>Committed, Bypassed or Redirected"]
+        settle["_settleUncommitted(), redirect to the shown route:<br/>Redirected"]
+        block["_blockNavigation(), also from _redirect()<br/>for an unknown target, a loop or the depth cap:<br/>Blocked"]
+        errornav["_errorNavigation(), also from _redirect()<br/>for a target without valid hash:<br/>Error"]
+        cancel["_cancelPendingNavigation(), if a navigation is pending:<br/>Cancelled, while restoring its result"]
+        commit ~~~ settle ~~~ block ~~~ errornav ~~~ cancel
     end
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
@@ -787,13 +787,13 @@ flowchart TD
     classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
     classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
     classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    class fcancel native
-    class call,immediate,push,commit,block,errornav,settle,cancel added
+    class cancel native
+    class call,immediate,push added
     class pending decision
-    class fcommit commit
-    class fredirect redirect
-    class fblock block
-    class ferror error
+    class commit commit
+    class settle redirect
+    class block block
+    class errornav error
     style actions fill:none,stroke:#0969da
 ```
 
@@ -894,15 +894,15 @@ sequenceDiagram
     end
     rect rgba(207, 34, 46, 0.15)
         Note over Router: route "protected",<br/>form dirty
-        User->>Shell: cross-app navigation<br/>to #35;Other-display
+        User->>Shell: cross-app<br/>navigation
         Shell->>Router: stop()
         Shell->>Router: _handleDataLoss():<br/>initialize(true)
         Note over Router: resumes "protected"
         Shell->>Shell: starts to put the<br/>previous hash back
         Shell->>User: confirm()
         User-->>Shell: Cancel
-        Note over Shell,Router: URL is back on<br/>#35;App-preview&/protected,<br/>no hashChanged
-        User->>Shell: link to<br/>#35;App-preview&/employees
+        Note over Shell,Router: URL is back,<br/>no hashChanged
+        User->>Shell: in-app link<br/>to employees
         Shell->>Router: parse("employees")
         Router->>Router: leave guard blocks
         Router->>Shell: replaceHash(oldHash<br/>of that event)
@@ -1334,16 +1334,16 @@ stateDiagram-v2
 
 Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
-A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result.
+A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
 
 ```mermaid
 stateDiagram-v2
-    evaluating --> idle: URL already right
-    evaluating --> restoring: URL must come back
+    evaluating --> idle: URL right
+    evaluating --> restoring: URL to restore
     restoring --> idle: URL is back
     evaluating --> idle: Cancelled
     awaitingHash --> idle: Cancelled
-    committing --> idle: hash write refused, Blocked
+    committing --> idle: refused
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
     classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
