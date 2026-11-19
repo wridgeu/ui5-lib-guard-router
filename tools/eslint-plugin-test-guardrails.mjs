@@ -8,16 +8,15 @@
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
-import { definePlugin, defineRule } from "@oxlint/plugins";
-
-/** @import { ESTree } from "@oxlint/plugins" */
+/** @import { ESTree, Plugin, Rule } from "@oxlint/plugins" */
 
 /**
  * Reports `browser.pause()` calls that introduce flaky, time-based waits.
  *
  * Scope: all test files (configured via oxlintrc overrides).
  */
-const noBrowserPause = defineRule({
+/** @type {Rule} */
+const noBrowserPause = {
 	meta: {
 		type: "problem",
 		docs: {
@@ -44,7 +43,7 @@ const noBrowserPause = defineRule({
 			},
 		};
 	},
-});
+};
 
 /**
  * Returns the inner call expression from an arrow/function callback body,
@@ -73,7 +72,8 @@ function extractSingleCallFromBody(body) {
  *
  * Scope: e2e test files only (configured via oxlintrc overrides).
  */
-const noHardWait = defineRule({
+/** @type {Rule} */
+const noHardWait = {
 	meta: {
 		type: "problem",
 		docs: {
@@ -110,7 +110,7 @@ const noHardWait = defineRule({
 			},
 		};
 	},
-});
+};
 
 const TIMER_FUNCTIONS = new Set(["setTimeout", "setInterval"]);
 
@@ -135,7 +135,8 @@ function calledGlobal(callee) {
  *
  * Scope: library QUnit test files (configured via oxlintrc overrides).
  */
-const noTimers = defineRule({
+/** @type {Rule} */
+const noTimers = {
 	meta: {
 		type: "problem",
 		docs: {
@@ -157,13 +158,14 @@ const noTimers = defineRule({
 			},
 		};
 	},
-});
+};
 
-export default definePlugin({
+/** @type {Plugin} */
+export default {
 	meta: { name: "test-guardrails" },
 	rules: {
 		"no-browser-pause": noBrowserPause,
 		"no-hard-wait": noHardWait,
 		"no-timers": noTimers,
 	},
-});
+};

@@ -47,3 +47,22 @@ tester.run("no-hedging-comment", plugin.rules["no-hedging-comment"], {
 		},
 	],
 });
+
+const obvious = "// increment counter\n\tcounter = increment(counter);";
+tester.run("no-obvious-comment", plugin.rules["no-obvious-comment"], {
+	valid: [
+		{ name: "the comment names nothing of the next statement", code: "// increment counter\nlet other;" },
+		{
+			name: "the next statement is the one in the block of the comment",
+			code: `function f() {\n\t// increment counter\n}\ncounter = increment(counter);`,
+		},
+	],
+	invalid: [
+		{ name: "a comment of the program", code: obvious, errors: [{ messageId: "noObviousComment" }] },
+		{
+			name: "a comment in a function body",
+			code: `function f() {\n\t${obvious}\n}\nlet other;`,
+			errors: [{ messageId: "noObviousComment" }],
+		},
+	],
+});

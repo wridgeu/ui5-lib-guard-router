@@ -8,9 +8,7 @@
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
-import { definePlugin, defineRule } from "@oxlint/plugins";
-
-/** @import { ESTree, Visitor } from "@oxlint/plugins" */
+/** @import { ESTree, Plugin, Rule } from "@oxlint/plugins" */
 
 /**
  * Detects catch blocks where the only statement is a console call.
@@ -20,7 +18,8 @@ import { definePlugin, defineRule } from "@oxlint/plugins";
  * should either re-throw, return an error value, or do meaningful
  * recovery.
  */
-const noConsoleOnlyCatch = defineRule({
+/** @type {Rule} */
+const noConsoleOnlyCatch = {
 	meta: {
 		type: "problem",
 		docs: {
@@ -55,7 +54,7 @@ const noConsoleOnlyCatch = defineRule({
 			},
 		};
 	},
-});
+};
 
 /**
  * Detects `if (cond) { return true; } else { return false; }` and
@@ -65,7 +64,8 @@ const noConsoleOnlyCatch = defineRule({
  * Same-value branches (true/true or false/false) are dead code:
  * reported without auto-fix so the developer decides what was intended.
  */
-const noRedundantBooleanReturn = defineRule({
+/** @type {Rule} */
+const noRedundantBooleanReturn = {
 	meta: {
 		type: "suggestion",
 		fixable: "code",
@@ -107,7 +107,7 @@ const noRedundantBooleanReturn = defineRule({
 			},
 		};
 	},
-});
+};
 
 /**
  * Extracts the return argument from a single-statement block or bare
@@ -141,12 +141,12 @@ const EM_DASH_RE = new RegExp(EM_DASH, "g");
  * Detects em-dashes (U+2014) in strings and/or comments.
  *
  * Em-dashes are a strong signal of AI-generated text that was pasted
- * without review. Configurable via `checkStrings` and `checkComments`
- * options (both default to true).
+ * without review.
  *
  * Auto-fix: replaces with `-` in strings, `--` in comments.
  */
-const noEmDash = defineRule({
+/** @type {Rule} */
+const noEmDash = {
 	meta: {
 		type: "suggestion",
 		fixable: "code",
@@ -157,28 +157,11 @@ const noEmDash = defineRule({
 			emDashInString: "String contains an em-dash (U+2014). Use a regular dash (-) instead.",
 			emDashInComment: "Comment contains an em-dash (U+2014). Use -- instead.",
 		},
-		schema: [
-			{
-				type: "object",
-				properties: {
-					checkStrings: { type: "boolean" },
-					checkComments: { type: "boolean" },
-				},
-				additionalProperties: false,
-			},
-		],
+		schema: [],
 	},
 	create(context) {
-		const [first] = context.options;
-		const opts = typeof first === "object" && first !== null && !Array.isArray(first) ? first : {};
-		const checkStrings = opts.checkStrings !== false;
-		const checkComments = opts.checkComments !== false;
-
-		/** @type {Visitor} */
-		const visitors = {};
-
-		if (checkStrings) {
-			visitors.Literal = function (node) {
+		return {
+			Literal(node) {
 				if (typeof node.value === "string" && node.value.includes(EM_DASH)) {
 					context.report({
 						node,
@@ -188,8 +171,8 @@ const noEmDash = defineRule({
 						},
 					});
 				}
-			};
-			visitors.TemplateLiteral = function (node) {
+			},
+			TemplateLiteral(node) {
 				for (const quasi of node.quasis) {
 					if (quasi.value.raw.includes(EM_DASH)) {
 						context.report({
@@ -205,11 +188,8 @@ const noEmDash = defineRule({
 						break;
 					}
 				}
-			};
-		}
-
-		if (checkComments) {
-			visitors.Program = function () {
+			},
+			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
 					if (!comment.value.includes(EM_DASH)) continue;
 					context.report({
@@ -226,18 +206,17 @@ const noEmDash = defineRule({
 						},
 					});
 				}
-			};
-		}
-
-		return visitors;
+			},
+		};
 	},
-});
+};
 
-export default definePlugin({
+/** @type {Plugin} */
+export default {
 	meta: { name: "code-quality" },
 	rules: {
 		"no-console-only-catch": noConsoleOnlyCatch,
 		"no-redundant-boolean-return": noRedundantBooleanReturn,
 		"no-em-dash": noEmDash,
 	},
-});
+};
