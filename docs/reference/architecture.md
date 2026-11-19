@@ -437,7 +437,14 @@ reported, `_describeUndo()` stores a `HashChangeUndo` in `_undo`:
 - `fullHash`: the root hash before the change, the hashes of nested routers included. It is
   unknown at first. `_onRootHashChanged()` takes it from the `oldHash` of the root hash
   changer's `hashChanged` event whose `newHash` is `first` (`""` for the first report of the
-  page, which has none). That listener runs after UI5 has reported the change to every router.
+  page, which has none). That listener runs after UI5 has reported the change to every router:
+  `_start()` attaches it behind the listener of UI5 that informs the routers. If the global
+  hash changer is replaced while the router runs (`HashChanger.replaceHashChanger()`, as the
+  shell of the Fiori launchpad does before it creates an app), UI5 moves the listeners of the
+  old one to the new one, in front of the new one's own listener. `_onRootHashChanged()` then
+  runs before the routers are informed. It notices the new hash changer (`_rootHashChanger`),
+  attaches itself behind again, and handles that one event in a microtask, once the routers
+  have been informed.
 - `shown`: the root hash when the attempt starts.
 - `step`: the step through the history that the change was, if it was one.
 - `started`: whether the router has begun to put the URL back.
@@ -1088,32 +1095,33 @@ and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#pri
 
 ## Internal State
 
-| Field                      | Type                                   | Purpose                                                                                                                                                     |
-| -------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `_options`                 | `ResolvedGuardRouterOptions`           | Resolved manifest options with defaults applied                                                                                                             |
-| `_pipeline`                | `GuardPipeline`                        | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)                                                                                            |
-| `_currentRoute`            | `string`                               | Name of the currently active route                                                                                                                          |
-| `_currentHash`             | `string \| null`                       | Hash of the active route, `null` before first                                                                                                               |
-| `_phase`                   | `RouterPhase`                          | Discriminated union tracking the router's lifecycle phase (see below)                                                                                       |
-| `_parseGeneration`         | `number`                               | Monotonic counter for async invalidation                                                                                                                    |
-| `_suppressedHash`          | `string \| null`                       | The hash `_restoreHash()` is writing, which the synchronous `parse()` it causes ignores                                                                     |
-| `_undo`                    | `HashChangeUndo \| null`               | How to undo the hash change of the pending navigation (see [Undoing a hash change](#undoing-a-hash-change))                                                 |
-| `_reportedHash`            | `unknown`                              | The hash that the router's hash changer is reporting, until `parse()` receives it ([Routers that share a hash changer](#routers-that-share-a-hash-changer)) |
-| `_lastReport`              | `unknown`                              | The hash the router's hash changer reported last, out-of-date reports aside                                                                                 |
-| `_reportOutdated`          | `boolean`                              | The report in progress is out of date: the hash changer shows a later hash that the router has parsed                                                       |
-| `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                                     |
-| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                                     |
-| `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                                        |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                                 |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                    | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                       |
-| `_destroyed`               | `boolean`                              | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op                   |
-| `_nativeMatching`          | `boolean`                              | The value UI5 wrote to `_bMatchingProcessStarted` (see [UI5 Internals the Router Relies On](#ui5-internals-the-router-relies-on))                           |
-| `_matchWaiters`            | `(() => void)[]`                       | Promise resolve functions that wait for a `routeMatched`, resolved when a navigation ends without a route match                                             |
-| `_blockLoad`               | `{ start, ignoreInitialHash } \| null` | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`, which also stores its `bIgnoreInitialHash` argument            |
-| `_meta`                    | `RouteMetaStore`                       | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                                               |
-| `_routeNames`              | `string[]`                             | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                                          |
-| `_greedyRouteNames`        | `string[]`                             | Names of the routes with `greedy: true`, in definition order, whose guards run in addition to the first match                                               |
-| `_ownerComponent`          | `UIComponent \| undefined`             | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                                              |
+| Field                      | Type                                   | Purpose                                                                                                                                                                    |
+| -------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_options`                 | `ResolvedGuardRouterOptions`           | Resolved manifest options with defaults applied                                                                                                                            |
+| `_pipeline`                | `GuardPipeline`                        | Owns guard storage and evaluation logic (see `GuardPipeline.ts`)                                                                                                           |
+| `_currentRoute`            | `string`                               | Name of the currently active route                                                                                                                                         |
+| `_currentHash`             | `string \| null`                       | Hash of the active route, `null` before first                                                                                                                              |
+| `_phase`                   | `RouterPhase`                          | Discriminated union tracking the router's lifecycle phase (see below)                                                                                                      |
+| `_parseGeneration`         | `number`                               | Monotonic counter for async invalidation                                                                                                                                   |
+| `_suppressedHash`          | `string \| null`                       | The hash `_restoreHash()` is writing, which the synchronous `parse()` it causes ignores                                                                                    |
+| `_undo`                    | `HashChangeUndo \| null`               | How to undo the hash change of the pending navigation (see [Undoing a hash change](#undoing-a-hash-change))                                                                |
+| `_reportedHash`            | `unknown`                              | The hash that the router's hash changer is reporting, until `parse()` receives it ([Routers that share a hash changer](#routers-that-share-a-hash-changer))                |
+| `_lastReport`              | `unknown`                              | The hash the router's hash changer reported last, out-of-date reports aside                                                                                                |
+| `_reportOutdated`          | `boolean`                              | The report in progress is out of date: the hash changer shows a later hash that the router has parsed                                                                      |
+| `_rootHashChanger`         | `HashChanger \| null`                  | The global hash changer that `_onRootHashChanged()` is attached to; another one after `HashChanger.replaceHashChanger()` ([Undoing a hash change](#undoing-a-hash-change)) |
+| `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                                                    |
+| `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                                                    |
+| `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                                                       |
+| `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                                                |
+| `_sourceDescriptors`       | `GuardDescriptor[]`                    | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                                      |
+| `_destroyed`               | `boolean`                              | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op                                  |
+| `_nativeMatching`          | `boolean`                              | The value UI5 wrote to `_bMatchingProcessStarted` (see [UI5 Internals the Router Relies On](#ui5-internals-the-router-relies-on))                                          |
+| `_matchWaiters`            | `(() => void)[]`                       | Promise resolve functions that wait for a `routeMatched`, resolved when a navigation ends without a route match                                                            |
+| `_blockLoad`               | `{ start, ignoreInitialHash } \| null` | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`, which also stores its `bIgnoreInitialHash` argument                           |
+| `_meta`                    | `RouteMetaStore`                       | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                                                              |
+| `_routeNames`              | `string[]`                             | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                                                         |
+| `_greedyRouteNames`        | `string[]`                             | Names of the routes with `greedy: true`, in definition order, whose guards run in addition to the first match                                                              |
+| `_ownerComponent`          | `UIComponent \| undefined`             | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                                                             |
 
 Two variables live at module scope, because they describe the browser and are shared by
 all routers: `lastStep` (the last step through the history, from the Navigation API) and

@@ -539,3 +539,72 @@ QUnit.test("navigationSettled called after destroy resolves immediately", async 
 	assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
 	assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
 });
+
+// ============================================================
+// Module: The global hash changer is replaced while the router runs
+// ============================================================
+QUnit.module("Router - Replaced hash changer", standardHooks);
+
+/**
+ * Replace the global hash changer, as the Fiori launchpad does when its shell starts. The new one
+ * is initialized first, so that it reports no hash change of its own to the listeners it takes
+ * over: the first one they get is a real one.
+ */
+function replaceHashChanger(): HashChanger {
+	const replacement = new HashChanger();
+	replacement.init();
+	HashChanger.replaceHashChanger(replacement);
+	return replacement;
+}
+
+const hashChangedListeners = (hashChanger: HashChanger): number =>
+	(Reflect.get(hashChanger, "mEventRegistry") as { hashChanged?: unknown[] }).hashChanged?.length ?? 0;
+
+QUnit.test(
+	"a hash change is blocked and undone after HashChanger.replaceHashChanger() has replaced the hash changer the router started with",
+	async function (assert: Assert) {
+		router.addRouteGuard("detail", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await waitForRoute(router, "protected");
+
+		const replacement = replaceHashChanger();
+		assert.strictEqual(
+			Reflect.get(router.getHashChanger(), "parent"),
+			replacement,
+			"UI5 has moved the hash changer of the router to the replacement",
+		);
+		replacement.setHash("detail/1");
+
+		assert.deepEqual(
+			await router.navigationSettled(),
+			{ status: NavigationOutcome.Blocked, route: "protected", hash: "protected" },
+			"the navigation settles as blocked",
+		);
+		assert.strictEqual(getHash(), "protected", "and the URL is back");
+
+		const statuses = recordSettlements(router);
+		replacement.setHash("detail/2");
+		await router.navigationSettled();
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked], "the next hash change is blocked");
+		assert.strictEqual(getHash(), "protected", "and undone as well");
+	},
+);
+
+QUnit.test(
+	"stop() and destroy() detach the router from the hash changer that has replaced the one it started with",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		const replacement = replaceHashChanger();
+		const listeners = hashChangedListeners(replacement);
+
+		router.stop();
+		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "stop() has detached the router");
+		router.initialize();
+		assert.strictEqual(hashChangedListeners(replacement), listeners, "initialize() attaches it again");
+		router.destroy();
+		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "destroy() has detached it");
+	},
+);

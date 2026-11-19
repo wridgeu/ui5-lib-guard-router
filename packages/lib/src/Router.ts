@@ -207,6 +207,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _lastReport: unknown = null;
 	/** Whether the hash changer shows a later hash than the one it is reporting (see {@link _onHashReported}). */
 	private _reportOutdated = false;
+	/** The global hash changer that {@link _onRootHashChanged} is attached to, behind the listener of UI5 that informs the routers. */
+	private _rootHashChanger: HashChanger | null = null;
 	/** The route that was current when the router stopped: `initialize(true)` resumes it, as UI5 does. */
 	private _stoppedRoute = "";
 	private _settlementResolvers: ((result: NavigationResult) => void)[] = [];
@@ -423,7 +425,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 			// After the listener of UI5 that informs the routers, which is attached with the hash
 			// changer of the first router: UI5 has reported a hash change to every router when
 			// this one runs.
-			HashChanger.getInstance().attachEvent("hashChanged", this._onRootHashChanged, this);
+			this._rootHashChanger = HashChanger.getInstance();
+			this._rootHashChanger.attachEvent("hashChanged", this._onRootHashChanged, this);
 		}
 		super.initialize(ignoreInitialHash);
 		if (starting && ignoreInitialHash) {
@@ -462,12 +465,33 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * the URL back does so now (see {@link _undoHashChange}).
 	 */
 	private _onRootHashChanged(event: HashChangerBase$HashChangedEvent): void {
-		const undo = this._undo;
 		// A string, which the UI5 types declare as an object.
 		const newHash: unknown = event.getParameter("newHash");
-		if (!undo || undo.first !== newHash) return;
 		// Only the first hash change that the page reports has no previous hash.
-		undo.fullHash ??= event.getParameter("oldHash") ?? "";
+		const oldHash = event.getParameter("oldHash") ?? "";
+		const hashChanger = HashChanger.getInstance();
+		if (hashChanger === this._rootHashChanger) {
+			this._completeUndo(newHash, oldHash);
+			return;
+		}
+		// The global hash changer was replaced (HashChanger.replaceHashChanger(), as the shell of
+		// the Fiori launchpad does). UI5 has moved this listener to the new one, in front of its
+		// listener that informs the routers. From the next hash change on it runs behind again;
+		// for this one, the routers are informed once this listener has returned.
+		hashChanger.detachEvent("hashChanged", this._onRootHashChanged, this);
+		hashChanger.attachEvent("hashChanged", this._onRootHashChanged, this);
+		this._rootHashChanger = hashChanger;
+		queueMicrotask(() => this._completeUndo(newHash, oldHash));
+	}
+
+	/**
+	 * Tell the undo of the pending navigation what the URL showed before the hash change
+	 * `newHash`, and put the URL back if the navigation waited for that.
+	 */
+	private _completeUndo(newHash: unknown, oldHash: string): void {
+		const undo = this._undo;
+		if (!undo || undo.first !== newHash) return;
+		undo.fullHash ??= oldHash;
 		if (this._phase.kind === "restoring" && this._phase.awaitsReport) this._replaceFullHash(undo.fullHash);
 	}
 
@@ -1225,7 +1249,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** Detach what {@link _start} has attached. */
 	private _detachHashListeners(): void {
 		this.getHashChanger().detachEvent("hashChanged", this._onHashReported, this);
+		// UI5 moves the listener along when the global hash changer is replaced.
 		HashChanger.getInstance().detachEvent("hashChanged", this._onRootHashChanged, this);
+		this._rootHashChanger = null;
 	}
 
 	/**
