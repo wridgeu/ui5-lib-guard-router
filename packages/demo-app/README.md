@@ -14,7 +14,7 @@ The route map: each arrow is a route with its pattern and what its guards do. An
 ```mermaid
 flowchart LR
     bar["Browser address bar<br/>index.html#/HASH"]
-    router{{"Router of demo.app<br/>ui5.guard.router.Router"}}
+    router{{"Router of demo.app<br/>ui5.guard.router.Router<br/>global: navigationLogger logs and allows"}}
 
     subgraph app ["Views of demo.app"]
         home["Home"]
@@ -35,7 +35,7 @@ flowchart LR
         nestedNotFound["NotFound"]
     end
 
-    bar -- "every navigation:<br/>navigationLogger logs and allows" --> router
+    bar -- "hash" --> router
 
     router -- "(empty pattern), route home<br/>leave guard of Home.controller: logs and allows" --> home
     router -- "protected<br/>enter: permission guard, async, redirects to home when logged out<br/>leave: dirtyFormGuard blocks while the form is dirty" --> protected
@@ -74,7 +74,7 @@ The hash of a nested route follows that of the parent route, for example `#/repo
 
 Guard registration happens in three ways: declarative manifest guards, programmatic guards in `Component.ts`, and controller-level guards.
 
-Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file has two sections: the guard factories that the demo registers first, reference-only examples second.
+The guard factories that the demo registers programmatically live in `webapp/guards.ts`.
 
 Individual guard modules for declarative manifest registration live in `webapp/guards/` as standalone files.
 
@@ -101,15 +101,7 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | ------------------------- | ----------- | ------ | --------------------------------- |
 | `createHomeLeaveLogger()` | Route leave | `home` | Logs leaving home (always allows) |
 
-**Not registered in the demo**: the reference section of `guards.ts` holds:
-
-| Function                          | Purpose                                                             |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `createDirtyFormGuard()`          | Dirty-form leave guard that takes the form model as a parameter     |
-| `createAuthGuard()`               | Synchronous auth guard (sync variant of the async permission guard) |
-| `createRedirectWithParamsGuard()` | Redirect preserving route parameters                                |
-| `createErrorDemoGuard()`          | Sync error handling behavior                                        |
-| `createAsyncErrorDemoGuard()`     | Async error handling behavior                                       |
+**Not registered in the demo**: [Guard Integration Patterns](../../docs/guides/integration-patterns.md) has further factories as inline examples: a [dirty-form leave guard](../../docs/guides/integration-patterns.md#dirty-form-leave-guard) that takes the form model, a synchronous [auth guard](../../docs/guides/integration-patterns.md#authentication-guard), a [redirect that keeps the route parameters](../../docs/guides/integration-patterns.md#redirect-with-parameters), and [guards that throw or reject](../../docs/guides/integration-patterns.md#error-handling-in-guards).
 
 No scenario of the demo settles as `Error`.
 
@@ -220,7 +212,7 @@ The nested component has its own `access`, `i18n` and `reports` models, see [Nes
 
 The root component and the nested reporting component each have their own bundle (`i18n/i18n.properties`, `reporting/i18n/i18n.properties`), declared in their manifest under `sap.app/i18n` and as the `i18n` model. Both support the default bundle only (`supportedLocales: [""]`, `fallbackLocale: ""`), so UI5 requests no language variants.
 
-- Views bind texts with `{i18n>key}`. A text that depends on a value is chosen in an expression binding (`{= ${auth>/isLoggedIn} ? ${i18n>authLoggedIn} : ${i18n>authLoggedOut}}`); a text with a placeholder is filled with `sap/base/strings/formatMessage` (see `view/SettlementPanel.fragment.xml`).
+- Views bind texts with `{i18n>key}`. A text that depends on a value is chosen in an expression binding (`{= ${auth>/isLoggedIn} ? ${i18n>authLoggedIn} : ${i18n>authLoggedOut}}`); a text with a placeholder is filled with `sap/base/strings/formatMessage`, and the text of the settlement status, one per `NavigationOutcome`, is chosen by the `formatSettlementStatus` formatter of `BaseController` (see `view/SettlementPanel.fragment.xml`).
 - The manifest uses `{{appTitle}}` and `{{appDescription}}`, also for the title of the FLP inbound.
 - The `runtime` model holds values only. The views supply the texts: for the settlement status (the model holds the `NavigationOutcome`, such as `committed`) and for empty values, such as "(empty hash)" or "Not settled yet".
 - Code that needs a text awaits the bundle, because the model loads it asynchronously: `ScenarioRunner.recordAction(key, args)` for the last action.

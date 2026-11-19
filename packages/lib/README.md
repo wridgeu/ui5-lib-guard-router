@@ -519,7 +519,7 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 | Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                                                              |
 | -------------------------- | ----------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names, see [Unknown routes during registration](#unknown-routes-during-registration)                                                                                                                                                    |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                                                            |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or leave them to `parse()` after the hash has changed (`"off"`), which also supersedes a pending navigation there                                                                                          |
 | `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: `initialize()` starts the router at once; a module that is not loaded yet is loaded on the first navigation that needs it (a failed load settles that navigation as `Error`). `"block"`: the router starts once all modules have loaded; a module that fails to load is skipped with a warning |
 | `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                    |
 
@@ -557,6 +557,8 @@ The full object form with `enter` and `leave` keys registers both enter and leav
 	}
 }
 ```
+
+Keys other than `enter` and `leave`, and an `enter` or `leave` value that is not an array, are logged as warnings and skipped. Under `"*"` only `enter` applies; `leave` is skipped with a warning, because there are no global leave guards.
 
 **Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
 
@@ -656,7 +658,7 @@ export default {
 };
 ```
 
-Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function they are no guards, next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function only `#name` reaches them (see [Cherry-pick syntax](#cherry-pick-syntax)), next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
 > [!NOTE]
 > When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
@@ -685,7 +687,7 @@ When a module exports multiple guards, you can register a subset using `#` to se
 
 Only a plain non-negative integer (`#0`, `#12`) selects by index. Every other key is a name: `#2faGuard` selects the export named `2faGuard` and is skipped with a warning if the module has none.
 
-When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
+When `#` is used on a single-function module, the key selects a function among the module's own properties, which is what a named export next to the default function becomes. Without such a property the export key is ignored with a debug message and the function is still registered.
 
 ### Guard context `bag`
 
@@ -844,15 +846,14 @@ router.addGuard((context): GuardRedirect | true => {
 });
 ```
 
-The demo app keeps `createRedirectWithParamsGuard()` as a reference implementation in `packages/demo-app/webapp/guards.ts`; the runnable demo does not register it, because none of its routes was renamed to a route with the same parameters.
+[Guard Integration Patterns](../../docs/guides/integration-patterns.md#redirect-with-parameters) has this guard as a factory for any target route. The demo app registers none, because none of its routes was renamed to a route with the same parameters.
 
 ### Guard factories
 
-The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` and `createAuthGuard()` are reference-only implementations showing the factory pattern; the runnable demo uses the manifest-declared `guards/dirtyFormGuard.ts` module for the `"protected"` leave guard and the async `createAsyncPermissionGuard()` for the `"protected"` enter guard.
+A factory closes over what its guard depends on. The demo app keeps the factories it registers in `packages/demo-app/webapp/guards.ts`: the async `createAsyncPermissionGuard()` is its `"protected"` enter guard. Its `"protected"` leave guard is the manifest-declared `guards/dirtyFormGuard.ts` module, so the two factories below are examples that the demo does not have.
 
 ```typescript
-// guards.ts
-import JSONModel from "sap/ui/model/json/JSONModel";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
 
 export function createAuthGuard(authModel: JSONModel): GuardFn {
@@ -876,7 +877,7 @@ The object form is useful when registering both enter and leave guards for the s
 import type { RouteGuardConfig } from "ui5/guard/router/types";
 
 const protectedGuards: RouteGuardConfig = {
-	beforeEnter: createAsyncPermissionGuard(authModel),
+	beforeEnter: createAuthGuard(authModel),
 	beforeLeave: createDirtyFormGuard(formModel),
 };
 
@@ -1057,7 +1058,6 @@ export default class Component extends UIComponent {
 	public static metadata = { manifest: "json" };
 
 	// No initializer: it would run after init(), which the UIComponent constructor calls.
-	// With tsc (target ES2022 or later) write `declare private _dirtyProvider: ...` instead, see below.
 	private _dirtyProvider?: DirtyStateProvider;
 
 	override init(): void {
@@ -1187,7 +1187,7 @@ A component that a parent router displays through a routing target of type `Comp
 - A redirect names a route of the same router. To leave the nested component, navigate with the parent's router (`Component.getOwnerComponentFor(component).getRouter()`), not from a guard.
 - On the first display, the parent route waits until the nested router's first navigation has passed its guards and matched, as with the native router. If a nested guard blocks that navigation, the parent route is still displayed and the nested component shows no view. If it redirects, the parent waits for the redirect target.
 - When the parent leaves the route, UI5 stops the nested router and removes its part of the hash. To keep the user in the nested component, register a leave guard on the parent's route.
-- A `navTo()` of the parent with `componentTargetInfo` commits and settles when UI5 has loaded the nested components and written the hash, not within the call. Until then the navigation is pending, and a navigation that supersedes it, `stop()` or `destroy()` settles it as `Cancelled`. That is also how a navigation ends whose hash UI5 never writes, because a nested component failed to load.
+- A `navTo()` of the parent, or a guard redirect, with `componentTargetInfo` commits and settles when UI5 has loaded the nested components and written the hash, not within the call. Until then the navigation is pending, and a navigation that supersedes it, `stop()` or `destroy()` settles it as `Cancelled`. That is also how a navigation ends whose hash UI5 never writes, because a nested component failed to load or the router is not async.
 - Navigate with `navTo()` of the respective router or with the router's own hash changer (`router.getHashChanger()`). The global `HashChanger.getInstance()` replaces the whole browser hash, including the part of the other router ([Enabling Routing in Nested Components](https://sdk.openui5.org/#/topic/fb19f501b16e4e4991eb6a017770945b)).
 
 When the parent refuses a hash change, it puts the whole URL back, the nested part included. UI5 reports every hash change to the nested router whatever the parent decides, so the nested router first matches its part of the refused hash and then its previous route, and fires the events of both:

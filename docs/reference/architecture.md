@@ -7,8 +7,10 @@ ui5-lib-guard-router/
 |-- package.json                    npm workspaces root
 |-- tsconfig.base.json              shared TypeScript config (strict mode)
 |-- tsconfig.json                   lists every project, so that editors and oxlint find the tsconfig of a file
-|-- tsconfig.node.json              Node code: scripts/, tools/, the wdio configs of the library
+|-- tsconfig.node.json              Node code checked with checkJs: scripts/, tools/, stryker.config.mjs, the wdio configs and testsuite of the library
 |-- .oxlintrc.json                  linter config
+|-- scripts/                        check-*, vendoring, pack smoke, with *.test.mjs beside them
+|-- tools/                          the oxlint JS plugins with their *.test.mjs, and the wdio Chrome profile
 |
 |-- packages/
     |-- lib/                        the core library
@@ -38,7 +40,7 @@ ui5-lib-guard-router/
         |   |-- controller/         App, Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
         |   |-- view/               XML views + SettlementPanel fragment
         |   |-- i18n/               text bundle of the root component
-        |   |-- guards.ts           guard factories (runtime and reference-only)
+        |   |-- guards.ts           guard factories that Component.ts and Home.controller.ts register
         |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, retiredPageGuard, dirtyFormGuard, navigationLogger)
         |   |-- demo/               RuntimeCoordinator, ScenarioRunner
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
@@ -49,6 +51,7 @@ ui5-lib-guard-router/
             |-- e2e/                wdi5 e2e tests (standalone)
             |-- flp/                wdi5 FLP preview tests
             |-- shared/             control references (view ID + control ID), model and nested-component helpers for both suites
+            |-- browser-modules.ts  types of the UI5 modules read in browser.execute()
             |-- wdio.conf.ts        standalone e2e config
             |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
@@ -200,11 +203,11 @@ flowchart TD
     suppress -- "yes" --> ret
     suppress -- "no" --> back{"undo started and root hash<br/>equals undo.fullHash?"}
     back -- "yes" --> adopt["adopt the hash without guards<br/>_finishRestore(newHash)"] --> ret
-    back -- "no" --> redir{committing phase?}
+    back -- "no" --> redir{"committing or awaitingHash<br/>phase for newHash?"}
     redir -- "yes" --> bypass(["_commitNavigation()"])
     redir -- "no" --> samehash{same as _currentHash?}
     samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
-    moved -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
+    moved -- "yes" --> canceldup["evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"] --> ret
     moved -- "no" --> match(["super.parse()<br/>the route matches again"])
     samehash -- "no" --> cancelprev["resolve route<br/>_cancelPendingNavigation()"]
     cancelprev --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
@@ -244,7 +247,9 @@ that `_restoreHash()` is writing, and the hash change that puts the URL back aft
 
 The same-hash branch handles the committed hash reaching `parse()` again. If a pending
 navigation had moved the URL away (`NavigationAttempt.restoreHash`), the user went back while
-its guards were pending, and the branch cancels it. Otherwise the route matches again through
+it was pending, and no route matches again: the route of the committed hash was never left. The
+branch cancels a navigation whose guards are pending. One that waits for UI5 to write its hash
+(`awaitingHash`) goes on, and only its undo is dropped. Otherwise the route matches again through
 `super.parse()`, without guards, as it does natively: UI5 reports the hash of a navigation with
 component targets once it has written it, reports the hash again after it reset the hash
 changer for a target displayed without a route, or application code called `parse()` directly.
@@ -306,7 +311,7 @@ Programmatic navigation:
 
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
-    → committing phase? → _commitNavigation() (transitions to idle)
+    → committing or awaitingHash phase for newHash? → _commitNavigation() (transitions to idle)
     → otherwise → _pipeline.evaluate(context)
         → allow  → _commitNavigation()
         → block  → _blockNavigation() → _undoHashChange()
@@ -319,8 +324,8 @@ Browser-initiated navigation (back/forward, URL bar, direct hash change):
 When `navTo()` runs guards and they allow navigation, the router enters the
 committing/preflight phase (which records the approved route) before calling
 `super.navTo()`. The parent router triggers a hash change, which re-enters through
-`parse()`. On entry, `parse()` sees the committing phase and calls `_commitNavigation()`
-with the incoming hash, which transitions to idle and commits without re-running guards.
+`parse()`. On entry, `parse()` finds the committing phase for the incoming hash and calls
+`_commitNavigation()`. A different hash is guarded as a navigation of its own.
 This avoids double evaluation while keeping `parse()` as the authoritative commit path.
 
 If `parse()` is not called inside `super.navTo()`, `_commitAfterNavTo()` commits the
@@ -665,16 +670,16 @@ infinite chains.
 
 `Router.ts` keeps the navigation logic and hands the rest to helper modules:
 
-| Step                         | Router code                                               | Helper                                                                                                 |
-| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Read the `guardRouter` block | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
-| Lazy-mode preload hint       | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
-| Pattern-tree expansion       | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
-| `guardLoading: "block"`      | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
-| `guardLoading: "lazy"`       | `initialize()` / `addRoute()` → `_registerLazyGuards()`   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
-| Export shapes and names      | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
-| Guard names in log messages  | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
-| Route metadata               | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
+| Step                         | Router code                                                                                    | Helper                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read the `guardRouter` block | constructor                                                                                    | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
+| Lazy-mode preload hint       | constructor                                                                                    | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
+| Pattern-tree expansion       | `initialize()`, `addRoute()`                                                                   | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
+| `guardLoading: "block"`      | `initialize()`                                                                                 | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
+| `guardLoading: "lazy"`       | `initialize()` → `_registerLazyGuards()`; `addRoute()` → `_registerManifestGuard(..., before)` | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
+| Export shapes and names      | -                                                                                              | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
+| Guard names in log messages  | -                                                                                              | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
+| Route metadata               | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()`                                      | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
@@ -1230,7 +1235,7 @@ all routers: `lastStep` (the last step through the history, from the Navigation 
 | `idle`         | `{ kind: "idle" }`                                                                                                                                                     | No navigation in progress                                                                                                                                                                                                                                                                                                                     |
 | `evaluating`   | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                                                                                                 | Guards are running; attempt carries hash, AbortController, generation, `restoreHash`, `direction`; `postponed` is set while the navigation waits for async guards                                                                                                                                                                             |
 | `committing`   | `{ kind: "committing", route: string, hash: string, origin: "preflight" \| "redirect" \| "parse", direction?: Direction, restoreHash: boolean, writtenOver?: string }` | Navigation is being committed: `parse()` commits it when it receives `hash`, and guards any other hash as a navigation of its own; `origin` distinguishes the entry path; `direction` (how the browser got to the history entry) drives `_alignTitleHistory()`; `restoreHash` and `writtenOver` say how to undo the hash that `navTo()` wrote |
-| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                    | An allowed `navTo()` with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                                 |
+| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                    | An allowed `navTo()` or redirect with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                     |
 | `restoring`    | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }`                                                                          | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route with `componentTargetInfo`)                                                      |
 
 How a navigation moves through the phases, with the `NavigationOutcome` it settles with:

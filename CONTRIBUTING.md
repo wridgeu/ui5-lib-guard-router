@@ -68,6 +68,7 @@ QUnit tests of the library are below `packages/lib/test/qunit/`. A folder is one
 | Upstream OpenUI5 tests                                    | `upstream-parity/`, only through `npm run vendor:openui5-router-tests`                                              |
 | The demo app in a browser                                 | `packages/demo-app/test/e2e/`, one spec file per scenario area                                                      |
 | The demo app in the Fiori launchpad preview               | `packages/demo-app/test/flp/`                                                                                       |
+| A lint plugin in `tools/` or a script in `scripts/`       | `<name>.test.mjs` next to it, run by `npm run test:tooling` (`node --test`)                                         |
 
 Rules that keep the layout working:
 
@@ -81,11 +82,11 @@ Rules that keep the layout working:
 ## Quality checks
 
 ```bash
-npm run typecheck    # TypeScript strict mode
-npm run lint         # oxlint, with type-aware rules; `any` may not be used unchecked (the no-unsafe-* rules)
+npm run typecheck    # tsc, strict: lib and demo tsconfigs, and tsconfig.node.json (scripts/, tools/ with checkJs, wdio configs)
+npm run lint         # oxlint, type-aware through oxlint-tsgolint; the no-unsafe-* rules apply everywhere except the vendored ports and the FLP JS fixtures; the tests and the demo webapp may cast (no-unsafe-type-assertion)
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
-npm run check:diagrams # every Mermaid block in the docs parses; a name in backticks in a block exists in packages/lib/src
+npm run check:diagrams # every Mermaid block in the docs parses; a name in backticks in a block exists in the code of packages/lib/src, comments aside; write other names (demo routes, UI5 APIs) without backticks
 npm run test:tooling # node --test for the lint plugins in tools/ and the scripts in scripts/ (*.test.mjs)
 npm run check        # all of the above (fmt:check + lint + typecheck + check:layout + check:diagrams + test:tooling)
 npm run fmt          # auto-format all files
@@ -113,7 +114,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.149, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.149, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, prefers `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` when set, and otherwise falls back to `gh auth token` when the GitHub CLI is available.
 
@@ -126,9 +127,9 @@ Short maintainer conventions:
   Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
-| File                            | Purpose                                                                                                                                            |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.149, Windows smoke) |
-| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                                       |
-| `release-please-config.json`    | Package path, extra version files                                                                                                                  |
-| `.release-please-manifest.json` | Current version tracker                                                                                                                            |
+| File                            | Purpose                                                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, diagram and tooling checks, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.149, Windows smoke) |
+| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                                                                   |
+| `release-please-config.json`    | Package path, extra version files                                                                                                                                              |
+| `.release-please-manifest.json` | Current version tracker                                                                                                                                                        |

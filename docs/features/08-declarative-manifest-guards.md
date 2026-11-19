@@ -64,20 +64,21 @@ The `guardRouter` block also holds the `guards` and `routeMeta` maps, which are 
 | `"routeName"` | `{ "enter": string[], "leave": string[] }` | `addRouteGuard()` / `addLeaveGuard()`            |
 
 - The `"*"` key only supports the `string[]` format (global leave guards do not exist in the API). Using the object form `{ "enter": [...] }` for `"*"` logs an info message and is treated as the array form; a `leave` array under `"*"` logs a warning and is skipped.
+- Keys other than `enter` and `leave`, and an `enter` or `leave` value that is not an array, are logged as warnings and skipped. Under `"*"` only `enter` applies; `leave` is skipped with a warning, because there are no global leave guards.
 - Route keys match the route names UI5 registers: the `name` of each entry in a `routes` array; for routes given as an object map, the entry's `name` if set, else its key.
 - Module paths use **dot notation** and resolve **relative to the component namespace** (`sap.app.id`).
     - Example: In app `demo.app`, `"guards.authGuard"` resolves to `demo/app/guards/authGuard` for `sap.ui.require`.
     - `"authGuard"` (no folder) resolves to `demo/app/authGuard` — the component root.
     - The component namespace is read from the router's owner component (the `oOwner` constructor argument) via `owner.getManifestEntry("sap.app")?.id`. If unavailable (e.g. standalone tests without a component), no namespace is prepended and the dot path is only converted to slashes.
     - Paths prefixed with `"module:"` bypass namespace resolution, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()` convention. Example: `"module:some.other.lib.guard"` resolves to `some/other/lib/guard` directly.
-- Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)).
+- Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)). A module with only named exports counts as the object shape.
 - A module entry may include a `#` cherry-pick suffix to select a single export: `"guards.security#checkAuth"` (see [Cherry-Pick Syntax](#cherry-pick-syntax)).
 - Array order defines execution order within a route.
 - Manifest guards are registered in `initialize()` (see [Execution Order](#execution-order)).
 
 ### Guard Module Format
 
-A guard module's default export must be one of three shapes. The shape is detected when the router resolves the module's exports: at `initialize()` for cached or `"block"`-loaded modules, otherwise when the lazy wrapper first loads the module.
+A guard module's default export must be one of three shapes. A module with only named exports counts as the object shape, with its exports in the order they are written. The shape is detected when the router resolves the module's exports: at `initialize()` for cached or `"block"`-loaded modules, otherwise when the lazy wrapper first loads the module.
 
 **Shape 1: Function** — single guard; name derived from the last segment of the module path.
 
@@ -140,12 +141,12 @@ anything else                   → warning, module skipped
 
 Append `#exportKey` to a module path to select a single export instead of registering all exports from the module.
 
-| Syntax                        | Behavior                                                                                             |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                               |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                          |
-| `"guards.checks#1"`           | Register only the export at index 1 (array index, or position in object key order)                   |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message. |
+| Syntax                        | Behavior                                                                                                                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                                                  |
+| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                                                             |
+| `"guards.checks#1"`           | Register only the export at index 1 (array index, or position in object key order)                                                                                                                                      |
+| `"guards.auth#name"`          | For single-function modules, `#name` picks a function among the module's own properties (a named export next to the default function). Without one, `#` is ignored with a debug message and the function is registered. |
 
 The `module:` prefix and `#` cherry-pick compose naturally: `"module:some.other.lib.guards#checkAuth"` resolves to module path `some/other/lib/guards` with export key `checkAuth`. Parsing splits on `#` first, then namespace resolution handles the `module:` prefix on the base path.
 
@@ -431,7 +432,7 @@ Key properties:
 
 - `"guards.security#checkAuth"` → only the `checkAuth` export registered
 - `"guards.checks#1"` → only the export at index 1 registered
-- `"guards.auth#anything"` on a single-function module → `#` ignored, debug warning logged
+- `"guards.auth#anything"` on a single-function module → picks the function `anything` among the module's own properties; without one, `#` ignored, debug message logged
 - Invalid cherry-pick key (nonexistent or non-function) → warning, guard skipped
 - `"module:lib.guards#key"` → `module:` prefix and `#` compose correctly
 - `"*"` key with cherry-pick: `"*": ["guards.logging#verbose"]` → valid

@@ -183,12 +183,12 @@ This registers all guards from `security` (including `checkAuth`), then register
 
 ### Rules
 
-| Syntax                        | Behavior                                                                                                                                                                                |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                  |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                             |
-| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                      |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message, since this likely indicates a mistake (wrong module or expected an object export). |
+| Syntax                        | Behavior                                                                                                                                                                                                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                                                                                                      |
+| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                                                                                                                 |
+| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                                                                                                          |
+| `"guards.auth#anything"`      | For single-function modules, `#name` picks a function among the module's own properties (a named export next to the default function). Without one, `#` is ignored with a debug message, since this likely indicates a mistake (wrong module or expected an object export). |
 
 The `#` separator is unambiguous — module paths use dots and slashes, never `#`.
 
