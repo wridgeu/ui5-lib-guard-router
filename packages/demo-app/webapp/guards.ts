@@ -1,15 +1,8 @@
 import Log from "sap/base/Log";
-import JSONModel from "sap/ui/model/json/JSONModel";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard/router/types";
 
 const LOG_COMPONENT = "demo.app.guards";
-
-/**
- * Guard factories registered by the demo runtime.
- *
- * See `Component.ts` and `controller/Home.controller.ts` for the wiring. The manifest
- * guards are the modules in `guards/`.
- */
 
 /**
  * Async guard that simulates checking permissions via an API.
@@ -17,9 +10,7 @@ const LOG_COMPONENT = "demo.app.guards";
  * - Async guard returning a Promise
  * - Using AbortSignal to cancel pending work when navigation is superseded
  *
- * This is the auth guard variant wired by `Component.ts` in the runnable demo.
- * For the synchronous equivalent used in the library README examples, see
- * {@link createAuthGuard} in the reference section below.
+ * `Component.ts` registers it on the "protected" route.
  *
  * @param authModel - Model containing auth state
  * @param simulatedDelayMs - Simulated API delay in milliseconds (default: 50)
@@ -38,7 +29,6 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 			await new Promise<void>((resolve, reject) => {
 				const timeoutId = setTimeout(resolve, simulatedDelayMs);
 
-				// Listen for abort signal to cancel the simulated API call
 				context.signal.addEventListener("abort", () => {
 					clearTimeout(timeoutId);
 					reject(new DOMException("Aborted", "AbortError"));
@@ -89,131 +79,6 @@ export const adminGuard: GuardFn = () => "protected";
 export function createHomeLeaveLogger(): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
 		Log.info(`Leaving home route, navigating to "${context.toRoute}"`, "", LOG_COMPONENT);
-		return true;
-	};
-}
-
-/**
- * Reference-only guard factories kept here for discoverability.
- * They are not registered by the runnable demo application.
- */
-
-/**
- * Leave guard that blocks navigation when a form has unsaved changes.
- * Demonstrates the "dirty form" pattern using a synchronous model check.
- *
- * Reference implementation: the runnable demo declares `guards/dirtyFormGuard.ts`
- * in the manifest, which reads the model through `context.ownerComponent`.
- *
- * No FLP-specific bypass is needed here. Cross-app navigation operates at
- * the shell level in both production and the FLP sandbox, so the leave
- * guard never runs for cross-app hashes.
- * The FLP dirty-state provider (registered separately via
- * `registerDirtyStateProvider`) handles cross-app dirty UX with its
- * own confirmation popup independently of the router.
- */
-export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
-	return (context: GuardContext): boolean => {
-		const isDirty: unknown = formModel.getProperty("/isDirty");
-		if (isDirty === true) {
-			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
-			return false;
-		}
-		return true;
-	};
-}
-
-/**
- * Guard that requires the user to be logged in.
- * Redirects to "home" if not authenticated.
- *
- * Reference implementation: the runnable demo uses the async variant
- * {@link createAsyncPermissionGuard} instead.
- */
-export function createAuthGuard(authModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		const isLoggedIn: unknown = authModel.getProperty("/isLoggedIn");
-		if (isLoggedIn !== true) {
-			Log.info(`Auth guard blocked navigation to "${context.toRoute}"`, "", LOG_COMPONENT);
-			return "home";
-		}
-		return true;
-	};
-}
-
-/**
- * Guard that demonstrates redirect with route parameters.
- * Redirects to a route while preserving or transforming parameters.
- *
- * Reference implementation: not used in the runnable demo.
- *
- * @example
- * // Redirect from "old-detail/{id}" to "detail/{id}" preserving the id
- * router.addRouteGuard("old-detail", createRedirectWithParamsGuard("detail"));
- *
- * @param targetRoute - The route to redirect to
- */
-export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		Log.info(`Redirecting from "${context.toRoute}" to "${targetRoute}" with params`, "", LOG_COMPONENT);
-		return {
-			route: targetRoute,
-			parameters: context.toArguments,
-		};
-	};
-}
-
-/**
- * Guard that demonstrates error handling behavior.
- *
- * Reference implementation: not used in the runnable demo. It shows that a
- * thrown guard error is logged and settles as `NavigationOutcome.Error`.
- *
- * @example
- * // Register as global guard to fail navigation on error
- * const errorModel = new JSONModel({ simulateError: false });
- * router.addGuard(createErrorDemoGuard(errorModel));
- *
- * // Trigger error by setting model property
- * errorModel.setProperty("/simulateError", true);
- *
- * @param errorModel - Model with /simulateError boolean property
- */
-export function createErrorDemoGuard(errorModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		const shouldThrow = errorModel.getProperty("/simulateError") === true;
-		if (shouldThrow) {
-			Log.warning(`Error demo guard throwing for route "${context.toRoute}"`, "", LOG_COMPONENT);
-			throw new Error(`Simulated guard error for route "${context.toRoute}"`);
-		}
-		return true;
-	};
-}
-
-/**
- * Async version of error demo guard - demonstrates rejected Promise handling.
- *
- * Reference implementation: not used in the runnable demo. Shows how async
- * guard errors (rejected Promises) are handled identically to sync errors.
- *
- * @example
- * // Register as route guard
- * const errorModel = new JSONModel({ simulateAsyncError: false });
- * router.addRouteGuard("risky", createAsyncErrorDemoGuard(errorModel));
- *
- * @param errorModel - Model with /simulateAsyncError boolean property
- * @param delayMs - Delay before rejecting (default: 50ms)
- */
-export function createAsyncErrorDemoGuard(errorModel: JSONModel, delayMs = 50): GuardFn {
-	return async (context: GuardContext): Promise<GuardResult> => {
-		// Simulate async work before checking error condition
-		await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-		const shouldReject = errorModel.getProperty("/simulateAsyncError") === true;
-		if (shouldReject) {
-			Log.warning(`Async error demo guard rejecting for route "${context.toRoute}"`, "", LOG_COMPONENT);
-			throw new Error(`Simulated async guard error for route "${context.toRoute}"`);
-		}
 		return true;
 	};
 }

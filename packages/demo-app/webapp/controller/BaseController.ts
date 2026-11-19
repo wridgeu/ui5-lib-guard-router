@@ -5,7 +5,9 @@ import History from "sap/ui/core/routing/History";
 import type Model from "sap/ui/model/Model";
 import type ResourceModel from "sap/ui/model/resource/ResourceModel";
 import type { GuardRouter } from "ui5/guard/router/types";
+import type NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import ScenarioRunner from "../demo/ScenarioRunner";
+import { SETTLEMENT_TEXT_KEYS } from "../model/runtime";
 
 /**
  * Shared controller helpers for the demo app.
@@ -28,6 +30,15 @@ export default abstract class BaseController extends Controller {
 
 	protected createScenarioRunner(): ScenarioRunner {
 		return new ScenarioRunner(this.getModel("runtime") as JSONModel, this.getModel("i18n") as ResourceModel);
+	}
+
+	/**
+	 * Formatter of the settlement panel, which every view with the panel shares. `notSettled` is
+	 * bound to the i18n model, so the text is formatted again once that model has loaded its bundle.
+	 */
+	formatSettlementStatus(status: NavigationOutcome | "", notSettled: string): string | null {
+		if (!status) return notSettled;
+		return (this.getModel("i18n") as ResourceModel).getProperty(SETTLEMENT_TEXT_KEYS[status]);
 	}
 
 	/**

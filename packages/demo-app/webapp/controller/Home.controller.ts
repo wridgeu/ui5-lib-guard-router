@@ -1,4 +1,4 @@
-import JSONModel from "sap/ui/model/json/JSONModel";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
@@ -15,13 +15,9 @@ import { createHomeLeaveLogger } from "../guards";
  * @namespace demo.app.controller
  */
 export default class HomeController extends BaseController {
-	/** Reference to the leave guard for cleanup in onExit. */
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	override onInit(): void {
-		// Register a standalone leave guard via addLeaveGuard().
-		// The guard is registered when the controller initializes and
-		// removed when it is destroyed (see onExit below).
 		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);

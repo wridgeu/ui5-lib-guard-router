@@ -5,13 +5,7 @@
 		<ObjectStatus
 			id="settlementStatus"
 			title="{i18n>settlementLabel}"
-			text="{= ${runtime>/lastSettlementStatus} === 'committed' ? ${i18n>settlementStatusCommitted}
-				: ${runtime>/lastSettlementStatus} === 'redirected' ? ${i18n>settlementStatusRedirected}
-				: ${runtime>/lastSettlementStatus} === 'bypassed' ? ${i18n>settlementStatusBypassed}
-				: ${runtime>/lastSettlementStatus} === 'cancelled' ? ${i18n>settlementStatusCancelled}
-				: ${runtime>/lastSettlementStatus} === 'blocked' ? ${i18n>settlementStatusBlocked}
-				: ${runtime>/lastSettlementStatus} === 'error' ? ${i18n>settlementStatusError}
-				: ${i18n>settlementNotSettled}}"
+			text="{ parts: ['runtime>/lastSettlementStatus', 'i18n>settlementNotSettled'], formatter: '.formatSettlementStatus' }"
 			state="{runtime>/lastSettlementState}"
 			class="sapUiTinyMarginBottom" />
 		<ObjectStatus

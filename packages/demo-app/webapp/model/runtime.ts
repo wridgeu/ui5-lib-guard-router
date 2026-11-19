@@ -30,9 +30,15 @@ const SETTLEMENT_STATES: Record<NavigationOutcome, ValueState> = {
 	error: ValueState.Error,
 };
 
-function formatSettlementHashTechnical(hash: string): string {
-	return JSON.stringify(hash);
-}
+/** The i18n key of the text for each outcome, typed like {@link SETTLEMENT_STATES}. */
+export const SETTLEMENT_TEXT_KEYS: Record<NavigationOutcome, string> = {
+	committed: "settlementStatusCommitted",
+	redirected: "settlementStatusRedirected",
+	bypassed: "settlementStatusBypassed",
+	cancelled: "settlementStatusCancelled",
+	blocked: "settlementStatusBlocked",
+	error: "settlementStatusError",
+};
 
 /** The model holds values only. The views take the texts, also those of the settlement status, from the i18n bundle. */
 export function createRuntimeModel(): JSONModel {
@@ -69,11 +75,11 @@ export function setRuntimeMessage(model: JSONModel, message: string): void {
 }
 
 export function setSettlementResult(model: JSONModel, result: NavigationResult): void {
-	const lastSettlementRevision = Number(model.getProperty("/lastSettlementRevision") ?? 0) + 1;
+	const lastSettlementRevision = (model.getProperty("/lastSettlementRevision") as number) + 1;
 	model.setProperty("/lastSettlementStatus", result.status);
 	model.setProperty("/lastSettlementState", SETTLEMENT_STATES[result.status]);
 	model.setProperty("/lastSettlementRoute", result.route);
 	model.setProperty("/lastSettlementHash", result.hash);
-	model.setProperty("/lastSettlementHashTechnical", formatSettlementHashTechnical(result.hash));
+	model.setProperty("/lastSettlementHashTechnical", JSON.stringify(result.hash));
 	model.setProperty("/lastSettlementRevision", lastSettlementRevision);
 }
