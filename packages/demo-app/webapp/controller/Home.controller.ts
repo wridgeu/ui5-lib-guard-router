@@ -29,7 +29,7 @@ export default class HomeController extends BaseController {
 
 	onToggleLogin(): void {
 		const model = this.getModel("auth", JSONModel);
-		const isLoggedIn = model.getProperty("/isLoggedIn");
+		const isLoggedIn: unknown = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
 		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
 	}

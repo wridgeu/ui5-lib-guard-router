@@ -63,6 +63,24 @@
 			}
 		},
 		{
+			"files": [
+				"packages/lib/src/**/*.ts",
+				"packages/lib/test/*.ts",
+				"packages/lib/test/qunit/*.ts",
+				"packages/lib/test/qunit/{unit,router,parity,fixtures}/**/*.ts",
+				"packages/lib/test/qunit/upstream-parity/*.ts",
+				"packages/lib/test/qunit/upstream-parity/adapters/**/*.ts",
+				"packages/demo-app/webapp/**/*.ts"
+			],
+			"rules": {
+				"typescript/no-unsafe-argument": "error",
+				"typescript/no-unsafe-assignment": "error",
+				"typescript/no-unsafe-call": "error",
+				"typescript/no-unsafe-member-access": "error",
+				"typescript/no-unsafe-return": "error"
+			}
+		},
+		{
 			"files": ["packages/lib/test/qunit/**/*.ts"],
 			"rules": {
 				"test-guardrails/no-timers": "error"

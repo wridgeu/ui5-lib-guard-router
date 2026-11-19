@@ -4,7 +4,13 @@ type DirtyStateProvider = Parameters<typeof Container.registerDirtyStateProvider
 
 // Probe instead of import: standalone runs on OpenUI5, which has no sap.ushell.
 function getContainer(): typeof Container | undefined {
-	return sap.ui.require("sap/ushell/Container");
+	const container: unknown = sap.ui.require("sap/ushell/Container");
+	return isContainer(container) ? container : undefined;
+}
+
+function isContainer(value: unknown): value is typeof Container {
+	const isObject = (typeof value === "object" && value !== null) || typeof value === "function";
+	return isObject && "registerDirtyStateProvider" in value;
 }
 
 export function hasUshellContainer(): boolean {

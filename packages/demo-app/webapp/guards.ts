@@ -114,7 +114,7 @@ export function createHomeLeaveLogger(): LeaveGuardFn {
  */
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 	return (context: GuardContext): boolean => {
-		const isDirty = formModel.getProperty("/isDirty");
+		const isDirty: unknown = formModel.getProperty("/isDirty");
 		if (isDirty === true) {
 			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
 			return false;
@@ -132,7 +132,7 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
  */
 export function createAuthGuard(authModel: JSONModel): GuardFn {
 	return (context: GuardContext): GuardResult => {
-		const isLoggedIn = authModel.getProperty("/isLoggedIn");
+		const isLoggedIn: unknown = authModel.getProperty("/isLoggedIn");
 		if (isLoggedIn !== true) {
 			Log.info(`Auth guard blocked navigation to "${context.toRoute}"`, "", LOG_COMPONENT);
 			return "home";

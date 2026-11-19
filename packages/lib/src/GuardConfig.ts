@@ -8,7 +8,7 @@ import { LOG_COMPONENT } from "./GuardPipeline";
 /** Type guard for plain objects. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
+	const proto: unknown = Object.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
 
@@ -232,10 +232,10 @@ interface ParsedGuardRouterConfig {
  */
 export function parseGuardRouterConfig(raw: unknown, componentNamespace: string): ParsedGuardRouterConfig {
 	const options = normalizeGuardRouterOptions(raw);
-	if (!isRecord(raw)) return { options, routeMeta: new Map(), guards: [] };
+	if (!isRecord(raw)) return { options, routeMeta: parseRouteMeta({}), guards: [] };
 	return {
 		options,
-		routeMeta: raw.routeMeta === undefined ? new Map() : parseRouteMeta(raw.routeMeta),
+		routeMeta: parseRouteMeta(raw.routeMeta === undefined ? {} : raw.routeMeta),
 		guards: raw.guards === undefined ? [] : parseGuardDescriptors(raw.guards, componentNamespace),
 	};
 }

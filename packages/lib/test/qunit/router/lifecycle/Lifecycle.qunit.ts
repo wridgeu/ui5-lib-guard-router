@@ -10,7 +10,7 @@ import {
 	changeHashSilently,
 	flushPromises,
 	getHash,
-	GuardRouterClass,
+	createRouterUnsafe,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
@@ -151,7 +151,7 @@ QUnit.test("the hash changer UI5 passes to the router of a nested component is u
 	router.destroy();
 	try {
 		// UIComponent passes it as fifth argument when the component is loaded as a routing target.
-		router = Reflect.construct(GuardRouterClass, [
+		router = createRouterUnsafe(
 			[
 				{ name: "home", pattern: "" },
 				{ name: "protected", pattern: "protected" },
@@ -160,7 +160,7 @@ QUnit.test("the hash changer UI5 passes to the router of a nested component is u
 			undefined,
 			undefined,
 			subHashChanger,
-		]);
+		);
 		assert.ok(router.getHashChanger() === subHashChanger, "the router uses the hash changer it was given");
 
 		router.initialize();

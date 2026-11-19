@@ -8,6 +8,6 @@ import type { GuardContext, GuardResult } from "ui5/guard/router/types";
  * is locked, the guard redirects to the report overview of the same router.
  */
 export default function confidentialGuard(context: GuardContext): GuardResult {
-	const unlocked = context.ownerComponent?.getModel("access")?.getProperty("/confidentialUnlocked");
+	const unlocked: unknown = context.ownerComponent?.getModel("access")?.getProperty("/confidentialUnlocked");
 	return unlocked === true ? true : "overview";
 }

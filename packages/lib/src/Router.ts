@@ -1452,10 +1452,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (direction === HistoryDirection.NewEntry || direction === HistoryDirection.Forwards) {
 			Reflect.set(this, "_bLastHashReplaced", false);
 		} else if (direction === HistoryDirection.Backwards) {
-			const titles: { title: string; isHome?: boolean }[] = this.getTitleHistory();
+			const titles: unknown[] = this.getTitleHistory();
 			const left = titles.at(-1);
 			const replaced = titles.at(-2);
-			if (left && replaced && !left.isHome && left.title !== replaced.title) titles.splice(-2, 1);
+			if (isRecord(left) && isRecord(replaced) && !left.isHome && left.title !== replaced.title) {
+				titles.splice(-2, 1);
+			}
 		}
 	}
 
@@ -1725,7 +1727,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			fromRoute,
 			fromHash: chain ? chain.fromHash : (this._currentHash ?? ""),
 			signal,
-			bag: chain ? chain.bag : new Map(),
+			bag: chain ? chain.bag : new Map<string, unknown>(),
 			toMeta: this.getRouteMeta(routeInfo.name),
 			fromMeta: this.getRouteMeta(fromRoute),
 			ownerComponent: this._ownerComponent,

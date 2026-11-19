@@ -30,7 +30,9 @@ export interface SinonTestContext {
  * test files under test-resources/, so a relative import would get a second instance.
  */
 export function loadModule<T>(path: string): Promise<T> {
-	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
+	return new Promise((resolve, reject) => {
+		sap.ui.require([path], (mod: T) => resolve(mod), reject);
+	});
 }
 
 /** A guard context for tests of the pipeline and of guard modules, which need no router. */
@@ -100,8 +102,12 @@ export function createdRouterHooks(current: () => GuardRouter): { beforeEach: ()
 }
 
 /** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
-export function createRouterUnsafe(routes: object[], config: unknown): GuardRouter {
-	return Reflect.construct(GuardRouterClass, [routes, config]);
+export function createRouterUnsafe(routes: object[], config: unknown, ...rest: unknown[]): GuardRouter {
+	const router: unknown = Reflect.construct(GuardRouterClass, [routes, config, ...rest]);
+	if (!(router instanceof GuardRouterClass)) {
+		throw new Error("The guard router class constructed no guard router");
+	}
+	return router;
 }
 
 /** {@link createRouterWithOptions} for invalid `guardRouter` values. */
@@ -120,7 +126,7 @@ export function getComponentRouter(component: Component): GuardRouter {
 
 /** Call `target[methodName]` as an untyped JS caller would, to test runtime validation of invalid arguments. */
 export function callUnsafe(target: object, methodName: string, ...args: unknown[]): unknown {
-	const method = Reflect.get(target, methodName);
+	const method: unknown = Reflect.get(target, methodName);
 	if (typeof method !== "function") {
 		throw new Error(`Method "${methodName}" is not available`);
 	}
