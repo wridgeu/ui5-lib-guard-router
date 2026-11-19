@@ -120,7 +120,7 @@ Every Mermaid diagram uses this palette; `check:diagrams` rejects a `classDef` t
 
 - A flowchart or state diagram that uses the classes has a legend: the two rows "Parts" and "Outcomes" at the foot of the overview in the library README, or one line under the figure that names the colours and symbols.
 - A sequence diagram puts the library's participants in `box rgba(0, 114, 178, 0.15) This library` and those of UI5 or the launchpad in `box rgba(110, 119, 129, 0.2)`. A diagram of one outcome wraps its messages in a `rect`: `rgba(0, 158, 115, 0.15)` committed, `rgba(240, 228, 66, 0.15)` redirected, `rgba(213, 94, 0, 0.15)` blocked. Its caption names the outcome.
-- One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled (about 750px).
+- One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled: at most 740px wide as GitHub renders it. `check:diagrams` cannot measure this (the headless DOM has no text layout), so read the `viewBox` width of the rendered SVG. A front matter with `minNodeWidth` and `wrappingWidth` under `flowchart`, and `forceNodeModelOrder` under `elk`, can narrow a figure and keep its order.
 - No backtick in a label, and `#35;` for a `#` in a sequence diagram: Mermaid drops the rest of the line after a `#`.
 
 ## Build

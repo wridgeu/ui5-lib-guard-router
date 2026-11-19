@@ -181,6 +181,11 @@ export default class Component extends UIComponent {
 The native chain of `sap.m.routing.Router` stays as it is; the library puts its guards in front of it.
 
 ```mermaid
+---
+config:
+  flowchart:
+    minNodeWidth: 60
+---
 flowchart TD
     bar["Address bar, back, forward:<br/>the browser changes the hash"]
     shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
@@ -190,8 +195,8 @@ flowchart TD
     subgraph added ["ui5.guard.router.Router (this library)"]
         preflight["Preflight of navTo():<br/>before the hash changes"]
         parse["Override of parse():<br/>after the hash changed"]
-        sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
         subgraph pipeline ["Guard pipeline"]
+            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
             leave["1. Leave guards of the current route"]
             global["2. Global enter guards"]
             enter["3. Enter guards of the target route"]
@@ -215,7 +220,7 @@ flowchart TD
     appCode --> preflight
     preflight --> leave
     parse --> leave
-    sources -.-> pipeline
+    sources -.-> leave
 
     enter --> commit
     enter --> redirect

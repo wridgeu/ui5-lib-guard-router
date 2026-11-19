@@ -9,81 +9,71 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-The route map of `demo.app`: each box on the left is a route with its pattern and what its guards do. Blue routes have a guard, and a route without an arrow never shows a view of its own. The dashed boxes are what a hash without a route gets. The global guard `navigationLogger` logs every navigation and allows it.
+The routes of `demo.app` in manifest order. A box names the route, then its pattern → the view of its target; the target has the name of the route unless the box names another. Right of a route stand its guards.
 
 ```mermaid
+---
+config:
+  flowchart:
+    minNodeWidth: 60
+    wrappingWidth: 300
+  elk:
+    forceNodeModelOrder: true
+    considerModelOrder: NODES_AND_EDGES
+---
 flowchart LR
-    subgraph routes ["Routes of demo.app"]
-        rHome["(empty pattern), route home<br/>leave guard of Home.controller:<br/>logs and allows"]
-        rProtected["protected<br/>enter: permission guard, async,<br/>redirects to home when logged out<br/>leave: dirtyFormGuard blocks<br/>while the form is dirty"]
-        rBlocked["blocked<br/>blockedGuard: always blocks"]
-        rForbidden["forbidden<br/>forbiddenGuard: always<br/>redirects to home"]
-        rAdmin["admin<br/>adminGuard: always<br/>redirects to protected"]
-        rTeam["team, no target<br/>retiredPageGuard: redirects to staff,<br/>which settles on employees"]
-        rEmployees["employees, route employees<br/>(route staff has the same pattern<br/>and never matches)"]
-        rEmployee["employees/{id}, route employee"]
-        rReports["reports"]
-        rNone["no route matches (bypassed)"]
-    end
-
-    subgraph views ["Views of demo.app"]
-        home["Home"]
-        protected["Protected"]
-        employees["Employees"]
-        employee["Employee"]
-        reporting["Component<br/>demo.app.reporting"]
-        notFound["NotFound"]
-    end
-
-    rHome --> home
-    rProtected --> protected
-    rEmployees --> employees
-    rEmployee --> employee
-    rReports --> reporting
-    rNone --> notFound
+    gLogger("✓ navigationLogger, global:<br/>logs, allows")
+    rHome["home<br/>(empty) → Home"] -.- gHome("✓ leave guard, Home.controller:<br/>logs, allows")
+    rProtected["protected<br/>protected → Protected"] -.- gPermission("↪ permission guard, Component.ts,<br/>async: to home if logged out")
+    rProtected -.- gDirty("✕ dirtyFormGuard, leave:<br/>blocks if the form is dirty")
+    rBlocked["blocked<br/>blocked → Blocked"] -.- gBlocked("✕ blockedGuard: blocks")
+    rForbidden["forbidden<br/>forbidden → Forbidden"] -.- gForbidden("↪ forbiddenGuard: to home")
+    rAdmin["admin<br/>admin → Admin"] -.- gAdmin("↪ adminGuard, Component.ts:<br/>to protected")
+    rTeam["team<br/>team, no target"] -.- gRetired("↪ retiredPageGuard: to staff")
+    rEmployees["employees<br/>employees → Employees"] ~~~ rStaff["staff, never matches<br/>employees → target<br/>employees: Employees"]
+    rEmployee["employee<br/>employees/{id} → Employee"] ~~~ rReports["reports<br/>reports → Component<br/>demo.app.reporting"]
+    rNone["bypassed<br/>no match → target notFound:<br/>NotFound"]
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    class rEmployees,rEmployee,rReports,home,protected,employees,employee,reporting native
-    class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam added
-    class rNone,notFound optional
-    style routes fill:none,stroke:#6e7781
-    style views fill:none,stroke:#6e7781
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    class rHome,rProtected,rBlocked,rForbidden,rAdmin,rEmployees,rStaff,rTeam,rEmployee,rReports native
+    class rNone optional
+    class gLogger,gHome commit
+    class gPermission,gForbidden,gAdmin,gRetired redirect
+    class gDirty,gBlocked block
 ```
+
+Grey: a route. Dashed: what a hash without a route gets. A guard says what it does: green ✓ allows, yellow ↪ redirects, orange ✕ blocks. A guard without a file named is declared in the manifest.
 
 The nested component `demo.app.reporting` (target `reports`, hash prefix `reports`) has a guard router of its own:
 
 ```mermaid
+---
+config:
+  flowchart:
+    minNodeWidth: 60
+    wrappingWidth: 300
+  elk:
+    forceNodeModelOrder: true
+    considerModelOrder: NODES_AND_EDGES
+---
 flowchart LR
-    subgraph routes ["Routes of demo.app.reporting"]
-        rOverview["(empty pattern), route overview"]
-        rSales["sales"]
-        rConfidential["confidential<br/>confidentialGuard: redirects<br/>to overview while locked"]
-        rNone["no route matches (bypassed)"]
-    end
-
-    subgraph views ["Views of demo.app.reporting"]
-        overview["Overview"]
-        sales["Sales"]
-        confidential["Confidential"]
-        notFound["NotFound"]
-    end
-
-    rOverview --> overview
-    rSales --> sales
-    rConfidential --> confidential
-    rNone --> notFound
+    rOverview["overview<br/>(empty) → Overview"] ~~~ rSales["sales<br/>sales → Sales"]
+    rConfidential["confidential<br/>confidential → Confidential"] -.- gConfidential("↪ confidentialGuard:<br/>to overview while locked")
+    rNone["bypassed<br/>no match → target notFound:<br/>NotFound"]
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    class rOverview,rSales,overview,sales,confidential native
-    class rConfidential added
-    class rNone,notFound optional
-    style routes fill:none,stroke:#6e7781
-    style views fill:none,stroke:#6e7781
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    class rOverview,rSales,rConfidential native
+    class rNone optional
+    class gConfidential redirect
 ```
+
+Same key as above; the guard is declared in the manifest of the component.
 
 The hash of a nested route follows that of the parent route, for example `#/reports&/reports/sales`.
 
