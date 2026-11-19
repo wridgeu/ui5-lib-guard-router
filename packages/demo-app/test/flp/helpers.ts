@@ -108,18 +108,14 @@ type DialogRecord = {
 export function installDialogHandler(accept: boolean): { record: DialogRecord; cleanup: () => void } {
 	const record: DialogRecord = { called: false, handled: false, message: "", type: "" };
 
-	const handler = async (dialog: WebdriverIO.Dialog): Promise<void> => {
+	const handler = (dialog: WebdriverIO.Dialog): void => {
 		record.called = true;
 		record.message = dialog.message();
 		record.type = dialog.type();
 
-		if (accept) {
-			await dialog.accept();
-		} else {
-			await dialog.dismiss();
-		}
-
-		record.handled = true;
+		void (accept ? dialog.accept() : dialog.dismiss()).then(() => {
+			record.handled = true;
+		});
 	};
 
 	browser.on("dialog", handler);

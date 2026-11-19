@@ -3,8 +3,8 @@ import Controller from "sap/ui/core/mvc/Controller";
 import JSONModel from "sap/ui/model/json/JSONModel";
 import History from "sap/ui/core/routing/History";
 import type Model from "sap/ui/model/Model";
-import type ResourceModel from "sap/ui/model/resource/ResourceModel";
-import type { GuardRouter } from "ui5/guard/router/types";
+import ResourceModel from "sap/ui/model/resource/ResourceModel";
+import GuardRouter from "ui5/guard/router/Router";
 import ScenarioRunner from "../demo/ScenarioRunner";
 
 /**
@@ -15,19 +15,24 @@ import ScenarioRunner from "../demo/ScenarioRunner";
 export default abstract class BaseController extends Controller {
 	/** The manifest sets `routerClass` to `ui5.guard.router.Router`. */
 	protected getRouter(): GuardRouter {
-		return UIComponent.getRouterFor(this) as GuardRouter;
+		const router = UIComponent.getRouterFor(this);
+		if (!(router instanceof GuardRouter)) {
+			throw new Error("The router is not a ui5.guard.router.Router");
+		}
+		return router;
 	}
 
-	protected getModel<T extends Model = Model>(name?: string): T {
+	/** The model `name` of the view or of the component, which is of the class `type`. */
+	protected getModel<T extends Model>(name: string, type: new (...args: never[]) => T): T {
 		const model = this.getView()?.getModel(name) ?? this.getOwnerComponent()?.getModel(name);
-		if (!model) {
-			throw new Error(`Model "${name ?? "default"}" is not available`);
+		if (!(model instanceof type)) {
+			throw new Error(`Model "${name}" is not available`);
 		}
-		return model as T;
+		return model;
 	}
 
 	protected createScenarioRunner(): ScenarioRunner {
-		return new ScenarioRunner(this.getModel<JSONModel>("runtime"), this.getModel<ResourceModel>("i18n"));
+		return new ScenarioRunner(this.getModel("runtime", JSONModel), this.getModel("i18n", ResourceModel));
 	}
 
 	/**

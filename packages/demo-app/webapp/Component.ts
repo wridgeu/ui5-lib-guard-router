@@ -1,6 +1,6 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter } from "ui5/guard/router/types";
+import GuardRouter from "ui5/guard/router/Router";
 import RuntimeCoordinator from "./demo/RuntimeCoordinator";
 import { adminGuard, createAsyncPermissionGuard } from "./guards";
 import { createRuntimeModel } from "./model/runtime";
@@ -37,7 +37,13 @@ export default class Component extends UIComponent {
 	override init(): void {
 		super.init();
 
-		const router = this.getRouter() as GuardRouter;
+		const router = this.getRouter();
+		const authModel = this.getModel("auth");
+		if (!(router instanceof GuardRouter) || !(authModel instanceof JSONModel)) {
+			throw new Error(
+				"The manifest must declare the routerClass ui5.guard.router.Router and the JSON model auth",
+			);
+		}
 		const runtimeModel = createRuntimeModel();
 		const formModel = new JSONModel({ isDirty: false });
 
@@ -47,7 +53,7 @@ export default class Component extends UIComponent {
 		// The permission guard closes over the auth model. Manifest guards reach the
 		// component through context.ownerComponent instead.
 		router.addRouteGuard("admin", adminGuard);
-		router.addRouteGuard("protected", createAsyncPermissionGuard(this.getModel("auth") as JSONModel));
+		router.addRouteGuard("protected", createAsyncPermissionGuard(authModel));
 
 		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);
 

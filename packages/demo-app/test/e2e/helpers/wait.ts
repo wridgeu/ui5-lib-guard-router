@@ -124,7 +124,7 @@ async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 
 function formatRuntimeSettlementExpectation(expected: RuntimeSettlementExpectation): string {
 	return Object.entries(expected)
-		.map(([key, value]) => `${key}=${String(value)}`)
+		.map(([key, value]) => `${key}=${value}`)
 		.join(", ");
 }
 
