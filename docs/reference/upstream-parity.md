@@ -221,7 +221,8 @@ does. The pages of the first two suites make about 140 and 90 changes, the third
 
 For a redirected step through the browser history (`RedirectedStepParity.qunit.ts`) the native
 router displays the page of the step before the target replaces it, and the guard router does
-not. The comparison therefore starts with the first step after the redirect: steps back and
+not: its guards decide before any target is displayed, so the page that a guard turned away
+is never shown, not even for a moment. That is the purpose of a guard. The comparison therefore starts with the first step after the redirect: steps back and
 forward over the replaced entry and its neighbors, with the hash, the routing events, the
 history entries, the pages and the title history after each. Two things stay different on
 purpose and are not compared: right after the redirect, the `NavContainer` of the native run
