@@ -16,8 +16,8 @@
 		"clean": "npm run clean --workspaces",
 		"fmt": "oxfmt .",
 		"fmt:check": "oxfmt --check .",
-		"lint": "oxlint packages/ scripts/ tools/ --import-plugin --deny-warnings",
-		"lint:fix": "oxlint packages/ scripts/ tools/ --import-plugin --fix",
+		"lint": "oxlint packages/ scripts/ tools/ --deny-warnings",
+		"lint:fix": "oxlint packages/ scripts/ tools/ --fix",
 		"check": "npm run fmt:check && npm run lint && npm run typecheck && npm run check:layout && npm run check:diagrams && npm run test:tooling",
 		"check:diagrams": "node ./scripts/check-diagrams.mjs",
 		"check:layout": "node ./scripts/check-test-layout.mjs",
@@ -57,7 +57,7 @@
 	},
 	"lint-staged": {
 		"{packages,scripts,tools}/**/*.{ts,js,mjs}": [
-			"oxlint --fix --import-plugin --deny-warnings",
+			"oxlint --fix --deny-warnings",
 			"oxfmt"
 		],
 		"*.{json,md,yaml,yml}": "oxfmt"
@@ -78,12 +78,12 @@
 		"@wdio/mocha-framework": "^9.33.1",
 		"@wdio/spec-reporter": "^9.33.1",
 		"husky": "^9.1.7",
-		"linkedom": "0.18.15",
+		"linkedom": "^0.18.15",
 		"lint-staged": "^17.6.1",
-		"mermaid": "12.3.0",
+		"mermaid": "^12.3.0",
 		"oxfmt": "^0.79.0",
 		"oxlint": "^1.94.0",
-		"oxlint-tsgolint": "7.0.2007",
+		"oxlint-tsgolint": "^7.0.2007",
 		"release-please": "^17.11.2",
 		"rimraf": "^6.1.4",
 		"typescript": "npm:@typescript/typescript6@^6.0.2",

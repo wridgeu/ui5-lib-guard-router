@@ -35,6 +35,11 @@
 		"unicorn/prefer-global-this": "off",
 		"unicorn/consistent-function-scoping": "off",
 		"typescript/no-explicit-any": "warn",
+		"typescript/no-unsafe-argument": "error",
+		"typescript/no-unsafe-assignment": "error",
+		"typescript/no-unsafe-call": "error",
+		"typescript/no-unsafe-member-access": "error",
+		"typescript/no-unsafe-return": "error",
 		"typescript/no-unsafe-type-assertion": "error",
 		"typescript/no-unnecessary-type-assertion": "warn",
 		"typescript/no-misused-promises": "error",
@@ -63,23 +68,13 @@
 			}
 		},
 		{
-			"files": [
-				"packages/lib/src/**/*.ts",
-				"packages/lib/test/*.ts",
-				"packages/lib/test/qunit/*.ts",
-				"packages/lib/test/qunit/{unit,router,parity,fixtures}/**/*.ts",
-				"packages/lib/test/qunit/upstream-parity/*.ts",
-				"packages/lib/test/qunit/upstream-parity/adapters/**/*.ts",
-				"packages/demo-app/**/*.ts",
-				"scripts/**/*.mjs",
-				"tools/**/*.{mjs,ts}"
-			],
+			"files": ["packages/lib/test/qunit/upstream-parity/ports/**", "packages/demo-app/test/flp/**/*.js"],
 			"rules": {
-				"typescript/no-unsafe-argument": "error",
-				"typescript/no-unsafe-assignment": "error",
-				"typescript/no-unsafe-call": "error",
-				"typescript/no-unsafe-member-access": "error",
-				"typescript/no-unsafe-return": "error"
+				"typescript/no-unsafe-argument": "off",
+				"typescript/no-unsafe-assignment": "off",
+				"typescript/no-unsafe-call": "off",
+				"typescript/no-unsafe-member-access": "off",
+				"typescript/no-unsafe-return": "off"
 			}
 		},
 		{
