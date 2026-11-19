@@ -49,6 +49,33 @@ QUnit.test("Resolves immediately with 'committed' when nothing pending", async f
 	assert.deepEqual(result, { status: NavigationOutcome.Committed, route: "home", hash: "" });
 });
 
+QUnit.test(
+	"attachNavigationSettled and attachRouteMatched pass data and listener, with and without data",
+	async function (assert: Assert) {
+		const data = { id: "data" };
+		const listener = { id: "listener" };
+		const calls: string[] = [];
+		function record(this: unknown, event: { getId(): string }, eventData?: unknown): void {
+			calls.push(`${event.getId()} ${this === listener} ${eventData === data}`);
+		}
+		router.attachNavigationSettled(data, record, listener);
+		router.attachNavigationSettled(record, listener);
+		router.attachRouteMatched(data, record, listener);
+		router.attachRouteMatched(record, listener);
+
+		router.initialize();
+		await waitForRoute(router, "home");
+		await flushPromises();
+
+		assert.deepEqual(calls.toSorted(), [
+			"navigationSettled true false",
+			"navigationSettled true true",
+			"routeMatched true false",
+			"routeMatched true true",
+		]);
+	},
+);
+
 QUnit.test("Resolves with 'committed' when sync guard allows", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => true);
 	router.initialize();

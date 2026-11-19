@@ -135,7 +135,7 @@ QUnit.test("first non-true global guard short-circuits", function (assert: Asser
 		return true;
 	});
 
-	pipeline.evaluate(createContext());
+	void pipeline.evaluate(createContext());
 	assert.deepEqual(calls, [1, 2], "Third guard never called");
 });
 
@@ -178,7 +178,7 @@ QUnit.test("global guards run before route guards and can short-circuit", functi
 		return true;
 	});
 
-	pipeline.evaluate(createContext());
+	void pipeline.evaluate(createContext());
 	assert.deepEqual(order, ["global", "route"], "Global runs first");
 
 	// Reset and test short-circuit
@@ -193,7 +193,7 @@ QUnit.test("global guards run before route guards and can short-circuit", functi
 		return true;
 	});
 
-	pipeline2.evaluate(createContext());
+	void pipeline2.evaluate(createContext());
 	assert.deepEqual(called, ["global"], "Route guard skipped when global blocks");
 });
 
@@ -213,7 +213,7 @@ QUnit.test("leave guard allows, full pipeline runs in order", function (assert: 
 		return true;
 	});
 
-	pipeline.evaluate(createContext({ fromRoute: "current" }));
+	void pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(order, ["leave", "global", "route"]);
 });
 
@@ -601,8 +601,8 @@ QUnit.test(
 			throw new Error("leave failed");
 		});
 
-		pipeline.evaluate(createContext(), { alsoEntering: ["audit"] });
-		pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["auditLeft"] });
+		void pipeline.evaluate(createContext(), { alsoEntering: ["audit"] });
+		void pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["auditLeft"] });
 
 		assert.deepEqual(logMessages(error), [
 			'Enter guard [0] on route "audit" threw, navigation failed',

@@ -59,11 +59,11 @@ QUnit.test("a named guard's throw is logged with its name", async function (this
 	const sync = new GuardPipeline();
 	sync.addGlobalGuard(() => true);
 	sync.addGlobalGuard(enter);
-	sync.evaluate(createContext());
+	void sync.evaluate(createContext());
 
 	const leaving = new GuardPipeline();
 	leaving.addLeaveGuard("current", leave);
-	leaving.evaluate(createContext({ fromRoute: "current" }));
+	void leaving.evaluate(createContext({ fromRoute: "current" }));
 
 	const async = new GuardPipeline();
 	async.addGlobalGuard(() => Promise.resolve(true));

@@ -9,8 +9,12 @@ function isGuardRedirect(value: unknown): value is GuardRedirect {
 		return false;
 	}
 
-	const { route } = value as GuardRedirect;
-	return typeof route === "string" && route.length > 0;
+	return "route" in value && typeof value.route === "string" && value.route.length > 0;
+}
+
+/** A guard as a module exports it: any function. Its arguments and its result are checked when it runs. */
+export function isGuardFn(value: unknown): value is GuardFn {
+	return typeof value === "function";
 }
 
 /**
@@ -24,7 +28,7 @@ export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 		return false;
 	}
 
-	return typeof (value as PromiseLike<T>).then === "function";
+	return "then" in value && typeof value.then === "function";
 }
 
 /** How this engine prints the resolve function of a Promise: `function () { [native code] }` in V8. */

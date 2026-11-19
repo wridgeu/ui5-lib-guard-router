@@ -30,6 +30,11 @@ import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 type Direction = ReturnType<History["getDirection"]>;
 
+/** Whether `value` is a function, by which UI5 tells the handler from the data in the arguments of an attach method. */
+function isCallable(value: unknown): value is (...args: unknown[]) => void {
+	return typeof value === "function";
+}
+
 /**
  * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
  * not a copy, because UIComponent adds `targetParent` (the ID of the root view) to its config
@@ -253,12 +258,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private readonly _ownerComponent: UIComponent | undefined;
 
 	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object);
-	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, ...rest: unknown[]) {
+	constructor(
+		routes?: object | object[],
+		config?: GuardRouterConfig,
+		owner?: UIComponent,
+		...rest: [targetsConfig?: object]
+	) {
 		const isRecordConfig = isRecord(config);
 		const guardRouter = isRecordConfig ? config.guardRouter : undefined;
 		// UI5 passes more than its types declare: after the targets config comes the
 		// hash changer of a component that is loaded as a routing target.
-		super(routes, isRecordConfig ? withoutGuardRouter(config) : config, owner, ...(rest as [object?]));
+		super(routes, isRecordConfig ? withoutGuardRouter(config) : config, owner, ...rest);
 		this._ownerComponent = owner;
 		this._mirrorMatchingProcess();
 		let componentNamespace = "";
@@ -276,12 +286,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		// Collect route names for pattern-tree traversal the way UI5 names the routes:
 		// an entry's own name, or its key in an object map when it has none.
-		const routeConfigs = Array.isArray(routes)
-			? (routes as { name: string; greedy?: boolean }[])
-			: Object.entries((routes ?? {}) as Record<string, { name?: string; greedy?: boolean }>).map(([key, r]) => ({
-					name: r.name ?? key,
-					greedy: r.greedy,
-				}));
+		const routeConfigs = Object.entries(routes ?? {}).map(([key, r]: [string, unknown]) => ({
+			name: isRecord(r) && typeof r.name === "string" ? r.name : key,
+			greedy: isRecord(r) && r.greedy,
+		}));
 		this._routeNames = routeConfigs.map((r) => r.name);
 		this._greedyRouteNames = routeConfigs.filter((r) => r.greedy).map((r) => r.name);
 
@@ -342,15 +350,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		oListener?: object,
 	): this;
 	override attachRouteMatched(fnFunction: (evt: Router$RouteMatchedEvent) => void, oListener?: object): this;
-	override attachRouteMatched(oData: unknown, fnFunction?: unknown, oListener?: unknown): this {
+	override attachRouteMatched(oData: object, fnFunction?: object, oListener?: object): this {
 		if (isPromiseResolver(oData) && (!this.isInitialized() || this._isMatching())) {
 			this._matchWaiters.push(oData);
 		}
-		return super.attachRouteMatched(
-			oData as object,
-			fnFunction as (evt: Router$RouteMatchedEvent) => void,
-			oListener as object,
-		);
+		if (isCallable(oData)) return super.attachRouteMatched(oData, fnFunction);
+		if (isCallable(fnFunction)) return super.attachRouteMatched(oData, fnFunction, oListener);
+		return this;
 	}
 
 	/**
@@ -421,7 +427,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// reject. A router destroyed while modules load stays destroyed.
 		const blockLoad = { start: true, ignoreInitialHash: bIgnoreInitialHash };
 		this._blockLoad = blockLoad;
-		loadGuardModules(expandedDescriptors).then((results) => {
+		void loadGuardModules(expandedDescriptors).then((results) => {
 			this._blockLoad = null;
 			if (this._destroyed) return;
 			for (const { descriptor, guards } of results) {
@@ -847,13 +853,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		oListener?: object,
 	): this;
 	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
-	attachNavigationSettled(oData: unknown, fnFunction?: unknown, oListener?: unknown): this {
-		this.attachEvent(
-			"navigationSettled",
-			oData as object,
-			fnFunction as (...args: unknown[]) => void,
-			oListener as object,
-		);
+	attachNavigationSettled(oData: object, fnFunction?: object, oListener?: object): this {
+		if (isCallable(oData)) return this.attachEvent("navigationSettled", oData, fnFunction);
+		if (isCallable(fnFunction)) return this.attachEvent("navigationSettled", oData, fnFunction, oListener);
 		return this;
 	}
 
@@ -868,7 +870,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.3.0
 	 */
 	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this {
-		this.detachEvent("navigationSettled", fnFunction as (...args: unknown[]) => void, oListener);
+		this.detachEvent("navigationSettled", fnFunction, oListener);
 		return this;
 	}
 
@@ -1900,7 +1902,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const hashChanger = this.getHashChanger();
 		if (hashChanger.getHash() === hash) return;
 		this._suppressedHash = suppressParse ? hash : null;
-		hashChanger.replaceHash(hash, HistoryDirection.Unknown);
+		void hashChanger.replaceHash(hash, HistoryDirection.Unknown);
 		this._suppressedHash = null;
 	}
 

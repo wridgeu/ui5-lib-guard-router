@@ -4,7 +4,7 @@
  */
 import Log from "sap/base/Log";
 import type { GuardContext, GuardFn, GuardResult } from "./types";
-import { isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
+import { isGuardFn, isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord } from "./GuardConfig";
 
 /** A guard function from a module, with the name its log messages show. */
@@ -43,7 +43,7 @@ function positionOf(exportKey: string): number {
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
 	const moduleName = moduleNameOf(modulePath);
 
-	if (typeof moduleExport === "function") {
+	if (isGuardFn(moduleExport)) {
 		if (exportKey !== undefined) {
 			Log.debug(
 				`guardRouter.guards: "${modulePath}#${exportKey}" is a single function, ignoring export key`,
@@ -51,7 +51,7 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				LOG_COMPONENT,
 			);
 		}
-		return [{ name: exportKey ?? moduleName, fn: moduleExport as GuardFn }];
+		return [{ name: exportKey ?? moduleName, fn: moduleExport }];
 	}
 
 	if (Array.isArray(moduleExport)) {
@@ -66,22 +66,22 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				guardWarning(modulePath, `#${exportKey} - index out of range, skipping`);
 				return [];
 			}
-			const entry = moduleExport[index] as unknown;
-			if (typeof entry !== "function") {
+			const entry: unknown = moduleExport[index];
+			if (!isGuardFn(entry)) {
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
+			return [{ name: `${moduleName}#${exportKey}`, fn: entry }];
 		}
 
 		const results: NamedGuard[] = [];
 		for (let i = 0; i < moduleExport.length; i++) {
-			const entry = moduleExport[i] as unknown;
-			if (typeof entry !== "function") {
+			const entry: unknown = moduleExport[i];
+			if (!isGuardFn(entry)) {
 				guardWarning(modulePath, `[${i}] is not a function, skipping`);
 				continue;
 			}
-			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
+			results.push({ name: `${moduleName}#${i}`, fn: entry });
 		}
 		return results;
 	}
@@ -105,20 +105,20 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				return [];
 			}
 			const [name, value] = entry;
-			if (typeof value !== "function") {
+			if (!isGuardFn(value)) {
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [{ name, fn: value as GuardFn }];
+			return [{ name, fn: value }];
 		}
 
 		const results: NamedGuard[] = [];
 		for (const [key, value] of entries) {
-			if (typeof value !== "function") {
+			if (!isGuardFn(value)) {
 				guardWarning(modulePath, `.${key} is not a function, skipping`);
 				continue;
 			}
-			results.push({ name: key, fn: value as GuardFn });
+			results.push({ name: key, fn: value });
 		}
 		return results;
 	}

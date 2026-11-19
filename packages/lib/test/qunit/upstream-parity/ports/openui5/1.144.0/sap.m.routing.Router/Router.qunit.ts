@@ -46,7 +46,7 @@ function stubViewsByName(viewMap: Record<string, Page>) {
 
 	return sinon.stub(prototype, "_getView").callsFake((options: unknown) => {
 		const candidateOptions = options as { viewName?: string; name?: string };
-		const candidate = String(candidateOptions.viewName ?? candidateOptions.name ?? "").toLowerCase();
+		const candidate = (candidateOptions.viewName ?? candidateOptions.name ?? "").toLowerCase();
 		for (const [name, page] of Object.entries(viewMap)) {
 			if (candidate.endsWith(name.toLowerCase()) || candidate.includes(`.${name.toLowerCase()}`)) {
 				return page;

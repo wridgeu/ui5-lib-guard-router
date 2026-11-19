@@ -236,7 +236,8 @@ export function recordHashChanges(): { hashes: string[]; stop: () => void } {
 	const hashes: string[] = [];
 	const listener = (event: HashChangerBase$HashChangedEvent): void => {
 		// The UI5 types declare the hash as an object.
-		hashes.push(String(event.getParameter("newHash")));
+		const newHash: unknown = event.getParameter("newHash");
+		if (typeof newHash === "string") hashes.push(newHash);
 	};
 	hashChanger.attachEvent("hashChanged", listener);
 	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };
@@ -252,11 +253,11 @@ export async function captureHashWrites(
 ): Promise<string[]> {
 	const writes: string[] = [];
 	const setHash = sinon.stub(hashChanger, "setHash").callsFake(function (this: HashChangerBase, ...args) {
-		writes.push(`set:${String(args[0])}`);
+		writes.push(`set:${args[0]}`);
 		return setHash.wrappedMethod.apply(this, args);
 	});
 	const replaceHash = sinon.stub(hashChanger, "replaceHash").callsFake(function (this: HashChangerBase, ...args) {
-		writes.push(`replace:${String(args[0])}`);
+		writes.push(`replace:${args[0]}`);
 		return replaceHash.wrappedMethod.apply(this, args);
 	});
 	try {
@@ -325,7 +326,8 @@ export function getHash(): string {
  * would hand a cyclic value to a failing assertion, which wdio cannot transfer out of the browser.
  */
 function toLogEntry(message: string, details: unknown): CapturedLogEntry {
-	return { message, details: details === undefined ? undefined : String(details) };
+	const text = String(details);
+	return { message, details: details === undefined ? undefined : text };
 }
 
 /** Messages a stubbed `Log` method received; a message logged under another component says so. */
@@ -347,7 +349,7 @@ export function captureWarnings(fn: () => void): CapturedLogEntry[] {
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /**
@@ -361,7 +363,7 @@ export async function captureWarningsAsync(fn: () => Promise<void>): Promise<Cap
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /** {@link captureWarnings} for `Log.error` calls. */
@@ -372,7 +374,7 @@ export function captureErrors(fn: () => void): CapturedLogEntry[] {
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /**
@@ -386,7 +388,7 @@ export async function captureErrorsAsync(fn: () => Promise<void>): Promise<Captu
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /** Routes forming a URL tree: `employees` → `employees/{id}` → `employees/{id}/resume`. */

@@ -656,8 +656,8 @@ for (const [decision, allowed, expected] of [
 			const hashChanger = router.getHashChanger();
 			const replaceProtected = (event: HashChangerBase$HashChangedEvent): void => {
 				// The UI5 types declare the hash as an object.
-				if (String(event.getParameter("newHash")) === "protected")
-					hashChanger.replaceHash("detail/1", "Unknown");
+				const newHash: unknown = event.getParameter("newHash");
+				if (newHash === "protected") void hashChanger.replaceHash("detail/1", "Unknown");
 			};
 			// Before the router starts to listen.
 			hashChanger.attachEvent("hashChanged", replaceProtected);
