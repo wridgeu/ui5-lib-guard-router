@@ -16,14 +16,14 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | [Error handling](#error-handling-in-guards)                                 | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
 | [Guard factories](#guard-factories)                                         | Any                  | Any          | `guards.ts` -- all `create*` functions                               |
 | [Controller-level lifecycle](#controller-level-guard-lifecycle)             | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
-| [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | `Component.ts` -- `addRouteGuard` with config                        |
+| [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | inline example                                                       |
 | [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Sync         | `guards.ts` -- multiple route guards                                 |
 | [Async guard timeout](#async-guard-timeout)                                 | Route enter          | Async        | inline example                                                       |
 | [Factory pattern for manifest guards](#factory-pattern-for-manifest-guards) | Any                  | Any          | inline example                                                       |
-| [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | inline example                                                       |
+| [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | `webapp/reporting/` -- nested component with manifest guards         |
 | [Settlement for UI feedback](#settlement-for-ui-feedback)                   | N/A                  | Async        | [Library README](../../packages/lib/README.md#navigation-settlement) |
 
-Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). Controller lifecycle and object-form examples also reference `Component.ts` and `Home.controller.ts` where noted in the table above.
+Most reusable guard factories live in [`packages/demo-app/webapp/guards.ts`](../../packages/demo-app/webapp/guards.ts). The controller lifecycle example references `Home.controller.ts`.
 
 ## Authentication guard
 
@@ -144,7 +144,7 @@ router.addRouteGuard("dashboard", async (context) => {
 });
 ```
 
-Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. The router blocks navigation and logs an error when a guard Promise rejects.
+Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. When a guard Promise rejects, the router logs an error and settles the navigation as `NavigationOutcome.Error`. A rejection after the signal was aborted (the navigation was superseded) is not logged.
 
 Reference: `createAsyncPermissionGuard` in `guards.ts`. See the [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) for the full pattern with a busy indicator.
 
@@ -187,7 +187,7 @@ When the timeout fires, `fetch` rejects with a `TimeoutError`. Since the guard's
 
 ## Always block
 
-Return `false` to block navigation unconditionally. The hash reverts to the previous route.
+Return `false` to block navigation unconditionally. A blocked `navTo()` never changes the hash; for browser-initiated navigation the hash reverts to the previous route.
 
 ```typescript
 router.addRouteGuard("maintenance", () => false);
@@ -204,6 +204,8 @@ router.addRouteGuard("old-page", () => "new-page");
 ```
 
 Reference: `forbiddenGuard` in `guards.ts`.
+
+The navigation settles on the route that matches the target's hash. With overlapping patterns, for example a renamed route whose old name is kept as an alias with the same pattern, that is the first matching route in manifest order, which can differ from the name the guard returned. The demo app shows this with its `team` and `staff` routes, see the [demo app README](../../packages/demo-app/README.md#overlapping-routes-team-and-staff).
 
 ## Dirty form leave guard
 
@@ -232,7 +234,7 @@ router.addRouteGuard("old-detail", (context) => ({
 }));
 ```
 
-Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for the `componentTargetInfo` variant.
+Reference: `createRedirectWithParamsGuard` in `guards.ts`. See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for a typed `GuardRedirect` variant; add `componentTargetInfo` to the returned object to pass nested component targets.
 
 ## Error handling in guards
 
@@ -245,6 +247,7 @@ router.addRouteGuard("risky", () => {
 	throw new Error("something broke");
 	// Navigation settles as Error. The router logs:
 	// Enter guard [0] on route "risky" threw, navigation failed
+	// A manifest guard is also named: Enter guard [0] "auth" on route "risky" threw, ...
 });
 ```
 
@@ -341,11 +344,16 @@ This keeps guard logic in a single place while letting each route configure its 
 Register a leave guard in `onInit` and remove it in `onExit`. UI5 caches XMLViews by default, so `onInit` runs once but `onExit` runs on `destroy()`.
 
 ```typescript
+import type JSONModel from "sap/ui/model/json/JSONModel";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import BaseController from "./BaseController";
+import { createDirtyFormGuard } from "../guards";
+
 export default class EditorController extends BaseController {
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	onInit(): void {
-		this._leaveGuard = createDirtyFormGuard(this.getModel("form"));
+		this._leaveGuard = createDirtyFormGuard(this.getModel("form") as JSONModel);
 		(this.getRouter() as GuardRouter).addLeaveGuard("editor", this._leaveGuard);
 	}
 
@@ -376,7 +384,7 @@ router.addRouteGuard("protected", guardConfig);
 router.removeRouteGuard("protected", guardConfig);
 ```
 
-Reference: `Component.ts` guard registration.
+The demo app does not use the object form. See the [library README object form example](../../packages/lib/README.md#object-form-with-routeguardconfig).
 
 ## Chained authorization (redirect chain guards)
 
@@ -437,6 +445,27 @@ router.addRouteGuard("orderDetail", orderAccessGuard); // protects individual or
 ```
 
 The parent guard runs first (protecting access to the child component), and the child's guards run within the child's own routing scope. Guards are cleaned up automatically when each component's router is destroyed.
+
+The demo app contains a runnable version of this pattern with manifest guards: its `reports` route displays the nested component [`demo.app.reporting`](../../packages/demo-app/webapp/reporting/), which declares its own `routerClass` and `guardRouter` block.
+
+```json
+// Parent manifest.json (sap.ui5)
+"componentUsages": {
+	"reports": { "name": "demo.app.reporting", "lazy": true }
+},
+"routing": {
+	"routes": [{ "name": "reports", "pattern": "reports", "target": { "name": "reports", "prefix": "reports" } }],
+	"targets": {
+		"reports": { "type": "Component", "usage": "reports", "id": "reportsComponent" }
+	}
+}
+```
+
+- The nested router writes its hash under the prefix of the parent route, for example `#/reports&/reports/sales`, and behind the shell intent in the Fiori launchpad (`#app-preview&/reports&/reports/sales` in the demo's FLP preview).
+- A manifest guard of the nested component receives the nested component as `context.ownerComponent`. The demo's [`confidentialGuard`](../../packages/demo-app/webapp/reporting/guards/confidentialGuard.ts) reads a model of the nested component and redirects within the nested router.
+- The parent route waits for the nested router's first navigation, also when a guard redirects it. If a guard blocks that first navigation, the parent route is displayed and the nested component shows no view, so prefer a redirect for routes that can be reached by deep link. See [UI5 Internals the Router Relies On](../reference/architecture.md#ui5-internals-the-router-relies-on).
+
+See the [demo app README](../../packages/demo-app/README.md#nested-component-reports) for the hashes to try.
 
 ## Settlement for UI feedback
 

@@ -1,0 +1,52 @@
+<mvc:View
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	controllerName="demo.app.reporting.controller.Overview">
+	<Page
+		id="overviewPage"
+		title="{i18n>overviewTitle}"
+		titleAlignment="Center"
+		showNavButton="true"
+		navButtonPress=".onNavBack">
+		<content>
+			<VBox id="overviewContent" class="sapUiMediumMargin" alignItems="Start" renderType="Bare">
+				<MessageStrip
+					id="overviewIntro"
+					text="{i18n>overviewIntro}"
+					type="Information"
+					showIcon="true"
+					class="sapUiSmallMarginBottom" />
+				<Panel id="reportsPanel" headerText="{i18n>overviewPanelTitle}" width="22rem" class="sapUiSmallMarginBottom">
+					<content>
+						<Text
+							id="guardInfo"
+							text="{i18n>overviewGuardInfo}"
+							wrapping="true"
+							class="sapUiSmallMarginBottom" />
+						<CheckBox
+							id="unlockCheckbox"
+							text="{i18n>unlockConfidential}"
+							selected="{access>/confidentialUnlocked}"
+							class="sapUiTinyMarginBottom" />
+						<ObjectStatus
+							id="accessStatus"
+							text="{= ${access>/confidentialUnlocked} ? ${i18n>accessUnlocked} : ${i18n>accessLocked}}"
+							state="{= ${access>/confidentialUnlocked} ? 'Success' : 'Warning'}"
+							class="sapUiSmallMarginBottom" />
+						<Button
+							id="navSalesBtn"
+							text="{i18n>openSales}"
+							press=".onNavToSales"
+							width="100%"
+							class="sapUiTinyMarginBottom" />
+						<Button
+							id="navConfidentialBtn"
+							text="{i18n>openConfidential}"
+							press=".onNavToConfidential"
+							width="100%" />
+					</content>
+				</Panel>
+			</VBox>
+		</content>
+	</Page>
+</mvc:View>

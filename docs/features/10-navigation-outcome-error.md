@@ -1,5 +1,7 @@
 # NavigationOutcome.Error
 
+> **Status**: Implemented. Guard errors settle as `NavigationOutcome.Error`, distinct from `Blocked`.
+
 ## Context
 
 Issue #50: distinguish guard errors from intentional blocks.
@@ -79,6 +81,8 @@ All changes are additive. No existing types change shape.
 
 ### Error decision instead of silent block
 
+> **As implemented:** the catch blocks do not return a `GuardDecision`. They log the error and re-throw it; when the signal is already aborted they return `false` without logging. `evaluate()` catches the re-thrown error (sync `try/catch`, async `.catch()`) and returns `{ action: "error", error }`, so the passthrough logic described below was not needed. The plan below is kept as the design record.
+
 The pipeline currently catches guard errors and returns `false`, which `evaluate()` maps to `{ action: "block" }`. The three catch blocks change to return `{ action: "error", error }` directly — a new variant of `GuardDecision`.
 
 **`_runGuards()` catch block** — sync enter guard throws:
@@ -115,7 +119,7 @@ Updated result normalization:
 
 ### Logging
 
-`Log.error()` calls stay in all catch blocks. Errors are still logged to the console regardless of whether the decision is `"error"` or `"block"` (abort case).
+`Log.error()` calls stay in all catch blocks, but only for errors that become an `"error"` decision. An error thrown after the signal was aborted produces a `"block"` decision without a log entry.
 
 ## Router changes
 
@@ -132,19 +136,25 @@ private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = t
 Parallel to `_blockNavigation()`. Same structure:
 
 - Clears phase to idle
-- Optionally restores browser hash to previous state
+- Optionally restores the browser hash to the previous state
 - Flushes settlement with `{ status: NavigationOutcome.Error, route, hash, error }`
+
+The hash is restored before the settlement fires, so handlers run on the final URL. The exception is a first navigation (nothing committed yet) on a non-empty hash: the settlement fires first, then the empty hash is restored and parsed as a navigation of its own.
 
 ### `_applyDecision()` and `_applyPreflightDecision()`
 
 Add `case "error"` to the existing switch on `decision.action`:
 
 - `_applyDecision()`: calls `_errorNavigation(decision.error, hash)` (with default `restoreHash: true`)
-- `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, false)` (hash was never changed in preflight)
+- `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, attempt.restoreHash)` (the preflight never changes the hash; it only restores it after superseding a pending hash change)
+
+Redirect chain hops (see [11](./11-guards-on-redirect-targets.md)) do the same in `_applyRedirectDecision()`, which `_applyWhenDecided()` calls for an async hop, passing `chain.attemptedHash` and `chain.restoreHash`.
 
 ### `.catch()` handlers in `navTo()` and `parse()`
 
 These currently call `_blockNavigation()` when the pipeline promise fails. They change to call `_errorNavigation()` instead — a pipeline promise rejection is an error, not an intentional block.
+
+> **As implemented:** the pipeline turns every guard failure into an `error` decision, so its Promise does not reject and there are no `.catch()` handlers for it. `_applyWhenDecided()` wraps the application of an async decision instead: an error thrown there is logged (`Navigation failed after its guards had settled`) and settles the navigation as `Error` only if it had not settled yet. A redirect target without a valid hash is reported by `_redirect()` itself, through `_errorNavigation()`.
 
 ### Unchanged
 
@@ -182,11 +192,11 @@ switch (result.status) {
 
 ### Existing test updates
 
-Tests in `Router.qunit.ts` and `GuardPipeline.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
+Tests in the Router test files and `GuardPipelineAsync.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
 
 ### New test cases
 
-**GuardPipeline tests** (`packages/lib/test/qunit/GuardPipeline.qunit.ts`):
+**GuardPipeline tests** (`packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`):
 
 1. Sync enter guard that throws → `{ action: "error", error: <thrown> }`
 2. Async enter guard that rejects → `{ action: "error", error: <rejected> }`
@@ -194,7 +204,7 @@ Tests in `Router.qunit.ts` and `GuardPipeline.qunit.ts` that currently assert `N
 4. Guard returning `false` → `{ action: "block" }` (regression — not Error)
 5. Guard error after signal abort → `{ action: "block" }` (unchanged behavior)
 
-**Router tests** (`packages/lib/test/qunit/Router.qunit.ts`):
+**Router tests** (`packages/lib/test/qunit/router/`):
 
 6. Sync guard throw → `NavigationOutcome.Error` with error on result
 7. Async guard reject → `NavigationOutcome.Error` with error on result

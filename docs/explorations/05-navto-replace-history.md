@@ -74,12 +74,7 @@ private _navigateBasedOnState(isLoggedIn: boolean): void {
 
 ## Combining with This Repository
 
-This approach is complementary. Even with `ui5.guard.router`, guards use `navTo(..., true)` internally for redirects. The library's `_redirect` method always passes `bReplace: true`:
-
-```typescript
-// Router.ts — _redirect()
-this.navTo(target, {}, {}, true);
-```
+This approach is complementary. `ui5.guard.router` writes the target of a redirected `navTo()` the way the call asked for (a new entry unless it passes `bReplace`), and replaces the entry of a redirected hash change with the target (see [Browser history](../../packages/lib/README.md#browser-history)).
 
 For application code, using `bReplace: true` in explicit `navTo` calls is still good practice alongside router guards, as it ensures clean history even for non-guarded navigations like login state transitions.
 

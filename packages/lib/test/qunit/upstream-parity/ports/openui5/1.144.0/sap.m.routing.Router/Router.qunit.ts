@@ -13,6 +13,7 @@
 // (importing resolves a different instance that breaks stub/spy assertions; see commit 66d036d)
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
+import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import Views from "sap/ui/core/routing/Views";
 import { cloneJson, normalizeNavContainerToArgs } from "../../../../adapters/assertions";
 import { createForwardNavigationFixture, createViewLevelFixture } from "../../../../adapters/fixtures";
@@ -32,15 +33,7 @@ type ForwardNavigationResult = {
 	} | null;
 };
 
-type RouteMatchedEvent = {
-	getParameter(name: string): unknown;
-};
-
-type RouteMatchedApi = {
-	attachRouteMatched(data: undefined, handler: (event: RouteMatchedEvent) => void): void;
-	detachRouteMatched(handler: (event: RouteMatchedEvent) => void, listener?: unknown): void;
-};
-
+// Views#_getView is private in UI5: the upstream test stubs it in the same way.
 function stubViewsForSinglePage(targetPage: Page) {
 	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
 	return sinon.stub(prototype, "_getView").callsFake(() => targetPage);
@@ -67,30 +60,21 @@ function stubViewsByName(viewMap: Record<string, Page>) {
 function waitForRouteMatched(
 	router: ComparableRouter,
 	routeName: string,
-	timeout = 1000,
 ): Promise<ForwardNavigationResult["routeMatched"]> {
-	return new Promise((resolve, reject) => {
-		const routeMatchedApi = router as unknown as RouteMatchedApi;
-
-		const timer = setTimeout(() => {
-			routeMatchedApi.detachRouteMatched(handler, undefined);
-			reject(new Error(`Timed out waiting for routeMatched "${routeName}"`));
-		}, timeout);
-
-		const handler = (event: RouteMatchedEvent) => {
-			if ((event.getParameter("name") as string | undefined) !== routeName) {
+	return new Promise((resolve) => {
+		const handler = (event: Router$RouteMatchedEvent) => {
+			if (event.getParameter("name") !== routeName) {
 				return;
 			}
 
-			clearTimeout(timer);
-			routeMatchedApi.detachRouteMatched(handler, undefined);
+			router.detachRouteMatched(handler, router);
 			resolve({
-				name: event.getParameter("name") as string | undefined,
-				arguments: cloneJson(event.getParameter("arguments") as unknown),
+				name: event.getParameter("name"),
+				arguments: cloneJson(event.getParameter("arguments")),
 			});
 		};
 
-		routeMatchedApi.attachRouteMatched(undefined, handler);
+		router.attachRouteMatched(handler, router);
 	});
 }
 

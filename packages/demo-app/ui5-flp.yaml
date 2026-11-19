@@ -8,6 +8,7 @@ framework:
     libraries:
         - name: sap.m
         - name: sap.ui.core
+        - name: sap.tnt
         - name: sap.ushell
         - name: themelib_sap_horizon
 server:
@@ -26,6 +27,24 @@ server:
                   theme: sap_horizon
                   libs: true
                   enhancedHomePage: true
+                  # A second app for the keep-alive E2E test (test/flp/flp-keep-alive.e2e.ts).
+                  apps:
+                      - target: /peer
+                        local: test/flp/peer
+                        intent:
+                            object: peer
+                            action: display
+                      # The same app with the native and with the guard router (test/flp/flp-native-parity.e2e.ts).
+                      - target: /parity/native
+                        local: test/flp/parity/native
+                        intent:
+                            object: paritynative
+                            action: display
+                      - target: /parity/guard
+                        local: test/flp/parity/guard
+                        intent:
+                            object: parityguard
+                            action: display
 resources:
     configuration:
         paths:

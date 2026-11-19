@@ -1,8 +1,13 @@
 import type { wdi5Config } from "wdio-ui5-service";
+import { chromeProfileHooks } from "../../../tools/wdio-chrome-profile";
 
-const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080/index.html";
+// Number formats depend on the locale: the expected texts are those of "en".
+const url = new URL(process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080/index.html");
+url.searchParams.set("sap-ui-language", "en");
+const baseUrl = url.href;
 
 export const config: wdi5Config = {
+	...chromeProfileHooks(),
 	wdi5: {
 		logLevel: "verbose",
 		waitForUI5Timeout: 30000,
@@ -21,7 +26,6 @@ export const config: wdi5Config = {
 	],
 	logLevel: "error",
 	bail: 0,
-	specFileRetries: 1,
 	baseUrl,
 	waitforTimeout: 31000,
 	connectionRetryTimeout: 120000,

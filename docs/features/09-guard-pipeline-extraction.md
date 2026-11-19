@@ -1,5 +1,7 @@
 # Guard Pipeline Extraction
 
+> **Status**: Implemented. `GuardPipeline` (`packages/lib/src/GuardPipeline.ts`) owns guard storage and evaluation; the router delegates to it.
+
 ## Context
 
 Issue #40: extract the guard evaluation logic from `Router.ts` into a standalone `GuardPipeline` class.
@@ -64,7 +66,7 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 
 **Private methods (moved from Router):**
 
-- `_runLeaveGuards(context)` — uses `context.fromRoute` for leave-guard lookup
+- `_runLeaveGuards(registered, context)` — receives the leave guards that `evaluate()` looked up via `context.fromRoute`
 - `_runEnterGuards(toRoute, context)` — reads `this._globalGuards` directly (no longer needs `globalGuards` parameter)
 - `_runRouteGuards(toRoute, context)`
 - `_runGuards(guards, context)`
@@ -77,7 +79,8 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 **Module-level utilities:**
 
 - `isGuardRedirect` — private to module
-- `isPromiseLike` — exported from module (Router imports it instead of maintaining a duplicate)
+- `isPromiseLike` — exported from module (Router and `GuardModules.ts` import it instead of maintaining a duplicate)
+- `nameGuard` — exported; `GuardModules.ts` uses it to name manifest guards. The private `describeGuard` adds the name to the error log of a guard that throws (`Enter guard [1] "checks#1" on route "admin" threw, navigation failed`)
 
 ### Exported types
 
@@ -145,10 +148,7 @@ Public guard methods keep validation and overload resolution, then delegate:
 
 ```typescript
 addGuard(guard: GuardFn): this {
-  if (typeof guard !== "function") {
-    Log.warning("addGuard called with invalid guard, ignoring", undefined, LOG_COMPONENT);
-    return this;
-  }
+  if (!this._isFn(guard, "addGuard")) return this; // warns "addGuard: not a function, ignoring"
   this._pipeline.addGlobalGuard(guard);
   return this;
 }
@@ -160,17 +160,10 @@ Evaluation call sites change from:
 const decision = this._evaluateGuards(context, controller.signal);
 ```
 
-to:
+to (`_createGuardContext` builds the full context: route and hash fields, `signal`, and the later additions `bag`, `toMeta`/`fromMeta` and `ownerComponent`):
 
 ```typescript
-const context: GuardContext = {
-	toRoute,
-	toHash,
-	toArguments,
-	fromRoute: this._currentRoute,
-	fromHash: this._currentHash ?? "",
-	signal: controller.signal,
-};
+const context = this._createGuardContext(routeInfo, toHash, controller.signal);
 const decision = this._pipeline.evaluate(context);
 ```
 
@@ -181,7 +174,7 @@ const decision = this._pipeline.evaluate(context);
 - `navTo()`, `parse()` — same control flow, just call `this._pipeline.evaluate()` instead of `this._evaluateGuards()`
 - `_applyPreflightDecision`, `_applyDecision`, `_redirect`, `_blockNavigation`, `_commitNavigation`, `_restoreHash` — all Router state management
 - `NavigationAttempt`, `RouterPhase`, phase state machine
-- `_warnIfRouteUnknown` — stays on Router (needs `this.getRoute()`)
+- `_warnIfRouteUnknown` (since renamed `_handleUnknownRouteRegistration`) — stays on Router (needs `this.getRoute()`)
 - `isRouteGuardConfig` — stays on Router (API overload resolution)
 - Settlement logic
 - All public API signatures
@@ -194,7 +187,7 @@ All 234 existing tests in `Router.qunit.ts` pass unchanged. The Router's public 
 
 ### New test file
 
-`packages/lib/test/qunit/GuardPipeline.qunit.ts`
+`packages/lib/test/qunit/unit/GuardPipeline.qunit.ts`
 
 Focused unit tests for the pipeline in isolation — no Router, no HashChanger, no UI5 runtime. Just `new GuardPipeline()`, add guards, call `evaluate()`, assert the decision.
 

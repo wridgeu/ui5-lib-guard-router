@@ -1,8 +1,9 @@
 # Guards on Redirect Targets
 
 **Issue:** [#52](https://github.com/wridgeu/ui5-lib-guard-router/issues/52)
-**Status:** Implemented
-**Change type:** Feature -- guards now evaluate on redirect targets with loop detection.
+**Change type:** Feature -- guards evaluate on redirect targets with loop detection.
+
+> **Status**: Implemented.
 
 ## Problem
 
@@ -97,8 +98,8 @@ degenerate cases where parameters keep varying.
 ```typescript
 const MAX_REDIRECT_DEPTH = 10;
 
-// At the top of _redirect, two separate checks:
-if (targetHash !== null && chain.visited.has(targetHash)) {
+// In _redirect, once the target hash is resolved, two separate checks:
+if (chain.visited.has(targetHash)) {
     Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
     this._blockNavigation(chain.attemptedHash, chain.restoreHash);
     return;
@@ -108,14 +109,12 @@ if (chain.visited.size > MAX_REDIRECT_DEPTH) {
     this._blockNavigation(chain.attemptedHash, chain.restoreHash);
     return;
 }
-if (targetHash !== null) {
-    chain.visited.add(targetHash);
-}
+chain.visited.add(targetHash);
 ```
 
 ### Visited Set Lifecycle
 
-- **Created** at the call site (`_applyPreflightDecision` / `_applyDecision`) when
+- **Created** in `_startRedirectChain()` (called by `_applyPreflightDecision` / `_applyDecision`) when
   the initial guard decision is "redirect". Seeded with the hash of the route whose
   guard produced the redirect (not the redirect target). This hash belongs in the set
   because its guards already ran -- returning to it would re-evaluate the same guard
@@ -153,17 +152,18 @@ empty `fromRoute`; that would hide context from guard functions.
 
 ### Guard Context on Redirect Hops
 
-| Field         | Value                                          |
-| ------------- | ---------------------------------------------- |
-| `toRoute`     | Redirect target (changes each hop)             |
-| `toHash`      | Redirect target's hash (changes each hop)      |
-| `toArguments` | Redirect target's parsed parameters (each hop) |
-| `fromRoute`   | Original source route (constant across chain)  |
-| `fromHash`    | Original source hash (constant across chain)   |
-| `signal`      | Shared AbortSignal from original navigation    |
-| `bag`         | Shared bag from original navigation            |
-| `toMeta`      | Resolved metadata for the redirect target      |
-| `fromMeta`    | Resolved metadata for the original source      |
+| Field            | Value                                          |
+| ---------------- | ---------------------------------------------- |
+| `toRoute`        | Redirect target (changes each hop)             |
+| `toHash`         | Redirect target's hash (changes each hop)      |
+| `toArguments`    | Redirect target's parsed parameters (each hop) |
+| `fromRoute`      | Original source route (constant across chain)  |
+| `fromHash`       | Original source hash (constant across chain)   |
+| `signal`         | Shared AbortSignal from original navigation    |
+| `bag`            | Shared bag from original navigation            |
+| `toMeta`         | Resolved metadata for the redirect target      |
+| `fromMeta`       | Resolved metadata for the original source      |
+| `ownerComponent` | Router's owner component                       |
 
 ### `_redirect` Method Body (Pseudocode)
 
@@ -171,12 +171,18 @@ empty `fromRoute`; that would hide context from guard functions.
 private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): void {
     // 1. Resolve target route and hash
     const targetName = typeof target === "string" ? target : target.route;
-    const targetParameters = typeof target === "string" ? {} : (target.parameters ?? {});
     const targetRoute = this.getRoute(targetName);
-    // ... resolve targetHash via targetRoute.getURL(targetParameters) ...
+    if (!targetRoute) {
+        // Unknown route: log a warning and block the chain
+        this._blockNavigation(chain.attemptedHash, chain.restoreHash);
+        return;
+    }
+    // Throws for missing mandatory parameters. The real method catches the error,
+    // logs it and fails the navigation: _errorNavigation(error, chain.attemptedHash, chain.restoreHash).
+    const targetHash = targetRoute.getURL(typeof target === "string" ? {} : (target.parameters ?? {}));
 
     // 2. Loop detection (two separate checks)
-    if (targetHash !== null && chain.visited.has(targetHash)) {
+    if (chain.visited.has(targetHash)) {
         Log.error(`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`, ...);
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
@@ -186,56 +192,49 @@ private _redirect(target: string | GuardRedirect, chain: RedirectChainContext): 
         this._blockNavigation(chain.attemptedHash, chain.restoreHash);
         return;
     }
-    if (targetHash !== null) {
-        chain.visited.add(targetHash);
-    }
+    chain.visited.add(targetHash);
 
-    // 3. Unknown route / unresolvable hash: attempt navTo, fall back to blocked
-    if (targetHash === null) {
-        // ... enter committing/redirect, call navTo, check if settlement occurred ...
-        return;
-    }
-
-    // 4. Build guard context for the redirect target
-    const routeInfo = this.getRouteInfoByHash(targetHash);
+    // 3. Build guard context for the redirect target: the route that matches its hash
+    const routeInfo = this._matchRoute(targetHash);
+    const toRoute = routeInfo.name;
     const context: GuardContext = {
-        toRoute: routeInfo?.name ?? "",
+        toRoute,
         toHash: targetHash,
-        toArguments: routeInfo?.arguments ?? {},
+        toArguments: routeInfo.arguments,
         fromRoute: chain.fromRoute,    // original source, constant
         fromHash: chain.fromHash,      // original source, constant
         signal: chain.signal,          // shared signal
         bag: chain.bag,               // shared bag
-        toMeta: this.getRouteMeta(routeInfo?.name ?? ""),
+        toMeta: this.getRouteMeta(toRoute),
         fromMeta: this.getRouteMeta(chain.fromRoute),
+        ownerComponent: this._ownerComponent,
     };
 
-    // 5. Evaluate guards (skip leave guards -- they already ran on first hop)
+    // 4. Evaluate guards (skip leave guards -- they already ran on first hop)
     const decision = this._pipeline.evaluate(context, { skipLeaveGuards: true });
 
-    // 6. Handle sync result
+    // 5. Handle sync result
     if (!isPromiseLike(decision)) {
-        this._applyRedirectDecision(decision, target, targetHash, chain);
+        this._applyRedirectDecision(decision, target, targetHash, toRoute, chain);
         return;
     }
 
-    // 7. Handle async result with generation check
-    decision
-        .then((d: GuardDecision) => {
-            if (chain.generation !== this._parseGeneration) return; // superseded
-            this._applyRedirectDecision(d, target, targetHash, chain);
-        })
-        .catch((error: unknown) => {
-            if (chain.generation !== this._parseGeneration) return;
-            Log.error(`Guard pipeline failed during redirect chain, blocking`, String(error), ...);
-            this._blockNavigation(chain.attemptedHash, chain.restoreHash);
-        });
+    // 6. Handle async result. _applyRedirectDecision() checks the generation (superseded chains
+    //    do nothing); _applyWhenDecided() logs an error thrown while the decision is applied and
+    //    settles the navigation as Error if it had not settled yet.
+    this._applyWhenDecided(
+        decision,
+        (d) => this._applyRedirectDecision(d, target, targetHash, toRoute, chain),
+        chain.attemptedHash,
+        chain.restoreHash,
+    );
 }
 
 private _applyRedirectDecision(
     decision: GuardDecision,
     target: string | GuardRedirect,
     targetHash: string,
+    toRoute: string,
     chain: RedirectChainContext,
 ): void {
     switch (decision.action) {
@@ -244,17 +243,17 @@ private _applyRedirectDecision(
             // this.navTo() sees the committing/redirect phase and calls super.navTo()
             // directly (existing bypass), which changes the hash and triggers parse(),
             // which sees committing and calls _commitNavigation().
-            const targetName = typeof target === "string" ? target : target.route;
-            this._phase = { kind: "committing", hash: targetHash, route: targetName, origin: "redirect" };
+            // The committed route is the one that matches the hash, the route UI5 displays.
+            this._phase = { kind: "committing", route: toRoute, origin: "redirect" };
+            // chain.replace: bReplace of the navTo() that started the chain, true after a hash change.
             if (typeof target === "string") {
-                this.navTo(target, {}, {}, true);
+                this.navTo(target, {}, {}, chain.replace);
             } else {
-                this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, true);
+                this.navTo(target.route, target.parameters ?? {}, target.componentTargetInfo, chain.replace);
             }
-            // Safety net: if navTo didn't produce a settlement (e.g. unknown route
-            // or redirect to current hash where HashChanger doesn't fire), handle it.
-            // The redirectsToCurrentHash path is kept because the HashChanger does
-            // not fire hashChanged for a same-hash navTo.
+            // If parse() was not reached (the hash already is the target, or component
+            // targets change it later), commit the target directly:
+            // this._commitNavigation(targetHash, toRoute)
             break;
         }
         case "block":
@@ -287,10 +286,11 @@ and discards the stale result.
 
 When a redirect target's hash equals `_currentHash` (the user is already on the
 target), the redirect target's guards are evaluated normally. If they allow, the
-chain commits with `NavigationOutcome.Redirected`. The `redirectsToCurrentHash`
-safety net in `_applyRedirectDecision` is kept because UI5's `HashChanger` does
-not fire `hashChanged` for a same-hash `navTo()`, so the normal commit path
-(parse → commitNavigation) would not trigger without it.
+navigation settles as `NavigationOutcome.Redirected` without a commit: the route does
+not match again and no hash is written; a hash change the navigation arrived with is
+undone (see the library README, [Browser history](../../packages/lib/README.md#browser-history)).
+A redirect with non-empty `componentTargetInfo`, whose hash change arrives later, and a
+redirect to a hash the URL already shows are committed directly by `_applyRedirectDecision`.
 
 ### Settlement
 
@@ -302,6 +302,13 @@ The entire chain is one logical navigation. Only one settlement is flushed:
 | Block (any hop)     | `NavigationOutcome.Blocked`                               |
 | Error (guard throw) | `NavigationOutcome.Error` + error on result               |
 | Loop detected       | `NavigationOutcome.Blocked` + `Log.error` with chain path |
+| Depth cap exceeded  | `NavigationOutcome.Blocked` + `Log.error` with chain path |
+| Unknown target      | `NavigationOutcome.Blocked` + `Log.warning` with the name |
+| Target without hash | `NavigationOutcome.Error` + `Log.error` with the name     |
+
+A target whose hash cannot be built (missing mandatory parameter) fails the chain like a
+throwing guard: it settles as `Error` in sync and async chains, from `navTo()` and from a
+hash change. Nothing is thrown to the caller.
 
 No intermediate settlements for redirect hops.
 
@@ -318,53 +325,29 @@ No intermediate settlements for redirect hops.
 
 ### Call Sites
 
-Both `_applyPreflightDecision` and `_applyDecision` create the initial chain context
-when the guard decision is "redirect":
-
-**Preflight path** (`_applyPreflightDecision`):
+Both `_applyPreflightDecision` and `_applyDecision` call `_startRedirectChain()` when the
+guard decision is "redirect". It creates the initial chain context:
 
 ```typescript
-case "redirect": {
-    const { attempt } = this._phase as PhaseEvaluating;
-    const visited = new Set<string>();
-    visited.add(targetHash); // hash of the route whose guard redirected
-    this._redirect(decision.target, {
-        visited,
-        attemptedHash: targetHash,
-        restoreHash: false, // preflight: hash was never changed
-        fromRoute: this._currentRoute,
-        fromHash: this._currentHash ?? "",
-        signal: attempt.controller.signal,
-        generation: attempt.generation,
-    });
-    break;
-}
-```
-
-**Parse path** (`_applyDecision`):
-
-```typescript
-case "redirect": {
-    const { attempt } = this._phase as PhaseEvaluating;
+private _startRedirectChain(target: string | GuardRedirect, hash: string, bag: Map<string, unknown>, attempt: NavigationAttempt): void {
     const visited = new Set<string>();
     visited.add(hash); // hash of the route whose guard redirected
-    this._redirect(decision.target, {
+    this._redirect(target, {
         visited,
         attemptedHash: hash,
-        restoreHash: true, // parse: hash already changed, restore on block
+        restoreHash: attempt.restoreHash, // true for parse, and for a navTo that superseded a pending hash change
         fromRoute: this._currentRoute,
         fromHash: this._currentHash ?? "",
         signal: attempt.controller.signal,
         generation: attempt.generation,
+        bag,
     });
-    break;
 }
 ```
 
 The signal and generation come from the `NavigationAttempt` created by `navTo()`
-or `parse()` at the start of the navigation. They must be captured and threaded
-into the chain context -- the `_phase` field may still be `evaluating` with the
-attempt accessible.
+or `parse()` at the start of the navigation, and `bag` from that navigation's guard
+context. The callers pass the attempt explicitly instead of reading it from `_phase`.
 
 ### Architecture Doc Update
 
@@ -385,14 +368,12 @@ README's limitations section has been restructured accordingly.
 9. Loop detection log message includes the full chain path
 10. Guard on redirect target receives correct context (toRoute = redirect target, fromRoute = original source)
 11. Leave guards run only on first hop, not on each redirect hop
-12. Redirect to current hash: guards evaluate, chain commits with `Redirected`
-13. Guard on redirect target throws -> entire chain blocked (pipeline error handling)
-14. Redirect target is unknown route -> chain blocked with warning (existing safety net)
+12. Redirect to current hash: guards evaluate, chain settles as `Redirected` without matching the route again
+13. Guard on redirect target throws -> entire chain settles as `Error` (pipeline error handling)
+14. Redirect target is unknown route -> chain blocked with warning
 15. Self-redirect (A -> A with same hash) detected as loop immediately
 
 ## Opt-In Configuration (Deferred)
 
-The initial implementation is always-on (no opt-in flag). The opt-in configuration
-(e.g., `evaluateRedirectGuards`) will be added once PR #49 (declarative manifest guard
-configuration) is merged, since #49 introduces the declarative config surface where
-this option naturally belongs.
+Guards on redirect targets always run; there is no opt-in flag. If one is added, the
+`guardRouter` manifest block is where it belongs (for example `evaluateRedirectGuards`).

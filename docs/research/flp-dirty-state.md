@@ -1,14 +1,14 @@
 # Research: FLP Data Loss Prevention (Dirty State)
 
 > **Date**: 2026-02-08 (updated 2026-03-15)
-> **UI5 version analyzed**: SAPUI5 1.144.0
+> **UI5 versions analyzed**: SAPUI5 1.144.0 and 1.149.0
 > **Context**: Understanding how FLP's built-in dirty state protection works, its scope, and how it complements the leave guards in this library. Updated with production FLP vs sandbox preview behavior and the leave guard interaction pattern.
 
 ## Summary
 
 SAP Fiori Launchpad provides data loss prevention through a navigation filter in the Shell controller (`_handleDataLoss`). This filter checks dirty state — via `setDirtyFlag`, `registerDirtyStateProvider`, and `setAsyncDirtyStateProvider` — and shows a browser `confirm()` dialog when the user tries to navigate away from an app with unsaved changes.
 
-The FLP mechanism operates at the **shell navigation level**, meaning it intercepts cross-app navigation, browser back/forward, home button clicks, and page refresh/close. It does **not** intercept hash changes that stay within the same app (in-app routing), because those are handled by the app's own router before the shell navigation filter runs.
+The filter runs for every hash change, in-app ones included, before the app router sees it. Dirty-state providers receive `isCrossAppNavigation` and decide whether an in-app change counts; `setDirtyFlag(true)` makes every hash change prompt. Page refresh/close is covered separately by `beforeunload`.
 
 ## Public API
 
@@ -38,7 +38,7 @@ sap.ushell.Container.setDirtyFlag(false);
 const isDirty = sap.ushell.Container.getDirtyFlag();
 ```
 
-**Deprecation reason**: FLP internally migrated to `getDirtyFlagsAsync()` (private) to support async dirty state providers. The synchronous `getDirtyFlag()` still works but cannot incorporate async providers.
+**Deprecation**: in 1.144.0 the shell uses `getDirtyFlagsAsync()` (private) to include an async provider. In 1.149.0 `getDirtyFlag()` delegates to `sap.ushell.navigation.DirtyState`, its named successor.
 
 **Source**: [`Container-dbg.js` — `getDirtyFlag`](https://ui5.sap.com/1.144.0/resources/sap/ushell/Container-dbg.js)
 
@@ -89,7 +89,7 @@ sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
 - **Since**: 1.98.0
 - **Visibility**: Private
 - Returns a Promise resolving to `true` if any sync or async dirty state provider returns `true`, or if the dirty flag is set.
-- This is what the Shell controller's `_handleDataLoss` actually uses (in newer versions).
+- In 1.144.0 `_handleDataLoss` uses it when an async provider is set. 1.149.0 no longer has it; the shell reads `DirtyState.getDirtyFlagInternal()`.
 
 ### `sap.ushell.Container.setAsyncDirtyStateProvider(fn: Function): void`
 
@@ -106,18 +106,18 @@ The Shell controller (`sap.ushell.renderer.Shell.controller`) registers `_handle
 
 **Flow**:
 
-1. User triggers navigation (click tile, browser back, home button, etc.)
-2. `ShellNavigationHashChanger.treatHashChanged` processes the hash change
-3. Navigation filters (including `_handleDataLoss`) are called in sequence
-4. `_handleDataLoss` calls `Container.getDirtyFlag()` (or `getDirtyFlagsAsync()`)
-5. If dirty, shows `window.confirm("Your unsaved changes will be lost...")` dialog
-6. Returns `NavigationFilterStatus.Continue` (allow) or `NavigationFilterStatus.Keep` (block)
+1. A hash change arrives: tile, home button, browser back/forward, or an app's own `navTo()`. The browser hash has already changed.
+2. `ShellNavigationHashChanger.treatHashChanged` calls the navigation filters in sequence, for in-app and cross-app changes alike.
+3. `_handleDataLoss` reads the dirty state (`Container.getDirtyFlag()` in 1.144.0, `DirtyState.getDirtyFlagInternal()` in 1.149.0). Not dirty: it returns `Continue`.
+4. Dirty: it puts the previous hash back (history back/forward, or `replaceHash` after a replaced entry), restarts the app router with `initialize(true)`, and returns `Custom`. `treatHashChanged` stops there; no `hashChanged` event reaches the app router.
+5. The hash change that puts the hash back is swallowed the same way. Once the browser shows the previous hash, the shell shows `window.confirm()`.
+6. Confirmed: it clears the dirty flag and sets the target hash again, which passes the filter this time. Cancelled: nothing more happens; the app stays on its route with its router running.
 
 **Source**: [`Shell-dbg.controller.js` — `_handleDataLoss`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js)
 
 ### `_disableSourceAppRouter`
 
-When navigation proceeds after a dirty state confirmation, the Shell controller calls `_disableSourceAppRouter` to prevent the source app's router from reacting to the navigation. This avoids conflicts between the FLP shell navigation and the app's internal router during cross-app transitions.
+A navigation filter registered before `_handleDataLoss`. For every cross-app hash change it calls `stop()` on the router of the current app, before the dirty check. If the data-loss check then puts the hash back, `_resumeAppRouterIgnoringCurrentHash` restarts the router with `initialize(true)`. The same restart runs after a failed navigation that returns to the previous app and after the target app opened in a new window.
 
 **Source**: [`Shell-dbg.controller.js` — `_disableSourceAppRouter`](https://ui5.sap.com/1.144.0/resources/sap/ushell/renderer/Shell-dbg.controller.js)
 
@@ -130,7 +130,7 @@ Used by navigation filters to communicate their decision:
 | `Continue` | Allow navigation to proceed                       |
 | `Custom`   | Custom navigation handling (filter provides hash) |
 | `Abandon`  | Cancel navigation entirely                        |
-| `Keep`     | Stay on current page (used by `_handleDataLoss`)  |
+| `Keep`     | Pass the full hash to the current app's router    |
 
 **Source**: [`ShellNavigationHashChanger-dbg.js`](https://ui5.sap.com/1.144.0/resources/sap/ushell/services/ShellNavigationHashChanger-dbg.js)
 
@@ -141,7 +141,7 @@ Used by navigation filters to communicate their decision:
 - **Inner-app navigation**: Same semantic object and action, different app route (e.g., `#Order-display&/list` → `#Order-display&/detail/123`). The `&/...` suffix is the inner-app route.
 - **Cross-app navigation**: Different semantic object/action (e.g., `#Order-display` → `#Product-manage`).
 
-Classification happens in `treatHashChanged` using `UrlParsing.compareHashes()`, which returns `{ sameIntent, sameParameters }`. The public `isInnerAppNavigation(newHash, oldHash)` method provides the same logic as a utility but is not used internally by `treatHashChanged`.
+Classification happens in `treatHashChanged` using `UrlParsing.compareHashes()`, which returns `{ sameIntent, sameParameters }`. The public `isInnerAppNavigation(newHash, oldHash)` method applies the same comparison; `treatHashChanged` does not call it, but `_disableSourceAppRouter` and the `NavigationContext` passed to dirty-state providers do.
 
 ## Hash Changer Architecture
 
@@ -169,7 +169,7 @@ oHashChanger._oRouterHashChanger = _oHashChanger._oRouterHashChanger;
 oHashChanger._oRouterHashChanger.parent = oHashChanger;
 ```
 
-From this point on, `HashChanger.getInstance()` returns the `ShellNavigationHashChanger`. Every `Router` that later calls `createRouterHashChanger()` gets a child whose parent is the shell hash changer.
+From this point on, `HashChanger.getInstance()` returns the `ShellNavigationHashChanger`. `createRouterHashChanger()` creates one `RouterHashChanger` and caches it, so the root router of every app component (the shell passes no `_routerHashChanger`), including apps kept alive in the background, gets the same instance. The shell keeps the routers of inactive apps from reacting by stopping them; see [FLP Integration](../reference/architecture.md#flp-integration).
 
 The replacement also overrides `getHash()`:
 
@@ -188,6 +188,8 @@ Browser hashchange (one event for the full fragment)
   → hasher library captures it
     → ShellNavigationHashChanger.treatHashChanged(newHash, oldHash)
       → _splitHash() decomposes at &/
+      → navigation filters (_disableSourceAppRouter, _handleDataLoss, ...)
+      │    a filter returning Custom or Abandon ends the flow here: no event below fires
       → UrlParsing.compareHashes() classifies the change
         │
         ├─ Inner-app (sameIntent && sameParameters, different appSpecificRoute)
@@ -273,18 +275,21 @@ All method signatures and event definitions verified against the unminified SAPU
 | Browser back/forward (cross-app) | Yes     | Shell navigation filter         |
 | Browser refresh / close          | Yes     | `beforeunload` event (separate) |
 
-### What FLP dirty state does NOT cover
+### In-app navigation
 
-| Trigger                             | Covered | Why                                                    |
-| ----------------------------------- | ------- | ------------------------------------------------------ |
-| In-app route changes (same app)     | No      | Inner-app hash changes bypass shell navigation filters |
-| Programmatic `router.navTo()` calls | No      | These are app-internal, below the FLP shell level      |
+In-app route changes, including an app's own `navTo()`, run the same filter. Whether they prompt depends on the dirty state:
 
-### Why inner-app navigation is not covered
+| Dirty state                                                | In-app hash change                     |
+| ---------------------------------------------------------- | -------------------------------------- |
+| `setDirtyFlag(true)`                                       | Prompts, like a cross-app change       |
+| Provider returns `false` for `isCrossAppNavigation: false` | Passes; the app router's guards decide |
+| Provider ignores the context and returns `true`            | Prompts, like a cross-app change       |
 
-When the hash changes but the intent stays the same (inner-app navigation), the `ShellNavigationHashChanger` treats it as an inner-app route change and does not run the full navigation filter pipeline. The dirty state check (`_handleDataLoss`) only runs for shell-level navigation events.
+A prompted in-app change does not reach the app router unless the user confirms. A guard router's `navTo()` whose hash write is held back this way settles as `Blocked`; the confirmed change then arrives as a hash change and runs through the guards. Leave guards plus a provider that returns `false` for in-app navigation keep the two scopes apart.
 
-This is by design — FLP assumes apps handle their own internal routing. This is exactly the gap that leave guards fill.
+### Keep-alive apps
+
+The shell asks every registered provider on each navigation and removes none itself. With `sap-keep-alive`, a hidden app embedded in the launchpad page keeps its provider registered, so the user is asked about its unsaved data while navigating between other apps. The app has to deregister the provider while it is hidden (`onDeactivate()`/`onActivate()`, see the library README, [Keep-alive apps](../../packages/lib/README.md#keep-alive-apps)). For apps in an iframe, the app runtime of SAPUI5 1.144.0 stores and swaps the providers per app (`AppLifeCycleAgent`); the 1.149.0 sources have no such swap. Source locations: [FLP evidence table](../reference/upstream-parity.md#fiori-launchpad-sapushell).
 
 ## Production FLP vs Sandbox Preview
 
@@ -297,9 +302,9 @@ In production, the FLP replaces the default `sap.ui.core.routing.HashChanger` wi
 - **Shell hash**: `#SemanticObject-action` — managed by the FLP
 - **App hash**: the fragment after `&/` — managed by the app's router
 
-The app's router only receives the app hash portion. When the user clicks the FLP home button or a different app tile, the shell hash changes but the app hash does not. The app's `Router.parse()` is never called for cross-app navigation. The FLP's `_disableSourceAppRouter` explicitly prevents the source app's router from reacting.
+The app's router only receives the app hash portion. The app's `Router.parse()` is never called for cross-app navigation: the `shellHashChanged` event does not fire `hashChanged` on the router's hash changer, and `_disableSourceAppRouter` stops the router.
 
-**Consequence**: Leave guards are never triggered by cross-app navigation in production. The FLP's `_handleDataLoss` filter handles dirty state before the hash changes.
+**Consequence**: Leave guards are never triggered by cross-app navigation in production. The FLP's `_handleDataLoss` filter handles dirty state after the browser hash has changed and before the app reacts to it.
 
 ### FLP Sandbox Preview (`fiori-tools-preview`)
 
@@ -307,74 +312,13 @@ The sandbox preview provided by `@sap/ux-ui5-tooling` is a lightweight FLP emula
 
 ### Leave guards and cross-app navigation
 
-No bypass logic or FLP detection is needed in leave guards. In both production and sandbox, `toExternal()` navigates at the shell level, so the leave guard never runs for cross-app hashes. The leave guard and dirty-state provider handle different scopes and never overlap:
-
-```typescript
-// Leave guard: blocks in-app navigation when dirty
-const leaveGuard: LeaveGuardFn = (context) => {
-	return !formModel.getProperty("/isDirty");
-};
-
-// Dirty-state provider: tells FLP about unsaved changes for cross-app
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) return false;
-	return formModel.getProperty("/isDirty") === true;
-};
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-```
-
-No `toRoute` check, no flags, no FLP detection in the leave guard.
+No bypass logic or FLP detection is needed in leave guards. The setup that combines a leave guard with a dirty-state provider is in the library README, [Combining leave guards with FLP dirty-state protection](../../packages/lib/README.md#combining-leave-guards-with-flp-dirty-state-protection).
 
 | Environment         | Cross-app via `toExternal()` triggers `parse()`? | Leave guard behavior |
 | ------------------- | ------------------------------------------------ | -------------------- |
 | Production FLP      | No (`ShellNavigationHashChanger` intercepts)     | Never reached        |
 | FLP sandbox         | No (`toExternal` operates at shell level)        | Never reached        |
 | Standalone (no FLP) | N/A (no ushell)                                  | N/A                  |
-
-In both production and sandbox, `toExternal()` navigates at the shell level, bypassing the app router's `parse()`. The leave guard never interferes with cross-app navigation. The dirty-state provider handles the confirmation UX independently.
-
-## Complementary Usage Pattern
-
-For complete data loss prevention in a Fiori Launchpad app:
-
-```typescript
-// Component.ts
-init(): void {
-    super.init();
-    const router = this.getRouter() as GuardRouter;
-
-    const formModel = new JSONModel({ isDirty: false });
-    this.setModel(formModel, "form");
-
-    // 1. Leave guard: protects in-app navigation
-    router.addRouteGuard("editOrder", {
-        beforeLeave: () => !formModel.getProperty("/isDirty"),
-    });
-
-    // 2. FLP dirty state provider: protects cross-app navigation
-    //    In production FLP, ShellNavigationHashChanger ensures cross-app
-    //    hashes never reach the app router, so the two never conflict.
-    if (sap.ushell?.Container) {
-        this._dirtyProvider = (navigationContext) => {
-            if (navigationContext?.isCrossAppNavigation === false) {
-                return false;
-            }
-            return formModel.getProperty("/isDirty") === true;
-        };
-        sap.ushell.Container.registerDirtyStateProvider(this._dirtyProvider);
-    }
-
-    router.initialize();
-}
-
-destroy(): void {
-    // Clean up FLP provider
-    if (sap.ushell?.Container && this._dirtyProvider) {
-        sap.ushell.Container.deregisterDirtyStateProvider(this._dirtyProvider);
-    }
-    super.destroy();
-}
-```
 
 ## Verification Sources
 

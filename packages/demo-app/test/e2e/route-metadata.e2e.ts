@@ -1,76 +1,80 @@
-import { waitForPage, expectHashToBe, resetAuth, fireEvent } from "./helpers";
+import { CONTROLS, type ControlRef, getControl, press } from "../shared/controls";
+import { expectHashToBe, waitForPage } from "./helpers/wait";
+import { fireEvent } from "./helpers/browser";
+import { startAtHome } from "./helpers/scenarios";
 
-const VIEW_PREFIX = "container-demo.app---";
+const EMPLOYEES_META = { section: "hr", requiresAuth: true };
+const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
+
+/** The views display `router.getRouteMeta(route)` as JSON. The placeholder text of a view that never displayed it fails the parse. */
+async function readDisplayedMeta(ref: ControlRef): Promise<Record<string, unknown>> {
+	const control = await getControl(ref);
+	return JSON.parse(await control.getProperty("text"));
+}
+
+async function openEmployees(): Promise<void> {
+	await press(CONTROLS.home.navToEmployees);
+	await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+	await expectHashToBe("#/employees");
+}
+
+async function openEmployee(): Promise<void> {
+	await press(CONTROLS.employees.navToEmployee);
+	await waitForPage(CONTROLS.employee.employeePage, "Employee Detail");
+	await expectHashToBe("#/employees/42");
+}
+
+async function navBackToEmployees(): Promise<void> {
+	await fireEvent(CONTROLS.employee.employeePage, "navButtonPress");
+	await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+	await expectHashToBe("#/employees");
+}
 
 describe("Route metadata and inheritance", () => {
-	before(async () => {
-		await browser.goTo({ sHash: "" });
-		await resetAuth();
-		await waitForPage(`${VIEW_PREFIX}homeView--homePage`, "Home");
+	beforeEach(async () => {
+		await startAtHome();
 	});
 
 	it("should display route metadata on employees page", async () => {
-		const btn = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}homeView--navToEmployees` },
-		});
-		await btn.press();
-		await waitForPage(`${VIEW_PREFIX}employeesView--employeesPage`, "Employees");
-		await expectHashToBe("#/employees");
+		await openEmployees();
 
-		const metaText = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeesView--employeesMeta` },
-		});
-		const text = await metaText.getProperty("text");
-		const meta = JSON.parse(text);
-		expect(meta.section).toBe("hr");
-		expect(meta.requiresAuth).toBe(true);
+		expect(await readDisplayedMeta(CONTROLS.employees.employeesMeta)).toEqual(EMPLOYEES_META);
 	});
 
 	it("should show inherited metadata on employee detail page", async () => {
-		const btn = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeesView--navToEmployee` },
-		});
-		await btn.press();
-		await waitForPage(`${VIEW_PREFIX}employeeView--employeePage`, "Employee Detail");
-		await expectHashToBe("#/employees/42");
+		await openEmployees();
+		await openEmployee();
 
-		const metaText = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeeView--employeeMeta` },
-		});
-		const text = await metaText.getProperty("text");
-		const meta = JSON.parse(text);
-		expect(meta.section).toBe("hr");
-		expect(meta.requiresAuth).toBe(true);
-		expect(meta.detail).toBe(true);
+		expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual(EMPLOYEE_META);
 	});
 
 	it("should navigate back to employees", async () => {
-		await fireEvent(`${VIEW_PREFIX}employeeView--employeePage`, "navButtonPress");
-		await waitForPage(`${VIEW_PREFIX}employeesView--employeesPage`, "Employees");
-		await expectHashToBe("#/employees");
+		await openEmployees();
+		await openEmployee();
+
+		await navBackToEmployees();
 	});
 
+	// Last test of the file: setRouteMeta() stays in effect until the page is reloaded.
+	// The exact comparisons above fail if this test ever runs before them.
 	it("should reflect runtime metadata updates in inheritance", async () => {
-		// Update metadata on employees
-		const updateBtn = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeesView--updateMeta` },
-		});
-		await updateBtn.press();
+		// Resolve the inherited metadata once before the update, so that the update
+		// has to replace an already computed result.
+		await openEmployees();
+		await openEmployee();
+		expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual(EMPLOYEE_META);
+		await navBackToEmployees();
 
-		// Navigate to employee detail
-		const navBtn = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeesView--navToEmployee` },
+		await press(CONTROLS.employees.updateMeta);
+		expect(await readDisplayedMeta(CONTROLS.employees.employeesMeta)).toEqual({
+			...EMPLOYEES_META,
+			updatedAt: expect.any(String),
 		});
-		await navBtn.press();
-		await waitForPage(`${VIEW_PREFIX}employeeView--employeePage`, "Employee Detail");
 
-		const metaText = await browser.asControl({
-			selector: { id: `${VIEW_PREFIX}employeeView--employeeMeta` },
+		await openEmployee();
+		expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual({
+			...EMPLOYEE_META,
+			updatedAt: expect.any(String),
 		});
-		const text = await metaText.getProperty("text");
-		const meta = JSON.parse(text);
-		expect(meta.updatedAt).toBeDefined();
-		expect(meta.section).toBe("hr");
-		expect(meta.detail).toBe(true);
 	});
 });

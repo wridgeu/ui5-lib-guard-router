@@ -1,5 +1,5 @@
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
 
@@ -22,7 +22,7 @@ export default class HomeController extends BaseController {
 		// Register a standalone leave guard via addLeaveGuard().
 		// The guard is registered when the controller initializes and
 		// removed when it is destroyed (see onExit below).
-		const router = this.getRouter<GuardRouter>();
+		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
@@ -31,32 +31,44 @@ export default class HomeController extends BaseController {
 		const model = this.getModel<JSONModel>("auth");
 		const isLoggedIn = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
-		this.createScenarioRunner().recordAction(isLoggedIn ? "User logged out" : "User logged in");
+		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
 	}
 
 	onNavToProtected(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("protected")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["protected"]);
 		this.getRouter().navTo("protected");
 	}
 
 	onNavToBlocked(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("blocked")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["blocked"]);
 		this.getRouter().navTo("blocked");
 	}
 
 	onNavToForbidden(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("forbidden")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["forbidden"]);
 		this.getRouter().navTo("forbidden");
 	}
 
 	onNavToAdmin(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("admin")');
+		this.createScenarioRunner().recordAction("actionNavTo", ["admin"]);
 		this.getRouter().navTo("admin");
 	}
 
 	onNavToEmployees(): void {
-		this.createScenarioRunner().recordAction('Triggered router.navTo("employees")');
-		this.getRouter<GuardRouter>().navTo("employees");
+		this.createScenarioRunner().recordAction("actionNavTo", ["employees"]);
+		this.getRouter().navTo("employees");
+	}
+
+	/** "team" is a retired page, see guards/retiredPageGuard.ts. */
+	onNavToTeam(): void {
+		this.createScenarioRunner().recordAction("actionNavTo", ["team"]);
+		this.getRouter().navTo("team");
+	}
+
+	/** "reports" displays the nested reporting component, which has its own guard router. */
+	onNavToReports(): void {
+		this.createScenarioRunner().recordAction("actionNavTo", ["reports"]);
+		this.getRouter().navTo("reports");
 	}
 
 	onDirectHashToProtected(): void {
@@ -91,7 +103,7 @@ export default class HomeController extends BaseController {
 	 */
 	override onExit(): void {
 		if (this._leaveGuard) {
-			const router = this.getRouter<GuardRouter>();
+			const router = this.getRouter();
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}

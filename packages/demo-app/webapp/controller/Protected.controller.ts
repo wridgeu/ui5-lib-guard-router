@@ -17,13 +17,9 @@ import BaseController from "./BaseController";
  * @namespace demo.app.controller
  */
 export default class ProtectedController extends BaseController {
-	onNavBack(): void {
-		this.getRouter().navTo("home");
-	}
-
 	onClearDirtyAndNavHome(): void {
 		this.getModel<JSONModel>("form").setProperty("/isDirty", false);
-		this.createScenarioRunner().recordAction("Cleared dirty state and returned to Home");
+		this.createScenarioRunner().recordAction("actionClearedDirty");
 		this.getRouter().navTo("home");
 	}
 }

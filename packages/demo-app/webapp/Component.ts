@@ -11,7 +11,7 @@ import { createRuntimeModel } from "./model/runtime";
  *
  * **Declarative** (manifest.json `guardRouter.guards`):
  * - Global navigation logger (`"*"`)
- * - `blocked` and `forbidden` enter guards (shorthand array syntax)
+ * - `blocked`, `forbidden` and `team` enter guards (shorthand array syntax)
  * - `protected` leave guard (object form with `leave`)
  *
  * **Programmatic** (registered here in `init()`):
@@ -31,8 +31,9 @@ export default class Component extends UIComponent {
 		interfaces: ["sap.ui.core.IAsyncContentCreation"],
 	};
 
-	private _runtimeCoordinator: RuntimeCoordinator | null = null;
-	private _permissionGuard: GuardFn | null = null;
+	// No initializers: they would run after the UIComponent constructor, which calls init().
+	private _runtimeCoordinator?: RuntimeCoordinator;
+	private _permissionGuard?: GuardFn;
 
 	override init(): void {
 		super.init();
@@ -44,8 +45,8 @@ export default class Component extends UIComponent {
 		this.setModel(runtimeModel, "runtime");
 		this.setModel(formModel, "form");
 
-		// Programmatic guards: these need component context (model access)
-		// that declarative manifest guards don't have via closure.
+		// The permission guard closes over the auth model. Manifest guards reach the
+		// component through context.ownerComponent instead.
 		router.addRouteGuard("admin", adminGuard);
 		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
 		router.addRouteGuard("protected", this._permissionGuard);
@@ -56,9 +57,22 @@ export default class Component extends UIComponent {
 		this._runtimeCoordinator.start(router);
 	}
 
+	/**
+	 * The launchpad hides the app and keeps it (`sap-keep-alive`). The manifest declares
+	 * `sap.ui5/keepAlive/supported`, so UI5 stops the router and calls this hook.
+	 */
+	override onDeactivate(): void {
+		this._runtimeCoordinator?.deactivate();
+	}
+
+	/** The launchpad shows the kept app again: UI5 has initialized the router. */
+	override onActivate(): void {
+		this._runtimeCoordinator?.activate();
+	}
+
 	override exit(): void {
 		this._runtimeCoordinator?.destroy();
-		this._runtimeCoordinator = null;
-		this._permissionGuard = null;
+		this._runtimeCoordinator = undefined;
+		this._permissionGuard = undefined;
 	}
 }

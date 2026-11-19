@@ -21,7 +21,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -46,13 +46,16 @@ jobs:
             - name: Typecheck
               run: npm run typecheck
 
+            - name: Check test layout
+              run: npm run check:layout
+
             - name: Verify vendored OpenUI5 router files
               run: npm run verify:openui5-router-vendor
 
             - name: Pack check
               run: npm run pack:check
 
-    node22-pack-smoke:
+    node24-pack-smoke:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -61,7 +64,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 22
+                  node-version: 24
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -88,7 +91,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -115,7 +118,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources
@@ -130,6 +133,30 @@ jobs:
             - name: Run OpenUI5 1.120 compatibility QUnit suite
               run: npm run test:qunit:compat:120
 
+    flp-sapui5-149:
+        needs: validate
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 26
+                  cache: npm
+
+            - name: Cache UI5 framework resources
+              uses: actions/cache@v4
+              with:
+                  path: ~/.ui5
+                  key: ui5-flp-149-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
+                  restore-keys: ui5-flp-149-
+
+            - run: npm ci
+
+            - name: Run FLP preview tests on SAPUI5 1.149
+              run: npm run test:e2e:flp:149
+
     windows-smoke:
         needs: validate
         runs-on: windows-latest
@@ -139,7 +166,7 @@ jobs:
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 24
+                  node-version: 26
                   cache: npm
 
             - name: Cache UI5 framework resources

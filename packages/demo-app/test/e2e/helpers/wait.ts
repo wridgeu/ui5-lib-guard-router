@@ -1,0 +1,273 @@
+/**
+ * E2E test helpers for the demo app.
+ *
+ * These helpers run in the browser context via wdi5's browser.execute().
+ * They access UI5 internals directly because:
+ * 1. wdi5's control resolution has quirks (e.g., picking up sub-elements)
+ * 2. We need to check router state that isn't exposed through the DOM
+ * 3. We need to manipulate model state without UI interaction
+ */
+
+import { type ControlRef, getAppComponentId, isPageDisplayed } from "../../shared/controls";
+import { getRuntimeSettlementRevision } from "../../shared/models";
+
+type SettlementSnapshot = {
+	status?: string;
+	route?: string;
+	hash?: string;
+} | null;
+
+type RuntimeSettlementSnapshot = {
+	status: string;
+	route: string;
+	hash: string;
+	revision: number;
+};
+
+type RuntimeSettlementExpectation = {
+	status: string;
+	route?: string;
+	hash?: string;
+};
+
+type RuntimeSettlementWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
+type HashWaitOptions = {
+	timeout?: number;
+	timeoutMsg?: string;
+	afterRevision?: number;
+};
+
+type PageWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
+type SettlementWaitResult = {
+	ok: boolean;
+	result: SettlementSnapshot;
+	message: string | null;
+};
+
+/**
+ * Wait for a UI5 Page control to be available, have the expected title,
+ * AND be currently visible with navigation fully settled.
+ *
+ * Resolves the page through the component (`component.byId(viewId).byId(id)`)
+ * in browser.execute, so only app-declared IDs are used and wdi5's control
+ * resolution cannot pick up sub-elements (e.g. navButton).
+ *
+ * Runs in two phases:
+ * 1. Settlement: calls `router.navigationSettled()` to wait for the guard
+ *    pipeline to finish.
+ * 2. DOM visibility: polls until the page control is rendered and visible
+ *    (not hidden by NavContainer's display:none on inactive pages).
+ */
+export async function waitForPage(
+	page: ControlRef,
+	expectedTitle: string,
+	timeoutOrOptions: number | PageWaitOptions = 10000,
+): Promise<void> {
+	const timeout = typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeout ?? 10000);
+	const afterRevision = typeof timeoutOrOptions === "number" ? undefined : timeoutOrOptions.afterRevision;
+	const pageName = `${page.viewId}/${page.id}`;
+	const componentId = await getAppComponentId(page.appId);
+
+	// Phase 1: Wait for the guard pipeline to settle.
+	const settlement = (await browser.executeAsync(
+		(compId: string, timeoutMs: number, done: (result: SettlementWaitResult) => void) => {
+			let finished = false;
+
+			const finish = (result: SettlementWaitResult) => {
+				if (finished) {
+					return;
+				}
+				finished = true;
+				window.clearTimeout(timer);
+				done(result);
+			};
+
+			const formatError = (error: unknown): string => {
+				if (error instanceof Error) {
+					return error.message;
+				}
+				return String(error);
+			};
+
+			const timer = window.setTimeout(() => {
+				finish({
+					ok: false,
+					result: null,
+					message: `Timed out after ${timeoutMs}ms waiting for router.navigationSettled()`,
+				});
+			}, timeoutMs);
+
+			try {
+				const Component = sap.ui.require("sap/ui/core/Component");
+				if (!Component?.getComponentById) {
+					finish({
+						ok: false,
+						result: null,
+						message: "sap/ui/core/Component is unavailable in the browser context",
+					});
+					return;
+				}
+
+				const component = Component.getComponentById(compId);
+				if (!component?.getRouter) {
+					finish({
+						ok: false,
+						result: null,
+						message: `Component "${compId}" was not found or does not expose getRouter()`,
+					});
+					return;
+				}
+
+				const router = component.getRouter();
+				if (!router) {
+					finish({
+						ok: false,
+						result: null,
+						message: `Router was not found for component "${compId}"`,
+					});
+					return;
+				}
+
+				if (typeof router.navigationSettled !== "function") {
+					finish({
+						ok: false,
+						result: null,
+						message: "Router does not expose navigationSettled(); the public settlement API is unavailable",
+					});
+					return;
+				}
+
+				router.navigationSettled().then(
+					(result: SettlementSnapshot) => finish({ ok: true, result, message: null }),
+					(error: unknown) => {
+						finish({
+							ok: false,
+							result: null,
+							message: `router.navigationSettled() rejected: ${formatError(error)}`,
+						});
+					},
+				);
+			} catch (error: unknown) {
+				finish({
+					ok: false,
+					result: null,
+					message: `Failed to wait for router settlement: ${formatError(error)}`,
+				});
+			}
+		},
+		componentId,
+		timeout,
+	)) as SettlementWaitResult;
+
+	if (!settlement.ok) {
+		throw new Error(
+			`waitForPage(${pageName}) could not confirm navigation settlement before checking "${expectedTitle}": ${settlement.message}`,
+		);
+	}
+
+	if (afterRevision !== undefined) {
+		await browser.waitUntil(async () => (await getRuntimeSettlementRevision()) > afterRevision, {
+			timeout,
+			timeoutMsg: `Page "${pageName}" did not observe a fresh settlement after revision ${afterRevision} within ${timeout}ms`,
+		});
+	}
+
+	// Phase 2: Poll until the page control is rendered and visible.
+	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle), {
+		timeout,
+		timeoutMsg: `Page "${pageName}" did not show title "${expectedTitle}" within ${timeout}ms after navigation settled to ${settlement.result?.status ?? "unknown"} (route: ${settlement.result?.route ?? "unknown"}, hash: ${settlement.result?.hash ?? "unknown"})`,
+	});
+}
+
+/**
+ * Wait for the URL hash to settle to an expected value, then assert it.
+ */
+export async function expectHashToBe(expected: string, timeoutMsgOrOptions?: string | HashWaitOptions): Promise<void> {
+	const options: HashWaitOptions =
+		typeof timeoutMsgOrOptions === "string" ? { timeoutMsg: timeoutMsgOrOptions } : (timeoutMsgOrOptions ?? {});
+	const timeout = options.timeout ?? 3000;
+
+	await browser.waitUntil(
+		async () => {
+			const hash = await browser.execute(() => window.location.hash);
+			if (hash !== expected) {
+				return false;
+			}
+
+			return (
+				options.afterRevision === undefined || (await getRuntimeSettlementRevision()) > options.afterRevision
+			);
+		},
+		{
+			timeout,
+			timeoutMsg:
+				options.timeoutMsg ??
+				`Hash did not settle to ${expected}${options.afterRevision === undefined ? "" : ` after revision ${options.afterRevision}`}`,
+		},
+	);
+}
+
+async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
+	return browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const runtimeModel = Component.getComponentById(componentId).getModel("runtime");
+
+			return {
+				status: String(runtimeModel.getProperty("/lastSettlementStatus")),
+				route: String(runtimeModel.getProperty("/lastSettlementRoute")),
+				hash: String(runtimeModel.getProperty("/lastSettlementHash")),
+				revision: Number(runtimeModel.getProperty("/lastSettlementRevision")),
+			};
+		},
+		await getAppComponentId(),
+	) as Promise<RuntimeSettlementSnapshot>;
+}
+
+function formatRuntimeSettlementExpectation(expected: RuntimeSettlementExpectation): string {
+	return Object.entries(expected)
+		.map(([key, value]) => `${key}=${String(value)}`)
+		.join(", ");
+}
+
+export async function waitForRuntimeSettlement(
+	expected: RuntimeSettlementExpectation,
+	options: RuntimeSettlementWaitOptions = {},
+): Promise<RuntimeSettlementSnapshot> {
+	const { timeout = 3000, afterRevision } = options;
+	let matchedSettlement: RuntimeSettlementSnapshot | null = null;
+
+	await browser.waitUntil(
+		async () => {
+			const settlement = await getRuntimeSettlement();
+			const matchesExpected = Object.entries(expected).every(([key, value]) => {
+				return settlement[key as keyof RuntimeSettlementSnapshot] === value;
+			});
+
+			if (!matchesExpected) {
+				return false;
+			}
+
+			if (afterRevision !== undefined && settlement.revision <= afterRevision) {
+				return false;
+			}
+
+			matchedSettlement = settlement;
+			return true;
+		},
+		{
+			timeout,
+			timeoutMsg: `Runtime settlement did not reach ${formatRuntimeSettlementExpectation(expected)} within ${timeout}ms${afterRevision === undefined ? "" : ` after revision ${afterRevision}`}`,
+		},
+	);
+
+	return matchedSettlement ?? getRuntimeSettlement();
+}

@@ -1,6 +1,4 @@
-import MobileRouter from "sap/m/routing/Router";
-
-type RouterArgs = ConstructorParameters<typeof MobileRouter>;
+import type { RouterArgs } from "./routerFactories";
 
 export function createForwardNavigationFixture(controlId: string): RouterArgs {
 	return [
@@ -24,7 +22,7 @@ export function createForwardNavigationFixture(controlId: string): RouterArgs {
 				transitionParameters: { some: "parameter" },
 			},
 		},
-	] as unknown as RouterArgs;
+	];
 }
 
 export function createViewLevelFixture(controlId: string): RouterArgs {
@@ -59,5 +57,5 @@ export function createViewLevelFixture(controlId: string): RouterArgs {
 				viewLevel: 1,
 			},
 		},
-	] as unknown as RouterArgs;
+	];
 }

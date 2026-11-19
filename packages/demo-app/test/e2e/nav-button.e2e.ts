@@ -1,61 +1,68 @@
-import { waitForPage, fireEvent, resetAuth } from "./helpers";
+import { CONTROLS, press, waitForComponent } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { loginAndGoToProtected, navBackToHome, startAtHome } from "./helpers/scenarios";
 
 describe("UI5 in-app nav back button", () => {
 	it("should navigate back to Home via the Page nav button", async () => {
-		await browser.goTo({ sHash: "" });
-		await resetAuth();
+		await startAtHome();
+		await loginAndGoToProtected();
 
-		// Login and go to Protected
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
-		await toggleBtn.press();
-
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
-		await navBtn.press();
-
-		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
-
-		// Click the UI5 Page's built-in nav back button
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-
-		// Should be back on Home
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await navBackToHome();
 	});
 
 	it("should allow re-navigation after using nav back button", async () => {
-		await browser.goTo({ sHash: "" });
-		await resetAuth();
-
-		// Login
-		const toggleBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--toggleLoginBtn" },
-		});
-		await toggleBtn.press();
-
-		// Go to Protected
-		const navBtn = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-		});
-		await navBtn.press();
-		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
-
-		// Nav back via UI5 button
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await startAtHome();
+		await loginAndGoToProtected();
+		await navBackToHome();
 
 		// Navigate to Protected again
-		const navBtn2 = await browser.asControl({
-			selector: { id: "container-demo.app---homeView--navProtectedBtn" },
-			forceSelect: true,
-		});
-		await navBtn2.press();
+		const settlementRevision = await getRuntimeSettlementRevision();
+		await press(CONTROLS.home.navProtectedBtn);
 
-		// Wait for view - confirms async guard completed
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: settlementRevision },
+		);
+		await expectHashToBe("#/protected");
+	});
+
+	it("should go one step back in the browser history from a page without a leave guard", async () => {
+		await startAtHome();
+		await press(CONTROLS.home.navToEmployees);
+		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+		const historyLength = await getHistoryLength();
+
+		await fireEvent(CONTROLS.employees.employeesPage, "navButtonPress");
+
+		await waitForPage(CONTROLS.home.homePage, "Home");
+		await expectHashToBe("");
+		expect(await getHistoryLength()).toBe(historyLength);
+
+		// The entry of Employees is still ahead: the nav button did not replace it.
+		await browser.forward();
+		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+		await expectHashToBe("#/employees");
+	});
+
+	// Last test of the file: the reload drops the wdi5 bridge, so after it only browser.execute helpers are used.
+	it("should replace the entry with the parent route when the app was entered on the page", async () => {
+		// The entry before the deep link is Home: a step back in the history would not end on Employees.
+		await startAtHome();
+		await setBrowserHash("#/employees/42");
+		await waitForPage(CONTROLS.employee.employeePage, "Employee Detail");
+
+		await browser.refresh();
+		await waitForComponent();
+		await waitForPage(CONTROLS.employee.employeePage, "Employee Detail");
+		const historyLength = await getHistoryLength();
+
+		await fireEvent(CONTROLS.employee.employeePage, "navButtonPress");
+
+		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
+		await expectHashToBe("#/employees");
+		expect(await getHistoryLength()).toBe(historyLength);
 	});
 });

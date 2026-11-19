@@ -2,7 +2,8 @@
  * Custom oxlint JS plugin that enforces test stability guardrails.
  *
  * Detects flaky hard-wait patterns in test files and guides towards
- * proper condition-based waiting (waitUntil / waitFor*).
+ * proper condition-based waiting (waitUntil / waitFor*), and timers of
+ * any kind in unit tests.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
@@ -104,11 +105,54 @@ const noHardWait = {
 	},
 };
 
+const TIMER_FUNCTIONS = new Set(["setTimeout", "setInterval"]);
+
+/** The name of the called function: `name()`, `window.name()` or `globalThis.name()`. */
+function calledGlobal(callee) {
+	if (callee.type === "Identifier") return callee.name;
+	if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier") return undefined;
+	if (callee.object.name !== "window" && callee.object.name !== "globalThis") return undefined;
+	return callee.property.type === "Identifier" ? callee.property.name : undefined;
+}
+
+/**
+ * Reports any `setTimeout` / `setInterval` call, including `window.` and `globalThis.` forms.
+ *
+ * A timer in a unit test either sleeps until the code under test is "probably" done
+ * or races it, and both flake under load. Tests wait on what the code does instead.
+ *
+ * Scope: library QUnit test files (configured via oxlintrc overrides).
+ */
+const noTimers = {
+	meta: {
+		type: "problem",
+		docs: {
+			description: "Disallow timers in unit tests - wait on router events or test-controlled promises instead",
+		},
+		messages: {
+			noTimers:
+				"Do not use timers in unit tests. Await a router event or navigationSettled(), resolve a Promise.withResolvers() deferred, or use flushPromises().",
+		},
+		schema: [],
+	},
+	create(context) {
+		return {
+			CallExpression(node) {
+				const name = calledGlobal(node.callee);
+				if (name && TIMER_FUNCTIONS.has(name)) {
+					context.report({ node, messageId: "noTimers" });
+				}
+			},
+		};
+	},
+};
+
 /** @type {import('eslint').ESLint.Plugin} */
 export default {
 	meta: { name: "test-guardrails" },
 	rules: {
 		"no-browser-pause": noBrowserPause,
 		"no-hard-wait": noHardWait,
+		"no-timers": noTimers,
 	},
 };

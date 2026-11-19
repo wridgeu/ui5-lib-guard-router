@@ -37,7 +37,7 @@ For context, here is how popular routing libraries handle metadata access for no
 When `getRouteMeta` is called with a route name that does not exist (i.e., `this.getRoute(routeName)` returns falsy):
 
 - **Return value**: empty frozen object (`{}`).
-- **Warning**: log a warning: `getRouteMeta: unknown route "<routeName>", returning empty metadata`.
+- **Warning**: log a warning: `getRouteMeta: unknown route, returning empty metadata`, with the route name as the log details.
 - **Caching**: do **not** cache the empty result. The next call for the same unknown route will re-evaluate and warn again.
 
 **Empty string is a valid route name**: `getRouteMeta("")` must return `{}` **without** warning. The empty string represents the root/initial state before any route has matched. It is used as `_currentRoute` before the first navigation and passed to `_createGuardContext` to populate `fromMeta`. The unknown-route warning must only fire for non-empty route names that don't resolve via `this.getRoute()`.
@@ -97,6 +97,8 @@ The existing `unknownRouteRegistration` policy covers both guard and metadata re
 
 ## Phase 2: Guard Error Handling
 
+> **As implemented:** guard inheritance is not resolved lazily per navigation. With `inheritance: "pattern-tree"`, `initialize()` expands each manifest guard descriptor to all descendant routes once (`expandToDescendants()` in `PatternTree.ts`), and `addRoute()` expands descriptors for the new route (`expandForNewRoute()`). There is no guard descriptor cache. A route with no inherited guards simply has none registered, and `_runRouteGuards()` returns `true`. The sections below are kept as the design record.
+
 ### Pipeline cache miss: Ancestor walk finds zero descriptors
 
 When the pipeline resolves inherited guards for a route and the ancestor walk produces an empty descriptor list:
@@ -111,7 +113,7 @@ When the pipeline resolves inherited guards for a route and the ancestor walk pr
 
 When a guard descriptor references a route name that never gets added to the router:
 
-- **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient.
+- **No special handling needed.** The registration-time policy (`unknownRouteRegistration`) is sufficient. For a manifest guard, `"throw"` does not throw: the guard is logged (`guardRouter.guards: failed to register "<modulePath>"`) and skipped, and the router still starts.
 - The ancestor walk goes upward from the navigation target. A descriptor pointing at a non-existent route is never reached by any ancestor walk. It sits inert in the descriptor registry.
 - If someone navigates to a non-existent route, UI5's own router fails to match the route pattern before the guard pipeline is ever consulted.
 
@@ -132,13 +134,13 @@ When a guard descriptor references a route name that never gets added to the rou
 
 ## Impact on Existing Plans
 
-- **`04-route-metadata.plan.md` Task 1**: Done. The unified `unknownRouteRegistration` option (renamed from `unknownRouteGuardRegistration`) covers both guard and metadata registration. No separate option is needed.
-- **`04-route-metadata.plan.md` Task 3**: Done. `getRouteMeta` logs a warning for unknown routes. `setRouteMeta` checks the `unknownRouteRegistration` policy before storing.
-- **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
+- **[`04-route-metadata.md`](./04-route-metadata.md) Task 1**: Done. The unified `unknownRouteRegistration` option (renamed from `unknownRouteGuardRegistration`) covers both guard and metadata registration. No separate option is needed.
+- **`04-route-metadata.md` Task 3**: Done. `getRouteMeta` logs a warning for unknown routes. `setRouteMeta` checks the `unknownRouteRegistration` policy before storing.
+- **`Router.ts` internals**: Done. `normalizeGuardRouterOptions`, `ResolvedGuardRouterOptions`, and `DEFAULT_OPTIONS` (in `GuardConfig.ts`) use the unified `unknownRouteRegistration` option. The `_handleUnknownRouteRegistration` method is generalized to accept a caller label.
 - **`Router.ts` implementation**: Done. `getRouteMeta` checks `this.getRoute()` with an empty-string carve-out. `setRouteMeta` delegates to the unified `_handleUnknownRouteRegistration` method.
 - **`packages/lib/README.md`**: Done. The options table documents `unknownRouteRegistration` and the unified `inheritance` option.
-- **Issue #62 Phase 1**: Done. The lazy resolver skips caching on empty results and logs a warning for unknown routes.
-- **Issue #62 Phase 2**: Done. The guard lazy resolver skips caching on empty descriptor lists.
+- **Issue #62 Phase 1**: Done. The lazy resolver logs a warning for unknown routes and does not cache them; empty results for known routes are cached (see the Phase 1 note).
+- **Issue #62 Phase 2**: Done differently. Guard descriptors are expanded eagerly at `initialize()` and `addRoute()`, so there is no lazy guard resolver or cache (see the Phase 2 note).
 
 ## Test Cases
 

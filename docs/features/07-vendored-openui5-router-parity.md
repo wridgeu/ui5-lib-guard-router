@@ -3,15 +3,15 @@
 > **Status**: Implemented. The initial vendored parity lane shipped in PR #33.
 > See [docs/reference/upstream-parity.md](../reference/upstream-parity.md) and the [local README](../../packages/lib/test/qunit/upstream-parity/README.md) for the shipped layout and maintenance process.
 >
-> **Implementation note:** The proposal below describes a dedicated CI/test lane. The shipped implementation folded the upstream parity suite into the existing `test:qunit` lane (registered in `testsuite.qunit.ts` and `wdio-qunit.conf.ts`) rather than creating a separate script. The CI workflow file map entry below is historical — no dedicated lane was added.
+> **Implementation note:** The proposal below describes a dedicated CI/test lane. The shipped implementation folded the upstream parity suite into the existing `test:qunit` lane (registered in `testsuite.qunit.ts`, from which `wdio-qunit.conf.ts` takes its pages) rather than creating a separate script. The CI workflow file map entry below is historical — no dedicated lane was added.
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 
-**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts`. A vendored parity lane pins compatibility against upstream framework behavior and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
+**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/parity/native/`. A vendored parity lane pins compatibility against upstream framework behavior and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
 
 **Architecture:** Keep two test layers and two source forms:
 
-- `NativeRouterCompat.qunit.ts` remains the fast local parity smoke suite owned entirely by this repo.
+- `parity/native/` remains the fast local parity smoke suite owned entirely by this repo.
 - A new vendored upstream-parity lane keeps **byte-for-byte upstream snapshots** in a `vendor/` subtree, then runs **local executable ports/wrappers** against a shared harness in the "no guards registered" contract mode.
 
 ---
@@ -24,7 +24,7 @@ The library extends `sap.m.routing.Router` and advertises itself as a drop-in re
 
 Without vendored upstream tests, the answer is only partially covered.
 
-- The local compatibility suite in `packages/lib/test/qunit/NativeRouterCompat.qunit.ts` already compares the native router and the guard router across several core behaviors.
+- The local compatibility suite in `packages/lib/test/qunit/parity/native/` already compares the native router and the guard router across several core behaviors.
 - That suite works as a fast smoke layer, but it is still curated entirely by this project.
 - The project does not yet keep a pinned, provenance-tracked set of upstream OpenUI5 router tests that can act as an additional contract suite.
 
@@ -143,7 +143,7 @@ That is the contract the vendored suite should support.
 | Action | File                                                                   | Responsibility                                                                                                     |
 | ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Create | `packages/lib/test/qunit/upstream-parity/README.md`                    | Local overview of the vendored parity suite, provenance rules, scripts, and how to update it                       |
-| Create | `packages/lib/test/qunit/upstream-parity/manifest.json`                | Machine-readable index of vendored raw files, executable ports, source paths, pinned tag/SHA, and adaptation notes |
+| Create | `packages/lib/test/qunit/upstream-parity/vendor-manifest.json`         | Machine-readable index of vendored raw files, executable ports, source paths, pinned tag/SHA, and adaptation notes |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/routerFactories.ts`  | Factory helpers for native router vs guard router construction                                                     |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/fixtures.ts`         | Shared route configs, test fixtures, hash reset helpers, and reusable setup                                        |
 | Create | `packages/lib/test/qunit/upstream-parity/adapters/assertions.ts`       | Parity assertions and shared event/hash comparison helpers                                                         |
@@ -170,7 +170,7 @@ packages/lib/test/qunit/
   upstream-parity/
     Current.qunit.ts               # imports all active versioned ports
     README.md
-    manifest.json
+    vendor-manifest.json
     adapters/
       assertions.ts
       fixtures.ts
@@ -193,7 +193,7 @@ Constraints:
 - exact upstream snapshots stay under `vendor/openui5/<tag>/raw/` preserving the original source path
 - executable local ports live under `ports/openui5/<tag>/` grouped by upstream module
 - local harness code stays in `adapters/`, outside both vendor and ports
-- provenance is tracked centrally in `manifest.json`
+- provenance is tracked centrally in `vendor-manifest.json`
 
 ---
 

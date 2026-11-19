@@ -10,6 +10,7 @@ export function getCurrentHash(): string {
 	return hash ? `#/${hash}` : "";
 }
 
+// The global hash changer on purpose: like a URL typed into the address bar, it replaces the whole hash, also the part of a nested component.
 export function setHash(hash: string): void {
 	HashChanger.getInstance().setHash(normalizeHash(hash));
 }

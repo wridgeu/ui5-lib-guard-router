@@ -24,11 +24,11 @@ Default `guardLoading` flips from `"block"` to `"lazy"`. The `"lazy"` mode gains
 **Constructor** (after parsing descriptors):
 
 ```typescript
-// Fire-and-forget preload — no callback, no promise
+// Fire-and-forget preload — a failed load is reported when the guard runs
 // Deduplicate module paths (same module may appear in multiple cherry-pick entries)
 // Always use base module path without # fragment
 const uniquePaths = [...new Set(descriptors.map((d) => d.modulePath))];
-sap.ui.require(uniquePaths);
+sap.ui.require(uniquePaths, undefined, () => {});
 ```
 
 **`initialize()`** (lazy mode):
@@ -40,39 +40,32 @@ this._registerLazyGuards(descriptors);
 return super.initialize();
 ```
 
-**Lazy wrapper — cherry-picked entries** (one wrapper per descriptor, resolves to exactly one guard):
+**Lazy wrapper — cherry-picked entries** (one wrapper per descriptor, resolves to exactly one guard). Simplified from `createLazyGuards()` in `GuardModules.ts`:
 
 ```typescript
-function createLazyGuard(modulePath: string, exportKey?: string): GuardFn {
-	return (context: GuardContext) => {
-		const cached = sap.ui.require(modulePath);
-		if (cached) {
-			const fn = resolveExport(cached, exportKey);
-			return fn(context); // sync — preload won the race
-		}
-		return new Promise((resolve, reject) => {
-			sap.ui.require(
-				[modulePath],
-				(mod) => {
-					const fn = resolveExport(mod, exportKey);
-					resolve(fn(context));
-				},
-				reject,
-			);
-		});
-	};
-}
+let guards: GuardFn[] | undefined; // resolved once, so a missing export warns once
+const run = (mod: unknown, context: GuardContext) => {
+	guards ??= resolveModuleExports(mod, modulePath, exportKey).map((g) => g.fn);
+	return runGuardsInOrder(guards, context);
+};
+const wrapper = (context: GuardContext) => {
+	const mod = sap.ui.require(modulePath);
+	if (mod !== undefined) return run(mod, context); // sync — preload won the race
+	return loadGuardModule(modulePath).then((loaded) => (context.signal.aborted ? false : run(loaded, context)));
+};
 ```
 
-**Lazy wrapper — bare-path multi-guard modules** (one "expander" wrapper that, on first invocation, loads the module, detects shape, registers the remaining guards, and executes itself as the first):
+A module that fails to load rejects the wrapper's Promise, so the navigation settles as `error`.
+
+**Lazy wrapper — bare-path multi-guard modules:**
 
 A single lazy wrapper cannot expand into N guards at invocation time. Two strategies:
 
 1. **Eager expansion for bare-path entries**: At `initialize()` time, if a descriptor has no `exportKey`, load the module (it may already be cached from preload), detect shape, and expand into individual descriptors before registering. This makes bare-path multi-guard modules behave like mini-block-loads — but only for the shape detection, not for all modules.
 
-2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are loaded at `initialize()` time to detect their shape and expand. Since the preload fired in the constructor, modules are likely cached — making this expansion effectively synchronous in practice. If not cached, this single module load is awaited before registering its guards.
+2. **Preferred approach**: Cherry-picked entries use lazy wrappers (one guard per wrapper, no expansion needed). Bare-path entries with no `exportKey` are probed in the module cache at `initialize()` time. Since the preload fired in the constructor, modules are likely cached, and their guards are registered individually. On a cache miss, one wrapper loads the module on first navigation and runs all of its guards in order; later navigations run them synchronously. Registering them from inside the wrapper instead would miss that navigation, because the pipeline already iterates its guard list.
 
-The implementation uses approach 2: `_registerLazyGuards()` partitions descriptors into cherry-picked (lazy wrapper) and bare-path (expand-on-init). This keeps `initialize()` synchronous in the common case (preload finished) while correctly handling multi-guard expansion.
+The implementation uses approach 2: `createLazyGuards()` in `GuardModules.ts` turns each descriptor into the guards to register: a lazy wrapper for a cherry-pick, the module's own guards for a cached bare path, and a module wrapper on a cache miss. `initialize()` stays synchronous in all cases.
 
 ### Why This Is Better
 
@@ -151,7 +144,7 @@ export default {
 ```
 typeof export === "function"           → Shape 1 (single guard)
 Array.isArray(export)                  → Shape 2 (array)
-typeof export === "object" && export   → Shape 3 (object)
+plain object (Object or null prototype) → Shape 3 (object)
 anything else                          → Log.warning, skip module
 ```
 
@@ -190,12 +183,12 @@ This registers all guards from `security` (including `checkAuth`), then register
 
 ### Rules
 
-| Syntax                        | Behavior                                                                                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                       |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                                  |
-| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                           |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug-level warning since this likely indicates a mistake (wrong module or expected an object export). |
+| Syntax                        | Behavior                                                                                                                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"guards.security"`           | Register **all** exports from module (key/array order)                                                                                                                                  |
+| `"guards.security#checkAuth"` | Register only the named export (object key)                                                                                                                                             |
+| `"guards.security#1"`         | Register only the indexed export (array index or object key order)                                                                                                                      |
+| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message, since this likely indicates a mistake (wrong module or expected an object export). |
 
 The `#` separator is unambiguous — module paths use dots and slashes, never `#`.
 
@@ -204,12 +197,12 @@ The `module:` prefix and `#` cherry-pick compose naturally. Parsing splits on `#
 
 ### Parsing
 
-`parseGuardDescriptors()` splits each entry on the first `#`:
+`parseGuardEntry()` in `GuardConfig.ts` (called by `parseGuardDescriptors()`) splits each entry on the first `#`:
 
 ```typescript
-const [rawModulePath, exportKey] = entry.split("#", 2);
-// rawModulePath: "guards.security"
-// exportKey: "checkAuth" | "1" | undefined
+const hashIndex = entry.indexOf("#");
+const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex); // "guards.security"
+const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1); // "checkAuth" | "1" | undefined
 ```
 
 The `exportKey` is stored on the descriptor and used at registration time to select the appropriate export(s) from the loaded module.
@@ -220,8 +213,8 @@ When a module is loaded:
 
 1. Determine the export shape (function / array / object)
 2. If `exportKey` is defined:
-    - For objects: look up `module[exportKey]`
-    - For arrays: look up `module[parseInt(exportKey)]`
+    - For objects: look up `module[exportKey]`; if there is no such key and `exportKey` is a plain non-negative integer, take the entry at that position in key order
+    - For arrays: `exportKey` must be a plain non-negative integer; look up the entry at that index
     - For functions: ignore `exportKey`
     - If the key doesn't exist or the value isn't a function: warn and skip
 3. If `exportKey` is undefined: register all exports in order
@@ -230,12 +223,12 @@ When a module is loaded:
 
 ### Every Guard Gets a Name
 
-| Export Shape  | Name Derivation                                                     |
-| ------------- | ------------------------------------------------------------------- |
-| Function      | Last segment of module path: `"guards.auth"` → `"auth"`             |
-| Array         | Module name + index: `"guards.checks"` → `"checks#0"`, `"checks#1"` |
-| Object        | Object key: `"guards.security"` → `"checkAuth"`, `"checkRole"`      |
-| Cherry-picked | Export key: `"guards.security#checkAuth"` → `"checkAuth"`           |
+| Export Shape  | Name Derivation                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Function      | Last segment of module path: `"guards.auth"` → `"auth"`                                                                                                          |
+| Array         | Module name + index: `"guards.checks"` → `"checks#0"`, `"checks#1"`                                                                                              |
+| Object        | Object key: `"guards.security"` → `"checkAuth"`, `"checkRole"`                                                                                                   |
+| Cherry-picked | Same as above for the picked export: `"guards.security#checkAuth"` → `"checkAuth"`, `"guards.checks#1"` → `"checks#1"`, `"guards.auth#key"` (function) → `"key"` |
 
 ### GuardDescriptor Type Change
 
@@ -244,31 +237,25 @@ interface GuardDescriptor {
 	readonly route: string;
 	readonly type: "enter" | "leave";
 	readonly modulePath: string;
-	readonly name: string; // NEW — derived or explicit
 	readonly exportKey?: string; // NEW — "checkAuth", "1", or undefined (without #)
 }
 ```
 
+The planned `name` field was not added; names come from the module's exports (see the implementation note below).
+
 ### Usage
 
-Names are used for **logging only** in this iteration:
-
-- `"guard 'checkAuth' (guards/security) blocked navigation to 'admin'"`
-- Pipeline trace in debug: `"checkAuth → checkRole → [blocked by checkRole]"`
+Names are used for logging only. They are derived when a module's exports are resolved (`resolveModuleExports()` in `GuardModules.ts`), not stored on `GuardDescriptor`, and appear only in the error log of a guard that throws. The naming rules, including lazy wrappers, are listed under "Named guard logging" in [08](./08-declarative-manifest-guards.md#named-guard-logging).
 
 Future extensibility (not implemented now): disable by name, ordering hints, DevTools integration. The naming foundation makes these possible without retrofit.
 
 ## 5. Case Sensitivity
 
-No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce per-option warnings listing valid choices and fall back to defaults. This is how `normalizeGuardRouterOptions()` already works.
+No change. All config values are case-sensitive, consistent with how UI5 handles `viewType`, `transition`, and other manifest enum values. Invalid values produce a per-option warning (`guardRouter.<option> has invalid value, using default`) and fall back to defaults. `normalizeGuardRouterOptions()` implements this.
 
 ## 6. Execution Order
 
-Within a single navigation pipeline:
-
-1. **Leave guards** (current route) — manifest-declared first (in declaration order), then imperative
-2. **Global enter guards** (`"*"`) — manifest-declared first, then imperative
-3. **Route-specific enter guards** — manifest-declared first, then imperative
+The phase order and the position of manifest guards are documented in the library README, [Execution order](../../packages/lib/README.md#execution-order) and [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards). Multi-guard modules add the following.
 
 For multi-guard modules registered via bare path (no cherry-pick), all guards from the module are inserted at the position where the module appears in the manifest array, in their internal order (array index / object key order).
 
@@ -302,13 +289,13 @@ The PR includes:
 - **Non-function entries in object/array**: warned and skipped individually
 - **Mixed shapes across routes**: one route uses object module, another uses function module
 - **Pattern 5 preload**: lazy mode with preload hint — guard available synchronously on first navigation (requires module to be pre-cached)
-- **Pattern 5 fallback**: lazy mode where preload hasn't finished — guard loads async on first navigation
+- **Pattern 5 fallback**: lazy mode where preload hasn't finished — guard loads async on first navigation, which makes the rest of that navigation async; later navigations are synchronous
 - **Default guardLoading is lazy**: no config → lazy behavior
-- **Named guard in log output**: verify guard name appears in warning/error logs
+- **Named guard in log output**: a manifest guard that throws is logged with its name, in block and lazy mode
 - **Execution order with multi-guard modules**: bare path registers all in order, cherry-picks respect manifest position
 - **Cherry-pick with `module:` prefix**: verify `"module:some.lib#key"` parsing order
 - **Same module from multiple routes**: module loaded once, guards registered per-route correctly
-- **Lazy mode with bare-path multi-guard module**: expand-on-init behavior
+- **Lazy mode with bare-path multi-guard module**: expand-on-init on a cache hit; on a cache miss, all guards run in order on the first navigation
 - **`"*"` key with cherry-pick**: `"*": ["guards.logging#verbose"]`
 - **Leave guard from multi-guard module**: verify type safety is consumer's responsibility
 - **Empty array/object export**: warning logged, no guards registered
@@ -318,7 +305,7 @@ The PR includes:
 
 - Default `guardLoading` value assertions: `"block"` → `"lazy"`
 - Guard module format validation messages: update to mention object/array shapes
-- GuardDescriptor type usage: add `name` and `exportKey` fields
+- GuardDescriptor type usage: add the `exportKey` field
 
 ### Interaction with Existing Features
 
@@ -326,14 +313,14 @@ Cherry-picked and multi-guard module guards behave identically to single-functio
 
 ## 9. Risks and Mitigations
 
-| Risk                                                        | Mitigation                                                                                                                            |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Object key order assumed stable                             | Guaranteed by ES2015+ spec. Document requirement for modern runtime (already a UI5 requirement).                                      |
-| Cherry-pick `#` conflicts with future path syntax           | `#` never appears in UI5 module paths (dots and slashes only). Safe separator.                                                        |
-| Array index cherry-pick is fragile                          | Document that object form is preferred for cherry-picking. Index-based is available but order-dependent.                              |
-| Default change from block to lazy                           | No functional difference for guards — they always run before navigation completes. Only timing changes. Document in migration guide.  |
-| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. Lazy wrapper handles the miss case identically to current lazy mode.                |
-| Bare-path multi-guard + lazy mode needs module load at init | Partitioned: cherry-picked entries use lazy wrappers; bare-path entries expand at init (usually from cache). Documented in Section 1. |
+| Risk                                                        | Mitigation                                                                                                                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Object key order assumed stable                             | Guaranteed by ES2015+ spec. Document requirement for modern runtime (already a UI5 requirement).                                                                      |
+| Cherry-pick `#` conflicts with future path syntax           | `#` never appears in UI5 module paths (dots and slashes only). Safe separator.                                                                                        |
+| Array index cherry-pick is fragile                          | Document that object form is preferred for cherry-picking. Index-based is available but order-dependent.                                                              |
+| Default is lazy, not block                                  | No functional difference for guards — they always run before navigation completes. Only timing differs.                                                               |
+| Preload hint has no guarantee                               | By design — it's an optimization, not a contract. On a miss the lazy wrapper loads the module on first navigation.                                                    |
+| Bare-path multi-guard + lazy mode needs module load at init | Partitioned: cherry-picked entries use lazy wrappers; bare-path entries expand at init from cache, or run from one module wrapper on a miss. Documented in Section 1. |
 
 ## 10. Out of Scope
 

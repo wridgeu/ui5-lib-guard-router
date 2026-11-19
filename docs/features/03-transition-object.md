@@ -218,7 +218,7 @@ The `NavigationIntent` holds a closure over the router instance. It cannot be se
 
 `retry()` navigates through the normal pipeline, so guards run again. This is the safe default: if conditions haven't actually changed, the guard will block again rather than allowing unauthorized access.
 
-`retrySkipGuards()` is the escape hatch for when the developer is certain the condition is resolved (e.g., user just completed login). This depends on Feature 02 (Guard Bypass).
+`retrySkipGuards()` is the escape hatch for when the developer is certain the condition is resolved (e.g., user just completed login). It uses Feature 02 (Guard Bypass, shipped as `skipGuards`).
 
 ### One-Shot Usage
 
@@ -240,13 +240,10 @@ export interface NavigationIntent {
     readonly id: number;
 }
 
-// Updated GuardContext
+// GuardContext gains one field; all existing fields (signal, bag, toMeta, fromMeta,
+// ownerComponent, ...) stay as they are
 export interface GuardContext {
-    toRoute: string;
-    toHash: string;
-    toArguments: Record<string, string | Record<string, string>>;
-    fromRoute: string;
-    fromHash: string;
+    // ...existing fields
     transition: NavigationIntent;
 }
 
@@ -269,10 +266,9 @@ _createNavigationIntent(toHash: string, toRoute: string, routeInfo: RouteInfo | 
 
 ## Dependencies
 
-- **Feature 02 (Guard Bypass)**: Deprioritized. `retrySkipGuards()` would require `skipGuards`
-  support, but in practice `retry()` (which re-runs guards) is sufficient — if the blocking
-  condition is resolved (e.g., user logged in), guards pass naturally. The `retrySkipGuards()`
-  method can be omitted or added later if Feature 02 is ever implemented.
+- **Feature 02 (Guard Bypass)**: Implemented as the `skipGuards` option on `navTo()`, so
+  `retrySkipGuards()` can be built on it. In practice `retry()` (which re-runs guards) is usually
+  enough — if the blocking condition is resolved (e.g., user logged in), guards pass naturally.
 
 ## Compatibility
 

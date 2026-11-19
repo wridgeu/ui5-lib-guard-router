@@ -160,4 +160,4 @@ The native `navigate` event approach has fundamental architectural limitations:
 
 4. **Wrong abstraction**: NavContainer is a UI control for page transitions. Navigation guards belong at the routing layer.
 
-This library (`ui5.guard.router`) addresses all of these by intercepting at `Router.parse()`, the single entry point for all navigation, before any route matching begins.
+This library (`ui5.guard.router`) addresses all of these by running guards in a `navTo()` preflight and in `Router.parse()`, the entry point for every hash change, before any route matching begins.

@@ -1,6 +1,10 @@
+import suite from "./qunit/testsuite.qunit";
+import { chromeProfileHooks } from "../../../tools/wdio-chrome-profile";
+
 const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080";
 
 export const config: WebdriverIO.Config = {
+	...chromeProfileHooks(),
 	runner: "local",
 	specs: [],
 	maxInstances: 1,
@@ -23,17 +27,10 @@ export const config: WebdriverIO.Config = {
 		[
 			"qunit",
 			{
-				paths: [
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=Router",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=RouterGuards",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=RouterAsync",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=RouterNavigation",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=RouterSettlement",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=RouterOptions",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=NativeRouterCompat",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=UpstreamParity",
-					"resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=GuardPipeline",
-				],
+				paths: Object.keys(suite.tests).map(
+					(page) =>
+						`resources/sap/ui/test/starter/Test.qunit.html?testsuite=test-resources/ui5/guard/router/qunit/testsuite.qunit&test=${page}`,
+				),
 			},
 		],
 	],

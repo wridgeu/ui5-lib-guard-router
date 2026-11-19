@@ -4,7 +4,7 @@ import process from "node:process";
 import { computeSha256, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/manifest.json");
+const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
 
 function getFlag(name) {
 	return process.argv.includes(name);

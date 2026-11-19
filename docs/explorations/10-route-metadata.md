@@ -2,7 +2,7 @@
 
 ## The Problem
 
-Currently, guard conditions are defined **imperatively** in JavaScript:
+When this was written, guard conditions could only be defined **imperatively** in JavaScript:
 
 ```typescript
 router.addRouteGuard("admin", (context) => {

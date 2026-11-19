@@ -1,6 +1,7 @@
 import type Event from "sap/ui/base/Event";
 import type MobileRouter from "sap/m/routing/Router";
 import type { ComponentTargetParameters, RouteInfo } from "sap/ui/core/routing/Router";
+import type UIComponent from "sap/ui/core/UIComponent";
 import type NavigationOutcome from "./NavigationOutcome";
 
 /**
@@ -26,11 +27,17 @@ export interface GuardRedirect {
  *
  * - `true`: Allow navigation to proceed.
  * - `false`: Block navigation. For programmatic `navTo()`, no hash change
- *   or history entry occurs. For browser-initiated navigation (back/forward,
- *   URL bar), the hash is restored via `replaceHash()` (best-effort repair).
- * - `string`: Redirect to this route name. For programmatic `navTo()`,
- *   navigation goes directly to the target with no intermediate history entry.
- *   For browser-initiated navigation, the redirect replaces the current entry.
+ *   or history entry occurs. A step through the browser history (back,
+ *   forward) is taken back, which leaves the history as it was. Any other
+ *   hash change (URL bar, link) has its history entry replaced with the
+ *   previous hash.
+ * - `string`: Redirect to this route name. For programmatic `navTo()`, the
+ *   guarded hash is never written: the target is, the way the call asked
+ *   for (a new history entry unless it passed `bReplace`), so that Back
+ *   returns to where the navigation started. A hash change that has reached
+ *   the browser has its history entry replaced with the target. A redirect
+ *   to the route that is displayed settles as `Redirected` without matching
+ *   the route again.
  * - `GuardRedirect`: Redirect with route name, parameters, and optional
  *   component target info. Same history semantics as string redirect.
  *
@@ -44,7 +51,13 @@ export type GuardResult = boolean | string | GuardRedirect;
  * @since 1.0.1
  */
 export interface GuardContext {
-	/** Target route name (empty string if no route matched / bypassed) @since 1.0.1 */
+	/**
+	 * Target route name (empty string if no route matched / bypassed): the first route that
+	 * matches the hash. The guards of greedy routes (`greedy: true`) that match it as well run
+	 * after those of this route, with the same context.
+	 *
+	 * @since 1.0.1
+	 */
 	toRoute: string;
 	/** Raw hash being navigated to @since 1.0.1 */
 	toHash: string;
@@ -56,7 +69,13 @@ export interface GuardContext {
 	 * @since 1.0.1
 	 */
 	toArguments: RouteInfo["arguments"];
-	/** Current route name (empty string on initial navigation) @since 1.0.1 */
+	/**
+	 * Current route name (empty string on initial navigation): the first route that matches the
+	 * current hash. The leave guards of greedy routes that match it as well run after those of
+	 * this route, with the same context.
+	 *
+	 * @since 1.0.1
+	 */
 	fromRoute: string;
 	/** Current hash @since 1.0.1 */
 	fromHash: string;
@@ -93,6 +112,14 @@ export interface GuardContext {
 	 * @since 1.6.0
 	 */
 	fromMeta: Readonly<Record<string, unknown>>;
+	/**
+	 * Component that owns the router. Gives guards without a closure over the
+	 * component (e.g. manifest-declared guards) access to its models and services.
+	 * `undefined` when the router has no owner.
+	 *
+	 * @since 1.7.0
+	 */
+	ownerComponent?: UIComponent;
 }
 
 /**
@@ -140,7 +167,8 @@ export interface RouteGuardConfig {
  *
  * - `"ignore"`: Register silently.
  * - `"warn"`: Log a warning and still register (default).
- * - `"throw"`: Throw synchronously; guard is not registered.
+ * - `"throw"`: Throw synchronously; guard is not registered. A manifest guard has no caller
+ *   to catch the error, so it is logged instead and the guard is skipped; the router still starts.
  *
  * @since 1.5.0
  */
@@ -219,10 +247,10 @@ export interface GuardRouterOptions {
 	/**
 	 * Strategy for loading manifest-declared guard modules. Defaults to `"lazy"`.
 	 *
-	 * In `"lazy"` mode, if the preload hint has not completed before the first
-	 * navigation, multi-export module guards beyond the first are appended after
-	 * any imperatively registered guards. Use `"block"` for strict declaration-order
-	 * guarantees.
+	 * In `"lazy"` mode, a module already cached at `initialize()` has its guards
+	 * registered one by one, in order. Otherwise one wrapper at the module's
+	 * position loads it on first navigation, runs all of its guards in order and
+	 * keeps them for later navigations. Either way the declared order holds.
 	 */
 	guardLoading?: GuardLoading;
 	/** Strategy for inheriting guards and metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
@@ -237,6 +265,20 @@ export interface GuardRouterOptions {
 	 * @since 1.6.0
 	 */
 	routeMeta?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Router constructor config: the standard `sap.m.routing.Router` config
+ * (`async`, `controlId`, `viewType`, ...) plus the guard router options.
+ *
+ * @since 1.7.0
+ */
+export interface GuardRouterConfig {
+	/** Load views and targets asynchronously, as `sap.m.routing.Router` recommends. */
+	async?: boolean;
+	/** Guard router options, set in the manifest under `sap.ui5.routing.config.guardRouter`. */
+	guardRouter?: GuardRouterOptions;
+	[key: string]: unknown;
 }
 
 /**

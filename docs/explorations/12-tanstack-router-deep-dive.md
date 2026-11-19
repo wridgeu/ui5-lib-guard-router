@@ -220,7 +220,7 @@ New commit promises resolve old ones, creating a chain where only the latest com
 | --------------- | -------------------------------- | -------------------------------------- |
 | Stale detection | `AbortController.signal.aborted` | `generation !== this._parseGeneration` |
 | Cancel pending  | `cancelMatches()` → `abort()`    | Generation increment invalidates       |
-| Latest wins     | `latestLoadPromise` loop         | Generation check after each `await`    |
+| Latest wins     | `latestLoadPromise` loop         | Generation check when a decision lands |
 | Granularity     | Per-match AbortController        | Single router-wide generation counter  |
 
 **TanStack's approach is more granular** (per-match cancellation), while **ui5.guard.router's is simpler** (single counter). Both achieve the same goal: only the latest navigation wins.
@@ -252,7 +252,7 @@ catch (err) {
 }
 ```
 
-**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). This is analogous to `ui5.guard.router`'s committing/redirect phase, which also bypasses guards during redirects.
+**Key insight**: Redirects from guards bypass blockers (`ignoreBlocker: true`). `ui5.guard.router` differs here: it evaluates the redirect target's guards (leave guards excepted) and uses its committing/redirect phase only so that the final commit does not run them again.
 
 ---
 
@@ -304,17 +304,17 @@ TanStack delegates blocking to the history library. In UI5, the equivalent would
 
 ### 2. AbortController for Async Guards ✅ Implemented
 
-~~Currently, `ui5.guard.router` uses a generation counter for staleness.~~ **This has been implemented.** `ui5.guard.router` now creates an `AbortController` per `parse()` call, aborts it when a newer navigation starts or the router is destroyed, and exposes `signal: AbortSignal` on the `GuardContext`. This runs alongside the generation counter — the signal provides cooperative cancellation for async operations (e.g., `fetch`), while the generation counter provides the hard staleness check after each `await`.
+~~Currently, `ui5.guard.router` uses a generation counter for staleness.~~ **This has been implemented.** `ui5.guard.router` now creates an `AbortController` per guarded navigation (`navTo()` preflight or `parse()`), aborts it when a newer navigation starts or the router is stopped or destroyed, and exposes `signal: AbortSignal` on the `GuardContext`. This runs alongside the generation counter — the signal provides cooperative cancellation for async operations (e.g., `fetch`) and stops the remaining guards, while the generation counter provides the hard staleness check when the pipeline's async decision arrives.
 
 ```typescript
-// Actual GuardContext (implemented):
+// Actual GuardContext (implemented; bag, toMeta, fromMeta and ownerComponent omitted):
 interface GuardContext {
 	toRoute: string;
 	toHash: string;
-	toArguments: Record<string, string>;
+	toArguments: RouteInfo["arguments"];
 	fromRoute: string;
 	fromHash: string;
-	signal: AbortSignal; // Aborted when navigation is superseded or router is destroyed
+	signal: AbortSignal; // Aborted when navigation is superseded or the router is stopped or destroyed
 }
 
 // Usage in a guard:
@@ -324,11 +324,11 @@ router.addGuard(async (context) => {
 });
 ```
 
-The generation counter remains the primary staleness mechanism (checked after each async guard resolves), while the `AbortSignal` enables guards to cancel in-flight network requests immediately when a new navigation starts.
+The generation counter remains the primary staleness mechanism (checked once, when the pipeline's async decision arrives), while the `AbortSignal` enables guards to cancel in-flight network requests immediately when a new navigation starts.
 
 ### 3. `ignoreBlocker` for Redirects
 
-TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.guard.router` achieves the same by entering the committing/redirect phase. Both prevent infinite redirect loops.
+TanStack explicitly passes `ignoreBlocker: true` when handling redirects. `ui5.guard.router` instead evaluates the guards of each redirect target and prevents infinite loops with a visited-hash set and a depth cap of 10 hops; its committing/redirect phase only keeps the final commit from running guards again.
 
 ### 4. Match Caching
 
@@ -357,13 +357,15 @@ TanStack Router:
             → onReady() [commit to state]
 
 ui5.guard.router:
-  navTo() / hashChange / URL bar
+  navTo()                                ← preflight: guards run before the hash changes
+  hashChange / URL bar
     → HashChanger fires hashChanged
       → parse(newHash)                      ← BLOCKING + GUARDING happens here
-        → _runLeaveGuards()
-        → _runEnterGuards()
-          → _runGuards()                ← sync-first optimization
-          → _continueGuardsAsync()             ← async fallback
+        → _pipeline.evaluate()
+          → _runLeaveGuards()
+          → _runEnterGuards()
+            → _runGuards()                  ← sync-first optimization
+            → _continueGuardsAsync()        ← async fallback, rest of the phase
         → _commitNavigation()
           → MobileRouter.parse()
             → route matching + target loading
@@ -381,8 +383,8 @@ ui5.guard.router:
 | **Blocking layer**   | History library (`@tanstack/history`) | Router `parse()` override          |
 | **Guard execution**  | In `loadMatches()` (async)            | In `parse()` (sync path preferred) |
 | **Staleness**        | AbortController per match             | Generation counter + AbortSignal   |
-| **Concurrent nav**   | Cancel matches + latest promise wins  | Generation check after each await  |
-| **Redirect bypass**  | `ignoreBlocker: true`                 | Committing/redirect phase          |
+| **Concurrent nav**   | Cancel matches + latest promise wins  | Generation check + aborted signal  |
+| **Redirect bypass**  | `ignoreBlocker: true`                 | None: target guards are evaluated  |
 | **State management** | `@tanstack/store` (reactive)          | Internal properties on router      |
 | **Match caching**    | `cachedMatches` array                 | Delegated to UI5 target caching    |
 

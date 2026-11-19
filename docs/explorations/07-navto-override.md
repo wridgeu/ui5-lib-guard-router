@@ -113,13 +113,13 @@ From the [problem analysis](../reference/analysis.md#22-override-navto-only):
 | Aspect                     | navTo Override Only        | `ui5.guard.router` (navTo preflight + parse fallback) |
 | -------------------------- | -------------------------- | ----------------------------------------------------- |
 | Programmatic navTo         | Covered                    | Covered (preflight, no hash change on block)          |
-| Browser back/forward       | NOT covered                | Covered (parse fallback, replaceHash on block)        |
+| Browser back/forward       | NOT covered                | Covered (parse fallback, hash change undone on block) |
 | Direct URL entry           | NOT covered                | Covered (parse fallback)                              |
 | HashChanger.setHash        | NOT covered                | Covered (parse fallback)                              |
 | Implementation complexity  | Low                        | Medium                                                |
 | Coverage                   | ~50%                       | ~100%                                                 |
 | History on block (navTo)   | Clean (navTo never called) | Clean (hash never changes)                            |
-| History on block (browser) | N/A                        | Repaired (replaceHash)                                |
+| History on block (browser) | N/A                        | Step taken back, or entry replaced                    |
 
 ## References
 

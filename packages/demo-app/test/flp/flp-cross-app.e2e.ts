@@ -7,9 +7,9 @@ import {
 } from "./helpers";
 
 /**
- * Cross-app navigation test. Isolated spec file because toExternal()
- * (e.g. FLP home button, tile click) navigates to Shell-home, leaving
- * the sandbox unrecoverable for the browser session.
+ * Cross-app navigation test. Isolated spec file because the cross-app
+ * navigation (as by the FLP home button or a tile) ends on Shell-home,
+ * leaving the sandbox unrecoverable for the browser session.
  */
 describe("FLP cross-app navigation (isolated session)", () => {
 	before(async () => {
@@ -18,6 +18,7 @@ describe("FLP cross-app navigation (isolated session)", () => {
 
 	it("completes dirty cross-app navigation after user confirms FLP dialog", async () => {
 		await loginAndGoToProtectedInFlp();
+		// Asserts that the page shows the dirty state.
 		await setDirtyStateInFlp(true);
 
 		// Accept the FLP dirty-state confirm dialog (user confirms navigation).

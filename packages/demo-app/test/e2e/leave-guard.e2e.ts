@@ -1,99 +1,120 @@
-import {
-	getRuntimeSettlementRevision,
-	waitForPage,
-	fireEvent,
-	resetAuth,
-	setDirtyState,
-	expectHashToBe,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { CONTROLS, expectControlText } from "../shared/controls";
+import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { fireEvent, getHistoryEntryIndex, getHistoryLength } from "./helpers/browser";
+import { loginAndGoToProtected, startAtHome } from "./helpers/scenarios";
 
-async function loginAndGoToProtected(): Promise<void> {
-	await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
-	await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
-	await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page");
+/** On Protected: set the form state and assert that the page shows it. */
+async function setDirtyOnProtected(isDirty: boolean): Promise<void> {
+	await setDirtyState(isDirty);
+	await expectControlText(CONTROLS.protected.dirtyStatus, isDirty ? "Form has unsaved changes" : "Form is clean");
+}
+
+/** Assert that the navigation started after `afterRevision` was blocked and Protected is still shown. */
+async function expectLeaveBlocked(afterRevision: number): Promise<void> {
+	await waitForRuntimeSettlement({ status: "Blocked", route: "protected", hash: "protected" }, { afterRevision });
+	await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
+	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+}
+
+/** Assert that the navigation started after `afterRevision` left Protected and committed on Home. */
+async function expectLeftToHome(afterRevision: number): Promise<void> {
+	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision });
+	await waitForRuntimeSettlement({ status: "Committed", route: "home", hash: "" }, { afterRevision });
+	await expectHashToBe("", "Hash should settle to home after leave guard allows");
 }
 
 describe("Leave Guard - Dirty Form", () => {
 	beforeEach(async () => {
-		await resetAuth();
-		await setDirtyState(false); // Ensure clean state before each test
-		await browser.goTo({ sHash: "" });
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await startAtHome();
+		await loginAndGoToProtected();
 	});
 
 	it("should allow leaving protected page when form is clean", async () => {
-		await loginAndGoToProtected();
-		await setDirtyState(false);
+		await setDirtyOnProtected(false);
+		const settlementRevision = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await expectHashToBe("", "Hash should settle to home after leave guard allows");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+
+		await expectLeftToHome(settlementRevision);
 	});
 
 	it("should block leaving protected page when form is dirty", async () => {
-		await loginAndGoToProtected();
-		await setDirtyState(true);
+		await setDirtyOnProtected(true);
 		const settlementRevision = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
 
-		// Leave guard should block - hash should stay at protected
-		await expectHashToBe("#/protected", {
-			timeoutMsg: "Hash should stay at protected after leave guard blocks",
-			afterRevision: settlementRevision,
-		});
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Blocked",
-				route: "protected",
-				hash: "protected",
-			},
-			{
-				afterRevision: settlementRevision,
-			},
-		);
-
-		expect(settlement.route).toBe("protected");
-		expect(settlement.hash).toBe("protected");
+		await expectLeaveBlocked(settlementRevision);
 	});
 
 	it("should allow leaving after clearing dirty state", async () => {
-		await loginAndGoToProtected();
-		await setDirtyState(true);
-		await setDirtyState(false);
+		// The dirty state has to be in effect first: the same navigation is blocked.
+		await setDirtyOnProtected(true);
+		const blockedRevision = await getRuntimeSettlementRevision();
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await expectLeaveBlocked(blockedRevision);
 
-		await fireEvent("container-demo.app---protectedView--protectedPage", "navButtonPress");
-		await expectHashToBe("", "Hash should settle to home after leave guard allows");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await setDirtyOnProtected(false);
+		const settlementRevision = await getRuntimeSettlementRevision();
+
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+
+		await expectLeftToHome(settlementRevision);
 	});
 
 	it("should block browser back when form is dirty", async () => {
-		await loginAndGoToProtected();
-		await setDirtyState(true);
-
-		// Verify dirty state was set before attempting navigation
-		const isDirty = await browser.execute(() => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			return Component?.getComponentById("container-demo.app")?.getModel("form")?.getProperty("/isDirty");
-		});
-		expect(isDirty).toBe(true);
-
+		await setDirtyOnProtected(true);
 		const settlementRevision = await getRuntimeSettlementRevision();
-		await browser.execute(() => window.history.back());
-		await expectHashToBe("#/protected", {
-			timeoutMsg: "Hash should stay at protected after leave guard blocks",
-			afterRevision: settlementRevision,
-		});
-		const settlement = await waitForRuntimeSettlement(
-			{
-				status: "Blocked",
-				route: "protected",
-				hash: "protected",
-			},
-			{ afterRevision: settlementRevision },
+
+		await browser.back();
+
+		await expectLeaveBlocked(settlementRevision);
+	});
+
+	it("should leave the browser history as it was after a blocked browser back", async () => {
+		await setDirtyOnProtected(true);
+		const historyLength = await getHistoryLength();
+		const entryIndex = await getHistoryEntryIndex();
+		const blockedRevision = await getRuntimeSettlementRevision();
+		await browser.back();
+		await expectLeaveBlocked(blockedRevision);
+		// The browser is on the entry it left, not on the one before it with the hash replaced.
+		expect(await getHistoryEntryIndex()).toBe(entryIndex);
+		expect(await getHistoryLength()).toBe(historyLength);
+
+		// The entry of Home is still behind Protected: one step back arrives there.
+		await setDirtyOnProtected(false);
+		const backRevision = await getRuntimeSettlementRevision();
+		await browser.back();
+		await expectLeftToHome(backRevision);
+
+		// And the entry of Protected is still ahead of it.
+		const forwardRevision = await getRuntimeSettlementRevision();
+		await browser.forward();
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: forwardRevision },
 		);
-		expect(settlement.route).toBe("protected");
-		expect(settlement.hash).toBe("protected");
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+	});
+
+	it("should go one step back with the nav button after it was blocked", async () => {
+		await setDirtyOnProtected(true);
+		const blockedRevision = await getRuntimeSettlementRevision();
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await expectLeaveBlocked(blockedRevision);
+
+		await setDirtyOnProtected(false);
+		const historyLength = await getHistoryLength();
+		const settlementRevision = await getRuntimeSettlementRevision();
+		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
+		await expectLeftToHome(settlementRevision);
+
+		// A step back, not a new entry: the entry of Protected is ahead.
+		expect(await getHistoryLength()).toBe(historyLength);
+		await browser.forward();
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
+		await expectHashToBe("#/protected");
 	});
 });

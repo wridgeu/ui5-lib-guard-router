@@ -105,9 +105,9 @@ export const adminGuard: GuardFn = () => "protected";
  * Leave guard that blocks navigation when a form has unsaved changes.
  * Demonstrates the "dirty form" pattern using a synchronous model check.
  *
- * No FLP-specific bypass is needed here. Cross-app navigation via
- * `toExternal()` operates at the shell level in both production and
- * the FLP sandbox, so the leave guard never runs for cross-app hashes.
+ * No FLP-specific bypass is needed here. Cross-app navigation operates at
+ * the shell level in both production and the FLP sandbox, so the leave
+ * guard never runs for cross-app hashes.
  * The FLP dirty-state provider (registered separately via
  * `registerDirtyStateProvider`) handles cross-app dirty UX with its
  * own confirmation popup independently of the router.
@@ -170,8 +170,7 @@ export function createAuthGuard(authModel: JSONModel): GuardFn {
  * Guard that demonstrates redirect with route parameters.
  * Redirects to a route while preserving or transforming parameters.
  *
- * Reference implementation: not used in the runnable demo because the demo
- * routes have no parameters.
+ * Reference implementation: not used in the runnable demo.
  *
  * @example
  * // Redirect from "old-detail/{id}" to "detail/{id}" preserving the id

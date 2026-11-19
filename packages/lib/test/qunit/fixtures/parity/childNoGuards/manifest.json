@@ -1,0 +1,52 @@
+{
+	"_version": "2.0.0",
+	"sap.app": {
+		"id": "ui5.guard.router.qunit.fixtures.parity.childNoGuards",
+		"type": "component",
+		"title": "Native parity child",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.ui": {
+		"technology": "UI5"
+	},
+	"sap.ui5": {
+		"dependencies": {
+			"minUI5Version": "1.136.0",
+			"libs": {
+				"sap.m": {},
+				"sap.ui.core": {},
+				"ui5.guard.router": {}
+			}
+		},
+		"rootView": {
+			"viewName": "ui5.guard.router.qunit.fixtures.parity.view.App",
+			"type": "XML",
+			"id": "appView"
+		},
+		"routing": {
+			"config": {
+				"routerClass": "ui5.guard.router.Router",
+				"type": "View",
+				"viewType": "XML",
+				"path": "ui5.guard.router.qunit.fixtures.parity.view",
+				"controlId": "app",
+				"controlAggregation": "pages",
+				"transition": "show",
+				"bypassed": {
+					"target": "notFound"
+				}
+			},
+			"routes": [
+				{ "name": "list", "pattern": "", "target": "list" },
+				{ "name": "detail", "pattern": "detail/{id}", "target": "detail" }
+			],
+			"targets": {
+				"list": { "name": "List", "id": "list", "title": "List" },
+				"detail": { "name": "Detail", "id": "detail", "title": "Detail" },
+				"notFound": { "name": "NotFound", "id": "notFound", "title": "Not found" }
+			}
+		}
+	}
+}

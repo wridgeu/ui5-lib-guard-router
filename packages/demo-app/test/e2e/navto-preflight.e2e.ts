@@ -1,28 +1,21 @@
-import {
-	expectHashToBe,
-	fireEvent,
-	getHistoryLength,
-	getRuntimeSettlementRevision,
-	resetAuth,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { CONTROLS, press } from "../shared/controls";
+import { getRuntimeSettlementRevision } from "../shared/models";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { getHistoryLength } from "./helpers/browser";
+import { expectKeptOnHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 describe("navTo preflight - history guarantees", () => {
 	beforeEach(async () => {
-		await resetAuth();
-		await browser.url("#");
-		await waitForPage("container-demo.app---homeView--homePage", "Home");
+		await startAtHome();
 	});
 
 	it("programmatic navTo to blocked route should not increase history length", async () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navBlockedBtn", "press");
+		await press(CONTROLS.home.navBlockedBtn);
 
-		await waitForRuntimeSettlement({ status: "Blocked", route: "home" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Blocked", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -32,10 +25,9 @@ describe("navTo preflight - history guarantees", () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navForbiddenBtn", "press");
+		await press(CONTROLS.home.navForbiddenBtn);
 
-		await waitForRuntimeSettlement({ status: "Redirected", route: "home" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -45,28 +37,30 @@ describe("navTo preflight - history guarantees", () => {
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
+		await press(CONTROLS.home.navProtectedBtn);
 
-		await waitForRuntimeSettlement({ status: "Redirected", route: "home" }, { afterRevision: rev });
-		await expectHashToBe("");
+		await expectKeptOnHome("Redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
 	});
 
 	it("programmatic navTo to allowed route should increase history length by 1", async () => {
-		// Log in first
-		await fireEvent("container-demo.app---homeView--toggleLoginBtn", "press");
+		await toggleLogin("Logged In");
 
 		const before = await getHistoryLength();
 		const rev = await getRuntimeSettlementRevision();
 
-		await fireEvent("container-demo.app---homeView--navProtectedBtn", "press");
+		await press(CONTROLS.home.navProtectedBtn);
 
-		await waitForPage("container-demo.app---protectedView--protectedPage", "Protected Page", {
+		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", {
 			afterRevision: rev,
 		});
-		await waitForRuntimeSettlement({ status: "Committed", route: "protected" }, { afterRevision: rev });
+		await waitForRuntimeSettlement(
+			{ status: "Committed", route: "protected", hash: "protected" },
+			{ afterRevision: rev },
+		);
+		await expectHashToBe("#/protected");
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before + 1);
