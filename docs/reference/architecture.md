@@ -193,26 +193,28 @@ the hash. With the default `navToPreflight: "guard"`, programmatic `navTo()` cal
 guards in the preflight path (see below); the hash change they cause re-enters `parse()` in
 the committing phase, which commits without running the guards again.
 
-The hashes that `parse()` handles without the guards:
+`parse()` checks the hash in this order, and the first case that applies ends the call:
 
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> destroyed{"router destroyed?"}
-    destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
-    destroyed -- "no" --> outdated{"report out of date?<br/>(_reportOutdated)"}
-    outdated -- "yes" --> ret1(["return"])
-    outdated -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
-    suppress -- "yes" --> ret2(["return"])
-    suppress -- "no" --> back{"undo started and root hash<br/>equals undo.fullHash?"}
-    back -- "yes" --> adopt(["adopt the hash without guards<br/>_finishRestore(newHash)"])
-    back -- "no" --> redir{"committing or awaitingHash<br/>phase for newHash?"}
-    redir -- "yes" --> bypass(["_commitNavigation()"])
-    redir -- "no" --> samehash{"same as _currentHash?"}
-    samehash -- "no" --> guards(["the guards run"])
-    samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
-    moved -- "yes" --> canceldup(["evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"])
-    moved -- "no" --> match(["super.parse()<br/>the route matches again"])
+    start(["parse(newHash)"]) --> destroyed["router destroyed:<br/>super.parse(), the base router warns"]
+    destroyed -- "otherwise" --> outdated["report out of date (_reportOutdated):<br/>return"]
+    outdated -- "otherwise" --> suppress["hash equals _suppressedHash:<br/>return"]
+    suppress -- "otherwise" --> back["undo started and root hash equals undo.fullHash:<br/>adopt the hash without guards, _finishRestore(newHash)"]
+    back -- "otherwise" --> redir["committing or awaitingHash phase for newHash:<br/>_commitNavigation()"]
+    redir -- "otherwise" --> moved["same as _currentHash, a pending navigation had moved the URL:<br/>evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"]
+    moved -- "otherwise" --> again["same as _currentHash:<br/>super.parse(), the route matches again"]
+    again -- "otherwise" --> guards(["the guards run"])
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    class destroyed,outdated,suppress,again native
+    class start,back,moved,guards added
+    class redir commit
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Every other hash runs the guards:
 
@@ -231,7 +233,24 @@ flowchart TD
     apply -- "error" --> errornav(["_errorNavigation()<br/>undoes the hash change"])
     commit ~~~ block
     redirect ~~~ errornav
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0969da,color:#1f2328
+    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
+    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    class ret,discard native
+    class cancelprev,setup,evaluate added
+    class handlermoved,stale,apply decision
+    class commit commit
+    class redirect redirect
+    class block block
+    class errornav error
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
 awaits that Promise and calls the remaining guards of the same phase one at a time with
@@ -534,17 +553,23 @@ A hash change that is no step and is blocked by a synchronous guard:
 
 ```mermaid
 sequenceDiagram
-    participant Root as Root hash changer
-    participant Router as Guard router
-    Root->>Router: _onHashReported("b"),<br/>then parse("b")
-    Router->>Router: _describeUndo():<br/>first "b"
-    Router->>Router: guards block
-    Router->>Router: _undoHashChange():<br/>fullHash unknown
-    Note over Router: restoring,<br/>with awaitsReport
-    Root->>Router: _onRootHashChanged():<br/>newHash "b", oldHash "a"
-    Router->>Root: replaceHash("a")
-    Root->>Router: parse("a")
-    Note over Router: root hash is fullHash:<br/>adopts "a" without<br/>guards, settles Blocked
+    box rgba(110, 119, 129, 0.2) UI5
+        participant Root as Root hash changer
+    end
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(207, 34, 46, 0.15)
+        Root->>Router: _onHashReported("b"),<br/>then parse("b")
+        Router->>Router: _describeUndo():<br/>first "b"
+        Router->>Router: guards block
+        Router->>Router: _undoHashChange():<br/>fullHash unknown
+        Note over Router: restoring,<br/>with awaitsReport
+        Root->>Router: _onRootHashChanged():<br/>newHash "b", oldHash "a"
+        Router->>Root: replaceHash("a")
+        Root->>Router: parse("a")
+        Note over Router: root hash is fullHash:<br/>adopts "a" without<br/>guards, settles Blocked
+    end
 ```
 
 ### Routers that share a hash changer
@@ -572,9 +597,13 @@ hash that puts the URL back, as the URL shows them.
 
 ```mermaid
 sequenceDiagram
-    participant HC as Shared hash changer
-    participant A as Router A<br/>(informed first)
-    participant B as Router B
+    box rgba(110, 119, 129, 0.2) UI5
+        participant HC as Shared hash changer
+    end
+    box rgba(9, 105, 218, 0.15) This library
+        participant A as Router A<br/>(informed first)
+        participant B as Router B
+    end
     HC->>A: "page1"
     A->>HC: guard redirects:<br/>replaces with "detail/1"
     HC->>A: "detail/1", commits
@@ -608,32 +637,33 @@ route. All of them get the one context of the navigation. On a redirect hop
 
 ```mermaid
 flowchart TD
-    start(["evaluate(context)"]) --> phase1
+    start(["evaluate(context)"]) --> p1["Phase 1: leave guards of fromRoute<br/>and alsoLeaving, none on a redirect hop<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p1 -- "all true,<br/>not aborted" --> p2["Phase 2: global guards<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p2 -- "all true,<br/>not aborted" --> p3["Phase 3: route guards of toRoute<br/>and alsoEntering<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p3 -- "all true" --> allow(["allow"])
 
-    subgraph phase1 ["Phase 1: leave guards of fromRoute and alsoLeaving (none on a redirect hop)"]
-        direction LR
-        lrun["_runGuards()"] -- "Promise" --> lfin["_continueGuardsAsync()"]
-    end
+    p1 -- "non-true<br/>or aborted" --> block(["block"])
+    p2 -- "first non-true<br/>or aborted" --> result(["block, or redirect<br/>to the route returned"])
+    p3 -- "first non-true<br/>or aborted" --> result
 
-    subgraph phase2 ["Phase 2: global guards"]
-        direction LR
-        grun["_runGuards()"] -- "Promise" --> gfin["_continueGuardsAsync()"]
-    end
+    allow ~~~ throws["a guard throws<br/>in any phase"]
+    throws --> error(["error<br/>(block if aborted)"])
 
-    subgraph phase3 ["Phase 3: route guards of toRoute and alsoEntering"]
-        direction LR
-        rrun["_runGuards()"] -- "Promise" --> rfin["_continueGuardsAsync()"]
-    end
-
-    phase1 -- "all true, not aborted" --> phase2
-    phase2 -- "all true, not aborted" --> phase3
-    phase3 -- "all true" --> allow(["allow"])
-
-    phase1 -- "non-true or aborted" --> block(["block"])
-    phase2 -- "first non-true or aborted" --> result(["block or redirect"])
-    phase3 -- "first non-true or aborted" --> result
-    phase1 & phase2 & phase3 -- "throws" --> error(["error<br/>(block if aborted)"])
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
+    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    class throws native
+    class start,p1,p2,p3 added
+    class allow commit
+    class result redirect
+    class block block
+    class error error
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
 A guard that throws or rejects ends evaluation in any phase; see error handling below.
@@ -699,7 +729,6 @@ sequenceDiagram
     participant Nav1 as Nav 1: parse("a")
     participant Router as Router State
     participant Nav2 as Nav 2: parse("b")
-
     Nav1->>Router: _startAttempt():<br/>gen = 1
     Nav1->>Nav1: await guard...
     Nav2->>Router: _cancelPendingNavigation():<br/>gen = 2
@@ -744,15 +773,31 @@ flowchart TD
 
     subgraph actions ["Terminal actions"]
         direction LR
-        commit["_commitNavigation()"] --> fcommit["Committed, Bypassed<br/>or Redirected"]
-        block["_blockNavigation()"] --> fblock["Blocked"]
-        errornav["_errorNavigation()"] --> ferror["Error"]
-        cancel["_cancelPendingNavigation()<br/>(if pending)"] --> fcancel["Cancelled,<br/>while restoring: its result"]
-        redirect["_redirect()"] -- "unknown target, loop<br/>or depth cap" --> fblock
-        redirect -- "target without<br/>valid hash" --> ferror
-        redirect -- "target is the<br/>shown route" --> fredirect["Redirected"]
+        commit["_commitNavigation()"] --> fcommit(["Committed, Bypassed<br/>or Redirected"])
+        block["_blockNavigation()<br/>also from _redirect(): unknown<br/>target, loop or depth cap"] --> fblock(["Blocked"])
+        errornav["_errorNavigation()<br/>also from _redirect(): target<br/>without valid hash"] --> ferror(["Error"])
+        settle["_settleUncommitted()<br/>redirect to the shown route"] --> fredirect(["Redirected"])
+        cancel["_cancelPendingNavigation()<br/>if a navigation is pending"] --> fcancel(["Cancelled,<br/>while restoring: its result"])
     end
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0969da,color:#1f2328
+    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
+    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    class fcancel native
+    class call,immediate,push,commit,block,errornav,settle,cancel added
+    class pending decision
+    class fcommit commit
+    class fredirect redirect
+    class fblock block
+    class ferror error
+    style actions fill:none,stroke:#0969da
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
 `_errorNavigation`, `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
@@ -841,23 +886,29 @@ therefore takes the hash to undo from the `oldHash` of the next root `hashChange
 ```mermaid
 sequenceDiagram
     actor User
-    participant Shell as Launchpad
-    participant Router as Guard router
-    Note over Router: route "protected",<br/>form dirty
-    User->>Shell: cross-app navigation<br/>to #35;Other-display
-    Shell->>Router: stop()
-    Shell->>Router: _handleDataLoss():<br/>initialize(true)
-    Note over Router: resumes "protected"
-    Shell->>Shell: starts to put<br/>#35;App-preview&/protected back
-    Shell->>User: confirm()
-    User-->>Shell: Cancel
-    Note over Shell,Router: URL shows #35;App-preview&/protected<br/>again, no hashChanged
-    User->>Shell: link to<br/>#35;App-preview&/employees
-    Shell->>Router: parse("employees")
-    Router->>Router: leave guard blocks
-    Router->>Shell: replaceHash(oldHash<br/>of that event)
-    Shell->>Router: parse("protected")
-    Note over Router: adopted without guards,<br/>settles Blocked
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(207, 34, 46, 0.15)
+        Note over Router: route "protected",<br/>form dirty
+        User->>Shell: cross-app navigation<br/>to #35;Other-display
+        Shell->>Router: stop()
+        Shell->>Router: _handleDataLoss():<br/>initialize(true)
+        Note over Router: resumes "protected"
+        Shell->>Shell: starts to put the<br/>previous hash back
+        Shell->>User: confirm()
+        User-->>Shell: Cancel
+        Note over Shell,Router: URL is back on<br/>#35;App-preview&/protected,<br/>no hashChanged
+        User->>Shell: link to<br/>#35;App-preview&/employees
+        Shell->>Router: parse("employees")
+        Router->>Router: leave guard blocks
+        Router->>Shell: replaceHash(oldHash<br/>of that event)
+        Shell->>Router: parse("protected")
+        Note over Router: adopted without guards,<br/>settles Blocked
+    end
 ```
 
 A hash change that the shell takes over never reaches `parse()`. A `navTo()` whose hash write
@@ -888,9 +939,13 @@ The component supports keep-alive:
 
 ```mermaid
 sequenceDiagram
-    participant Shell as Launchpad
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
     participant Comp as App component
-    participant Router as Guard router
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     Shell->>Router: stop() on the cross-app hash change
     Shell->>Comp: deactivate()
     Comp->>Router: stop()
@@ -906,8 +961,12 @@ It does not:
 
 ```mermaid
 sequenceDiagram
-    participant Shell as Launchpad
-    participant Router as Guard router
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     Shell->>Router: stop() on the<br/>cross-app hash change
     Shell->>Router: stop()
     Note over Shell,Router: app hidden
@@ -1266,19 +1325,33 @@ stateDiagram-v2
     committing --> awaitingHash: component targets, UI5 writes the hash later
     awaitingHash --> committing: parse() receives the hash
     committing --> idle: hash is there → Committed, Bypassed or Redirected
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    class idle native
+    class evaluating,committing,awaitingHash added
 ```
 
-A navigation that does not:
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+
+A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result.
 
 ```mermaid
 stateDiagram-v2
-    evaluating --> idle: Blocked, Error, Redirected to the shown route, URL already right
-    evaluating --> restoring: the same, URL must come back
-    restoring --> idle: URL is back, superseded, stop() or destroy() → its result
-    evaluating --> idle: superseded, stop() or destroy() → Cancelled
-    awaitingHash --> idle: superseded, stop() or destroy() → Cancelled
-    committing --> idle: hash write refused → Blocked
+    evaluating --> idle: URL already right
+    evaluating --> restoring: URL must come back
+    restoring --> idle: URL is back
+    evaluating --> idle: Cancelled
+    awaitingHash --> idle: Cancelled
+    committing --> idle: hash write refused, Blocked
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    class idle native
+    class evaluating,committing,awaitingHash,restoring added
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 ## Monorepo Tooling
 

@@ -1048,9 +1048,13 @@ Declared: the launchpad goes through the component.
 
 ```mermaid
 sequenceDiagram
-    participant Shell as Launchpad
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
     participant Comp as App component
-    participant Router as Guard router
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     Shell->>Comp: deactivate()
     Comp->>Router: stop()
     Comp->>Comp: onDeactivate()
@@ -1065,8 +1069,12 @@ Not declared: the launchpad calls the router itself.
 
 ```mermaid
 sequenceDiagram
-    participant Shell as Launchpad
-    participant Router as Guard router
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     Shell->>Router: stop()
     Note over Shell,Router: app hidden
     Shell->>Router: initialize(true)
@@ -1162,13 +1170,17 @@ Allowed: the hash is written once the guards have passed.
 ```mermaid
 sequenceDiagram
     participant App
-    participant Router as Guard router
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     participant History as Browser history
-    App->>Router: navTo("admin")
-    Router->>Router: leave, global and<br/>route guards allow
-    Router->>History: new entry #35;admin
-    Router-->>App: settles Committed
-    Router-->>App: routeMatched "admin"
+    rect rgba(26, 127, 55, 0.15)
+        App->>Router: navTo("admin")
+        Router->>Router: leave, global and<br/>route guards allow
+        Router->>History: new entry #35;admin
+        Router-->>App: settles Committed
+        Router-->>App: routeMatched "admin"
+    end
 ```
 
 Blocked: nothing is written.
@@ -1176,12 +1188,16 @@ Blocked: nothing is written.
 ```mermaid
 sequenceDiagram
     participant App
-    participant Router as Guard router
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     participant History as Browser history
-    App->>Router: navTo("admin")
-    Router->>Router: a guard blocks
-    Router-->>App: settles Blocked
-    Note over History: no entry written
+    rect rgba(207, 34, 46, 0.15)
+        App->>Router: navTo("admin")
+        Router->>Router: a guard blocks
+        Router-->>App: settles Blocked
+        Note over History: no entry written
+    end
 ```
 
 Redirected to `profile`: only the final target is written.
@@ -1189,14 +1205,18 @@ Redirected to `profile`: only the final target is written.
 ```mermaid
 sequenceDiagram
     participant App
-    participant Router as Guard router
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
     participant History as Browser history
-    App->>Router: navTo("admin")
-    Router->>Router: an enter guard<br/>redirects to "profile"
-    Router->>Router: global and route guards<br/>of "profile" allow
-    Router->>History: new entry #35;profile
-    Router-->>App: settles Redirected
-    Router-->>App: routeMatched "profile"
+    rect rgba(154, 103, 0, 0.2)
+        App->>Router: navTo("admin")
+        Router->>Router: an enter guard<br/>redirects to "profile"
+        Router->>Router: global and route guards<br/>of "profile" allow
+        Router->>History: new entry #35;profile
+        Router-->>App: settles Redirected
+        Router-->>App: routeMatched "profile"
+    end
 ```
 
 A hash change from the browser arrives after the URL has changed, so the router puts it back or replaces it:
@@ -1207,14 +1227,18 @@ Back, blocked by a leave guard: the router takes the step back.
 sequenceDiagram
     actor User
     participant Browser
-    participant Router as Guard router
-    User->>Browser: Back
-    Browser->>Router: hashChanged "home"
-    Router->>Router: leave guard of<br/>"detail" blocks
-    Router->>Browser: history.go(1)
-    Browser->>Router: hashChanged "detail"
-    Note over Router: taken without guards
-    Router-->>User: settles Blocked, history as before
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(207, 34, 46, 0.15)
+        User->>Browser: Back
+        Browser->>Router: hashChanged "home"
+        Router->>Router: leave guard of<br/>"detail" blocks
+        Router->>Browser: history.go(1)
+        Browser->>Router: hashChanged "detail"
+        Note over Router: taken without guards
+        Router-->>User: settles Blocked, history as before
+    end
 ```
 
 `#admin` typed into the URL bar, redirected: the target replaces the new entry.
@@ -1223,16 +1247,20 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Browser
-    participant Router as Guard router
-    User->>Browser: types #35;admin
-    Note over Browser: new entry #35;admin
-    Browser->>Router: hashChanged "admin"
-    Router->>Router: an enter guard<br/>redirects to "profile"
-    Router->>Router: global and route guards<br/>of "profile" allow
-    Router->>Browser: replaces the entry<br/>with #35;profile
-    Browser->>Router: hashChanged "profile"
-    Note over Router: commits without guards
-    Router-->>User: settles Redirected
+    box rgba(9, 105, 218, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(154, 103, 0, 0.2)
+        User->>Browser: types #35;admin
+        Note over Browser: new entry #35;admin
+        Browser->>Router: hashChanged "admin"
+        Router->>Router: an enter guard<br/>redirects to "profile"
+        Router->>Router: global and route guards<br/>of "profile" allow
+        Router->>Browser: replaces the entry<br/>with #35;profile
+        Browser->>Router: hashChanged "profile"
+        Note over Router: commits without guards
+        Router-->>User: settles Redirected
+    end
 ```
 
 **Settlement of a blocked step.** The browser takes a step asynchronously. A navigation that the router undoes with a step settles once the URL is back: `navigationSettled()` resolves, and the `navigationSettled` event fires, after the `hashChanged` event that started the navigation has returned.
@@ -1257,18 +1285,22 @@ When the parent refuses a hash change, it puts the whole URL back, the nested pa
 ```mermaid
 sequenceDiagram
     participant Browser
-    participant Parent as Parent router
-    participant Child as Nested router
-    Note over Browser: #35;shell&/child/detail/1,<br/>Back to #35;home
-    Browser->>Parent: hashChanged "home"
-    Parent->>Parent: leave guard of<br/>"shell" blocks
-    Parent->>Browser: history.go(1)
-    Browser->>Child: hashChanged "", its part of #35;home
-    Note over Child: matches "list"
-    Browser->>Parent: hashChanged "shell"
-    Note over Parent: taken without guards,<br/>settles Blocked
-    Browser->>Child: hashChanged "detail/1"
-    Note over Child: matches "detail" again
+    box rgba(9, 105, 218, 0.15) This library
+        participant Parent as Parent router
+        participant Child as Nested router
+    end
+    rect rgba(207, 34, 46, 0.15)
+        Note over Browser: #35;shell&/child/detail/1,<br/>Back to #35;home
+        Browser->>Parent: hashChanged "home"
+        Parent->>Parent: leave guard of<br/>"shell" blocks
+        Parent->>Browser: history.go(1)
+        Browser->>Child: hashChanged "", its part of #35;home
+        Note over Child: matches "list"
+        Browser->>Parent: hashChanged "shell"
+        Note over Parent: taken without guards,<br/>settles Blocked
+        Browser->>Child: hashChanged "detail/1"
+        Note over Child: matches "detail" again
+    end
 ```
 
 With `propagateTitle` set on the component target or in the routing config, titles propagate from the nested router to the parent as with the native router. `titleChanged` fires only for navigations that commit; while a navigation waits for async guards, UI5 defers it to the next `routeMatched`.

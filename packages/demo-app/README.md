@@ -49,12 +49,12 @@ flowchart LR
     rReports --> reporting
     rNone --> notFound
 
-    classDef plain fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef guarded fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef muted fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    class rEmployees,rEmployee,rReports,home,protected,blocked,forbidden,admin,employees,employee,reporting plain
-    class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam guarded
-    class rNone,notFound muted
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    class rEmployees,rEmployee,rReports,home,protected,blocked,forbidden,admin,employees,employee,reporting native
+    class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam added
+    class rNone,notFound optional
     style routes fill:none,stroke:#6e7781
     style views fill:none,stroke:#6e7781
 ```
@@ -82,12 +82,12 @@ flowchart LR
     rConfidential --> confidential
     rNone --> notFound
 
-    classDef plain fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef guarded fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef muted fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    class rOverview,rSales,overview,sales,confidential plain
-    class rConfidential guarded
-    class rNone,notFound muted
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    class rOverview,rSales,overview,sales,confidential native
+    class rConfidential added
+    class rNone,notFound optional
     style routes fill:none,stroke:#6e7781
     style views fill:none,stroke:#6e7781
 ```

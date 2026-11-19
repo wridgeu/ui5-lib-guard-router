@@ -103,6 +103,26 @@ The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint`
 
 Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics differ from upstream oxlint.
 
+### Diagram style
+
+Every Mermaid diagram uses this palette; `check:diagrams` rejects a `classDef` that differs from it. The colours are readable in the light and the dark theme of GitHub.
+
+| Class      | Meaning                                 | `classDef`                                                       |
+| ---------- | --------------------------------------- | ---------------------------------------------------------------- |
+| `native`   | Native UI5, or nothing the library does | `fill:#6e7781,stroke:#424a53,color:#ffffff`                      |
+| `added`    | What the library adds                   | `fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff`     |
+| `optional` | Optional surroundings                   | `fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328` |
+| `decision` | A decision                              | `fill:#ddf4ff,stroke:#0969da,color:#1f2328`                      |
+| `commit`   | Outcome commit                          | `fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff`     |
+| `redirect` | Outcome redirect                        | `fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff`     |
+| `block`    | Outcome block                           | `fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff`     |
+| `error`    | Outcome error                           | `fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff`     |
+
+- A flowchart or state diagram that uses the classes has a legend, in the figure or as one line under it.
+- A sequence diagram puts the library's participants in `box rgba(9, 105, 218, 0.15) This library` and those of UI5 or the launchpad in `box rgba(110, 119, 129, 0.2)`. A diagram of one outcome wraps its messages in a `rect`: `rgba(26, 127, 55, 0.15)` committed, `rgba(154, 103, 0, 0.2)` redirected, `rgba(207, 34, 46, 0.15)` blocked.
+- One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled (about 720px).
+- No backtick in a label, and `#35;` for a `#` in a sequence diagram: Mermaid drops the rest of the line after a `#`.
+
 ## Build
 
 ```bash

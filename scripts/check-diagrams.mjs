@@ -1,4 +1,4 @@
-// Checks every Mermaid block of the docs: it parses, has no backtick, and the library code it names exists (comments name none).
+// Checks every Mermaid block of the docs: it parses, has no backtick, keeps to the diagram style, and the library code it names exists (comments name none).
 // Usage: npm run check:diagrams
 import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
@@ -11,6 +11,17 @@ import { sourceNames } from "./source-names.mjs";
 const CODE_NAME = /(?<![\w$.])(?:[\w$]+\.)*(_[\w$]+|[A-Za-z$][\w$]*(?=\())/g;
 /** Names of UI5, the launchpad and the browser that the diagrams call and the library source does not. */
 const EXTERNAL_NAMES = new Set(["activate", "deactivate", "onActivate", "onDeactivate", "confirm", "_handleDataLoss"]);
+/** The classes of the diagram style (CONTRIBUTING.md, "Diagram style"). */
+const PALETTE = {
+	native: "fill:#6e7781,stroke:#424a53,color:#ffffff",
+	added: "fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff",
+	optional: "fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328",
+	decision: "fill:#ddf4ff,stroke:#0969da,color:#1f2328",
+	commit: "fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff",
+	redirect: "fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff",
+	block: "fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff",
+	error: "fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff",
+};
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LIB_SRC = "packages/lib/src";
@@ -19,7 +30,11 @@ const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 
 // Mermaid sanitizes labels with DOMPurify, which takes the DOM from `window` when it is loaded.
 const { window } = parseHTML("<html><body></body></html>");
-Object.assign(globalThis, { window, document: window.document });
+// Mermaid asks the browser whether the colour of a sequence `box` is one, through `new Option().style`.
+class Option {
+	style = {};
+}
+Object.assign(globalThis, { window, document: window.document, Option });
 const { default: mermaid } = await import("mermaid");
 
 const docs = execFileSync("git", ["ls-files", "*.md"], { cwd: repoRoot, encoding: "utf8" }).split("\n").filter(Boolean);
@@ -52,6 +67,13 @@ for (const doc of docs) {
 
 		// Rule 2: GitHub prints a backtick in a label as it is, and rejects a label that starts with one.
 		if (diagram.includes("`")) errors.push(`${where}: the Mermaid block has a backtick, write the name plainly`);
+
+		// Rule 4: a class is one of the diagram style in CONTRIBUTING.md, with its colours.
+		for (const [, name, style] of diagram.matchAll(/^\s*classDef (\S+) (.*)$/gm)) {
+			if (PALETTE[name] !== style.trim()) {
+				errors.push(`${where}: the Mermaid block defines the class ${name} other than the diagram style does`);
+			}
+		}
 
 		// Rule 3: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
 		// Only labels are read: a flowchart node `id("label")` is no call.
