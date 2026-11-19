@@ -182,19 +182,6 @@ The native chain of `sap.m.routing.Router` stays as it is; the library puts its 
 
 ```mermaid
 flowchart TD
-    subgraph legend ["Legend"]
-        lNative["native UI5"]
-        lAdded["added by the library"]
-        lOptional["optional"]
-        lCommit("commit")
-        lRedirect("redirect")
-        lBlock("block")
-        lError("error")
-        lNative ~~~ lCommit
-        lAdded ~~~ lRedirect
-        lOptional ~~~ lBlock
-    end
-
     bar["Address bar, back, forward:<br/>the browser changes the hash"]
     shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
     appCode["Application code<br/>calls navTo()"]
@@ -214,7 +201,7 @@ flowchart TD
         redirect("A guard names a route:<br/>redirect")
         block("A guard returns false:<br/>block")
         error("A guard throws:<br/>error")
-        settled(["Event navigationSettled"])
+        settled(["Event navigationSettled:<br/>Committed, Bypassed, Redirected,<br/>Blocked or Error"])
     end
 
     subgraph native ["sap.m.routing.Router (native): parse()"]
@@ -222,7 +209,6 @@ flowchart TD
         nested["Nested component<br/>(target of type Component)"]
     end
 
-    lBlock ~~~ bar
     bar --> hash
     shell -.-> hash
     hash --> parse
@@ -241,9 +227,9 @@ flowchart TD
 
     commit --> match
     target -.-> nested
-    commit -- "Committed, Bypassed<br/>or Redirected" --> settled
-    block -- "Blocked" --> settled
-    error -- "Error" --> settled
+    commit --> settled
+    block --> settled
+    error --> settled
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
     classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
@@ -252,18 +238,19 @@ flowchart TD
     classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
     classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
     classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    class lNative,bar,appCode,hash,match,target,view native
-    class lAdded,preflight,parse,sources,leave,global,enter,settled added
-    class lOptional,shell,nested optional
-    class lCommit,commit commit
-    class lRedirect,redirect redirect
-    class lBlock,block block
-    class lError,error error
-    style legend fill:none,stroke:#6e7781,stroke-dasharray:2 3
+    class bar,appCode,hash,match,target,view native
+    class preflight,parse,sources,leave,global,enter,settled added
+    class shell,nested optional
+    class commit commit
+    class redirect redirect
+    class block block
+    class error error
     style added fill:none,stroke:#0969da,stroke-width:2px
     style pipeline fill:none,stroke:#0969da
     style native fill:none,stroke:#6e7781,stroke-width:2px
 ```
+
+Grey is the native `sap.m.routing.Router`, blue with a thick border is what the library adds, and light grey with a dashed border is optional. The outcomes are green (commit), amber (redirect), red (block) and dark red (error).
 
 A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 

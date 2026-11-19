@@ -120,7 +120,7 @@ Every Mermaid diagram uses this palette; `check:diagrams` rejects a `classDef` t
 
 - A flowchart or state diagram that uses the classes has a legend, in the figure or as one line under it.
 - A sequence diagram puts the library's participants in `box rgba(9, 105, 218, 0.15) This library` and those of UI5 or the launchpad in `box rgba(110, 119, 129, 0.2)`. A diagram of one outcome wraps its messages in a `rect`: `rgba(26, 127, 55, 0.15)` committed, `rgba(154, 103, 0, 0.2)` redirected, `rgba(207, 34, 46, 0.15)` blocked.
-- One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled (about 720px).
+- One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled (about 750px).
 - No backtick in a label, and `#35;` for a `#` in a sequence diagram: Mermaid drops the rest of the line after a `#`.
 
 ## Build

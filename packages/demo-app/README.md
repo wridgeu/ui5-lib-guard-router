@@ -9,11 +9,11 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-The route map of `demo.app`: each box on the left is a route with its pattern and what its guards do. Blue routes have a guard, an arrow that ends in a cross never shows its view, and the dashed boxes are what a hash without a route gets.
+The route map of `demo.app`: each box on the left is a route with its pattern and what its guards do. Blue routes have a guard, and a route without an arrow never shows a view of its own. The dashed boxes are what a hash without a route gets. The global guard `navigationLogger` logs every navigation and allows it.
 
 ```mermaid
 flowchart LR
-    subgraph routes ["Routes of demo.app (global guard navigationLogger logs and allows)"]
+    subgraph routes ["Routes of demo.app"]
         rHome["(empty pattern), route home<br/>leave guard of Home.controller:<br/>logs and allows"]
         rProtected["protected<br/>enter: permission guard, async,<br/>redirects to home when logged out<br/>leave: dirtyFormGuard blocks<br/>while the form is dirty"]
         rBlocked["blocked<br/>blockedGuard: always blocks"]
@@ -29,9 +29,6 @@ flowchart LR
     subgraph views ["Views of demo.app"]
         home["Home"]
         protected["Protected"]
-        blocked["Blocked"]
-        forbidden["Forbidden"]
-        admin["Admin"]
         employees["Employees"]
         employee["Employee"]
         reporting["Component<br/>demo.app.reporting"]
@@ -40,10 +37,6 @@ flowchart LR
 
     rHome --> home
     rProtected --> protected
-    rBlocked --x blocked
-    rForbidden --x forbidden
-    rAdmin --x admin
-    rTeam --> employees
     rEmployees --> employees
     rEmployee --> employee
     rReports --> reporting
@@ -52,7 +45,7 @@ flowchart LR
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
     classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    class rEmployees,rEmployee,rReports,home,protected,blocked,forbidden,admin,employees,employee,reporting native
+    class rEmployees,rEmployee,rReports,home,protected,employees,employee,reporting native
     class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam added
     class rNone,notFound optional
     style routes fill:none,stroke:#6e7781
