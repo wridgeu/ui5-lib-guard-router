@@ -32,11 +32,9 @@ if (existsSync(".stryker-tmp") && readdirSync(".stryker-tmp").some((name) => nam
 	process.exit(1);
 }
 
-// Stryker types every option as optional, and so every entry of an array.
-const mutate = (strykerConfig.mutate ?? []).filter((pattern) => typeof pattern === "string");
-const include = mutate.filter((pattern) => !pattern.startsWith("!"));
+const include = strykerConfig.mutate.filter((pattern) => !pattern.startsWith("!"));
 const exclude = new Set(
-	mutate.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => globSync(pattern.slice(1))),
+	strykerConfig.mutate.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => globSync(pattern.slice(1))),
 );
 const allFiles = include.flatMap((pattern) => globSync(pattern)).filter((file) => !exclude.has(file));
 const args = process.argv.slice(2);

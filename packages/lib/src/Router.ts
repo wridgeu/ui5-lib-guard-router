@@ -247,6 +247,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _blockLoad: { start: boolean; ignoreInitialHash?: boolean } | null = null;
 	private _meta: RouteMetaStore;
+	/** Recorded by `addRoute()`, which the UI5 constructor calls for every route: no initializer may reset them after it. */
 	private _routeNames: string[];
 	/** Routes that also match when an earlier route has matched the hash (`greedy: true`). */
 	private _greedyRouteNames: string[];
@@ -265,6 +266,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 		// hash changer of a component that is loaded as a routing target.
 		super(routes, isRecordConfig ? withoutGuardRouter(config) : config, owner, ...rest);
 		this._ownerComponent = owner;
+		// A config without routes has made no addRoute() call.
+		this._routeNames ??= [];
+		this._greedyRouteNames ??= [];
 		this._mirrorMatchingProcess();
 		let componentNamespace = "";
 		const appConfig = owner?.getManifestEntry("sap.app") as unknown;
@@ -278,22 +282,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._options.inheritance === "pattern-tree" ? () => this._collectRoutePatterns() : null,
 		);
 		this._pendingGuardDescriptors = parsed.guards;
-
-		// Collect route names for pattern-tree traversal the way the constructor of
-		// sap.ui.core.routing.Router names the routes: it turns an array into a map keyed by the
-		// name of each entry, so that entries without a name share the key "undefined", and it
-		// names an entry of a map that has no name by its key.
-		const nameOf = (r: unknown): string | undefined =>
-			isRecord(r) && typeof r.name === "string" ? r.name : undefined;
-		const routeMap: object = Array.isArray(routes)
-			? Object.fromEntries(routes.map((r: unknown) => [nameOf(r) ?? "undefined", r]))
-			: (routes ?? {});
-		const routeConfigs = Object.entries(routeMap).map(([key, r]: [string, unknown]) => ({
-			name: nameOf(r) ?? key,
-			greedy: isRecord(r) && r.greedy,
-		}));
-		this._routeNames = routeConfigs.map((r) => r.name);
-		this._greedyRouteNames = routeConfigs.filter((r) => r.greedy).map((r) => r.name);
 
 		// Fire-and-forget preload hint: a module cached by initialize()
 		// needs no async load on navigation (see _registerLazyGuards).
@@ -544,15 +532,15 @@ export default class Router extends MobileRouter implements GuardRouter {
 	override addRoute(oConfig: $RouteSettings, oParent?: Route): void {
 		super.addRoute(oConfig, oParent);
 
-		// Skip when called by the parent constructor before field initializers have run.
-		// Routes from the constructor args are captured in _routeNames by the constructor body.
-		if (!this._routeNames) return;
-
 		const name = oConfig.name;
+		this._routeNames ??= [];
+		this._greedyRouteNames ??= [];
 		if (this._routeNames.includes(name)) return;
 
 		this._routeNames.push(name);
 		if (oConfig.greedy) this._greedyRouteNames.push(name);
+		// The UI5 constructor adds the routes of the config before this constructor sets up the rest.
+		if (!this._meta) return;
 		this._meta.invalidate();
 
 		if (this._options.inheritance !== "pattern-tree") return;

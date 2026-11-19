@@ -1,7 +1,7 @@
 // @ts-check
 // Run via `npm run test:mutation`: per source file, one UI5 server (port 8084) serves the
 // in-place instrumented sources to a wdio QUnit run per mutant.
-/** @type {import("@stryker-mutator/api/core").PartialStrykerOptions} */
+/** @satisfies {import("@stryker-mutator/api/core").PartialStrykerOptions} */
 export default {
 	mutate: ["packages/lib/src/**/*.ts", "!packages/lib/src/types.ts", "!packages/lib/src/library.ts"],
 	testRunner: "command",

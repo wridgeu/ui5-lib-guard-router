@@ -9,8 +9,7 @@ function getContainer(): typeof Container | undefined {
 }
 
 function isContainer(value: unknown): value is typeof Container {
-	const isObject = (typeof value === "object" && value !== null) || typeof value === "function";
-	return isObject && "registerDirtyStateProvider" in value;
+	return typeof value === "object" && value !== null && "registerDirtyStateProvider" in value;
 }
 
 export function hasUshellContainer(): boolean {

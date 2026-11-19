@@ -280,7 +280,13 @@ export default class GuardPipeline {
 	private _runEnterGuards(entering: string[], context: GuardContext): GuardResult | Promise<GuardResult> {
 		const runRouteGuards = (): GuardResult | Promise<GuardResult> =>
 			this._runForEach(entering, context, (route) => this._runRouteGuards(route, context));
-		const globalResult = this._runEnterGuardList(this._globalGuards, context, context.toRoute);
+		const globalResult = this._runGuards(
+			this._globalGuards,
+			context,
+			context.toRoute,
+			(result) => this._validateGuardResult(result),
+			"Enter guard",
+		);
 
 		if (isPromiseLike(globalResult)) {
 			return globalResult.then((result: GuardResult) => {
@@ -296,16 +302,8 @@ export default class GuardPipeline {
 	/** Run route-specific guards if any are registered. */
 	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		const guards = toRoute ? this._enterGuards.get(toRoute) : undefined;
-		return guards ? this._runEnterGuardList(guards, context, toRoute) : true;
-	}
-
-	/** Run enter guards: a result that is not `true` is validated as a block or a redirect. */
-	private _runEnterGuardList(
-		guards: GuardFn[],
-		context: GuardContext,
-		route: string,
-	): GuardResult | Promise<GuardResult> {
-		return this._runGuards(guards, context, route, (result) => this._validateGuardResult(result), "Enter guard");
+		if (!guards) return true;
+		return this._runGuards(guards, context, toRoute, (result) => this._validateGuardResult(result), "Enter guard");
 	}
 
 	/**
