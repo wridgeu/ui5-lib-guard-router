@@ -9,6 +9,53 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
+The route map: each arrow is a route with its pattern and what its guards do. An arrow that ends in a cross never shows its view.
+
+```mermaid
+flowchart LR
+    bar["Browser address bar<br/>index.html#/HASH"]
+    router{{"Router of demo.app<br/>ui5.guard.router.Router"}}
+
+    subgraph app ["Views of demo.app"]
+        home["Home"]
+        protected["Protected"]
+        blocked["Blocked"]
+        forbidden["Forbidden"]
+        admin["Admin"]
+        employees["Employees"]
+        employee["Employee"]
+        notFound["NotFound"]
+    end
+
+    subgraph reporting ["Component demo.app.reporting (target reports, hash prefix reports)"]
+        nestedRouter{{"Router of demo.app.reporting<br/>ui5.guard.router.Router"}}
+        overview["Overview"]
+        sales["Sales"]
+        confidential["Confidential"]
+        nestedNotFound["NotFound"]
+    end
+
+    bar -- "every navigation:<br/>navigationLogger logs and allows" --> router
+
+    router -- "(empty pattern), route home<br/>leave guard of Home.controller: logs and allows" --> home
+    router -- "protected<br/>enter: permission guard, async, redirects to home when logged out<br/>leave: dirtyFormGuard blocks while the form is dirty" --> protected
+    router -- "blocked<br/>blockedGuard: always blocks" --x blocked
+    router -- "forbidden<br/>forbiddenGuard: always redirects to home" --x forbidden
+    router -- "admin<br/>adminGuard: always redirects to protected" --x admin
+    router -- "employees, route employees<br/>(route staff has the same pattern and never matches)" --> employees
+    router -- "team, no target<br/>retiredPageGuard: redirects to staff,<br/>which settles on employees" --> employees
+    router -- "employees/{id}, route employee" --> employee
+    router -- "reports" --> nestedRouter
+    router -- "(bypassed)" --> notFound
+
+    nestedRouter -- "(empty pattern), route overview" --> overview
+    nestedRouter -- "sales" --> sales
+    nestedRouter -- "confidential<br/>confidentialGuard: redirects to overview while locked" --> confidential
+    nestedRouter -- "(bypassed)" --> nestedNotFound
+```
+
+The hash of a nested route follows that of the parent route, for example `#/reports&/reports/sales`.
+
 | Route       | Pattern            | Guard behavior                                                                                   |
 | ----------- | ------------------ | ------------------------------------------------------------------------------------------------ |
 | `home`      | `""`               | Open. Leave: logs and allows (controller-level guard)                                            |

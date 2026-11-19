@@ -178,6 +178,78 @@ export default class Component extends UIComponent {
 
 ## How it works
 
+The native chain of `sap.m.routing.Router` stays as it is; the library adds the parts with the thick border. The dashed parts are optional surroundings.
+
+```mermaid
+flowchart TD
+    bar["Address bar, back and forward:<br/>the browser changes the hash"]
+    appCode["Application code calls `navTo()`"]
+    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
+
+    subgraph native ["sap.m.routing.Router (native)"]
+        hash["Hash changer"]
+        match["Route match"]
+        target["Target"]
+        view["View"]
+    end
+
+    subgraph added ["ui5.guard.router.Router (this library)"]
+        preflight["Preflight of `navTo()`:<br/>guards run before the hash changes"]
+        parse["Override of `parse()`:<br/>guards run after the hash changed"]
+        subgraph pipeline ["Guard pipeline"]
+            leave["1. Leave guards of the current route"]
+            global["2. Global enter guards"]
+            enter["3. Enter guards of the target route"]
+            leave --> global --> enter
+        end
+        commit(["commit:<br/>a `navTo()` writes its hash now"])
+        block(["block:<br/>a hash the browser changed is undone"])
+        redirect(["redirect:<br/>another hop, 10 at most"])
+        error(["error:<br/>a hash the browser changed is undone"])
+        settled(["Event `navigationSettled`"])
+    end
+
+    subgraph sources ["Where guards come from"]
+        manifest["manifest.json, block `guardRouter`:<br/>modules under `guards`,<br/>loaded as `guardLoading` says (lazy or block)"]
+        tree["With `inheritance` pattern-tree:<br/>also on the routes whose pattern<br/>extends that of the guarded route"]
+        api["Calls of `addGuard()`,<br/>`addRouteGuard()` and `addLeaveGuard()`"]
+    end
+
+    nested["Target of type Component:<br/>nested component, which can have<br/>a guard router of its own"]
+
+    bar --> hash
+    shell -.-> hash
+    hash -- "hash changed" --> parse
+    appCode --> preflight
+    preflight --> leave
+    parse --> leave
+
+    pipeline -- "every guard returns true" --> commit
+    pipeline -- "a guard returns false" --> block
+    pipeline -- "an enter guard returns a route" --> redirect
+    pipeline -- "a guard throws or rejects" --> error
+    redirect -- "guards of the new target,<br/>no leave guards" --> global
+
+    commit -- "native parse()" --> match
+    match --> target --> view
+    target -.-> nested
+
+    commit -- "as `Committed` or `Bypassed`,<br/>after a redirect as `Redirected`" --> settled
+    block -- "as `Blocked`" --> settled
+    error -- "as `Error`" --> settled
+
+    manifest --> pipeline
+    manifest -.-> tree -.-> pipeline
+    api --> pipeline
+
+    classDef added stroke-width:3px
+    classDef faint stroke-dasharray:4 4
+    class preflight,parse,leave,global,enter,commit,block,redirect,error,settled,manifest,tree,api added
+    class shell,nested faint
+```
+
+A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. The detailed diagrams of each step are in the [architecture reference](../../docs/reference/architecture.md#two-entry-point-model-navto-preflight--parse-fallback).
+
 The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
 
 - **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
