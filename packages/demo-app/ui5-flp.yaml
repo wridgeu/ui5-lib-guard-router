@@ -45,6 +45,10 @@ server:
                         intent:
                             object: parityguard
                             action: display
+                      # A launchpad page of its own that runs the demo app in an iframe (test/flp/flp-iframe-keep-alive.e2e.ts).
+                      # The manifest has the type "component", so the preview adds no app for it and only serves the folder.
+                      - target: /iframe
+                        local: test/flp/iframe
 resources:
     configuration:
         paths:

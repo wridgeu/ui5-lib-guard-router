@@ -1,0 +1,83 @@
+{
+	"_version": "3.1.0",
+	"site": {
+		"payload": {
+			"groupsOrder": []
+		}
+	},
+	"catalogs": {},
+	"groups": {},
+	"visualizations": {},
+	"applications": {
+		"demo.app": {
+			"sap.app": {
+				"id": "demo.app",
+				"title": "UI5 Guard Router Demo",
+				"crossNavigation": {
+					"inbounds": {
+						"guardiframe-display": {
+							"semanticObject": "guardiframe",
+							"action": "display",
+							"signature": {
+								"additionalParameters": "allowed"
+							}
+						}
+					}
+				}
+			},
+			"sap.ui": {
+				"technology": "URL"
+			},
+			"sap.integration": {
+				"urlTemplateId": "demo.iframe.ui5"
+			}
+		},
+		"demo.peer": {
+			"sap.app": {
+				"id": "demo.peer",
+				"title": "Peer App",
+				"crossNavigation": {
+					"inbounds": {
+						"peer-display": {
+							"semanticObject": "peer",
+							"action": "display",
+							"signature": {
+								"additionalParameters": "allowed"
+							}
+						}
+					}
+				}
+			},
+			"sap.ui5": {
+				"componentName": "demo.peer"
+			},
+			"sap.ui": {
+				"technology": "UI5"
+			},
+			"sap.platform.runtime": {
+				"componentProperties": {
+					"url": "/peer",
+					"asyncHints": {}
+				}
+			}
+		}
+	},
+	"urlTemplates": {
+		"demo.iframe.ui5": {
+			"identification": {
+				"id": "demo.iframe.ui5"
+			},
+			"payload": {
+				"urlTemplate": "/iframe/ui5appruntime.html?sap-ui-app-id=demo.app#guardiframe-display",
+				"parameters": {
+					"names": {}
+				},
+				"capabilities": {
+					"navigationMode": "embedded",
+					"appFrameworkId": "UI5"
+				}
+			}
+		}
+	},
+	"pages": {}
+}

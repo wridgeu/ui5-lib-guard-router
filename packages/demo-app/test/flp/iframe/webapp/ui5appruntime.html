@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>UI5 app runtime</title>
+		<!--
+			The page that the launchpad of flp.html loads in an iframe: the UI5 app runtime of
+			sap.ushell starts the app that the URL names (sap-ui-app-id) and places it in the
+			element "content".
+		-->
+		<meta
+			name="sap.ushellConfig.ui5appruntime"
+			content='{ "ui5appruntime": { "config": { "appIndex": { "data": { "url": "/", "ui5ComponentName": "demo.app" } } } } }'
+		/>
+		<script
+			id="sap-ui-bootstrap"
+			src="../resources/sap-ui-core.js"
+			data-sap-ui-libs="sap.m,sap.ushell"
+			data-sap-ui-async="true"
+			data-sap-ui-theme="sap_horizon"
+			data-sap-ui-compatVersion="edge"
+			data-sap-ui-language="en"
+			data-sap-ui-frameOptions="allow"
+			data-sap-ui-oninit="module:sap/ushell/appRuntime/ui5/AppRuntime"
+		></script>
+	</head>
+	<body class="sapUiBody" id="content"></body>
+</html>
