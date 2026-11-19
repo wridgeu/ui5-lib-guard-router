@@ -68,6 +68,7 @@ QUnit tests of the library are below `packages/lib/test/qunit/`. A folder is one
 | Upstream OpenUI5 tests                                    | `upstream-parity/`, only through `npm run vendor:openui5-router-tests`                                              |
 | The demo app in a browser                                 | `packages/demo-app/test/e2e/`, one spec file per scenario area                                                      |
 | The demo app in the Fiori launchpad preview               | `packages/demo-app/test/flp/`                                                                                       |
+| The demo app in an iframe of the launchpad                | `packages/demo-app/test/flp/`, on the launchpad page of `test/flp/iframe/webapp/` (served at `/iframe`)             |
 | A lint plugin in `tools/` or a script in `scripts/`       | `<name>.test.mjs` next to it, run by `npm run test:tooling` (`node --test`)                                         |
 
 Rules that keep the layout working:
@@ -76,6 +77,7 @@ Rules that keep the layout working:
 - **QUnit module names** are `"<Area> - <topic>"`, unique, and never shared by two files: a failing test is found by its module name.
 - **Helpers**: used by one file, they stay in the file; by one folder, in `<folder>/<folder>Helpers.ts`; by several folders, in `testHelpers.ts`; by the sub-pages of one parent folder, in that parent folder (`parity/parityRecorder.ts`, `parity/nestedParityHarness.ts`). A module with tests that share one router gets its hooks from `routerHooks()`.
 - **Fixtures** are in `fixtures/<kind>/`; the `sap.app.id` of a fixture component matches its folder path.
+- **Demo specs that need a browser session of their own** (a page load with other URL parameters, another launchpad page, a resource that fails to load) are a spec file of their own with "(isolated session)" in the `describe` title: wdio starts a session per spec file.
 - **Demo tests**: selectors and model access shared by the standalone and the FLP suite are in `packages/demo-app/test/shared/`. Code that runs in the browser through `browser.execute()` reads UI5 modules with `sap.ui.require(name)`; `packages/demo-app/test/browser-modules.ts` declares the type of each module read that way.
 - A test that the docs cite by file and title (the "Proven by" column of the compatibility table in the library README) is renamed or moved together with its citation; `npm run check:layout` fails for a citation that names no test.
 

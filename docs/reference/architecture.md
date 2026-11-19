@@ -249,7 +249,10 @@ The same-hash branch handles the committed hash reaching `parse()` again. If a p
 navigation had moved the URL away (`NavigationAttempt.restoreHash`), the user went back while
 it was pending, and no route matches again: the route of the committed hash was never left. The
 branch cancels a navigation whose guards are pending. One that waits for UI5 to write its hash
-(`awaitingHash`) goes on, and only its undo is dropped. Otherwise the route matches again through
+(`awaitingHash`) goes on, and only its undo is dropped: the hash change that it describes is
+undone already, and kept, it would be taken back once more with the next hash change that does
+not commit (two steps through the browser history instead of one, which leaves the app;
+`awaiting-hash.e2e.ts`). Otherwise the route matches again through
 `super.parse()`, without guards, as it does natively: UI5 reports the hash of a navigation with
 component targets once it has written it, reports the hash again after it reset the hash
 changer for a target displayed without a route, or application code called `parse()` directly.
@@ -987,8 +990,18 @@ own (`CommonDataModel` adapter, `siteDataUrl`), in which the app has
 `"sap.ui": { "technology": "URL" }` and a URL template (`sap.integration/urlTemplateId`, and
 `urlTemplates` with the capabilities `navigationMode: "embedded"` and `appFrameworkId: "UI5"`).
 The template points to a page that starts `sap/ushell/appRuntime/ui5/AppRuntime` and has an
-element with the ID `content`, where the app runtime places the app. The FLP specs of the demo
-do not cover the iframe. Two setups that look similar do not work:
+element with the ID `content`, where the app runtime places the app. The page reads the app
+from a `meta` element named `sap.ushellConfig.ui5appruntime` (`ui5appruntime/config/appIndex/data`),
+which both versions accept.
+
+That setup is in `packages/demo-app/test/flp/iframe/webapp/` (`flp.html`, `config.js`,
+`init.js`, `site.json`, `ui5appruntime.html`); the preview middleware serves the folder at
+`/iframe`. `flp-iframe-keep-alive.e2e.ts` runs the demo app in it on both versions and pins the
+first point: the router is stopped while the app is hidden, the kept component settles
+`Committed` on its default route when it is shown again, with its unsaved data, and its guards
+run once for a navigation after that. A cross-app navigation that starts in the shell hides the
+app without a question. What the app runtime asks about unsaved data, and the provider list of
+1.144.0, are not pinned by a test. Two setups that look similar do not work:
 
 - Without the element `content` the component is created and routes, but the app runtime never
   records it as its running app. It answers `store` with `sap.ushell.appRuntime.isInvalidIframe`,
