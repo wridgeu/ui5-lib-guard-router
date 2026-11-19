@@ -6,6 +6,8 @@
 ui5-lib-guard-router/
 |-- package.json                    npm workspaces root
 |-- tsconfig.base.json              shared TypeScript config (strict mode)
+|-- tsconfig.json                   lists every project, so that editors and oxlint find the tsconfig of a file
+|-- tsconfig.node.json              Node code: scripts/, tools/, the wdio configs of the library
 |-- .oxlintrc.json                  linter config
 |
 |-- packages/
@@ -1268,8 +1270,8 @@ stateDiagram-v2
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
-- **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages
+- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
+- **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
 
 ## Test Architecture

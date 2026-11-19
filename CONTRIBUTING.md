@@ -82,7 +82,7 @@ Rules that keep the layout working:
 
 ```bash
 npm run typecheck    # TypeScript strict mode
-npm run lint         # oxlint
+npm run lint         # oxlint, with type-aware rules
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
 npm run check        # all of the above (fmt:check + lint + typecheck + check:layout)

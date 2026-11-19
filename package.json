@@ -16,11 +16,11 @@
 		"clean": "npm run clean --workspaces",
 		"fmt": "oxfmt .",
 		"fmt:check": "oxfmt --check .",
-		"lint": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-		"lint:fix": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --fix",
+		"lint": "oxlint packages/ scripts/ tools/ --import-plugin --deny-warnings",
+		"lint:fix": "oxlint packages/ scripts/ tools/ --import-plugin --fix",
 		"check": "npm run fmt:check && npm run lint && npm run typecheck && npm run check:layout",
 		"check:layout": "node ./scripts/check-test-layout.mjs",
-		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/lib/tsconfig.test.json && tsc --noEmit -p packages/demo-app/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.test.json",
+		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/lib/tsconfig.test.json && tsc --noEmit -p packages/demo-app/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.test.json && tsc --noEmit -p tsconfig.node.json",
 		"build": "npm run build --workspace=packages/lib",
 		"start": "npm start --workspace=packages/demo-app",
 		"start:flp": "npm run start:flp --workspace=packages/demo-app",
@@ -55,7 +55,7 @@
 	},
 	"lint-staged": {
 		"{packages,scripts,tools}/**/*.{ts,js,mjs}": [
-			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+			"oxlint --fix --import-plugin --deny-warnings",
 			"oxfmt"
 		],
 		"*.{json,md,yaml,yml}": "oxfmt"
@@ -78,6 +78,7 @@
 		"lint-staged": "^17.6.1",
 		"oxfmt": "^0.79.0",
 		"oxlint": "^1.94.0",
+		"oxlint-tsgolint": "7.0.2007",
 		"release-please": "^17.11.2",
 		"rimraf": "^6.1.4",
 		"typescript": "npm:@typescript/typescript6@^6.0.2",

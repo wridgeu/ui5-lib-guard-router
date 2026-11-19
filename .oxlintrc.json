@@ -5,6 +5,9 @@
 		"suspicious": "warn",
 		"perf": "warn"
 	},
+	"options": {
+		"typeAware": true
+	},
 	"plugins": ["typescript", "oxc", "unicorn", "import"],
 	"jsPlugins": [
 		{
@@ -32,6 +35,14 @@
 		"unicorn/prefer-global-this": "off",
 		"unicorn/consistent-function-scoping": "off",
 		"typescript/no-explicit-any": "warn",
+		"typescript/no-unsafe-type-assertion": "error",
+		"typescript/no-unnecessary-type-assertion": "warn",
+		"typescript/no-misused-promises": "error",
+		"typescript/switch-exhaustiveness-check": "error",
+		"typescript/only-throw-error": "error",
+		"typescript/prefer-promise-reject-errors": "error",
+		"typescript/return-await": "error",
+		"typescript/unbound-method": "off",
 		"code-quality/no-console-only-catch": "warn",
 		"code-quality/no-redundant-boolean-return": "warn",
 		"code-quality/no-em-dash": "warn",
@@ -46,6 +57,7 @@
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
+				"typescript/no-unsafe-type-assertion": "off",
 				"comment-quality/no-section-divider": "off",
 				"test-guardrails/no-browser-pause": "error"
 			}

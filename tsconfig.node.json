@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"allowJs": true,
+		"emitDeclarationOnly": true,
+		"types": ["node", "@wdio/globals/types"]
+	},
+	"include": [
+		"scripts/*.mjs",
+		"tools/*.mjs",
+		"tools/*.ts",
+		"stryker.config.mjs",
+		"packages/lib/test/wdio*.ts",
+		"packages/lib/test/qunit/testsuite.qunit.ts"
+	]
+}
