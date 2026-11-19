@@ -77,7 +77,8 @@ for (const doc of docs) {
 
 		// Rule 3: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
 		// Only labels are read: a flowchart node `id("label")` is no call.
-		const labels = /^\s*flowchart/.test(diagram)
+		// A front matter (`config:`) may precede the diagram type.
+		const labels = /^\s*flowchart/.test(diagram.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ""))
 			? [...diagram.matchAll(/"([^"\n]*)"/g)].map(([, label]) => label)
 			: [...diagram.matchAll(/^[^:\n]*:(.*)$/gm)].map(([, label]) => label);
 		for (const [, name] of labels.join("\n").matchAll(CODE_NAME)) {
