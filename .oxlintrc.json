@@ -70,7 +70,7 @@
 				"packages/lib/test/qunit/{unit,router,parity,fixtures}/**/*.ts",
 				"packages/lib/test/qunit/upstream-parity/*.ts",
 				"packages/lib/test/qunit/upstream-parity/adapters/**/*.ts",
-				"packages/demo-app/**/*.{ts,js}",
+				"packages/demo-app/**/*.ts",
 				"scripts/**/*.mjs",
 				"tools/**/*.{mjs,ts}"
 			],
@@ -80,6 +80,12 @@
 				"typescript/no-unsafe-call": "error",
 				"typescript/no-unsafe-member-access": "error",
 				"typescript/no-unsafe-return": "error"
+			}
+		},
+		{
+			"files": ["packages/demo-app/webapp/**/*.ts"],
+			"rules": {
+				"typescript/no-unsafe-type-assertion": "off"
 			}
 		},
 		{

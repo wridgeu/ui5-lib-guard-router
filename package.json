@@ -66,7 +66,7 @@
 		"@commitlint/cli": "^21.2.4",
 		"@commitlint/config-conventional": "^21.2.4",
 		"@openui5/types": "^1.154.0",
-		"@oxlint/plugins": "1.94.0",
+		"@oxlint/plugins": "^1.94.0",
 		"@sapui5/types": "^1.154.0",
 		"@stryker-mutator/core": "^10.1.1",
 		"@stryker-mutator/typescript-checker": "^10.1.1",
