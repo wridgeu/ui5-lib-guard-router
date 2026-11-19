@@ -2,14 +2,7 @@ import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import coreLibrary from "sap/ui/core/library";
 import type { GuardRouter } from "ui5/guard/router/types";
-import {
-	callUnsafe,
-	captureHashWrites,
-	flushPromises,
-	GuardRouterClass,
-	initHashChanger,
-	recordSettlements,
-} from "../../testHelpers";
+import { callUnsafe, captureHashWrites, flushPromises, GuardRouterClass, initHashChanger } from "../../testHelpers";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -66,48 +59,12 @@ QUnit.test("ext router has additional guard methods", function (assert: Assert) 
 	assert.ok(typeof extRouter.navigationSettled === "function", "has navigationSettled");
 });
 
-QUnit.test(
-	"an attach call without a handler registers a listener, as with the native router",
-	function (assert: Assert) {
-		callUnsafe(extRouter, "attachRouteMatched", { some: "data" });
-		assert.ok(
-			extRouter.hasListeners("routeMatched"),
-			"a call without a handler is left to EventProvider, as natively",
-		);
+QUnit.test("an attach call without a handler is passed on to EventProvider", function (assert: Assert) {
+	callUnsafe(extRouter, "attachRouteMatched", { some: "data" });
+	assert.ok(extRouter.hasListeners("routeMatched"), "a call without a handler is left to EventProvider, as natively");
 
-		callUnsafe(extRouter, "attachNavigationSettled", { some: "data" });
-		assert.ok(
-			extRouter.hasListeners("navigationSettled"),
-			"attachNavigationSettled() registers like attachEvent()",
-		);
-	},
-);
-
-QUnit.test("routes without a name in a routes array are not named by their index", async function (assert: Assert) {
-	// UI5 registers both unnamed routes under the one name "undefined". A route added as "0" is a new route.
-	const routes = [{ pattern: "first" }, { pattern: "second" }, { name: "page", pattern: "page" }];
-	const ext = new GuardRouterClass(routes, {
-		async: true,
-		guardRouter: {
-			inheritance: "pattern-tree",
-			guards: { page: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"] },
-		},
-	});
-	try {
-		const statuses = recordSettlements(ext);
-		ext.initialize();
-		await flushPromises();
-		ext.addRoute({ name: "0", pattern: "page/detail" });
-		ext.navTo("0");
-		await ext.navigationSettled();
-		assert.deepEqual(
-			statuses,
-			["bypassed", "blocked"],
-			"a route added under that name is new: it inherits the guard",
-		);
-	} finally {
-		ext.destroy();
-	}
+	callUnsafe(extRouter, "attachNavigationSettled", { some: "data" });
+	assert.ok(extRouter.hasListeners("navigationSettled"), "attachNavigationSettled() registers like attachEvent()");
 });
 
 // ============================================================

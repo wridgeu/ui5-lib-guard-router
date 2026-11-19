@@ -217,6 +217,28 @@ QUnit.test("leave guard allows, full pipeline runs in order", function (assert: 
 	assert.deepEqual(order, ["leave", "global", "route"]);
 });
 
+for (const [kind, add, context] of [
+	["enter", "addEnterGuard", createContext({ toRoute: "route" })],
+	["leave", "addLeaveGuard", createContext({ fromRoute: "route" })],
+] as const) {
+	QUnit.test(`${kind} guard registered before another guard of the route runs in front of it`, function (assert) {
+		const pipeline = new GuardPipeline();
+		const order: string[] = [];
+		const record = (name: string) => (): boolean => {
+			order.push(name);
+			return true;
+		};
+		const second = record("second");
+		pipeline[add]("route", record("first"));
+		pipeline[add]("route", second);
+		pipeline[add]("route", record("inserted"), second);
+		pipeline[add]("route", record("appended"), record("unregistered"));
+
+		void pipeline.evaluate(context);
+		assert.deepEqual(order, ["first", "inserted", "second", "appended"]);
+	});
+}
+
 // ============================================================
 // Module: leave guards
 // ============================================================

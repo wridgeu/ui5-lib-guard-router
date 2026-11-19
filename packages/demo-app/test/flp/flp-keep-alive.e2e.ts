@@ -1,5 +1,6 @@
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
+import { getDirtyState } from "../shared/models";
 import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
@@ -30,16 +31,6 @@ async function navigateCrossApp(shellHash: string): Promise<boolean> {
 	}
 }
 
-async function isFormDirty(): Promise<unknown> {
-	return browser.execute(
-		(componentId: string): unknown => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			return Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
-		},
-		await getAppComponentId(),
-	);
-}
-
 /**
  * Keep-alive: with `sap-keep-alive=true` the launchpad hides the demo app and keeps its
  * component when the user navigates to another app. Isolated spec file: the page is loaded
@@ -63,13 +54,13 @@ describe("FLP keep-alive (isolated session)", () => {
 		expect(await navigateCrossApp("peer-display")).toBe(true);
 		await waitForComponent(PEER_APP_ID);
 		expect(await getAppComponentId()).toBe(componentId);
-		expect(await isFormDirty()).toBe(true);
+		expect(await getDirtyState()).toBe(true);
 
 		// The demo app is hidden with unsaved data. Coming back to it loses nothing.
 		expect(await navigateCrossApp("app-preview")).toBe(false);
 		await waitForRouterRunningInFlp();
 		expect(await getAppComponentId()).toBe(componentId);
-		expect(await isFormDirty()).toBe(true);
+		expect(await getDirtyState()).toBe(true);
 
 		// It is shown again, so leaving it asks again.
 		expect(await navigateCrossApp("peer-display")).toBe(true);

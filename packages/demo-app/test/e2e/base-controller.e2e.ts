@@ -1,3 +1,4 @@
+import type BaseController from "../../webapp/controller/BaseController";
 import { CONTROLS, getAppComponentId } from "../shared/controls";
 import { waitForPage } from "./helpers/wait";
 
@@ -8,16 +9,9 @@ describe("BaseController", () => {
 			(componentId: string) => {
 				const Component = sap.ui.require("sap/ui/core/Component");
 				const controller = Component.getComponentById(componentId).byId("homeView")?.getController();
-				if (!controller) {
-					throw new Error('View "homeView" has no controller');
-				}
-				// getModel is protected: read it from the instance of the real Home controller.
-				const getModel: unknown = Reflect.get(controller, "getModel");
-				if (typeof getModel !== "function") {
-					throw new Error("The Home controller has no getModel method");
-				}
 				try {
-					getModel.call(controller, "missing");
+					// getModel is protected, which the bracket access gets past.
+					(controller as BaseController)["getModel"]("missing");
 				} catch (error) {
 					return error instanceof Error ? error.message : String(error);
 				}

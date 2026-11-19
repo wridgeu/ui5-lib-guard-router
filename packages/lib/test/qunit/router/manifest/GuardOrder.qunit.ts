@@ -1,6 +1,6 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import type { GuardFn, GuardRouter, GuardRouterOptions, Router$NavigationSettledEvent } from "ui5/guard/router/types";
+import type { GuardRouter, GuardRouterOptions, Router$NavigationSettledEvent } from "ui5/guard/router/types";
 import {
 	captureErrors,
 	captureWarnings,
@@ -45,7 +45,7 @@ function firstSettlement(target: GuardRouter): Promise<NavigationOutcome> {
 	});
 }
 
-function pushCall(probe: LazyProbe, name: string): GuardFn {
+function pushCall(probe: LazyProbe, name: string): () => true {
 	return () => {
 		probe.calls.push(name);
 		return true;
@@ -104,36 +104,44 @@ QUnit.test("entries keep their declared positions, and a duplicate entry runs tw
 	assert.deepEqual(probe.calls, expected, "later navigation, within navTo");
 });
 
-for (const [added, initial] of [
-	["a descendant", { name: "employees", pattern: "employees" }],
-	["an ancestor", { name: "employee", pattern: "employees/{id}" }],
-] as const) {
-	QUnit.test(
-		`pattern-tree: after addRoute() of ${added}, ancestor guards still run before descendant guards`,
-		async function (assert: Assert) {
-			const cached = `${FIXTURES}/lazyCachedGuard`;
-			await loadModule(cached);
-			const probe = await loadProbe();
-			router = new GuardRouterClass([{ name: "home", pattern: "" }, initial], {
-				async: true,
-				guardRouter: {
-					inheritance: "pattern-tree",
-					unknownRouteRegistration: "ignore",
-					guards: { employee: [`${cached}#1`], employees: [`${cached}#0`] },
-				},
-			});
-			router.initialize();
-			await waitForRoute(router, "home");
-			router.addRouteGuard("employee", pushCall(probe, "programmatic"));
+for (const type of ["enter", "leave"] as const) {
+	for (const [added, initial] of [
+		["a descendant", { name: "employees", pattern: "employees" }],
+		["an ancestor", { name: "employee", pattern: "employees/{id}" }],
+	] as const) {
+		QUnit.test(
+			`pattern-tree: after addRoute() of ${added}, ancestor ${type} guards still run before descendant guards`,
+			async function (assert: Assert) {
+				const cached = `${FIXTURES}/lazyCachedGuard`;
+				await loadModule(cached);
+				const probe = await loadProbe();
+				router = new GuardRouterClass([{ name: "home", pattern: "" }, initial], {
+					async: true,
+					guardRouter: {
+						inheritance: "pattern-tree",
+						unknownRouteRegistration: "ignore",
+						guards: { employee: { [type]: [`${cached}#1`] }, employees: { [type]: [`${cached}#0`] } },
+					},
+				});
+				router.initialize();
+				await waitForRoute(router, "home");
+				if (type === "enter") router.addRouteGuard("employee", pushCall(probe, "programmatic"));
+				else router.addLeaveGuard("employee", pushCall(probe, "programmatic"));
 
-			if (initial.name === "employees") router.addRoute({ name: "employee", pattern: "employees/{id}" });
-			else router.addRoute({ name: "employees", pattern: "employees" });
-			router.navTo("employee", { id: "1" });
-			assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+				if (initial.name === "employees") router.addRoute({ name: "employee", pattern: "employees/{id}" });
+				else router.addRoute({ name: "employees", pattern: "employees" });
+				router.navTo("employee", { id: "1" });
+				assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+				if (type === "leave") {
+					assert.deepEqual(probe.calls, [], "no leave guard runs on entering");
+					router.navTo("home");
+					await router.navigationSettled();
+				}
 
-			assert.deepEqual(probe.calls, ["cachedFirst", "cachedSecond", "programmatic"]);
-		},
-	);
+				assert.deepEqual(probe.calls, ["cachedFirst", "cachedSecond", "programmatic"]);
+			},
+		);
+	}
 }
 
 QUnit.test("block mode guards the first navigation", async function (assert: Assert) {

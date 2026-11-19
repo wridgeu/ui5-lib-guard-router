@@ -175,6 +175,36 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"a redirect with componentTargetInfo that is superseded before UI5 writes its hash is cancelled",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", (): GuardRedirect => ({
+			route: "detail",
+			parameters: { id: "7" },
+			componentTargetInfo: { nested: { route: "list" } },
+		}));
+		let leftRoute: string | undefined;
+		router.addRouteGuard("forbidden", (context: GuardContext) => {
+			leftRoute = context.fromRoute;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		router.navTo("protected");
+		assert.deepEqual(statuses, [], "the redirect waits for its hash");
+		router.navTo("forbidden");
+
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Committed]);
+		assert.strictEqual(leftRoute, "home", "the next navigation leaves the route that is shown");
+		// The deferred hash of the redirect target arrives as a navigation of its own.
+		await flushPromises();
+		await flushPromises();
+		assert.strictEqual(getHash(), "detail/7");
+	},
+);
+
 // ============================================================
 // Module: Redirect edge cases
 // ============================================================
