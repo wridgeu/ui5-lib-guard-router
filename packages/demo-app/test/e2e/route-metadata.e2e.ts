@@ -1,5 +1,7 @@
 import { CONTROLS, type ControlRef, getControl, press } from "../shared/controls";
-import { expectHashToBe, fireEvent, startAtHome, waitForPage } from "./helpers";
+import { expectHashToBe, waitForPage } from "./helpers/wait";
+import { fireEvent } from "./helpers/browser";
+import { startAtHome } from "./helpers/scenarios";
 
 const EMPLOYEES_META = { section: "hr", requiresAuth: true };
 const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };

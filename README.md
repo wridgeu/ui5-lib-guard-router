@@ -134,7 +134,7 @@ packages/
   lib/          ui5.guard.router library (Router + types) and its QUnit tests
   demo-app/     Demo app with auth guards, a nested component, FLP preview, and guided scenarios
 scripts/        CI helpers, layout check, pack smoke test, release plan, and vendored parity tooling
-tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-guardrails)
+tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-guardrails), Chrome profile hooks of the wdio configs
 ```
 
 ## Contributing

@@ -1,14 +1,8 @@
 import type BaseLog from "sap/base/Log";
 import { CONTROLS, press } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	expectKeptOnHome,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { expectKeptOnHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 describe("Redirect chain: admin -> protected -> home", () => {
 	beforeEach(async () => {

@@ -1,14 +1,8 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	expectKeptOnHome,
-	setBrowserHash,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { setBrowserHash } from "./helpers/browser";
+import { expectKeptOnHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 describe("Direct URL navigation with guards", () => {
 	beforeEach(async () => {

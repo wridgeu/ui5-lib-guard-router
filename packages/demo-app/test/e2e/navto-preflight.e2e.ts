@@ -1,14 +1,8 @@
 import { CONTROLS, press } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	expectKeptOnHome,
-	getHistoryLength,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { getHistoryLength } from "./helpers/browser";
+import { expectKeptOnHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 describe("navTo preflight - history guarantees", () => {
 	beforeEach(async () => {

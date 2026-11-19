@@ -1,5 +1,5 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
-import { waitForPage } from "./helpers";
+import { waitForPage } from "./helpers/wait";
 
 describe("Basic routing (no guard interaction)", () => {
 	it("should load Home view at root hash with default auth state", async () => {

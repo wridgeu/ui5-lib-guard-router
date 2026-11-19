@@ -1,16 +1,8 @@
 import { CONTROLS, press, waitForComponent } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	fireEvent,
-	getHistoryLength,
-	loginAndGoToProtected,
-	navBackToHome,
-	setBrowserHash,
-	startAtHome,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { loginAndGoToProtected, navBackToHome, startAtHome } from "./helpers/scenarios";
 
 describe("UI5 in-app nav back button", () => {
 	it("should navigate back to Home via the Page nav button", async () => {

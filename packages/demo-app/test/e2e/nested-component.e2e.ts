@@ -8,7 +8,9 @@ import {
 	waitForComponent,
 } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
-import { expectHashToBe, fireEvent, getHistoryLength, setBrowserHash, startAtHome, waitForPage } from "./helpers";
+import { expectHashToBe, waitForPage } from "./helpers/wait";
+import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { startAtHome } from "./helpers/scenarios";
 
 const OVERVIEW_HASH = "#/reports";
 const SALES_HASH = "#/reports&/reports/sales";

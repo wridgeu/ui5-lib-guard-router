@@ -1,5 +1,5 @@
 import suite from "./qunit/testsuite.qunit";
-import { chromeProfileHooks } from "./wdio-chrome-profile";
+import { chromeProfileHooks } from "../../../tools/wdio-chrome-profile";
 
 const baseUrl = process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080";
 

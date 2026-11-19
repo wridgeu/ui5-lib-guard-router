@@ -258,3 +258,24 @@ export async function expectAppHashToBe(expected: string, options: AppHashWaitOp
 		},
 	);
 }
+
+/**
+ * On Protected with a dirty form: navigate to "home" through the router and assert that the
+ * leave guard blocked it without an FLP confirm dialog.
+ */
+export async function expectInAppNavigationBlocked(): Promise<void> {
+	const settlementRevision = await getRuntimeSettlementRevision();
+	const { record, cleanup } = installDialogHandler(true);
+
+	try {
+		await navigateToRouteInFlp("home");
+
+		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
+		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
+		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
+		await expectControlText(CONTROLS.protected.protectedCurrentHashText, "#/protected");
+		expect(record.called).toBe(false);
+	} finally {
+		cleanup();
+	}
+}

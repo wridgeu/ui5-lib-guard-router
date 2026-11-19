@@ -1,6 +1,6 @@
 import { CONTROLS, press } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import { expectKeptOnHome, loginAndGoToProtected, navBackToHome, startAtHome, toggleLogin } from "./helpers";
+import { expectKeptOnHome, loginAndGoToProtected, navBackToHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 /** On Home: press a navigation button whose guard redirects to Home. */
 async function pressAndExpectRedirectHome(button: "navProtectedBtn" | "navForbiddenBtn"): Promise<void> {

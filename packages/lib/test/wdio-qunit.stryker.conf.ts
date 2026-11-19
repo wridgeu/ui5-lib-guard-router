@@ -1,4 +1,4 @@
-import { chromeProfileHooks } from "./wdio-chrome-profile";
+import { chromeProfileHooks } from "../../../tools/wdio-chrome-profile";
 import { config as baseConfig } from "./wdio-qunit.conf";
 
 interface StrykerNamespace {

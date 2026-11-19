@@ -1,13 +1,8 @@
 import { CONTROLS, expectControlText, getAppComponentId, press } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	setBrowserHash,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { setBrowserHash } from "./helpers/browser";
+import { startAtHome, toggleLogin } from "./helpers/scenarios";
 
 /**
  * The guard of the retired "team" route redirects to "staff", the legacy name of "employees".

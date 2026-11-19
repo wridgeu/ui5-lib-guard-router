@@ -1,5 +1,5 @@
 import type { wdi5Config } from "wdio-ui5-service";
-import { chromeProfileHooks } from "../../lib/test/wdio-chrome-profile";
+import { chromeProfileHooks } from "../../../tools/wdio-chrome-profile";
 
 // Number formats depend on the locale: the expected texts are those of "en".
 const url = new URL(process.env.UI5_TEST_BASE_URL ?? "http://localhost:8080/index.html");

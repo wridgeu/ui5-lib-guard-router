@@ -1,15 +1,8 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
 import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
-import {
-	expectHashToBe,
-	fireEvent,
-	getHistoryEntryIndex,
-	getHistoryLength,
-	loginAndGoToProtected,
-	startAtHome,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { fireEvent, getHistoryEntryIndex, getHistoryLength } from "./helpers/browser";
+import { loginAndGoToProtected, startAtHome } from "./helpers/scenarios";
 
 /** On Protected: set the form state and assert that the page shows it. */
 async function setDirtyOnProtected(isDirty: boolean): Promise<void> {

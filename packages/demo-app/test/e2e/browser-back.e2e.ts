@@ -1,14 +1,7 @@
 import { CONTROLS } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
-import {
-	expectHashToBe,
-	expectKeptOnHome,
-	loginAndGoToProtected,
-	startAtHome,
-	toggleLogin,
-	waitForPage,
-	waitForRuntimeSettlement,
-} from "./helpers";
+import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
+import { expectKeptOnHome, loginAndGoToProtected, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 /** On Protected: go back in the browser history and assert that the navigation to Home committed. */
 async function browserBackToHome(): Promise<void> {
