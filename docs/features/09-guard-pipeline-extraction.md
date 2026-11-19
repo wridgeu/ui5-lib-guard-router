@@ -67,10 +67,9 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 **Private methods (moved from Router):**
 
 - `_runForEach(routes, context, run, start)` — runs leave or enter guards route by route (greedy routes), sync until a run returns a Promise
-- `_runLeaveGuards(route, context)` — runs the leave guards of one leaving route
 - `_runEnterGuards(entering, context)` — global guards, then the route guards of each entering route; reads `this._globalGuards` directly
 - `_runRouteGuards(toRoute, context)`
-- `_runGuards(guards, context, route)`
+- `_runGuards(guards, context, route, onBlock, label)` — the sync loop for leave and enter guards
 - `_continueGuardsAsync(pendingResult, guards, currentIndex, context, onBlock, label, route)`
 - `_validateGuardResult(result)`
 - `_validateLeaveGuardResult(result)`

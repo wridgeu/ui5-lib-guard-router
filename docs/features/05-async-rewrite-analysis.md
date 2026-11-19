@@ -302,10 +302,10 @@ The sync-first approach matches UI5's routing model well:
 
 ### Dual-Path Complexity
 
-`GuardPipeline.ts` has six guard-running methods:
+`GuardPipeline.ts` has five guard-running methods:
 
 - `_runForEach()`: runs leave or enter guards route by route (greedy routes), sync until a run returns a Promise
-- `_runLeaveGuards()` and `_runGuards()`: sync loops for leave and enter guards
+- `_runGuards()`: the sync loop, shared by leave and enter guards
 - `_continueGuardsAsync()`: async continuation, shared by leave and enter guards
 - `_runEnterGuards()`: coordinator for global, then route enter guards
 - `_runRouteGuards()`: route enter guards, if any are registered
