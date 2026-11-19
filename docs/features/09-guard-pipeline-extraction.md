@@ -66,11 +66,12 @@ The pipeline imports `sap/base/Log` for guard validation warnings and error logg
 
 **Private methods (moved from Router):**
 
-- `_runLeaveGuards(registered, context)` — receives the leave guards that `evaluate()` looked up via `context.fromRoute`
-- `_runEnterGuards(toRoute, context)` — reads `this._globalGuards` directly (no longer needs `globalGuards` parameter)
+- `_runForEach(routes, context, run, start)` — runs leave or enter guards route by route (greedy routes), sync until a run returns a Promise
+- `_runLeaveGuards(route, context)` — runs the leave guards of one leaving route
+- `_runEnterGuards(entering, context)` — global guards, then the route guards of each entering route; reads `this._globalGuards` directly
 - `_runRouteGuards(toRoute, context)`
-- `_runGuards(guards, context)`
-- `_continueGuardsAsync(pendingResult, guards, currentIndex, context, onBlock, label, isLeaveGuard)`
+- `_runGuards(guards, context, route)`
+- `_continueGuardsAsync(pendingResult, guards, currentIndex, context, onBlock, label, route)`
 - `_validateGuardResult(result)`
 - `_validateLeaveGuardResult(result)`
 
@@ -138,7 +139,7 @@ private _pipeline = new GuardPipeline();
 ### Removed
 
 - `_globalGuards`, `_enterGuards`, `_leaveGuards` fields
-- `_evaluateGuards`, `_runLeaveGuards`, `_runEnterGuards`, `_runRouteGuards`, `_runGuards`, `_continueGuardsAsync`, `_validateGuardResult`, `_validateLeaveGuardResult` methods (8 methods)
+- `_evaluateGuards`, `_runLeaveGuards`, `_runEnterGuards`, `_runRouteGuards`, `_runGuards`, `_continueGuardsAsync`, `_validateGuardResult`, `_validateLeaveGuardResult` methods (8 methods). Router later got a thin `_evaluateGuards(context, redirectHop)` back: it calls `this._pipeline.evaluate()` with the greedy routes that leave and enter, and skips leave guards on a redirect hop
 - Module-level `isGuardRedirect`, `addToGuardMap`, `removeFromGuardMap` functions
 - `GuardContextBase` type (Router now builds the full `GuardContext` with signal directly)
 
@@ -171,7 +172,7 @@ const decision = this._pipeline.evaluate(context);
 
 ### Unchanged
 
-- `navTo()`, `parse()` — same control flow, just call `this._pipeline.evaluate()` instead of `this._evaluateGuards()`
+- `navTo()`, `parse()` — same control flow; the guard logic they reach through `_evaluateGuards()` is in `this._pipeline.evaluate()`
 - `_applyPreflightDecision`, `_applyDecision`, `_redirect`, `_blockNavigation`, `_commitNavigation`, `_restoreHash` — all Router state management
 - `NavigationAttempt`, `RouterPhase`, phase state machine
 - `_warnIfRouteUnknown` (since renamed `_handleUnknownRouteRegistration`) — stays on Router (needs `this.getRoute()`)

@@ -174,8 +174,8 @@ The navTo override concept was later adopted as one half of a two-entry-point de
 
 - **Complete coverage**: Every navigation path (programmatic `navTo`, browser back/forward, URL bar changes) flows through `parse()`. One override catches everything.
 - **Earliest possible interception**: Guards run before route matching, target loading, view creation, and event firing. No flash, no unnecessary work.
-- **Clean blocking**: When a guard blocks, we simply don't call `super.parse()`. The framework never begins processing. We restore the previous hash via `replaceHash()`.
-- **Minimal surface**: Single method override. Less code, fewer bugs, easier to maintain.
+- **Clean blocking**: When a guard blocks, we simply don't call `super.parse()`. The framework never begins processing. The router undoes the hash change: a history step back, or a write of the full previous hash ([Undoing a hash change](architecture.md#undoing-a-hash-change)).
+- **One place for every hash change**: `parse()` catches all of them; a `navTo()` preflight and the lifecycle overrides (`initialize`, `stop`, `destroy`) sit alongside it.
 - **Async-friendly**: Synchronous guards execute in the same tick as the hash change. Async guards are supported via a deferred path with a generation counter to handle concurrent navigations.
 
 **Cons**:
@@ -415,10 +415,9 @@ If a guard blocks the very first navigation (where `_currentHash` is `null`):
 
 ## 6. Related Work and References
 
-- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): The primary issue motivating this project
+- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): The primary issue motivating this project; SAP tracks it internally as CPOUI5FRAMEWORK-338
 - [UI5/openui5#3094](https://github.com/UI5/openui5/issues/3094): Auth protection (server-side vs client-side)
 - [UI5/openui5#1326](https://github.com/UI5/openui5/issues/1326): Earliest "protect a route" request (2017)
-- [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411): CPOUI5FRAMEWORK-338, SAP internal backlog item (unimplemented as of 2026)
 - [DSAG UI5 Best Practice: Routing](https://1dsag.github.io/UI5-Best-Practice/routing/): Community routing guidelines
 - [Vue Router Navigation Guards](https://router.vuejs.org/guide/advanced/navigation-guards.html): The gold standard for SPA navigation guards
 - [Plunker: UI5 preventing navigation](https://embed.plnkr.co/wp6yes): @boghyon's sample for focus handling + navigation prevention

@@ -204,7 +204,10 @@ flowchart TD
     samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
     moved -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
     moved -- "no" --> match(["super.parse()<br/>the route matches again"])
-    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
+    samehash -- "no" --> cancelprev["resolve route<br/>_cancelPendingNavigation()"]
+    cancelprev --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
+    handlermoved -- "yes" --> ret
+    handlermoved -- "no" --> setup["_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
 
     setup --> evaluate["_pipeline.evaluate(context)"]
     evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
@@ -319,16 +322,19 @@ with the incoming hash, which transitions to idle and commits without re-running
 This avoids double evaluation while keeping `parse()` as the authoritative commit path.
 
 If `parse()` is not called inside `super.navTo()`, `_commitAfterNavTo()` commits the
-navigation and settles it. There are two cases:
+navigation and settles it, or reports that the caller must block it. There are three cases:
 
 - The hash changer already shows the target hash, so no hash change comes. The router calls
   `super.parse()` itself and the route matches.
 - UI5 writes the hash later. That is the case with `componentTargetInfo`: UI5 first loads
-  the nested components, collects their hashes and then writes one combined hash. The router
-  commits and settles at once but does not call `super.parse()`. The route matches when
-  `parse()` receives that hash, which is the committed hash by then (same-hash branch), as it
-  does natively. Matched earlier, the route would display the nested component, and fire its
-  own `routeMatched`, before UI5 has set the hash of that component.
+  the nested components, collects their hashes and then writes one combined hash. The
+  navigation waits in the `awaitingHash` phase. It commits and settles when `parse()` receives
+  that hash, and the route matches then, as it does natively. Committed earlier, the router
+  would be on a route that UI5 does not display if the hash is never written: UI5 writes none
+  when a nested component fails to load, and none on a router that is not async. Such a
+  navigation stays pending until the next navigation, `stop()` or `destroy()` settles it as
+  `Cancelled`. A navigation that supersedes the pending one does the same; the hash that UI5
+  then still writes is a hash change like any other, guarded in `parse()`.
 - Neither: the hash changer refused the hash change. The Fiori launchpad does that while it
   asks the user about unsaved data and the user cancels. Nothing changed, so the navigation
   settles as `Blocked`.
@@ -344,8 +350,9 @@ again and the route matches again in the same-hash branch of `parse()`. The call
 `skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
 guards. Both go through `_navigateAllowed()`. If `super.navTo()` throws there, the phase is
 reset to idle, so the next hash change runs its guards instead of being committed as
-already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` in the idle
-phase and `parse()` evaluates the guards.
+already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` without
+touching the phase and `parse()` evaluates the guards: a pending navigation is superseded
+there, by the hash change, so that a block undoes both hash changes.
 
 The preflight needs a router that listens to hash changes. While `isInitialized()` is false,
 `navTo()` only calls `super.navTo()` (behavior: library README, [Lifecycle](../../packages/lib/README.md#lifecycle)):
@@ -584,7 +591,7 @@ flowchart TD
     start(["evaluate(context)"]) --> lcheck{"leave guards for fromRoute<br/>and alsoLeaving?<br/>(skipped on redirect hops)"}
 
     subgraph phase1 ["Phase 1: leave guards"]
-        lrun["_runLeaveGuards()"]
+        lrun["_runGuards(leaveGuards)"]
         lfin["_continueGuardsAsync()"]
     end
 
@@ -762,8 +769,9 @@ ensures:
 - Multiple callers of `navigationSettled()` for the same navigation all receive the same result
 - Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
 - `_commitNavigation` uses the phase origin (committing/redirect vs. other) and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
-- `_cancelPendingNavigation` only flushes when the router is in the evaluating phase, avoiding
-  spurious settlement signals during initialization or when no navigation is in flight
+- `_cancelPendingNavigation` flushes only when the router is evaluating or awaiting a hash
+  (`Cancelled`), or restoring (the result that phase stored), avoiding spurious settlement
+  signals during initialization or when no navigation is in flight
 - A navigation that did not commit (`Blocked`, `Error`, `Cancelled` with a restore, a
   `Redirected` to the committed hash) goes through `_settleUncommitted()`, which restores the
   hash before it flushes. Handlers run on the final URL, and a hash that a handler sets is not
@@ -1197,8 +1205,9 @@ and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#pri
 | `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                                                    |
 | `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                                                    |
 | `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                                                       |
+| `_manifestGuards`          | `{ descriptor, fn }[]`                 | The manifest guards registered for a route, by which `addRoute()` puts inherited guards in front of the guards of deeper routes                                            |
 | `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                                                |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                    | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                                      |
+| `_sourceDescriptors`       | `ManifestGuardDescriptor[]`            | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                                      |
 | `_destroyed`               | `boolean`                              | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op                                  |
 | `_nativeMatching`          | `boolean`                              | The value UI5 wrote to `_bMatchingProcessStarted` (see [UI5 Internals the Router Relies On](#ui5-internals-the-router-relies-on))                                          |
 | `_matchWaiters`            | `(() => void)[]`                       | Promise resolve functions that wait for a `routeMatched`, resolved when a navigation ends without a route match                                                            |
@@ -1212,14 +1221,15 @@ Two variables live at module scope, because they describe the browser and are sh
 all routers: `lastStep` (the last step through the history, from the Navigation API) and
 `undoneHref` (the URL a router is taking a step back from).
 
-`RouterPhase` is a discriminated union with four variants:
+`RouterPhase` is a discriminated union with five variants:
 
-| Phase        | Shape                                                                                         | Description                                                                                                                                                                                                                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idle`       | `{ kind: "idle" }`                                                                            | No navigation in progress                                                                                                                                                                                                                                                                |
-| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                        | Guards are running; attempt carries hash, route, AbortController, generation, `restoreHash`; `postponed` is set while the navigation waits for async guards                                                                                                                              |
-| `committing` | `{ kind: "committing", route: string, origin: "preflight" \| "redirect" \| "parse" }`         | Navigation is being committed; `origin` distinguishes the entry path                                                                                                                                                                                                                     |
-| `restoring`  | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }` | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route with `componentTargetInfo`) |
+| Phase          | Shape                                                                                                                                                                  | Description                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idle`         | `{ kind: "idle" }`                                                                                                                                                     | No navigation in progress                                                                                                                                                                                                                                                                                                                     |
+| `evaluating`   | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                                                                                                 | Guards are running; attempt carries hash, AbortController, generation, `restoreHash`, `direction`; `postponed` is set while the navigation waits for async guards                                                                                                                                                                             |
+| `committing`   | `{ kind: "committing", route: string, hash: string, origin: "preflight" \| "redirect" \| "parse", direction?: Direction, restoreHash: boolean, writtenOver?: string }` | Navigation is being committed: `parse()` commits it when it receives `hash`, and guards any other hash as a navigation of its own; `origin` distinguishes the entry path; `direction` (how the browser got to the history entry) drives `_alignTitleHistory()`; `restoreHash` and `writtenOver` say how to undo the hash that `navTo()` wrote |
+| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                    | An allowed `navTo()` with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                                 |
+| `restoring`    | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }`                                                                          | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route with `componentTargetInfo`)                                                      |
 
 How a navigation moves through the phases, with the `NavigationOutcome` it settles with:
 
@@ -1231,9 +1241,13 @@ stateDiagram-v2
     evaluating --> committing: navTo() or redirect allowed, hash write pending
     evaluating --> idle: hash change allowed → Committed or Bypassed
     committing --> idle: parse() receives the hash → Committed, Bypassed or Redirected
+    committing --> awaitingHash: component targets, UI5 writes the hash later
+    awaitingHash --> idle: parse() receives the hash → Committed or Redirected
+    awaitingHash --> idle: superseded, stop() or destroy() → Cancelled
     evaluating --> idle: Blocked, Error, Redirected to the shown route, URL already right
     evaluating --> restoring: Blocked, Error, Redirected to the shown route, URL must come back
     restoring --> idle: URL is back → settles with its result
+    restoring --> idle: superseded, stop() or destroy() → settles with its result
     evaluating --> idle: superseded, stop() or destroy() → Cancelled
 ```
 

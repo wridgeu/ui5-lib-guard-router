@@ -176,7 +176,7 @@ UI5's router stays stopped after `stop()` until `initialize()` is called again, 
 
 ## Lazy mode and destroy safety
 
-In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` is synchronous -- there is no async module load before `super.initialize()`, so the destroy-during-init race window does not exist. The `_destroyed` sentinel check is only needed for block mode, where `initialize()` defers `super.initialize()` until modules have loaded.
+In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` is synchronous -- there is no async module load before `super.initialize()`, so the destroy-during-init race window does not exist. The module-load check of `_destroyed` in `initialize()` is only needed for block mode, where `initialize()` defers `super.initialize()` until modules have loaded. `parse()` and `destroy()` read `_destroyed` in every mode: `parse()` hands a hash change that reaches a destroyed router to the base router, and `destroy()` returns early on a second call.
 
 Mid-navigation destroy is handled in all modes by the generation counter and `AbortController`. When `destroy()` is called during a navigation:
 
@@ -186,11 +186,11 @@ Mid-navigation destroy is handled in all modes by the generation counter and `Ab
 
 ## Summary
 
-| Concern              | UI5 TargetCache                              | Guard Router                                |
-| -------------------- | -------------------------------------------- | ------------------------------------------- |
-| Sentinel field       | `_oCache` (nulled to `undefined`)            | `_destroyed` (set to `true`)                |
-| Check location       | `afterLoaded` callback                       | `.then()` in `initialize()`                 |
-| Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions) |
-| Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)   |
+| Concern              | UI5 TargetCache                              | Guard Router                                                                      |
+| -------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
+| Sentinel field       | `_oCache` (nulled to `undefined`)            | `_destroyed` (set to `true`)                                                      |
+| Check location       | `afterLoaded` callback                       | `.then()` in `initialize()` (block mode); `parse()` and `destroy()` in every mode |
+| Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions)                                       |
+| Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)                                         |
 
 [targetcache-src]: https://github.com/UI5/openui5/blob/1.144.0/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js

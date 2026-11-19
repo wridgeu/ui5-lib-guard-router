@@ -82,6 +82,8 @@ interface RedirectChainContext {
 	restoreHash: boolean; // whether to restore hash on block
 	fromRoute: string; // original source route (user's current)
 	fromHash: string; // original source hash
+	replace: boolean | undefined; // bReplace of the navTo() that started the chain, true after a hash change
+	direction: Direction | undefined; // how the browser got to the entry the target replaces (title history)
 	signal: AbortSignal; // shared signal from original navigation
 	generation: number; // shared generation counter
 	bag: Map<string, unknown>; // shared bag from original navigation
@@ -289,8 +291,9 @@ target), the redirect target's guards are evaluated normally. If they allow, the
 navigation settles as `NavigationOutcome.Redirected` without a commit: the route does
 not match again and no hash is written; a hash change the navigation arrived with is
 undone (see the library README, [Browser history](../../packages/lib/README.md#browser-history)).
-A redirect with non-empty `componentTargetInfo`, whose hash change arrives later, and a
-redirect to a hash the URL already shows are committed directly by `_applyRedirectDecision`.
+A redirect to a hash the URL already shows is committed directly by `_applyRedirectDecision`.
+A redirect with non-empty `componentTargetInfo` commits when UI5 writes its hash, as a
+`navTo()` with `componentTargetInfo` does (the `awaitingHash` phase).
 
 ### Settlement
 
@@ -329,13 +332,15 @@ Both `_applyPreflightDecision` and `_applyDecision` call `_startRedirectChain()`
 guard decision is "redirect". It creates the initial chain context:
 
 ```typescript
-private _startRedirectChain(target: string | GuardRedirect, hash: string, bag: Map<string, unknown>, attempt: NavigationAttempt): void {
+private _startRedirectChain(target: string | GuardRedirect, hash: string, bag: Map<string, unknown>, attempt: NavigationAttempt, replace: boolean | undefined): void {
     const visited = new Set<string>();
     visited.add(hash); // hash of the route whose guard redirected
     this._redirect(target, {
         visited,
         attemptedHash: hash,
         restoreHash: attempt.restoreHash, // true for parse, and for a navTo that superseded a pending hash change
+        replace,
+        direction: attempt.direction,
         fromRoute: this._currentRoute,
         fromHash: this._currentHash ?? "",
         signal: attempt.controller.signal,

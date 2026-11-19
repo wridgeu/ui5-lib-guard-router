@@ -73,7 +73,7 @@ Rules that keep the layout working:
 
 - **Browser history steps** (`history.back()`, `forward()`, `go()`) belong only in the pages that run alone: `router/history`, `parity/nested`, `parity/guarded`, `parity/entries`, `parity/steps`. Chrome ignores a history step on a page that changed the hash about 200 times within ten seconds, so a history test on a busy page fails. `parity/guarded`, `parity/entries` and `parity/steps` also record what the browser does with its history entries and have to stay below that number, so a new test of that kind may need a page of its own.
 - **QUnit module names** are `"<Area> - <topic>"`, unique, and never shared by two files: a failing test is found by its module name.
-- **Helpers**: used by one file, they stay in the file; by one folder, in `<folder>/<folder>Helpers.ts`; by several folders, in `testHelpers.ts`. A module with tests that share one router gets its hooks from `routerHooks()`.
+- **Helpers**: used by one file, they stay in the file; by one folder, in `<folder>/<folder>Helpers.ts`; by several folders, in `testHelpers.ts`; by the sub-pages of one parent folder, in that parent folder (`parity/parityRecorder.ts`, `parity/nestedParityHarness.ts`). A module with tests that share one router gets its hooks from `routerHooks()`.
 - **Fixtures** are in `fixtures/<kind>/`; the `sap.app.id` of a fixture component matches its folder path.
 - **Demo tests**: selectors and model access shared by the standalone and the FLP suite are in `packages/demo-app/test/shared/`.
 - A test that the docs cite by file and title (the "Proven by" column of the compatibility table in the library README) is renamed or moved together with its citation; `npm run check:layout` fails for a citation that names no test.
@@ -120,7 +120,7 @@ Short maintainer conventions:
 - Use `[skip ci]` only for docs-only or issue-only commits that do not affect shipped code, tests, or build/release configuration.
 - Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
 - Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
-- If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
+- If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/README.md`, `packages/demo-app/README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml` and `packages/demo-app/ui5-flp.yaml`. The UI5 type packages in the root `package.json` only need to be at least the baseline.
   Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
 - For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 

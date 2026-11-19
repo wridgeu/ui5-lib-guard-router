@@ -8,7 +8,7 @@ The library's guard model runs guards inside the `parse()` override, which inter
 
 ## Solution
 
-Override `navTo()` to run the same shared guard pipeline (`_pipeline.evaluate()`, originally `_evaluateGuards()`) _before_ calling `super.navTo()`. This gives two entry points into one pipeline:
+Override `navTo()` to run the same shared guard pipeline (`_evaluateGuards()`, which calls `_pipeline.evaluate()`) _before_ calling `super.navTo()`. This gives two entry points into one pipeline:
 
 - **`navTo()` preflight**: guards run before the hash changes. Blocked navigations never push a history entry. Redirected navigations go directly to the final target.
 - **`parse()` fallback**: guards run after the hash changes (browser back/forward, URL bar, direct `HashChanger.setHash()`). The router undoes a refused hash change, see [Browser history](../../packages/lib/README.md#browser-history).

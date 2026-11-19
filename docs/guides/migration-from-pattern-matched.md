@@ -72,7 +72,7 @@ No view renders for `"protected"` unless the guard returns `true`. A redirect to
 - All route definitions, patterns, and targets in `manifest.json` are unchanged.
 - `navTo()` calls throughout the application continue to work. The guard pipeline intercepts at the router level, not the `navTo` call site.
 - Views, controllers, and models require no changes beyond removing the old guard logic.
-- The router is a drop-in replacement for `sap.m.routing.Router`. All native router methods (`navTo`, `getRoute`, `attachRouteMatched`, etc.) are inherited and behave identically.
+- The router is a drop-in replacement for `sap.m.routing.Router`. Native router methods such as `getRoute` and `attachRouteMatched` keep their behavior. `navTo()` keeps its native signatures and, with no guards registered, behaves like the native one; with guards it runs them before it changes the hash, so a blocked call never changes it.
 
 ## If UI5 ships native guards
 

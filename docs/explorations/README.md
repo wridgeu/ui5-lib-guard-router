@@ -4,20 +4,20 @@ This folder contains research documents exploring alternative implementations fo
 
 ## At a Glance
 
-| #   | Document                                                         | Category      | Verdict                                                                                 |
-| --- | ---------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------- |
-| 01  | [Event-Based (PatternMatched)](#01---event-based-patternmatched) | Alternative   | Usable as quick workaround, but causes content flash and history pollution              |
-| 02  | [HashChanger Interception](#02---hashchanger-interception)       | Alternative   | Fragile, globally scoped, labeled "bad practice" by the UI5 team                        |
-| 03  | [Conditional Rendering](#03---conditional-rendering)             | Alternative   | Simplest for binary login/logout, but no per-route guards or deep linking               |
-| 04  | [Component Separation](#04---component-separation)               | Alternative   | SAP-recommended for code isolation, but heavy overhead and no per-route guards          |
-| 05  | [navTo with bReplace](#05---navto-with-breplace)                 | Complementary | Zero-risk fix for history pollution; already used internally by this library            |
-| 06  | [Framework Comparison](#06---framework-comparison)               | Reference     | Survey of Vue, Angular, React, TanStack, Ember, Nuxt, Next.js, SvelteKit guard patterns |
-| 07  | [navTo Override](#07---navto-override)                           | Alternative   | **Rejected.** Only catches programmatic navigation, misses back/forward and URL entry   |
-| 08  | [Leave Guards](#08---leave-guards)                               | Extension     | "Are you sure you want to leave?" guards for unsaved changes                            |
-| 09  | [Transition Object](#09---transition-object)                     | Extension     | Ember-inspired retry mechanism for "redirect to login, then resume" flows               |
-| 10  | [Route Metadata](#10---route-metadata)                           | Extension     | Declarative `requiresAuth`, `roles` on routes so one guard handles all checks           |
-| 11  | [Bypass Guards](#11---bypass-guards)                             | Extension     | Mechanism to skip guards for specific navigations (logout, post-login retry)            |
-| 12  | [TanStack Router Deep Dive](#12---tanstack-router-deep-dive)     | Reference     | Source-level analysis of TanStack Router's navigation pipeline and blocking model       |
+| #   | Document                                                         | Category      | Verdict                                                                                             |
+| --- | ---------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| 01  | [Event-Based (PatternMatched)](#01---event-based-patternmatched) | Alternative   | Usable as quick workaround, but causes content flash and history pollution                          |
+| 02  | [HashChanger Interception](#02---hashchanger-interception)       | Alternative   | Fragile, globally scoped, labeled "bad practice" by the UI5 team                                    |
+| 03  | [Conditional Rendering](#03---conditional-rendering)             | Alternative   | Simplest for binary login/logout, but no per-route guards or deep linking                           |
+| 04  | [Component Separation](#04---component-separation)               | Alternative   | SAP-recommended for code isolation, but heavy overhead and no per-route guards                      |
+| 05  | [navTo with bReplace](#05---navto-with-breplace)                 | Complementary | Zero-risk fix for history pollution; the library replaces the entry when it redirects a hash change |
+| 06  | [Framework Comparison](#06---framework-comparison)               | Reference     | Survey of Vue, Angular, React, TanStack, Ember, Nuxt, Next.js, SvelteKit guard patterns             |
+| 07  | [navTo Override](#07---navto-override)                           | Alternative   | **Rejected.** Only catches programmatic navigation, misses back/forward and URL entry               |
+| 08  | [Leave Guards](#08---leave-guards)                               | Extension     | **Implemented.** "Are you sure you want to leave?" guards for unsaved changes                       |
+| 09  | [Transition Object](#09---transition-object)                     | Extension     | Ember-inspired retry mechanism for "redirect to login, then resume" flows                           |
+| 10  | [Route Metadata](#10---route-metadata)                           | Extension     | **Implemented.** Declarative `requiresAuth`, `roles` on routes so one guard handles all checks      |
+| 11  | [Bypass Guards](#11---bypass-guards)                             | Extension     | **Implemented.** Mechanism to skip guards for specific navigations (logout, post-login retry)       |
+| 12  | [TanStack Router Deep Dive](#12---tanstack-router-deep-dive)     | Reference     | Source-level analysis of TanStack Router's navigation pipeline and blocking model                   |
 
 ## Alternative Approaches
 
@@ -59,7 +59,7 @@ Splits the app into a public Component (login) and an authenticated Component (t
 
 Uses `navTo`'s fourth parameter (`bReplace: true`) to replace the current history entry instead of pushing a new one. Prevents "back to login" after logging in.
 
-**When to use**: Always -- it's a zero-risk improvement. The guard router already uses this internally for redirects.
+**When to use**: Always -- it's a zero-risk improvement. The guard router replaces the history entry when it redirects a hash change; a redirected `navTo()` writes its target the way the call asked (a new entry unless it passed `bReplace`).
 
 > [05-navto-replace-history.md](05-navto-replace-history.md)
 
@@ -73,11 +73,11 @@ Overrides only `navTo()` to run guards before triggering navigation. Simple, but
 
 ## Extension Ideas
 
-These documents explore features that could be added on top of the current `parse()` override. All are designed to be backward compatible.
+These documents explore features on top of the `parse()` override. 08, 10 and 11 are implemented (see [features](../features/README.md)); 09 is still a proposal.
 
 ### 08 - Leave Guards
 
-"Are you sure you want to leave?" guards that prevent navigation **away** from a route (e.g., unsaved form data). Recommends `addLeaveGuard(routeName, fn)` / `removeLeaveGuard(routeName, fn)` as the primary API, with optional retry support and a React-inspired blocker pattern in later phases.
+"Are you sure you want to leave?" guards that prevent navigation **away** from a route (e.g., unsaved form data). Recommends `addLeaveGuard(routeName, fn)` / `removeLeaveGuard(routeName, fn)` as the primary API, with optional retry support and a React-inspired blocker pattern in later phases. Implemented: [features/01](../features/01-leave-guards.md).
 
 > [08-leave-guards.md](08-leave-guards.md)
 
@@ -89,13 +89,13 @@ An Ember-inspired `NavigationIntent` object added to `GuardContext`. Can be stor
 
 ### 10 - Route Metadata
 
-Declarative metadata on route definitions (`requiresAuth`, `roles`, `featureFlag`) so a single global guard can handle all permission logic by reading `context.toMeta` instead of writing per-route guards. Recommends a hybrid of manifest-declared metadata plus a runtime `setRouteMeta()` API.
+Declarative metadata on route definitions (`requiresAuth`, `roles`, `featureFlag`) so a single global guard can handle all permission logic by reading `context.toMeta` instead of writing per-route guards. Recommends a hybrid of manifest-declared metadata plus a runtime `setRouteMeta()` API. Implemented: [features/04](../features/04-route-metadata.md).
 
 > [10-route-metadata.md](10-route-metadata.md)
 
 ### 11 - Bypass Guards
 
-A mechanism for specific navigations to skip all guards (logout, "Save & Navigate", post-login retry). Recommends a `skipGuards` option on `navTo()` for its simplicity. Combined with the transition object's `retrySkipGuards()`, this covers the major bypass scenarios.
+A mechanism for specific navigations to skip all guards (logout, "Save & Navigate", post-login retry). Recommends a `skipGuards` option on `navTo()` for its simplicity. Implemented: [features/02](../features/02-guard-bypass.md). The transition object's `retrySkipGuards()` belongs to the unimplemented proposal [features/03](../features/03-transition-object.md).
 
 > [11-bypass-guards.md](11-bypass-guards.md)
 

@@ -9,8 +9,8 @@ Common guard patterns for `ui5.guard.router.Router`. Each section describes a pa
 | [Authentication guard](#authentication-guard)                               | Route enter          | Sync         | `guards.ts` -- `createAuthGuard`                                     |
 | [Redirect and resume](#redirect-and-resume)                                 | Global enter         | Sync         | inline example                                                       |
 | [Async permission check](#async-permission-check-with-abortsignal)          | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
-| [Always block](#always-block)                                               | Route enter          | Sync         | `guards.ts` -- `blockedGuard`                                        |
-| [Always redirect](#always-redirect)                                         | Route enter          | Sync         | `guards.ts` -- `forbiddenGuard`                                      |
+| [Always block](#always-block)                                               | Route enter          | Sync         | `guards/blockedGuard.ts`                                             |
+| [Always redirect](#always-redirect)                                         | Route enter          | Sync         | `guards/forbiddenGuard.ts`                                           |
 | [Dirty form leave guard](#dirty-form-leave-guard)                           | Route leave          | Sync         | `guards.ts` -- `createDirtyFormGuard`                                |
 | [Redirect with parameters](#redirect-with-parameters)                       | Route enter          | Sync         | `guards.ts` -- `createRedirectWithParamsGuard`                       |
 | [Error handling](#error-handling-in-guards)                                 | Global / Route enter | Both         | `guards.ts` -- `createErrorDemoGuard`, `createAsyncErrorDemoGuard`   |
@@ -193,7 +193,7 @@ Return `false` to block navigation unconditionally. A blocked `navTo()` never ch
 router.addRouteGuard("maintenance", () => false);
 ```
 
-Reference: `blockedGuard` in `guards.ts`.
+Reference: `guards/blockedGuard.ts` (a manifest guard module).
 
 ## Always redirect
 
@@ -203,7 +203,7 @@ Return a route name string to redirect unconditionally.
 router.addRouteGuard("old-page", () => "new-page");
 ```
 
-Reference: `forbiddenGuard` in `guards.ts`.
+Reference: `guards/forbiddenGuard.ts` (a manifest guard module).
 
 The navigation settles on the route that matches the target's hash. With overlapping patterns, for example a renamed route whose old name is kept as an alias with the same pattern, that is the first matching route in manifest order, which can differ from the name the guard returned. The demo app shows this with its `team` and `staff` routes, see the [demo app README](../../packages/demo-app/README.md#overlapping-routes-team-and-staff).
 

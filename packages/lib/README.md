@@ -17,7 +17,7 @@ Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **befo
 
 ## Why
 
-UI5's router has no way to block or redirect navigation before views render. The usual workaround, scattering guard logic across `attachPatternMatched` callbacks, causes flashes of unauthorized content, polluted browser history, and scattered guard logic across controllers.
+UI5's router has no way to block or redirect navigation before views render. The usual workaround, guard logic in each controller's `attachPatternMatched` callback, flashes unauthorized content, pollutes the browser history and spreads the checks across controllers.
 
 This library solves all three by intercepting at the router level, before any route matching begins.
 
@@ -114,6 +114,7 @@ server:
     customMiddleware:
         - name: ui5-middleware-servestatic
           afterMiddleware: compression
+          mountPath: /resources
           configuration:
               rootPath: node_modules/ui5-lib-guard-router/dist/resources
 ```
@@ -313,7 +314,7 @@ A guard redirect to a route that does not exist settles as `Blocked` because no 
 
 An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
 
-If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router, this defaults to `Committed` with the instance's current route/hash state. After `stop()`, those fields are reset, so idle calls resolve with empty strings until the next navigation settles. Multiple callers waiting on the same pending navigation all receive the same result.
+If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router, this defaults to `Committed` with the instance's current route/hash state. After `stop()`, those fields are reset, so idle calls resolve with empty strings until the next navigation settles or `initialize(true)` resumes the route. Multiple callers waiting on the same pending navigation all receive the same result.
 
 **App code: busy indicator during async guards**
 
@@ -583,7 +584,7 @@ export default {
 };
 ```
 
-Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
 > [!NOTE]
 > When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
@@ -723,7 +724,7 @@ Defaults to `"none"` for backward compatibility.
 
 Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care. Setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
 
-Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
+Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered, in front of the manifest guards of deeper routes, and the metadata cache is cleared).
 
 Runtime metadata set via `setRouteMeta()` participates in inheritance. Child routes see updated ancestor metadata after cache invalidation.
 
@@ -831,7 +832,7 @@ router.removeGuard(logGuard);
 The demo app shows the same lifecycle pattern in `packages/demo-app/webapp/controller/Home.controller.ts`, registering `createHomeLeaveLogger()` on the `home` route and removing it again in `onExit()`.
 
 ```typescript
-import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
 
@@ -839,14 +840,14 @@ export default class HomeController extends BaseController {
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	onInit(): void {
-		const router = this.getRouter<GuardRouter>();
+		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
 
 	onExit(): void {
 		if (this._leaveGuard) {
-			const router = this.getRouter<GuardRouter>();
+			const router = this.getRouter();
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}
@@ -866,42 +867,6 @@ export default class HomeController extends BaseController {
 >
 > In FLP apps with `sap-keep-alive`, the component and its guards stay while the app is hidden, see [Keep-alive apps](#keep-alive-apps).
 
-### Metadata-driven guards via manifest (legacy alternative)
-
-> [!NOTE]
-> The native `guardRouter.routeMeta` configuration (see [Route metadata](#route-metadata)) is the recommended way to declare per-route metadata. The approach below reads a custom manifest section instead.
-
-For common patterns like "this route requires authentication", you can store per-route metadata in a custom manifest section and use a single global guard instead of writing repetitive per-route guards:
-
-```json
-{
-	"ui5.guard.router": {
-		"routeMeta": {
-			"admin": { "requiresAuth": true, "roles": ["admin"] },
-			"profile": { "requiresAuth": true },
-			"home": { "public": true }
-		}
-	}
-}
-```
-
-```typescript
-// Component.ts: read the custom section via getManifestEntry (typed path lookup)
-type RouteMeta = Record<string, Record<string, unknown>>;
-const routeMeta = (this.getManifestEntry("/ui5.guard.router/routeMeta") ?? {}) as RouteMeta;
-
-router.addGuard((context) => {
-	const meta = routeMeta[context.toRoute] ?? {};
-	if (meta.requiresAuth && !authModel.getProperty("/isLoggedIn")) return "login";
-	if (meta.roles && !hasAnyRole(meta.roles as string[])) return "forbidden";
-	return true;
-});
-```
-
-`getManifestEntry()` accepts a path string (starting with `/`) to reach into nested manifest sections. The return type is `any`, so the local `RouteMeta` alias provides type safety at the consumption site.
-
-This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework. It is a convention for application data.
-
 ### Native alternative for leave guards: Fiori Launchpad data loss prevention
 
 If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
@@ -909,23 +874,27 @@ If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in d
 **`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog on every hash change, in-app ones included, and the browser's leave-page dialog on refresh/close. An in-app `navTo()` that the shell holds back for the dialog settles as `Blocked`; if the user confirms, the shell sets the hash again and the router runs the guards for it:
 
 ```typescript
-sap.ushell.Container.setDirtyFlag(true); // mark unsaved changes
-sap.ushell.Container.setDirtyFlag(false); // clear after save
+import Container from "sap/ushell/Container";
+
+Container.setDirtyFlag(true); // mark unsaved changes
+Container.setDirtyFlag(false); // clear after save
 ```
 
 **`registerDirtyStateProvider(fn)`** (since 1.31.0): Registers a callback that FLP calls during navigation to dynamically determine dirty state. The callback receives a `NavigationContext` with `isCrossAppNavigation` (boolean) and `innerAppRoute` (string), allowing the provider to distinguish between cross-app and in-app navigation:
 
 ```typescript
+import Container from "sap/ushell/Container";
+
 const dirtyProvider = (navigationContext) => {
 	if (navigationContext?.isCrossAppNavigation === false) {
 		return false; // let in-app routing handle it
 	}
 	return formModel.getProperty("/isDirty") === true;
 };
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+Container.registerDirtyStateProvider(dirtyProvider);
 
 // Clean up (since 1.67.0)
-sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
+Container.deregisterDirtyStateProvider(dirtyProvider);
 ```
 
 > **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. It still returns the flag combined with all registered providers.
@@ -940,6 +909,8 @@ When you use both a route leave guard and `registerDirtyStateProvider`, the two 
 `ShellNavigationHashChanger` never passes a cross-app hash to the app router, so the leave guard never runs for it. The provider returns `false` for in-app navigation, so the shell does not prompt for it. The two mechanisms never overlap:
 
 ```typescript
+import Container from "sap/ushell/Container";
+
 // 1. Leave guard: blocks in-app navigation when dirty
 router.addRouteGuard("editOrder", {
 	beforeLeave: () => formModel.getProperty("/isDirty") !== true,
@@ -952,7 +923,7 @@ const dirtyProvider = (navigationContext) => {
 	}
 	return formModel.getProperty("/isDirty") === true;
 };
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+Container.registerDirtyStateProvider(dirtyProvider);
 ```
 
 In an app the launchpad keeps alive, deregister the provider while the app is hidden ([Keep-alive apps](#keep-alive-apps)). No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is handled by the shell in both production and the FLP sandbox.
@@ -1001,7 +972,7 @@ sequenceDiagram
     end
 ```
 
-Guards stay registered while the app is hidden, and so do dirty-state providers: the launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden:
+Guards stay registered while the app is hidden, and so do dirty-state providers: the launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden. The example needs `"keepAlive": { "supported": true }` in the manifest (the Declared row): without it, UI5 does not call `onDeactivate()` and `onActivate()`, and the provider stays registered.
 
 ```typescript
 import UIComponent from "sap/ui/core/UIComponent";
@@ -1014,6 +985,7 @@ export default class Component extends UIComponent {
 	public static metadata = { manifest: "json" };
 
 	// No initializer: it would run after init(), which the UIComponent constructor calls.
+	// With tsc (target ES2022 or later) write `declare private _dirtyProvider: ...` instead, see below.
 	private _dirtyProvider?: DirtyStateProvider;
 
 	override init(): void {
@@ -1041,7 +1013,7 @@ export default class Component extends UIComponent {
 ```
 
 > [!WARNING]
-> `UIComponent` calls `init()` from its constructor. TypeScript class field initializers run after that constructor and overwrite what `init()` stored: with `private _dirtyProvider: DirtyStateProvider | null = null`, `onDeactivate()` and `exit()` find nothing to deregister. The same applies to guards that `init()` registers and `exit()` removes. Declare such fields without an initializer.
+> `UIComponent` calls `init()` from its constructor. TypeScript class field initializers run after that constructor and overwrite what `init()` stored: with `private _dirtyProvider: DirtyStateProvider | null = null`, `onDeactivate()` and `exit()` find nothing to deregister. The same applies to guards that `init()` registers and `exit()` removes. Declare such fields without an initializer. Whether that is enough depends on the transpiler: `ui5-tooling-transpile` uses Babel 7's `@babel/preset-typescript`, whose default (`allowDeclareFields: false`) drops a field without an initializer, so `private _dirtyProvider?: DirtyStateProvider;` emits nothing. tsc with `useDefineForClassFields` (the default for target ES2022 and later), and Babel with `allowDeclareFields: true`, still emit the field and reset it to `undefined`. There, write `declare private _dirtyProvider: DirtyStateProvider | undefined;`, which is never emitted. Babel 7 with the default options rejects `declare` fields.
 
 The launchpad internals are in [FLP Integration](../../docs/reference/architecture.md#keep-alive). An app that the launchpad runs in an iframe is hidden and shown the same way, but its provider is asked by the app runtime inside the iframe and not by the shell, see [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
 
@@ -1052,7 +1024,7 @@ When a guard redirects navigation from route A to route B, the router evaluates 
 ```
 User navigates to "dashboard"
   → dashboard guard checks permissions, returns "profile"
-  → profile guard checks onboarding status ← this guard RUNS
+  → profile guard checks onboarding status, returns "onboarding" ← this guard RUNS
   → onboarding guard allows → onboarding view renders
 ```
 
@@ -1143,6 +1115,7 @@ A component that a parent router displays through a routing target of type `Comp
 - A redirect names a route of the same router. To leave the nested component, navigate with the parent's router (`Component.getOwnerComponentFor(component).getRouter()`), not from a guard.
 - On the first display, the parent route waits until the nested router's first navigation has passed its guards and matched, as with the native router. If a nested guard blocks that navigation, the parent route is still displayed and the nested component shows no view. If it redirects, the parent waits for the redirect target.
 - When the parent leaves the route, UI5 stops the nested router and removes its part of the hash. To keep the user in the nested component, register a leave guard on the parent's route.
+- A `navTo()` of the parent with `componentTargetInfo` commits and settles when UI5 has loaded the nested components and written the hash, not within the call. Until then the navigation is pending, and a navigation that supersedes it, `stop()` or `destroy()` settles it as `Cancelled`. That is also how a navigation ends whose hash UI5 never writes, because a nested component failed to load.
 - Navigate with `navTo()` of the respective router or with the router's own hash changer (`router.getHashChanger()`). The global `HashChanger.getInstance()` replaces the whole browser hash, including the part of the other router ([Enabling Routing in Nested Components](https://sdk.openui5.org/#/topic/fb19f501b16e4e4991eb6a017770945b)).
 
 When the parent refuses a hash change, it puts the whole URL back, the nested part included. UI5 reports every hash change to the nested router whatever the parent decides, so the nested router first matches its part of the refused hash and then its previous route, and fires the events of both:
@@ -1171,7 +1144,7 @@ The router relies on two UI5 internals for this, see [Compatibility](#compatibil
 
 ## Compatibility with `sap.m.routing.Router`
 
-Without guards the router behaves like `sap.m.routing.Router`. With guards it differs only where a guard blocks, redirects or makes a navigation wait. Differential tests prove this: they run the same steps on a native router and on a guard router and compare what each records (hashes, history entries, routing events, titles, displayed views, log lines). Tests in `NativeCompat`, `NativeCompatTraces`, `NestedRouterParity`, `GuardedNavigationParity`, `GuardedEntryParity`, `flp-native-parity` and the vendored OpenUI5 router tests compare with the native router; a test from another file pins a behavior that differs on purpose. Where a guard blocks or redirects, the guard router is compared with the native navigation that the decision stands for: none for a block, a navigation to the target for a redirect. CI runs the QUnit tests on OpenUI5 1.144.0 and 1.120.0, the launchpad test on SAPUI5 1.144.0. How the comparison works: [Upstream Parity](../../docs/reference/upstream-parity.md).
+Without guards the router behaves like `sap.m.routing.Router`. With guards it differs only where a guard blocks, redirects or makes a navigation wait. Differential tests prove this: they run the same steps on a native router and on a guard router and compare what each records (hashes, history entries, routing events, titles, displayed views, log lines). Tests in `NativeCompat`, `NativeCompatTraces`, `NestedRouterParity`, `GuardedNavigationParity`, `GuardedEntryParity`, `flp-native-parity` and the vendored OpenUI5 router tests compare with the native router; a test from another file pins a behavior that differs on purpose. Where a guard blocks or redirects, the guard router is compared with the native navigation that the decision stands for: none for a block, a navigation to the target for a redirect. CI runs the QUnit tests on OpenUI5 1.144.0 and 1.120.0, the launchpad test on SAPUI5 1.144.0 and 1.149.0. How the comparison works: [Upstream Parity](../../docs/reference/upstream-parity.md).
 
 File names in "Proven by" are those of test files below `packages/lib/test/qunit/`; an `.e2e.ts` file is below `packages/demo-app/test/`.
 

@@ -68,7 +68,7 @@ await browserInstance.waitUntil(() => {
 });
 ```
 
-Waits for `QUnit.done()` with `waitforTimeout: 90000` (from `wdio-qunit.conf.ts:19`).
+Waits for `QUnit.done()` with `waitforTimeout: 90000` (from `packages/lib/test/wdio-qunit.conf.ts`).
 
 ### QUnit done signal
 

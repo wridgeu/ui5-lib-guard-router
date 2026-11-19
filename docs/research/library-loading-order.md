@@ -93,7 +93,7 @@ Component.create("demo.app")
   |     |
   |     +-- loadModuleAndLog("ui5/guard/router/Router")
   |           +-- sap.ui.require("ui5/guard/router/Router")
-  |                 +-- Router module loaded (its AMD dep on ./library already satisfied)
+  |                 +-- Router module loaded (library.js already executed in STEP 1; Router does not import it)
   |
   +-- createInstance()                        // STEP 3: instantiation
         +-- new Component()
