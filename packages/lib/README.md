@@ -1043,7 +1043,7 @@ export default class Component extends UIComponent {
 > [!WARNING]
 > `UIComponent` calls `init()` from its constructor. TypeScript class field initializers run after that constructor and overwrite what `init()` stored: with `private _dirtyProvider: DirtyStateProvider | null = null`, `onDeactivate()` and `exit()` find nothing to deregister. The same applies to guards that `init()` registers and `exit()` removes. Declare such fields without an initializer.
 
-The launchpad internals are in [FLP Integration](../../docs/reference/architecture.md#keep-alive).
+The launchpad internals are in [FLP Integration](../../docs/reference/architecture.md#keep-alive). An app that the launchpad runs in an iframe is hidden and shown the same way, but its provider is asked by the app runtime inside the iframe and not by the shell, see [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
 
 ## Redirect chains
 

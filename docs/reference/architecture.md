@@ -873,9 +873,7 @@ routers of all kept apps. Embedded apps (`appIntegration/contracts/EmbeddedUI5Ha
 
 `Component#deactivate()` and `Component#activate()` are UI5 core (`sap/ui/core/Component.js`);
 `isKeepAliveSupported()` reads the manifest entry. Apps in an iframe are hidden and shown by
-the app runtime (`appRuntime/ui5/services/AppLifeCycleAgent.js`) the same way: `deactivate()`
-or `stop()` on hide, `activate()`, `initialize()` or `initialize(true)` on show. The iframe path
-is read from the sources only.
+the app runtime the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
 
 ```mermaid
 sequenceDiagram
@@ -899,8 +897,7 @@ sequenceDiagram
 ```
 
 The dirty-state providers of a hidden embedded app stay registered: the shell asks them on
-every navigation until the app deregisters them. The iframe runtime of 1.144.0 swaps the
-providers per app. The application side is in the library README,
+every navigation until the app deregisters them. The application side is in the library README,
 [Keep-alive apps](../../packages/lib/README.md#keep-alive-apps).
 
 Observed in the FLP sandbox (SAPUI5 1.144.0, `?sap-keep-alive=true`, embedded apps; demo
@@ -916,6 +913,75 @@ spec `flp-keep-alive.e2e.ts`):
   router behaves the same.
 - Returning from the launchpad home through a hash with an inner route (browser back, bookmark)
   destroys the kept component and creates a new one, which starts with `initialize()`.
+
+### Keep-alive in an iframe
+
+An app that the launchpad runs in an iframe is started by the UI5 app runtime
+(`appRuntime/ui5/`) inside the iframe. To hide and show it, the shell sends the messages
+`sap.ushell.services.appLifeCycle.store` and `sap.ushell.services.appLifeCycle.restore`
+(`appIntegration/contracts/StatefulContainerV2Handler.js`), and the app runtime
+(`appRuntime/ui5/services/AppLifeCycleAgent.js`) calls the component as the shell calls an
+embedded one:
+
+| The component       | Hide (`store`)                             | Show (`restore`)                                                                                               |
+| ------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| supports keep-alive | `deactivate()`                             | The hash of the iframe is replaced with the intent, then `activate()`                                          |
+| does not            | `suspend()` if it has one, `Router#stop()` | The hash is replaced, `restore()` if it has one, `initialize(true)`; `initialize()` on the legacy restore flow |
+
+Observed with SAPUI5 1.144.0 and 1.149.0: the demo app in an iframe, a second app embedded in
+the launchpad page, `?sap-keep-alive=true`. Both versions behave the same, except for the last
+point.
+
+- Hide and show run as in the table. The router is stopped while the app is hidden. Shown again
+  through an intent without an inner route, an app that supports keep-alive starts on the hash
+  `""` with `initialize()` and settles `Committed` on its default route; an app without the
+  declaration resumes its route on the hash `""` with `initialize(true)` and matches no route.
+  That is the behavior of an embedded app.
+- The iframe has its own URL, so the hidden app sees no hash change of the other app. The app
+  runtime reports each hash change of the app to the shell (`sap.ushell.appRuntime.hashChange`),
+  which shows it in the URL of the launchpad.
+- Browser back from the second app shows the kept app again, the same component; the second app
+  is destroyed.
+- A dirty-state provider that the app registers stays in the iframe. The app runtime keeps the
+  providers itself and does not report them to the shell, so the shell does not ask them:
+    - A cross-app navigation that starts in the shell (its `Navigation` service, a new hash in the
+      URL of the launchpad) hides an app with unsaved data without a question. The data stays with
+      the kept app.
+    - The app runtime asks before every hash write in the iframe (`hasher.setHash()`,
+      `hasher.replaceHash()`) and before a cross-app navigation that the app starts through the
+      `Navigation` service of the app runtime. If its dirty flag is set or a provider answers
+      `true`, it shows `window.confirm()` in the iframe. On cancel nothing is written: a `navTo()`
+      settles as `Blocked`, as after any hash write that the launchpad takes over. On confirm the
+      navigation goes on and the shell hides the app.
+    - The provider is asked with the navigation context of the iframe. After the app is shown
+      again, that context is cross-app until the next hash change in the app, because the app
+      runtime has replaced the hash with the intent. A provider that answers only for a
+      cross-app navigation (`isCrossAppNavigation !== false`) therefore answers for the first
+      in-app `navTo()` after an app with unsaved data is shown again, and the user is asked.
+- 1.144.0 only: on `store` the app runtime saves the list of providers and empties it, before it
+  calls `deactivate()`; on `restore` it puts the list back, before it calls `activate()`. An app
+  that deregisters its provider in `onDeactivate()` and registers it in `onActivate()` has it in
+  the list once more after each hide and show (four times after three rounds). All entries are
+  the same function, so the answers do not change. 1.149.0 no longer touches the providers on
+  `store` and `restore` (read from the source).
+
+The demo's preview middleware (`fiori-tools-preview`) cannot declare an app in an iframe: its
+site generator writes every app as a component embedded in the launchpad page
+(`"sap.ui": { "technology": "UI5" }`). The runs above used a launchpad page with a site of its
+own (`CommonDataModel` adapter, `siteDataUrl`), in which the app has
+`"sap.ui": { "technology": "URL" }` and a URL template (`sap.integration/urlTemplateId`, and
+`urlTemplates` with the capabilities `navigationMode: "embedded"` and `appFrameworkId: "UI5"`).
+The template points to a page that starts `sap/ushell/appRuntime/ui5/AppRuntime` and has an
+element with the ID `content`, where the app runtime places the app. The FLP specs of the demo
+do not cover the iframe. Two setups that look similar do not work:
+
+- Without the element `content` the component is created and routes, but the app runtime never
+  records it as its running app. It answers `store` with `sap.ushell.appRuntime.isInvalidIframe`,
+  and the shell destroys the iframe and goes to the launchpad home.
+- A URL app without a URL template opens in a new window. The intent parameter
+  `sap-ushell-navmode=inplace` embeds it, but the hash that the app runtime reports for the first
+  in-app navigation lacks the parameter: the shell takes it for another intent, resolves it
+  without the parameter and opens the app in a new window.
 
 The source locations are in the [FLP evidence table](./upstream-parity.md#fiori-launchpad-sapushell).
 The FLP spec files of the demo app are listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
