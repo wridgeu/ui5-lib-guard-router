@@ -128,122 +128,20 @@ For the full API reference, usage examples, limitations, and FLP integration gui
 ## Repository structure
 
 ```
-docs/           Docs index plus reference, research, explorations, and feature notes
+CONTRIBUTING.md Development setup, tests, quality checks, releases
+docs/           Docs index plus guides, reference, feature notes, explorations, research
 packages/
-  lib/          ui5.guard.router library (Router + types)
+  lib/          ui5.guard.router library (Router + types) and its QUnit tests
   demo-app/     Demo app with auth guards, a nested component, FLP preview, and guided scenarios
-scripts/        CI helpers, pack smoke test, release plan, and vendored parity tooling
+scripts/        CI helpers, layout check, pack smoke test, release plan, and vendored parity tooling
 tools/          Custom oxlint JS plugins (code-quality, comment-quality, test-guardrails)
 ```
-
-## Development
-
-### Prerequisites
-
-- Node.js ^24.22.1 or >= 26.12.1
-- npm >= 9 (workspaces)
-
-### Install and run
-
-```bash
-npm install       # install all dependencies
-npm start         # demo app at http://localhost:8080/index.html
-npm run start:flp # demo app in local FLP preview at http://localhost:8080/test/flp.html#app-preview
-```
-
-Additional local servers:
-
-```bash
-npm run start:lib            # serve the library workspace directly
-npm run start:lib:compat:120 # serve the library against OpenUI5 1.120.0
-npm run serve:demo           # serve the demo app without auto-opening a browser
-npm run serve:demo:flp       # serve the FLP preview without auto-opening a browser
-```
-
-### Tests
-
-```bash
-npm test              # run the default local subset (QUnit + standalone E2E)
-npm run test:full     # run the full browser matrix (default + compat + FLP)
-npm run test:qunit    # unit tests only (includes vendored upstream parity)
-npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
-npm run test:e2e      # integration tests only
-npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
-npm run test:mutation # Stryker mutation testing of packages/lib, one file at a time (slow; reports in reports/mutation/<File>.html)
-```
-
-Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
-
-`test:mutation` runs Stryker once per source file, each against a fresh server. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`. Results are kept per file in `reports/mutation/incremental/`, so a repeated run only tests new or changed mutants; any change under `packages/lib/test/` discards them, and `--force` discards them on demand. Stryker edits the sources in place: if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do).
-
-#### Test conventions
-
-- The QUnit tests never wait on time; the `test-guardrails/no-timers` lint rule rejects `setTimeout` and `setInterval` in `packages/lib/test/qunit/`. Tests wait on router events (`waitForRoute()`, `navigationSettled()`), resolve test-controlled guard Promises (`Promise.withResolvers()`) at the point they need, and call `flushPromises()` before asserting that a superseded result had no effect. A test that waits for an event that never comes fails at the QUnit `testTimeout` in `testsuite.qunit.ts`.
-- Tests pass values the types forbid (as an untyped JavaScript caller could) through the helpers in `packages/lib/test/qunit/testHelpers.ts` (`callUnsafe()`, the `*Unsafe` wrappers, `createRouterUnsafe()`) instead of casting.
-- The few tests that inspect internal state read them with `Reflect.get()`, e.g. `Reflect.get(router, "_oConfig")`. The library uses TypeScript `private` rather than `#private` fields because UI5's class system relies on prototype-based inheritance and metadata introspection.
-
-The vendored parity sources themselves are maintained with:
-
-```bash
-npm run vendor:openui5-router-tests -- --tag 1.144.0 --write-manifest
-npm run verify:openui5-router-vendor
-```
-
-### Quality checks
-
-```bash
-npm run typecheck    # TypeScript strict mode
-npm run lint         # oxlint
-npm run fmt:check    # oxfmt
-npm run check        # all of the above (fmt:check + lint + typecheck)
-npm run fmt          # auto-format all files
-npm run lint:fix     # auto-fix lint issues
-npm run pack:smoke   # install the packed library in a temp consumer and typecheck it
-npm run pack:check   # build + dry-run pack + consumer smoke test
-npm run release:plan # preview the next release-please version/PR locally
-npm run commitlint   # validate the latest commit message locally
-```
-
-The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
-
-Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics differ from upstream oxlint.
-
-### Build
-
-```bash
-npm run build        # library → packages/lib/dist/
-npm run clean        # remove dist and .ui5 caches in all packages
-```
-
-### Releases
-
-Automated via [release-please](https://github.com/googleapis/release-please) and GitHub Actions.
-
-1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
-2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
-
-For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, prefers `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` when set, and otherwise falls back to `gh auth token` when the GitHub CLI is available.
-
-Short maintainer conventions:
-
-- Use `[skip ci]` only for docs-only or issue-only commits that do not affect shipped code, tests, or build/release configuration.
-- Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
-- Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
-- If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, and the root UI5 type-package versions in `package.json`.
-  Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
-- For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
-
-| File                            | Purpose                                                                                                                       |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, pack checks, parity verification, browser tests, compatibility, Windows smoke) |
-| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                  |
-| `release-please-config.json`    | Package path, extra version files                                                                                             |
-| `.release-please-manifest.json` | Current version tracker                                                                                                       |
 
 ## Contributing
 
 Issues and pull requests are always welcome. If you spot a bug, have a question, or want to propose an improvement, please file an issue. If you already have a fix or documentation update in mind, feel free to open a PR directly.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the development setup, the test commands, where tests go, the quality checks and the release process. [docs/README.md](docs/README.md) maps the longer docs.
 
 ## License
 

@@ -24,36 +24,23 @@ The router provides:
 
 ## Documents
 
-| #   | Feature                                                                                                         | Priority | Depends On | Status          |
-| --- | --------------------------------------------------------------------------------------------------------------- | -------- | ---------- | --------------- |
-| 01  | [Leave Guards](./01-leave-guards.implemented.md)                                                                | High     | None       | **Implemented** |
-| 02  | [Guard Bypass](./02-guard-bypass.md)                                                                            | Low      | None       | **Implemented** |
-| 03  | [Transition Object](./03-transition-object.md)                                                                  | Medium   | None       | Proposed        |
-| 04  | [Route Metadata](./04-route-metadata.md)                                                                        | Low      | None       | **Implemented** |
-| 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md)                                        | Medium   | None       | **Implemented** |
-| 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)                                              | High     | None       | **Implemented** |
-| 08b | [Multi-Guard Modules, Cherry-Pick Syntax, Pattern 5 Loading](./08b-multi-guard-modules-and-pattern5-loading.md) | High     | 08         | **Implemented** |
-| 12  | [Lazy Resolution Error Handling](./12-lazy-resolution-error-handling.md)                                        | High     | 04         | **Implemented** |
-| 11  | [Guards on Redirect Targets](./11-guards-on-redirect-targets.md)                                                | High     | #38, #39   | **Implemented** |
+One decision record per feature, in the order they were written. Each document starts with a `**Status**:` line that this table repeats: **Implemented**, Proposed or Rejected.
 
-## Refactoring
-
-| #   | Feature                                                        | Priority | Depends On | Status          |
-| --- | -------------------------------------------------------------- | -------- | ---------- | --------------- |
-| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md) | Medium   | #38, #39   | **Implemented** |
-| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md)    | Medium   | #09        | **Implemented** |
-
-## Architecture Analysis
-
-| #   | Topic                                                    | Conclusion                                                                            |
-| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| 05  | [Async Rewrite Analysis](./05-async-rewrite-analysis.md) | Not recommended. Sync-first is correct for UI5. Refactor to unified pipeline instead. |
-
-## Optimizations
-
-| #   | Feature                                    | Priority | Depends On | Status          |
-| --- | ------------------------------------------ | -------- | ---------- | --------------- |
-| 06  | [navTo Preflight](./06-navto-preflight.md) | High     | None       | **Implemented** |
+| #   | Document                                                                                                        | Type                  | Priority | Depends On | Status                                                                          |
+| --- | --------------------------------------------------------------------------------------------------------------- | --------------------- | -------- | ---------- | ------------------------------------------------------------------------------- |
+| 01  | [Leave Guards](./01-leave-guards.md)                                                                            | Feature               | High     | None       | **Implemented**                                                                 |
+| 02  | [Guard Bypass](./02-guard-bypass.md)                                                                            | Feature               | Low      | None       | **Implemented**                                                                 |
+| 03  | [Transition Object](./03-transition-object.md)                                                                  | Feature               | Medium   | None       | Proposed                                                                        |
+| 04  | [Route Metadata](./04-route-metadata.md)                                                                        | Feature               | Low      | None       | **Implemented**                                                                 |
+| 05  | [Async Rewrite Analysis](./05-async-rewrite-analysis.md)                                                        | Architecture analysis |          |            | Rejected: sync-first is correct for UI5, refactor to a unified pipeline instead |
+| 06  | [navTo Preflight](./06-navto-preflight.md)                                                                      | Optimization          | High     | None       | **Implemented**                                                                 |
+| 07  | [Vendored OpenUI5 Router Parity](./07-vendored-openui5-router-parity.md)                                        | Feature               | Medium   | None       | **Implemented**                                                                 |
+| 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)                                              | Feature               | High     | None       | **Implemented**                                                                 |
+| 08b | [Multi-Guard Modules, Cherry-Pick Syntax, Pattern 5 Loading](./08b-multi-guard-modules-and-pattern5-loading.md) | Feature               | High     | 08         | **Implemented**                                                                 |
+| 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md)                                                  | Refactoring           | Medium   | #38, #39   | **Implemented**                                                                 |
+| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md)                                                     | Refactoring           | Medium   | #09        | **Implemented**                                                                 |
+| 11  | [Guards on Redirect Targets](./11-guards-on-redirect-targets.md)                                                | Feature               | High     | #38, #39   | **Implemented**                                                                 |
+| 12  | [Lazy Resolution Error Handling](./12-lazy-resolution-error-handling.md)                                        | Feature               | High     | 04         | **Implemented**                                                                 |
 
 ## Status Notes
 

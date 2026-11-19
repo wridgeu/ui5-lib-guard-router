@@ -1,6 +1,6 @@
 # Analysis: Async Guard Support vs Fully Async Router Rewrite
 
-> **Status**: Not recommended. The sync-first model is correct for UI5. See the [feature index](./README.md).
+> **Status**: Rejected. A fully async router rewrite is not recommended: the sync-first model is correct for UI5. See the [feature index](./README.md).
 
 ## Context: OpenUI5 Issue #3411
 
