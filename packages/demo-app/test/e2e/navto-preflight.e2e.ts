@@ -1,7 +1,7 @@
 import { CONTROLS, press } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
 import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
-import { getHistoryLength } from "./helpers/browser";
+import { getHistoryLength } from "../shared/history";
 import { expectKeptOnHome, startAtHome, toggleLogin } from "./helpers/scenarios";
 
 describe("navTo preflight - history guarantees", () => {
@@ -15,7 +15,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navBlockedBtn);
 
-		await expectKeptOnHome("Blocked", rev);
+		await expectKeptOnHome("blocked", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -27,7 +27,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navForbiddenBtn);
 
-		await expectKeptOnHome("Redirected", rev);
+		await expectKeptOnHome("redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -39,7 +39,7 @@ describe("navTo preflight - history guarantees", () => {
 
 		await press(CONTROLS.home.navProtectedBtn);
 
-		await expectKeptOnHome("Redirected", rev);
+		await expectKeptOnHome("redirected", rev);
 
 		const after = await getHistoryLength();
 		expect(after).toBe(before);
@@ -57,7 +57,7 @@ describe("navTo preflight - history guarantees", () => {
 			afterRevision: rev,
 		});
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: rev },
 		);
 		await expectHashToBe("#/protected");

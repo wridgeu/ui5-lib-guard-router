@@ -3,17 +3,10 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { npmArgs } from "./npm-command.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const libDir = path.join(repoRoot, "packages", "lib");
-
-function npmArgs() {
-	if (!process.env.npm_execpath) {
-		throw new Error("npm_execpath is not set. Run this script via npm.");
-	}
-
-	return [process.execPath, [process.env.npm_execpath]];
-}
 
 function run(command, args, options = {}) {
 	execFileSync(command, args, {

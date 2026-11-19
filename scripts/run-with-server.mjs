@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { createServer } from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
+import { npmArgs } from "./npm-command.mjs";
 
 const DEFAULT_TIMEOUT_MS = 120000;
 const SIGNAL_EXIT_CODES = {
@@ -19,14 +20,6 @@ function getOption(name) {
 		throw new Error(`Missing ${name}`);
 	}
 	return process.argv[index + 1];
-}
-
-function npmArgs() {
-	if (!process.env.npm_execpath) {
-		throw new Error("npm_execpath is not set. Run this script via npm.");
-	}
-
-	return [process.execPath, [process.env.npm_execpath]];
 }
 
 async function waitForExit(child) {

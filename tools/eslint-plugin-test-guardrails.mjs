@@ -61,8 +61,8 @@ function extractSingleCallFromBody(body) {
 /**
  * Reports `await new Promise(resolve => setTimeout(resolve, N))` where N > 0.
  *
- * Intentionally allows `setTimeout(resolve, 0)` since that's a microtask flush
- * pattern, not a hard wait.
+ * Intentionally allows `setTimeout(resolve, 0)` since it yields to the event loop
+ * once (a macrotask), not a timed wait.
  *
  * Scope: e2e test files only (configured via oxlintrc overrides).
  */

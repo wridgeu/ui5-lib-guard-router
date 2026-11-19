@@ -7,7 +7,7 @@ async function pressAndExpectRedirectHome(button: "navProtectedBtn" | "navForbid
 	const settlementRevision = await getRuntimeSettlementRevision();
 	await press(CONTROLS.home[button]);
 
-	await expectKeptOnHome("Redirected", settlementRevision);
+	await expectKeptOnHome("redirected", settlementRevision);
 }
 
 describe("Multi-route navigation sequences", () => {

@@ -14,7 +14,7 @@ describe("Guard allows navigation when logged in", () => {
 		// The hash is only written once the async guard allowed the navigation.
 		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("#/protected");
@@ -28,7 +28,7 @@ describe("Guard blocks enter navigation", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await press(CONTROLS.home.navBlockedBtn);
 
-		await expectKeptOnHome("Blocked", settlementRevision);
+		await expectKeptOnHome("blocked", settlementRevision);
 	});
 });
 
@@ -39,7 +39,7 @@ describe("Guard redirects to Home", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await press(CONTROLS.home.navForbiddenBtn);
 
-		await expectKeptOnHome("Redirected", settlementRevision);
+		await expectKeptOnHome("redirected", settlementRevision);
 	});
 });
 
@@ -52,6 +52,6 @@ describe("Guard redirects unauthenticated navigation", () => {
 		await press(CONTROLS.home.navProtectedBtn);
 
 		// The async permission guard redirects.
-		await expectKeptOnHome("Redirected", settlementRevision);
+		await expectKeptOnHome("redirected", settlementRevision);
 	});
 });

@@ -1,4 +1,3 @@
-import type UshellContainer from "sap/ushell/Container";
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
 import {
@@ -6,6 +5,7 @@ import {
 	loginAndGoToProtectedInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
+	triggerFlpCrossAppNavigation,
 	waitForRouterRunningInFlp,
 } from "./helpers";
 
@@ -19,12 +19,7 @@ const PEER_APP_ID = "demo.peer";
 async function navigateCrossApp(shellHash: string): Promise<boolean> {
 	const { record, cleanup } = installDialogHandler(true);
 	try {
-		await browser.execute(async (target: string) => {
-			const Container: typeof UshellContainer = sap.ui.require("sap/ushell/Container");
-			const navigation = await Container.getServiceAsync("Navigation");
-			// Not awaited: a confirm() blocks the page until the dialog is handled.
-			void navigation.navigate({ target: { shellHash: target } });
-		}, shellHash);
+		await triggerFlpCrossAppNavigation(shellHash);
 		await browser.waitUntil(async () => (await browser.execute(() => window.location.hash)).includes(shellHash), {
 			timeout: 10000,
 			timeoutMsg: `FLP did not navigate to "${shellHash}"`,

@@ -47,7 +47,7 @@ export async function loginAndGoToProtected(): Promise<void> {
 	const afterRevision = await getRuntimeSettlementRevision();
 	await press(CONTROLS.home.navProtectedBtn);
 	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision });
-	await waitForRuntimeSettlement({ status: "Committed", route: "protected", hash: "protected" }, { afterRevision });
+	await waitForRuntimeSettlement({ status: "committed", route: "protected", hash: "protected" }, { afterRevision });
 	await expectHashToBe("#/protected");
 }
 
@@ -57,7 +57,7 @@ export async function loginAndGoToProtected(): Promise<void> {
  * starting state, so the fresh settlement is what proves that the navigation ran.
  */
 export async function expectKeptOnHome(
-	status: "Redirected" | "Blocked",
+	status: "redirected" | "blocked",
 	afterRevision: number,
 	timeout?: number,
 ): Promise<void> {
@@ -73,7 +73,7 @@ export async function navBackToHome(): Promise<void> {
 
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 	await waitForRuntimeSettlement(
-		{ status: "Committed", route: "home", hash: "" },
+		{ status: "committed", route: "home", hash: "" },
 		{ afterRevision: settlementRevision },
 	);
 	await expectHashToBe("");

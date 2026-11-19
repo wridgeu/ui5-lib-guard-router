@@ -1,4 +1,5 @@
 import { CONTROLS, expectControlText, press } from "../shared/controls";
+import { getHistoryEntryIndex, getHistoryLength } from "../shared/history";
 import { getRuntimeSettlementRevision } from "../shared/models";
 import {
 	expectAppHashToBe,
@@ -125,16 +126,16 @@ describe("FLP guard router hardening", () => {
 	it("leaves the browser history as it was after a blocked browser back", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(true);
-		const historyLength = await browser.execute(() => window.history.length);
-		const entryIndex = await browser.execute(() => window.navigation.currentEntry?.index);
+		const historyLength = await getHistoryLength();
+		const entryIndex = await getHistoryEntryIndex();
 		const blockedRevision = await getRuntimeSettlementRevision();
 		await browser.back();
 		await waitForProtectedPageInFlp({ afterRevision: blockedRevision });
 		await expectAppHashToBe("protected", { afterRevision: blockedRevision });
 		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
 		// The browser is on the entry it left, not on the one before it with the hash replaced.
-		expect(await browser.execute(() => window.navigation.currentEntry?.index)).toBe(entryIndex);
-		expect(await browser.execute(() => window.history.length)).toBe(historyLength);
+		expect(await getHistoryEntryIndex()).toBe(entryIndex);
+		expect(await getHistoryLength()).toBe(historyLength);
 
 		// The entry of Home is still behind Protected: one step back arrives there.
 		await setDirtyStateInFlp(false);
@@ -148,7 +149,7 @@ describe("FLP guard router hardening", () => {
 	});
 
 	it("returns to Home with browser back after a redirected navTo()", async () => {
-		const entryIndex = await browser.execute(() => window.navigation.currentEntry?.index ?? -1);
+		const entryIndex = await getHistoryEntryIndex();
 		const redirectRevision = await getRuntimeSettlementRevision();
 		await press(CONTROLS.home.navTeamBtn);
 		await waitForPageInFlp(CONTROLS.employees.employeesPage, "Employees", { afterRevision: redirectRevision });
@@ -156,7 +157,7 @@ describe("FLP guard router hardening", () => {
 		await expectControlText(CONTROLS.employees.settlementStatus, "Redirected");
 
 		// The redirect target is a history entry of its own: Home is the entry before it.
-		expect(await browser.execute(() => window.navigation.currentEntry?.index)).toBe(entryIndex + 1);
+		expect(await getHistoryEntryIndex()).toBe(entryIndex + 1);
 		await browserBackToHome();
 
 		// The guarded hash "team" was never written: forward arrives on the redirect target.

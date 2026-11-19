@@ -10,7 +10,7 @@ import { startAtHome, toggleLogin } from "./helpers/scenarios";
  * navigation has to settle on the route that UI5 displays, not on the name the guard returned.
  */
 async function expectRedirectedToEmployees(afterRevision: number): Promise<void> {
-	await waitForRuntimeSettlement({ status: "Redirected", route: "employees", hash: "employees" }, { afterRevision });
+	await waitForRuntimeSettlement({ status: "redirected", route: "employees", hash: "employees" }, { afterRevision });
 	await expectHashToBe("#/employees");
 	await waitForPage(CONTROLS.employees.employeesPage, "Employees");
 	await expectControlText(CONTROLS.employees.settlementStatus, "Redirected");
@@ -39,7 +39,7 @@ describe("Redirect to a route name whose hash another route matches: team -> sta
 		const backRevision = await getRuntimeSettlementRevision();
 		await browser.back();
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "home", hash: "" },
+			{ status: "committed", route: "home", hash: "" },
 			{ afterRevision: backRevision },
 		);
 		await waitForPage(CONTROLS.home.homePage, "Home");
@@ -49,7 +49,7 @@ describe("Redirect to a route name whose hash another route matches: team -> sta
 		const forwardRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "employees", hash: "employees" },
+			{ status: "committed", route: "employees", hash: "employees" },
 			{ afterRevision: forwardRevision },
 		);
 		await expectHashToBe("#/employees");
@@ -67,7 +67,7 @@ describe("Redirect to a route name whose hash another route matches: team -> sta
 		// The entry that "team" created holds the redirect target; the entry before it is untouched.
 		const backRevision = await getRuntimeSettlementRevision();
 		await browser.back();
-		await waitForRuntimeSettlement({ status: "Committed", route: "employee" }, { afterRevision: backRevision });
+		await waitForRuntimeSettlement({ status: "committed", route: "employee" }, { afterRevision: backRevision });
 		await waitForPage(CONTROLS.employee.employeePage, "Employee Detail");
 	});
 
@@ -95,7 +95,7 @@ describe("Redirect to a route name whose hash another route matches: team -> sta
 		);
 
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "employees", hash: "employees" },
+			{ status: "committed", route: "employees", hash: "employees" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("#/employees");

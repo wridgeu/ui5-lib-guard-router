@@ -9,22 +9,12 @@ import {
 	press,
 	waitForComponent,
 } from "../shared/controls";
-import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
-
-type PageWaitOptions = {
-	timeout?: number;
-	afterRevision?: number;
-};
-
-type AppHashWaitOptions = {
-	timeout?: number;
-	afterRevision?: number;
-};
+import { getRuntimeSettlementRevision, setDirtyState, type SettlementWaitOptions } from "../shared/models";
 
 export async function waitForPageInFlp(
 	page: ControlRef,
 	expectedTitle: string,
-	options: PageWaitOptions = {},
+	options: SettlementWaitOptions = {},
 ): Promise<void> {
 	const { timeout = 30000, afterRevision } = options;
 	const name = `${page.viewId}/${page.id}`;
@@ -36,7 +26,8 @@ export async function waitForPageInFlp(
 		});
 	}
 
-	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle).catch(() => false), {
+	// The lookup fails until the FLP has mounted the component. waitUntil retries a failed poll and reports its error if it times out on one.
+	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle), {
 		timeout,
 		timeoutMsg: `Page "${name}" did not show title "${expectedTitle}"`,
 	});
@@ -184,11 +175,11 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 	}
 }
 
-export async function waitForProtectedPageInFlp(options?: PageWaitOptions): Promise<void> {
+export async function waitForProtectedPageInFlp(options?: SettlementWaitOptions): Promise<void> {
 	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", options);
 }
 
-export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<void> {
+export async function waitForHomePageInFlp(options?: SettlementWaitOptions): Promise<void> {
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home", options);
 }
 
@@ -236,7 +227,7 @@ export async function navigateToRouteInFlp(routeName: string): Promise<void> {
  * The ShellNavigationHashChanger overrides this method to split shell hash
  * from app hash automatically.
  */
-export async function expectAppHashToBe(expected: string, options: AppHashWaitOptions = {}): Promise<void> {
+export async function expectAppHashToBe(expected: string, options: SettlementWaitOptions = {}): Promise<void> {
 	const { timeout = 5000, afterRevision } = options;
 
 	await browser.waitUntil(

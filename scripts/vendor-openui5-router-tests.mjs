@@ -109,17 +109,11 @@ async function main() {
 		);
 	}
 
-	const commitSha = await resolveCommitSha(repo, requestedTag ?? targetVersion, sha);
+	const commitSha = await resolveCommitSha(repo, targetVersion, sha);
 	const isVersionChange = targetVersion !== manifest.upstream.tag;
 
 	if (writeManifest && isVersionChange) {
-		const unmigratedPortEntry = manifestFiles.find((file) => {
-			return (
-				file.portFilePath &&
-				!file.portFilePath.includes(`/${targetVersion}/`) &&
-				!file.portFilePath.includes(`\\${targetVersion}\\`)
-			);
-		});
+		const unmigratedPortEntry = manifestFiles.find((file) => !file.portFilePath.includes(`/${targetVersion}/`));
 
 		if (unmigratedPortEntry) {
 			throw new Error(

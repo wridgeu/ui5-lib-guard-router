@@ -5,10 +5,6 @@
  * console-only error handling, redundant boolean returns, and
  * em-dashes in string literals.
  *
- * Type-assertion rules (no-as-any, no-double-type-assertion) have been
- * replaced by native typescript/no-explicit-any, no-unsafe-type-assertion,
- * and no-unnecessary-type-assertion.
- *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 

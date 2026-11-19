@@ -10,7 +10,7 @@ async function browserBackToHome(): Promise<void> {
 
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: settlementRevision });
 	await waitForRuntimeSettlement(
-		{ status: "Committed", route: "home", hash: "" },
+		{ status: "committed", route: "home", hash: "" },
 		{ afterRevision: settlementRevision },
 	);
 	await expectHashToBe("");
@@ -26,7 +26,7 @@ describe("Browser back navigation with guards", () => {
 		await browserBackToHome();
 	});
 
-	it("should not show protected page on browser back after logout", async () => {
+	it("should re-evaluate the enter guard on browser forward after logout", async () => {
 		await browserBackToHome();
 		await toggleLogin("Logged Out");
 
@@ -34,7 +34,7 @@ describe("Browser back navigation with guards", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 
-		await expectKeptOnHome("Redirected", settlementRevision);
+		await expectKeptOnHome("redirected", settlementRevision);
 	});
 
 	it("should handle multiple back/forward cycles", async () => {
@@ -45,7 +45,7 @@ describe("Browser back navigation with guards", () => {
 		await browser.forward();
 		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("#/protected");

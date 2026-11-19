@@ -1,7 +1,8 @@
 import { CONTROLS, press, waitForComponent } from "../shared/controls";
 import { getRuntimeSettlementRevision } from "../shared/models";
 import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
-import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { fireEvent, setBrowserHash } from "./helpers/browser";
+import { getHistoryLength } from "../shared/history";
 import { loginAndGoToProtected, navBackToHome, startAtHome } from "./helpers/scenarios";
 
 describe("UI5 in-app nav back button", () => {
@@ -23,7 +24,7 @@ describe("UI5 in-app nav back button", () => {
 
 		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("#/protected");

@@ -1,4 +1,4 @@
-import type Text from "sap/m/Text";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import BaseController from "./BaseController";
 
 /**
@@ -21,7 +21,7 @@ export default class EmployeeController extends BaseController {
 
 	private _showMeta(): void {
 		const meta = this.getRouter().getRouteMeta("employee");
-		(this.byId("employeeMeta") as Text).setText(JSON.stringify(meta));
+		this.getModel<JSONModel>("runtime").setProperty("/employeeMeta", JSON.stringify(meta));
 	}
 
 	override onNavBack(): void {

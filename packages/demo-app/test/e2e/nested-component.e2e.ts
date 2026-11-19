@@ -9,7 +9,8 @@ import {
 } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
 import { expectHashToBe, waitForPage } from "./helpers/wait";
-import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { fireEvent, setBrowserHash } from "./helpers/browser";
+import { getHistoryLength } from "../shared/history";
 import { startAtHome } from "./helpers/scenarios";
 
 const OVERVIEW_HASH = "#/reports";

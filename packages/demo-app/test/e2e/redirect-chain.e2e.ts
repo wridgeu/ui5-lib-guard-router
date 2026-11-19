@@ -22,7 +22,7 @@ describe("Redirect chain: admin -> protected -> home", () => {
 		// Admin guard redirects to protected, protected's async auth guard
 		// checks login state (logged out) and redirects to home.
 		// The entire chain settles as Redirected on home.
-		await expectKeptOnHome("Redirected", rev, 5000);
+		await expectKeptOnHome("redirected", rev, 5000);
 
 		// A redirect from admin straight to home would settle the same: the guard of the hop
 		// in between has to have run.
@@ -45,7 +45,7 @@ describe("Redirect chain: admin -> protected -> home", () => {
 		// Admin guard redirects to protected, protected's auth guard allows
 		// because user is logged in. Chain stops at protected.
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "protected", hash: "protected" },
+			{ status: "redirected", route: "protected", hash: "protected" },
 			{ afterRevision: rev, timeout: 5000 },
 		);
 		await expectHashToBe("#/protected");

@@ -5,27 +5,11 @@ import type { GuardFn, GuardContext, GuardResult, LeaveGuardFn } from "ui5/guard
 const LOG_COMPONENT = "demo.app.guards";
 
 /**
- * Guard factories actively registered by the demo runtime.
+ * Guard factories registered by the demo runtime.
  *
- * See `Component.ts` and `controller/Home.controller.ts` for the wiring.
+ * See `Component.ts` and `controller/Home.controller.ts` for the wiring. The manifest
+ * guards are the modules in `guards/`.
  */
-
-/**
- * Global navigation logger guard.
- * Demonstrates the global guard pattern: runs for every navigation.
- * Always returns true (allows navigation) but logs the transition.
- *
- * Note: Uses Log.info() which may be filtered in browser console by default.
- * Set console log level to "Info" or use sap-ui-log-level=INFO URL parameter.
- */
-export function createNavigationLogger(): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		const from = context.fromRoute || "(initial)";
-		const to = context.toRoute || "(no match)";
-		Log.info(`Navigation logger: ${from} → ${to}`, "", LOG_COMPONENT);
-		return true;
-	};
-}
 
 /**
  * Async guard that simulates checking permissions via an API.
@@ -80,18 +64,6 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 }
 
 /**
- * Guard that always blocks navigation.
- * Demonstrates the simplest enter-guard block shape.
- */
-export const blockedGuard: GuardFn = () => false;
-
-/**
- * Guard that always redirects navigation to "home".
- * Demonstrates the simplest redirect guard shape.
- */
-export const forbiddenGuard: GuardFn = () => "home";
-
-/**
  * Guard that always redirects to "protected".
  *
  * Demonstrates a redirect chain: navigating to "admin" redirects to
@@ -100,28 +72,6 @@ export const forbiddenGuard: GuardFn = () => "home";
  * in, the chain stops at "protected" (admin -> protected).
  */
 export const adminGuard: GuardFn = () => "protected";
-
-/**
- * Leave guard that blocks navigation when a form has unsaved changes.
- * Demonstrates the "dirty form" pattern using a synchronous model check.
- *
- * No FLP-specific bypass is needed here. Cross-app navigation operates at
- * the shell level in both production and the FLP sandbox, so the leave
- * guard never runs for cross-app hashes.
- * The FLP dirty-state provider (registered separately via
- * `registerDirtyStateProvider`) handles cross-app dirty UX with its
- * own confirmation popup independently of the router.
- */
-export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
-	return (context: GuardContext): boolean => {
-		const isDirty = formModel.getProperty("/isDirty");
-		if (isDirty === true) {
-			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
-			return false;
-		}
-		return true;
-	};
-}
 
 /**
  * Leave guard that logs navigation away from Home.
@@ -147,6 +97,31 @@ export function createHomeLeaveLogger(): LeaveGuardFn {
  * Reference-only guard factories kept here for discoverability.
  * They are not registered by the runnable demo application.
  */
+
+/**
+ * Leave guard that blocks navigation when a form has unsaved changes.
+ * Demonstrates the "dirty form" pattern using a synchronous model check.
+ *
+ * Reference implementation: the runnable demo declares `guards/dirtyFormGuard.ts`
+ * in the manifest, which reads the model through `context.ownerComponent`.
+ *
+ * No FLP-specific bypass is needed here. Cross-app navigation operates at
+ * the shell level in both production and the FLP sandbox, so the leave
+ * guard never runs for cross-app hashes.
+ * The FLP dirty-state provider (registered separately via
+ * `registerDirtyStateProvider`) handles cross-app dirty UX with its
+ * own confirmation popup independently of the router.
+ */
+export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
+	return (context: GuardContext): boolean => {
+		const isDirty = formModel.getProperty("/isDirty");
+		if (isDirty === true) {
+			Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
+			return false;
+		}
+		return true;
+	};
+}
 
 /**
  * Guard that requires the user to be logged in.

@@ -5,6 +5,12 @@ import { getAppComponentId } from "./controls";
  * through the component, without UI interaction.
  */
 
+/** Options of a wait for a page or a hash. With `afterRevision`, only a settlement recorded after that revision counts. */
+export type SettlementWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
 /** Number of navigations the demo app's router has settled. A navigation started after reading it settles with a higher number. */
 export async function getRuntimeSettlementRevision(): Promise<number> {
 	return browser.execute(

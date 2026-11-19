@@ -1,7 +1,8 @@
 import { CONTROLS, expectControlText } from "../shared/controls";
 import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
-import { fireEvent, getHistoryEntryIndex, getHistoryLength } from "./helpers/browser";
+import { fireEvent } from "./helpers/browser";
+import { getHistoryEntryIndex, getHistoryLength } from "../shared/history";
 import { loginAndGoToProtected, startAtHome } from "./helpers/scenarios";
 
 /** On Protected: set the form state and assert that the page shows it. */
@@ -12,7 +13,7 @@ async function setDirtyOnProtected(isDirty: boolean): Promise<void> {
 
 /** Assert that the navigation started after `afterRevision` was blocked and Protected is still shown. */
 async function expectLeaveBlocked(afterRevision: number): Promise<void> {
-	await waitForRuntimeSettlement({ status: "Blocked", route: "protected", hash: "protected" }, { afterRevision });
+	await waitForRuntimeSettlement({ status: "blocked", route: "protected", hash: "protected" }, { afterRevision });
 	await expectHashToBe("#/protected", "Hash should stay at protected after leave guard blocks");
 	await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");
 }
@@ -20,7 +21,7 @@ async function expectLeaveBlocked(afterRevision: number): Promise<void> {
 /** Assert that the navigation started after `afterRevision` left Protected and committed on Home. */
 async function expectLeftToHome(afterRevision: number): Promise<void> {
 	await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision });
-	await waitForRuntimeSettlement({ status: "Committed", route: "home", hash: "" }, { afterRevision });
+	await waitForRuntimeSettlement({ status: "committed", route: "home", hash: "" }, { afterRevision });
 	await expectHashToBe("", "Hash should settle to home after leave guard allows");
 }
 
@@ -93,7 +94,7 @@ describe("Leave Guard - Dirty Form", () => {
 		const forwardRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: forwardRevision },
 		);
 		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page");

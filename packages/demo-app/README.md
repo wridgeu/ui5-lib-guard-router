@@ -27,7 +27,7 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 Guard registration happens in three ways: declarative manifest guards, programmatic guards in `Component.ts`, and controller-level guards.
 
-Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file has two sections: guard factories for the runtime first, reference-only examples second.
+Guard factories for programmatic registration live in `webapp/guards.ts` for single-file discoverability. The file has two sections: the guard factories that the demo registers first, reference-only examples second.
 
 Individual guard modules for declarative manifest registration live in `webapp/guards/` as standalone files.
 
@@ -54,10 +54,11 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | ------------------------- | ----------- | ------ | --------------------------------- |
 | `createHomeLeaveLogger()` | Route leave | `home` | Logs leaving home (always allows) |
 
-**Not registered in the demo**: the first section of `guards.ts` also exports `createNavigationLogger()`, `blockedGuard`, `forbiddenGuard` and `createDirtyFormGuard()`; the demo registers the manifest modules in `webapp/guards/` instead. The reference section below them holds:
+**Not registered in the demo**: the reference section of `guards.ts` holds:
 
 | Function                          | Purpose                                                             |
 | --------------------------------- | ------------------------------------------------------------------- |
+| `createDirtyFormGuard()`          | Dirty-form leave guard that takes the form model as a parameter     |
 | `createAuthGuard()`               | Synchronous auth guard (sync variant of the async permission guard) |
 | `createRedirectWithParamsGuard()` | Redirect preserving route parameters                                |
 | `createErrorDemoGuard()`          | Sync error handling behavior                                        |
@@ -149,13 +150,13 @@ All controllers extend `BaseController`, which provides shared helpers: `getRout
 
 These files power the runtime inspector panels and hash-driven scenario buttons in the UI. They are isolated from the library and exist solely to make the demo interactive.
 
-| File                         | Purpose                                                                                                                                                  |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `demo/RuntimeCoordinator.ts` | Orchestrator: listens to hash changes, syncs the runtime model, registers the FLP dirty-state provider lazily and deregisters it while the app is hidden |
-| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model            |
-| `routing/hashNavigation.ts`  | Wrapper around the global `HashChanger` for the scenario buttons; like the address bar, it replaces the whole hash, including the nested part            |
-| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, and last navigation settlement details): values only, no texts                 |
-| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                              |
+| File                         | Purpose                                                                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo/RuntimeCoordinator.ts` | Orchestrator: records each `navigationSettled` and the hash it ends on in the runtime model, registers the FLP dirty-state provider lazily and deregisters it while the app is hidden |
+| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model                                         |
+| `routing/hashNavigation.ts`  | Wrapper around the global `HashChanger` for the scenario buttons; like the address bar, it replaces the whole hash, including the nested part                                         |
+| `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, last navigation settlement details and the route metadata the Employees pages show): values only, no texts  |
+| `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                                                           |
 
 ### Models
 
@@ -174,9 +175,9 @@ The root component and the nested reporting component each have their own bundle
 
 - Views bind texts with `{i18n>key}`. A text that depends on a value is chosen in an expression binding (`{= ${auth>/isLoggedIn} ? ${i18n>authLoggedIn} : ${i18n>authLoggedOut}}`); a text with a placeholder is filled with `sap/base/strings/formatMessage` (see `view/SettlementPanel.fragment.xml`).
 - The manifest uses `{{appTitle}}` and `{{appDescription}}`, also for the title of the FLP inbound.
-- The `runtime` model holds values only. The views supply the texts for empty values, such as "(empty hash)" or "Not settled yet".
+- The `runtime` model holds values only. The views supply the texts: for the settlement status (the model holds the `NavigationOutcome`, such as `committed`) and for empty values, such as "(empty hash)" or "Not settled yet".
 - Code that needs a text awaits the bundle, because the model loads it asynchronously: `ScenarioRunner.recordAction(key, args)` for the last action.
-- Not translated on purpose: route names, hashes, the settlement status (`Committed`, `Redirected`, ...) and the route metadata JSON are technical values and shown as they are. Log messages are for developers.
+- Not translated on purpose: route names, hashes and the route metadata JSON are technical values and shown as they are. Log messages are for developers.
 
 ## FLP preview
 
@@ -278,11 +279,11 @@ Test files are in `test/e2e/`:
 
 Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 
-Helpers of the standalone suite are in `test/e2e/helpers/`: `wait.ts` waits for a state of the app (`waitForPage`, `expectHashToBe`, `waitForRuntimeSettlement`), `browser.ts` acts on the browser or a control directly (`fireEvent`, `getHistoryLength`, `getHistoryEntryIndex`, `setBrowserHash`), `scenarios.ts` holds steps that several specs repeat (`startAtHome`, `toggleLogin`, `loginAndGoToProtected`, `expectKeptOnHome`, `navBackToHome`). Both suites share `test/shared/`: `controls.ts` (control references, `press`, `waitForComponent(appId)`, `isPageDisplayed`), `models.ts` (`setDirtyState`, `getRuntimeSettlementRevision`) and `reports.ts` for the nested component (`setConfidentialUnlocked`, `settleReportsNavigation`; wait for it with `waitForComponent(REPORTS_APP_ID)`).
+Helpers of the standalone suite are in `test/e2e/helpers/`: `wait.ts` waits for a state of the app (`waitForPage`, `expectHashToBe`, `waitForRuntimeSettlement`), `browser.ts` acts on the browser or a control directly (`fireEvent`, `setBrowserHash`), `scenarios.ts` holds steps that several specs repeat (`startAtHome`, `toggleLogin`, `loginAndGoToProtected`, `expectKeptOnHome`, `navBackToHome`). Both suites share `test/shared/`: `controls.ts` (control references, `press`, `waitForComponent(appId)`, `isPageDisplayed`), `models.ts` (`setDirtyState`, `getRuntimeSettlementRevision`), `history.ts` (`getHistoryLength`, `getHistoryEntryIndex`) and `reports.ts` for the nested component (`setConfidentialUnlocked`, `settleReportsNavigation`; wait for it with `waitForComponent(REPORTS_APP_ID)`).
 
 The E2E configuration (`test/wdio.conf.ts`) loads the app with `sap-ui-language=en`, because the expected texts and number formats are those of English.
 
-FLP-specific coverage lives in `test/flp/` and is split across seven spec files:
+FLP-specific coverage lives in `test/flp/` and is split across eight spec files:
 
 | File                         | Purpose                                                                                                                                                                                                                                                                                                                                                   |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -295,7 +296,7 @@ FLP-specific coverage lives in `test/flp/` and is split across seven spec files:
 | `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display                                                                                                                                                                                                                                    |
 | `flp-native-parity.e2e.ts`   | The same app with the native and with the guard router (isolated): deep link, navigation, cancelled cross-app navigation, keep-alive; the two must leave the same record                                                                                                                                                                                  |
 
-The cross-app, keep-alive and native-parity specs are isolated because they navigate to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
+The cross-app, clean cross-app and keep-alive specs are isolated because they end on Shell-home, leaving the sandbox unrecoverable; the native-parity spec is isolated for the reason given below. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
 
 `flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds a minimal component (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
 

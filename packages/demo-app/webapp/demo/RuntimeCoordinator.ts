@@ -2,7 +2,6 @@ import JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardRouter, Router$NavigationSettledEvent } from "ui5/guard/router/types";
 import { registerDirtyStateProvider } from "../flp/ContainerAdapter";
 import { setSettlementResult, syncRuntimeModel } from "../model/runtime";
-import { attachHashChanged } from "../routing/hashNavigation";
 
 export default class RuntimeCoordinator {
 	private readonly _runtimeModel: JSONModel;
@@ -17,14 +16,13 @@ export default class RuntimeCoordinator {
 		return this._formModel.getProperty("/isDirty") === true;
 	};
 
-	private _detachHashChanged: (() => void) | null = null;
-
 	private _unregisterDirtyProvider: (() => void) | null = null;
 
 	private _router: GuardRouter | null = null;
 
 	private readonly _settlementHandler = (evt: Router$NavigationSettledEvent): void => {
 		setSettlementResult(this._runtimeModel, evt.getParameters());
+		syncRuntimeModel(this._runtimeModel, this._unregisterDirtyProvider !== null);
 	};
 
 	constructor(runtimeModel: JSONModel, formModel: JSONModel) {
@@ -38,13 +36,10 @@ export default class RuntimeCoordinator {
 		this.activate();
 	}
 
-	/** The app is shown: follow the hash, and answer the launchpad's question about unsaved data. */
+	/** The app is shown: answer the launchpad's question about unsaved data. Each settlement syncs the hash. */
 	activate(): void {
-		this._detachHashChanged = attachHashChanged(() => {
-			this.sync();
-		});
-
-		this.sync();
+		this._unregisterDirtyProvider ??= registerDirtyStateProvider(this._dirtyStateProvider);
+		syncRuntimeModel(this._runtimeModel, this._unregisterDirtyProvider !== null);
 	}
 
 	/**
@@ -54,9 +49,6 @@ export default class RuntimeCoordinator {
 	 * between other apps.
 	 */
 	deactivate(): void {
-		this._detachHashChanged?.();
-		this._detachHashChanged = null;
-
 		this._unregisterDirtyProvider?.();
 		this._unregisterDirtyProvider = null;
 	}
@@ -70,13 +62,5 @@ export default class RuntimeCoordinator {
 		}
 
 		this.deactivate();
-	}
-
-	sync(): void {
-		if (!this._unregisterDirtyProvider) {
-			this._unregisterDirtyProvider = registerDirtyStateProvider(this._dirtyStateProvider);
-		}
-
-		syncRuntimeModel(this._runtimeModel, this._unregisterDirtyProvider !== null);
 	}
 }

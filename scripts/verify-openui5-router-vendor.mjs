@@ -25,15 +25,10 @@ async function main() {
 			[...currentEntryPoint.matchAll(/import\s+"([^"]+)";/g)].map((match) => match[1]),
 		);
 		const expectedImports = new Set(
-			manifestFiles
-				.filter((file) => file.portFilePath)
-				.map((file) => {
-					const relativePath = path.posix.relative(
-						"packages/lib/test/qunit/upstream-parity",
-						String(file.portFilePath).replaceAll("\\", "/"),
-					);
-					return `./${relativePath.replace(/\.ts$/, "")}`;
-				}),
+			manifestFiles.map((file) => {
+				const relativePath = path.posix.relative("packages/lib/test/qunit/upstream-parity", file.portFilePath);
+				return `./${relativePath.replace(/\.ts$/, "")}`;
+			}),
 		);
 
 		for (const expectedImport of expectedImports) {
@@ -58,17 +53,13 @@ async function main() {
 	}
 
 	for (const file of manifestFiles) {
-		if (
-			!file.rawFilePath.includes(`/${manifest.upstream.tag}/`) &&
-			!file.rawFilePath.includes(`\\${manifest.upstream.tag}\\`)
-		) {
+		if (!file.rawFilePath.includes(`/${manifest.upstream.tag}/`)) {
 			errors.push(
 				`Raw file path does not match active upstream version ${manifest.upstream.tag}: ${file.rawFilePath}`,
 			);
 		}
 
-		const normalizedRawPath = file.rawFilePath.replaceAll("\\", "/");
-		if (!normalizedRawPath.endsWith(file.sourcePath)) {
+		if (!file.rawFilePath.endsWith(file.sourcePath)) {
 			errors.push(`Raw file path does not align with source path ${file.sourcePath}: ${file.rawFilePath}`);
 		}
 
@@ -92,10 +83,7 @@ async function main() {
 			errors.push(`Missing executable port file: ${file.portFilePath}`);
 		}
 
-		if (
-			!file.portFilePath.includes(`/${manifest.upstream.tag}/`) &&
-			!file.portFilePath.includes(`\\${manifest.upstream.tag}\\`)
-		) {
+		if (!file.portFilePath.includes(`/${manifest.upstream.tag}/`)) {
 			errors.push(
 				`Port file path does not match active upstream version ${manifest.upstream.tag}: ${file.portFilePath}`,
 			);
