@@ -74,11 +74,7 @@ async function navTo(app: App, route: string, parameters: Record<string, string>
 
 async function setDirtyFlag(dirty: boolean): Promise<void> {
 	await browser.execute((flag: boolean) => {
-		const Container = sap.ui.require("sap/ushell/Container");
-		if (!Container) {
-			throw new Error("FLP container is not available");
-		}
-		Container.setDirtyFlag(flag);
+		sap.ui.require("sap/ushell/Container").setDirtyFlag(flag);
 	}, dirty);
 }
 

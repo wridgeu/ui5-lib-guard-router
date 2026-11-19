@@ -1,4 +1,6 @@
 import type { wdi5Selector } from "wdio-ui5-service";
+import type NavContainer from "sap/m/NavContainer";
+import type Page from "sap/m/Page";
 import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 
 /**
@@ -205,14 +207,11 @@ export async function isPageDisplayed(page: ControlRef, expectedTitle: string): 
 	return browser.execute(
 		(componentId: string, viewId: string, id: string, title: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const NavContainer = sap.ui.require("sap/m/NavContainer");
-			const Page = sap.ui.require("sap/m/Page");
 			const view = Component.getComponentById(componentId).byId(viewId);
-			const control = view?.byId(id);
-			const container = view?.getParent();
-			if (NavContainer && container instanceof NavContainer && container.getCurrentPage() !== view) return false;
-			const isPage = Page !== undefined && control instanceof Page;
-			const domRef = isPage && control.getTitle() === title ? control.getDomRef() : null;
+			const control = view?.byId(id) as Page | undefined;
+			const container = view?.getParent() as NavContainer | null | undefined;
+			if (container && container.getCurrentPage() !== view) return false;
+			const domRef = control?.getTitle() === title ? control.getDomRef() : null;
 			return domRef ? domRef.checkVisibility({ visibilityProperty: true }) : false;
 		},
 		await getAppComponentId(page.appId),

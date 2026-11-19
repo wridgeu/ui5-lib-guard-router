@@ -32,10 +32,9 @@ async function navigateCrossApp(shellHash: string): Promise<boolean> {
 
 async function isFormDirty(): Promise<unknown> {
 	return browser.execute(
-		(componentId: string) => {
+		(componentId: string): unknown => {
 			const Component = sap.ui.require("sap/ui/core/Component");
-			const isDirty: unknown = Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
-			return isDirty;
+			return Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
 		},
 		await getAppComponentId(),
 	);

@@ -1,6 +1,4 @@
 import type Log from "sap/base/Log";
-import type NavContainer from "sap/m/NavContainer";
-import type Page from "sap/m/Page";
 import type HashChanger from "sap/ui/core/routing/HashChanger";
 import type UIComponent from "sap/ui/core/UIComponent";
 import type View from "sap/ui/core/mvc/View";
@@ -25,8 +23,7 @@ interface TestedComponent extends UIComponent {
 /**
  * Types for the synchronous `sap.ui.require(name)`, which UI5 declares as `any`. Test code
  * that runs in the browser through `browser.execute()` reads modules with it, because it
- * cannot import them. The page under test has loaded the modules that are declared without
- * `undefined`; the others are missing while the page starts or on a page without a launchpad.
+ * cannot import them. The page under test has loaded them.
  */
 declare global {
 	namespace sap {
@@ -34,9 +31,7 @@ declare global {
 			function require(name: "sap/ui/core/Component"): { getComponentById(id: string): TestedComponent };
 			function require(name: "sap/ui/core/routing/HashChanger"): typeof HashChanger;
 			function require(name: "sap/base/Log"): typeof Log;
-			function require(name: "sap/m/NavContainer"): typeof NavContainer | undefined;
-			function require(name: "sap/m/Page"): typeof Page | undefined;
-			function require(name: "sap/ushell/Container"): typeof Container | undefined;
+			function require(name: "sap/ushell/Container"): typeof Container;
 		}
 	}
 }

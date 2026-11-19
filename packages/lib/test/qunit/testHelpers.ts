@@ -1,7 +1,7 @@
+import type Event from "sap/ui/base/Event";
 import type Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type HashChangerBase from "sap/ui/core/routing/HashChangerBase";
-import type { HashChangerBase$HashChangedEvent } from "sap/ui/core/routing/HashChangerBase";
 import UIComponent from "sap/ui/core/UIComponent";
 import Log from "sap/base/Log";
 import jQuery from "sap/ui/thirdparty/jquery";
@@ -236,10 +236,8 @@ export async function assertBlocked(
 export function recordHashChanges(): { hashes: string[]; stop: () => void } {
 	const hashChanger = HashChanger.getInstance();
 	const hashes: string[] = [];
-	const listener = (event: HashChangerBase$HashChangedEvent): void => {
-		// The UI5 types declare the hash as an object.
-		const newHash: unknown = event.getParameter("newHash");
-		if (typeof newHash === "string") hashes.push(newHash);
+	const listener = (event: Event<{ newHash: string }>): void => {
+		hashes.push(event.getParameter("newHash"));
 	};
 	hashChanger.attachEvent("hashChanged", listener);
 	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };

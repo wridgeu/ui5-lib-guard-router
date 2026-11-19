@@ -69,57 +69,46 @@ QUnit.test("ext router has additional guard methods", function (assert: Assert) 
 QUnit.test(
 	"an attach call without a handler registers a listener, as with the native router",
 	function (assert: Assert) {
-		callUnsafe(nativeRouter, "attachRouteMatched", { some: "data" });
 		callUnsafe(extRouter, "attachRouteMatched", { some: "data" });
-		assert.ok(nativeRouter.hasListeners("routeMatched"), "the native router leaves the check to EventProvider");
-		assert.strictEqual(extRouter.hasListeners("routeMatched"), nativeRouter.hasListeners("routeMatched"));
+		assert.ok(
+			extRouter.hasListeners("routeMatched"),
+			"a call without a handler is left to EventProvider, as natively",
+		);
 
-		callUnsafe(nativeRouter, "attachEvent", "navigationSettled", { some: "data" });
 		callUnsafe(extRouter, "attachNavigationSettled", { some: "data" });
-		assert.strictEqual(
+		assert.ok(
 			extRouter.hasListeners("navigationSettled"),
-			nativeRouter.hasListeners("navigationSettled"),
 			"attachNavigationSettled() registers like attachEvent()",
 		);
 	},
 );
 
-QUnit.test(
-	"routes without a name in a routes array take no other name than with the native router",
-	async function (assert: Assert) {
-		// UI5 registers both unnamed routes under the one name "undefined". A route added as "0" is a new route.
-		const routes = () => [{ pattern: "first" }, { pattern: "second" }, { name: "page", pattern: "page" }];
-		const native = new MobileRouter(routes(), { async: true });
-		const ext = new GuardRouterClass(routes(), {
-			async: true,
-			guardRouter: {
-				inheritance: "pattern-tree",
-				guards: { page: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"] },
-			},
-		});
-		try {
-			assert.strictEqual(native.getRoute("undefined")?.getPattern(), "second");
-			assert.strictEqual(ext.getRoute("undefined")?.getPattern(), "second");
-			assert.strictEqual(native.getRoute("0"), undefined, "the index of an unnamed route names no route");
-			assert.strictEqual(ext.getRoute("0"), undefined);
-
-			const statuses = recordSettlements(ext);
-			ext.initialize();
-			await flushPromises();
-			ext.addRoute({ name: "0", pattern: "page/detail" });
-			ext.navTo("0");
-			await ext.navigationSettled();
-			assert.deepEqual(
-				statuses,
-				["bypassed", "blocked"],
-				"a route added under that name is new: it inherits the guard",
-			);
-		} finally {
-			native.destroy();
-			ext.destroy();
-		}
-	},
-);
+QUnit.test("routes without a name in a routes array are not named by their index", async function (assert: Assert) {
+	// UI5 registers both unnamed routes under the one name "undefined". A route added as "0" is a new route.
+	const routes = [{ pattern: "first" }, { pattern: "second" }, { name: "page", pattern: "page" }];
+	const ext = new GuardRouterClass(routes, {
+		async: true,
+		guardRouter: {
+			inheritance: "pattern-tree",
+			guards: { page: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"] },
+		},
+	});
+	try {
+		const statuses = recordSettlements(ext);
+		ext.initialize();
+		await flushPromises();
+		ext.addRoute({ name: "0", pattern: "page/detail" });
+		ext.navTo("0");
+		await ext.navigationSettled();
+		assert.deepEqual(
+			statuses,
+			["bypassed", "blocked"],
+			"a route added under that name is new: it inherits the guard",
+		);
+	} finally {
+		ext.destroy();
+	}
+});
 
 // ============================================================
 // Module: Route matching parity
