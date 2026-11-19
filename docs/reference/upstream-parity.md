@@ -298,6 +298,27 @@ and the mechanisms are described in
 | Private member `sap.ui.core.routing.Router#_bLastHashReplaced`                                                                                                                                               | Set to `false` in `Router._commitNavigation()` for the target of a redirected hash change that added a history entry or stepped forward (`Router._alignTitleHistory()`), so that UI5 adds the title of the target to the title history instead of replacing the last one | OpenUI5 1.144.0, OpenUI5 1.120.0         |
 | `Router#getTitleHistory()` returns the array of the title history itself, not a copy                                                                                                                         | After a redirected step back, `Router._alignTitleHistory()` removes the title of the replaced history entry from that array, under the condition by which `Router#fireTitleChanged` removes a title on a step back                                                       | OpenUI5 1.144.0, OpenUI5 1.120.0         |
 
+Why there is no public alternative:
+
+- **UI5's routing classes share the same internals among themselves.** `Route` writes the
+  router's `_bMatchingProcessStarted`. `Target#waitForComponentTarget` reads it on the router of
+  another component and subscribes the bare resolve function. `navTo()` and `fireTitleChanged()`
+  hand `_bLastHashReplaced` and the title array to each other (source locations below). The
+  router depends on these members because it changes when a route matches, and these members are
+  how UI5's own classes learn about that. No other private member is read or written.
+- **Nothing public or protected can do the same.** `fireTitleChanged()` is private, and overriding
+  it would couple to more of UI5 than the two members do. `navTo()` with or without `bReplace`
+  cannot express "replace an entry that never got a title" (a new entry or a step forward). Nor
+  can it express "drop the title of the entry that a step back arrived at": that title was never
+  added, because the guard turned the route away before it matched. The title history and the
+  wait for a nested router can only be reached through what UI5's own classes use.
+- **Why the title history matters:** the Fiori launchpad builds the shell's navigation hierarchy
+  from it (`sap/ushell/ui5service/ShellUIService.js`, `attachTitleChanged`, which reads the
+  `history` parameter; also `getTitleHistory()[0]` for the initial title). Without the two title
+  couplings, after a redirect that hierarchy would lose the page before it (new entry, step
+  forward). After a redirected step back it would keep an entry for the page the guard turned
+  away.
+
 Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:compat:120`):
 
 - `packages/lib/test/qunit/router/async/AsyncGuards.qunit.ts`, module "Router - Native matching flag"
