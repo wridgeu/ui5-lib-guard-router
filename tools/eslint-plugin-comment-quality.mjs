@@ -11,8 +11,6 @@
 
 /** @import { Comment, ESTree, Plugin, Rule } from "@oxlint/plugins" */
 
-// Shared helpers
-
 /**
  * Directives and keeper patterns that must never be flagged, regardless
  * of what the rest of the comment text looks like.
@@ -38,49 +36,6 @@ function commentText(node) {
 		.replace(/^[ \t]*\*[ \t]?/gm, " ")
 		.replace(/\s+/g, " ")
 		.trim();
-}
-
-/**
- * @param {unknown} value
- * @returns {value is ESTree.Node}
- */
-function isNode(value) {
-	return typeof value === "object" && value !== null && "type" in value;
-}
-
-/**
- * Collects all Identifier names reachable from a node (max 3 levels
- * of nesting). Used to extract the "vocabulary" of a code statement.
- *
- * @param {ESTree.Node} node
- * @returns {Set<string>}
- */
-function collectIdentifiers(node) {
-	/** @type {Set<string>} */
-	const ids = new Set();
-
-	/**
-	 * @param {ESTree.Node} n
-	 * @param {number} depth
-	 */
-	function walk(n, depth) {
-		if (depth > 3) return;
-		if (n.type === "Identifier") {
-			ids.add(n.name.toLowerCase());
-			return;
-		}
-		for (const [key, value] of Object.entries(n)) {
-			if (key === "parent") continue;
-			/** @type {unknown[]} */
-			const children = Array.isArray(value) ? value : [value];
-			for (const child of children) {
-				if (isNode(child)) walk(child, depth + 1);
-			}
-		}
-	}
-
-	walk(node, 0);
-	return ids;
 }
 
 /**
@@ -127,8 +82,6 @@ const FILLER_WORDS = new Set([
 	"above",
 	"below",
 ]);
-
-// Rules
 
 /**
  * Flags single-line comments that just restate the adjacent code using
@@ -193,7 +146,12 @@ const noObviousComment = {
 					const nextNode = nearestBody.find((n) => n.start > comment.end);
 					if (!nextNode) continue;
 
-					const codeIds = collectIdentifiers(nextNode);
+					// The vocabulary of the statement: the names of its identifiers.
+					const codeIds = new Set(
+						context.sourceCode
+							.getTokens(nextNode, { filter: (token) => token.type === "Identifier" })
+							.map((token) => token.value.toLowerCase()),
+					);
 					if (codeIds.size === 0) continue;
 
 					const words = commentWords(text);
@@ -345,7 +303,6 @@ const noHedgingComment = {
 		return {
 			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
-					// Skip line comments that are keeper directives
 					if (KEEPER_RE.test(comment.value)) continue;
 					// Skip JSDoc / block comments (they often cite examples)
 					if (comment.type === "Block") continue;

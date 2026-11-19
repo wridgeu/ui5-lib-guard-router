@@ -86,10 +86,8 @@ const testFiles = [...[...onDisk, ...ports].map((file) => `${QUNIT}/${file}`), .
 const titlesOf = (file) => testTitles(read(file));
 const citation = /`([^`\s]+\.(?:qunit|e2e)\.ts): ([^`]+)`/g;
 // The same for a module: `<test file>`, module "<name>", or: module "<name>" of `<test file>`.
-const moduleCitations = [
-	/`(?<cited>[^`\s]+\.qunit\.ts)`, module "(?<name>[^"]+)"/g,
-	/\bmodule "(?<name>[^"]+)" of `(?<cited>[^`\s]+\.qunit\.ts)`/gi,
-];
+const moduleAfterFile = /`([^`\s]+\.qunit\.ts)`, module "([^"]+)"/g;
+const moduleBeforeFile = /\bmodule "([^"]+)" of `([^`\s]+\.qunit\.ts)`/gi;
 /**
  * @param {string} doc
  * @param {string} cited
@@ -101,6 +99,17 @@ function citedFile(doc, cited) {
 	if (files.length !== 1) errors.push(`${doc} cites ${cited}, which names ${files.length} test files`);
 	return files.length === 1 ? files[0] : undefined;
 }
+/**
+ * @param {string} doc
+ * @param {string} cited
+ * @param {string} name
+ */
+function checkModuleCitation(doc, cited, name) {
+	const file = citedFile(doc, cited);
+	if (file && `${QUNIT}/${moduleFiles.get(name)}` !== file) {
+		errors.push(`${doc} cites a module that ${file} does not have: "${name}"`);
+	}
+}
 for (const doc of docs) {
 	// A citation in running text may be wrapped.
 	const text = read(doc).replace(/\s+/g, " ");
@@ -110,15 +119,8 @@ for (const doc of docs) {
 			errors.push(`${doc} cites a test that ${file} does not have: "${title}"`);
 		}
 	}
-	for (const pattern of moduleCitations) {
-		for (const { groups } of text.matchAll(pattern)) {
-			if (!groups) continue;
-			const file = citedFile(doc, groups.cited);
-			if (file && `${QUNIT}/${moduleFiles.get(groups.name)}` !== file) {
-				errors.push(`${doc} cites a module that ${file} does not have: "${groups.name}"`);
-			}
-		}
-	}
+	for (const [, cited, name] of text.matchAll(moduleAfterFile)) checkModuleCitation(doc, cited, name);
+	for (const [, name, cited] of text.matchAll(moduleBeforeFile)) checkModuleCitation(doc, cited, name);
 }
 // The parity table of the library README is made of such citations: none found means the
 // format changed and nothing above checked it.
