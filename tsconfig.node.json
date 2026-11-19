@@ -4,6 +4,7 @@
 		"allowJs": true,
 		"checkJs": true,
 		"allowImportingTsExtensions": true,
+		"module": "esnext",
 		"emitDeclarationOnly": true,
 		"types": ["node", "@wdio/globals/types"]
 	},

@@ -32,6 +32,8 @@ const allowedStatuses = new Set(["ported", "ported-subset"]);
  * @property {string[]} adaptations
  */
 
+/** @typedef {{ upstream: ManifestUpstream, files: ManifestFile[] }} Manifest */
+
 /**
  * @param {unknown} value
  * @returns {value is Record<string, unknown>}
@@ -50,10 +52,8 @@ export function computeSha256(contents) {
  *
  * @param {Record<string, unknown>} upstream
  * @param {string[]} errors
- * @returns {upstream is ManifestUpstream}
  */
 function validateUpstream(upstream, errors) {
-	const before = errors.length;
 	for (const key of Object.keys(upstream)) {
 		if (!allowedUpstreamKeys.has(key)) {
 			errors.push(`Manifest upstream contains unsupported key '${key}'`);
@@ -71,22 +71,20 @@ function validateUpstream(upstream, errors) {
 	if (typeof upstream.commitSha !== "string" || !/^[a-f0-9]{40}$/.test(upstream.commitSha)) {
 		errors.push(`Manifest upstream commitSha is invalid: ${String(upstream.commitSha)}`);
 	}
-	return errors.length === before;
 }
 
 /**
- * Validates one file entry of the manifest, adding an error for each problem. An unsupported
- * key is an error, but leaves the entry valid.
+ * Validates one file entry of the manifest, adding an error for each unsupported key and
+ * one for the first other problem.
  *
  * @param {unknown} file
  * @param {number} index
  * @param {string[]} errors
- * @returns {file is ManifestFile}
  */
 function validateFile(file, index, errors) {
 	if (!isRecord(file)) {
 		errors.push(`Manifest file entry at index ${index} must be an object`);
-		return false;
+		return;
 	}
 
 	for (const key of Object.keys(file)) {
@@ -109,41 +107,35 @@ function validateFile(file, index, errors) {
 		file.portFilePath.length === 0
 	) {
 		errors.push(`Manifest entry is incomplete: ${JSON.stringify(file)}`);
-		return false;
+		return;
 	}
 
 	if (!Array.isArray(file.adaptations) || file.adaptations.some((item) => typeof item !== "string")) {
 		errors.push(`Manifest entry has invalid adaptations array: ${file.id}`);
-		return false;
+		return;
 	}
 
 	if (typeof file.contentSha256 !== "string" || !/^([a-f0-9]{64})$/.test(file.contentSha256)) {
 		errors.push(`Manifest entry has invalid contentSha256: ${file.id}`);
-		return false;
+		return;
 	}
 
 	if (typeof file.status !== "string" || !allowedStatuses.has(file.status)) {
-		const status = typeof file.status === "string" ? file.status : JSON.stringify(file.status);
-		errors.push(`Manifest entry has unsupported status '${status}': ${file.id}`);
-		return false;
+		errors.push(`Manifest entry has unsupported status ${JSON.stringify(file.status)}: ${file.id}`);
 	}
-	return true;
 }
 
 /**
- * Validates the parsed vendor manifest. `files` and `upstream` are the entries of `manifest`
- * itself, so a caller can change them and write the manifest back.
+ * Validates the parsed vendor manifest.
  *
  * @param {unknown} manifest
- * @returns {{ errors: string[], files: ManifestFile[], upstream: ManifestUpstream | undefined }}
+ * @param {string[]} errors empty array; receives one message per problem
+ * @returns {manifest is Manifest}
  */
-export function validateUpstreamParityManifest(manifest) {
-	/** @type {string[]} */
-	const errors = [];
-
+export function isValidUpstreamParityManifest(manifest, errors) {
 	if (!isRecord(manifest)) {
 		errors.push("Manifest root must be an object");
-		return { errors, files: [], upstream: undefined };
+		return false;
 	}
 
 	for (const key of Object.keys(manifest)) {
@@ -156,16 +148,16 @@ export function validateUpstreamParityManifest(manifest) {
 		errors.push("Manifest files array is missing or empty");
 	}
 
-	/** @type {ManifestUpstream | undefined} */
-	let upstream;
 	if (!isRecord(manifest.upstream)) {
 		errors.push("Manifest upstream metadata is missing or invalid");
-	} else if (validateUpstream(manifest.upstream, errors)) {
-		upstream = manifest.upstream;
+	} else {
+		validateUpstream(manifest.upstream, errors);
 	}
 
 	/** @type {unknown[]} */
-	const manifestFiles = Array.isArray(manifest.files) ? manifest.files : [];
-	const files = manifestFiles.filter((file, index) => validateFile(file, index, errors));
-	return { errors, files, upstream };
+	const files = Array.isArray(manifest.files) ? manifest.files : [];
+	for (const [index, file] of files.entries()) {
+		validateFile(file, index, errors);
+	}
+	return errors.length === 0;
 }

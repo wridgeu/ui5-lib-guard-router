@@ -1,4 +1,5 @@
 import { spawn, execFileSync } from "node:child_process";
+import { once } from "node:events";
 import { createServer } from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -27,15 +28,10 @@ function getOption(name) {
 	return process.argv[index + 1];
 }
 
-/**
- * @param {ChildProcess} child
- * @returns {Promise<{ code: number | null, signal: NodeJS.Signals | null }>}
- */
-function waitForExit(child) {
-	return new Promise((resolve, reject) => {
-		child.once("exit", (code, signal) => resolve({ code, signal }));
-		child.once("error", reject);
-	});
+/** @param {ChildProcess} child */
+async function waitForExit(child) {
+	await once(child, "exit");
+	return { code: child.exitCode, signal: child.signalCode };
 }
 
 /**

@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import rootPackage from "../package.json" with { type: "json" };
 import { npmArgs } from "./npm-command.mjs";
-import { isRecord } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const libDir = path.join(repoRoot, "packages", "lib");
@@ -39,15 +39,6 @@ function runAndCapture(command, args, options = {}) {
 }
 
 async function main() {
-	/** @type {unknown} */
-	const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-	/** @param {string} name */
-	const devDependency = (name) => {
-		const version =
-			isRecord(rootPackage) && isRecord(rootPackage.devDependencies) && rootPackage.devDependencies[name];
-		if (typeof version !== "string") throw new Error(`package.json has no devDependency ${name}`);
-		return version;
-	};
 	const tempDir = await mkdtemp(path.join(os.tmpdir(), "ui5-guard-pack-"));
 	let tarballPath = "";
 	const [npmCommand, npmBaseArgs] = npmArgs();
@@ -159,8 +150,8 @@ async function main() {
 				...npmBaseArgs,
 				"install",
 				tarballPath,
-				`@openui5/types@${devDependency("@openui5/types")}`,
-				`typescript@${devDependency("typescript")}`,
+				`@openui5/types@${rootPackage.devDependencies["@openui5/types"]}`,
+				`typescript@${rootPackage.devDependencies.typescript}`,
 			],
 			{ cwd: tempDir },
 		);

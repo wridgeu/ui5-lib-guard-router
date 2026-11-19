@@ -1,20 +1,19 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { computeSha256, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
+import { computeSha256, isValidUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
 
 async function main() {
-	const {
-		errors,
-		files: manifestFiles,
-		upstream,
-	} = validateUpstreamParityManifest(JSON.parse(await readFile(manifestPath, "utf8")));
+	/** @type {unknown} */
+	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+	/** @type {string[]} */
+	const errors = [];
 	const currentEntryPointPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/Current.qunit.ts");
 
-	if (errors.length > 0 || !upstream) {
+	if (!isValidUpstreamParityManifest(manifest, errors)) {
 		for (const error of errors) {
 			console.error(error);
 		}
@@ -28,7 +27,7 @@ async function main() {
 			[...currentEntryPoint.matchAll(/import\s+"([^"]+)";/g)].map((match) => match[1]),
 		);
 		const expectedImports = new Set(
-			manifestFiles.map((file) => {
+			manifest.files.map((file) => {
 				const relativePath = path.posix.relative("packages/lib/test/qunit/upstream-parity", file.portFilePath);
 				return `./${relativePath.replace(/\.ts$/, "")}`;
 			}),
@@ -55,9 +54,11 @@ async function main() {
 		);
 	}
 
-	for (const file of manifestFiles) {
-		if (!file.rawFilePath.includes(`/${upstream.tag}/`)) {
-			errors.push(`Raw file path does not match active upstream version ${upstream.tag}: ${file.rawFilePath}`);
+	for (const file of manifest.files) {
+		if (!file.rawFilePath.includes(`/${manifest.upstream.tag}/`)) {
+			errors.push(
+				`Raw file path does not match active upstream version ${manifest.upstream.tag}: ${file.rawFilePath}`,
+			);
 		}
 
 		if (!file.rawFilePath.endsWith(file.sourcePath)) {
@@ -84,8 +85,10 @@ async function main() {
 			errors.push(`Missing executable port file: ${file.portFilePath}`);
 		}
 
-		if (!file.portFilePath.includes(`/${upstream.tag}/`)) {
-			errors.push(`Port file path does not match active upstream version ${upstream.tag}: ${file.portFilePath}`);
+		if (!file.portFilePath.includes(`/${manifest.upstream.tag}/`)) {
+			errors.push(
+				`Port file path does not match active upstream version ${manifest.upstream.tag}: ${file.portFilePath}`,
+			);
 		}
 	}
 
@@ -98,7 +101,7 @@ async function main() {
 	}
 
 	console.log(
-		`Verified ${manifestFiles.length} vendored OpenUI5 router file entries for ${upstream.tag} (${upstream.commitSha})`,
+		`Verified ${manifest.files.length} vendored OpenUI5 router file entries for ${manifest.upstream.tag} (${manifest.upstream.commitSha})`,
 	);
 }
 

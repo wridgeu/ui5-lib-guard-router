@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { computeSha256, isRecord, validateUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
+import { computeSha256, isRecord, isValidUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
@@ -124,17 +124,18 @@ function buildRawFilePathForManifest(tag, sourcePath) {
 
 async function main() {
 	const manifest = await readManifest();
-	const { errors: manifestErrors, files: manifestFiles, upstream } = validateUpstreamParityManifest(manifest);
-	if (manifestErrors.length > 0 || !upstream) {
+	/** @type {string[]} */
+	const manifestErrors = [];
+	if (!isValidUpstreamParityManifest(manifest, manifestErrors)) {
 		throw new Error(`Manifest is invalid before vendoring: ${manifestErrors.join("; ")}`);
 	}
 
 	const requestedTag = getOption("--tag");
 	const sha = getOption("--sha");
-	const targetVersion = requestedTag ?? sha ?? upstream.tag;
+	const targetVersion = requestedTag ?? sha ?? manifest.upstream.tag;
 	const dryRun = getFlag("--dry-run");
 	const writeManifest = getFlag("--write-manifest");
-	const repo = upstream.repo;
+	const repo = manifest.upstream.repo;
 
 	if (writeManifest && !requestedTag) {
 		throw new Error(
@@ -143,10 +144,10 @@ async function main() {
 	}
 
 	const commitSha = await resolveCommitSha(repo, targetVersion, sha);
-	const isVersionChange = targetVersion !== upstream.tag;
+	const isVersionChange = targetVersion !== manifest.upstream.tag;
 
 	if (writeManifest && isVersionChange) {
-		const unmigratedPortEntry = manifestFiles.find((file) => !file.portFilePath.includes(`/${targetVersion}/`));
+		const unmigratedPortEntry = manifest.files.find((file) => !file.portFilePath.includes(`/${targetVersion}/`));
 
 		if (unmigratedPortEntry) {
 			throw new Error(
@@ -155,7 +156,7 @@ async function main() {
 		}
 	}
 
-	for (const file of manifestFiles) {
+	for (const file of manifest.files) {
 		const targetPath = buildRawFilePath(targetVersion, file.sourcePath);
 		const sourceUrl = `https://raw.githubusercontent.com/${repo}/${commitSha}/${file.sourcePath}`;
 		if (dryRun) {
@@ -176,14 +177,15 @@ async function main() {
 	}
 
 	if (!dryRun && writeManifest) {
-		upstream.tag = targetVersion;
-		upstream.commitSha = commitSha;
-		for (const file of manifestFiles) {
+		manifest.upstream.tag = targetVersion;
+		manifest.upstream.commitSha = commitSha;
+		for (const file of manifest.files) {
 			file.rawFilePath = buildRawFilePathForManifest(targetVersion, file.sourcePath);
 		}
 
-		const { errors: updatedManifestErrors } = validateUpstreamParityManifest(manifest);
-		if (updatedManifestErrors.length > 0) {
+		/** @type {string[]} */
+		const updatedManifestErrors = [];
+		if (!isValidUpstreamParityManifest(manifest, updatedManifestErrors)) {
 			throw new Error(`Generated manifest is invalid: ${updatedManifestErrors.join("; ")}`);
 		}
 
