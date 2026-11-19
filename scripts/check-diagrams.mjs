@@ -1,11 +1,16 @@
-// Checks every Mermaid block of the docs: it parses, and the library code it names exists (comments name none).
+// Checks every Mermaid block of the docs: it parses, has no backtick, and the library code it names exists (comments name none).
 // Usage: npm run check:diagrams
 import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
-import { IDENTIFIER, sourceNames } from "./source-names.mjs";
+import { sourceNames } from "./source-names.mjs";
+
+/** A call (`name(`) or a private name (`_name`) in a diagram. */
+const CODE_NAME = /(?<![\w$.])(?:[\w$]+\.)*(_[\w$]+|[A-Za-z$][\w$]*(?=\())/g;
+/** Names of UI5, the launchpad and the browser that the diagrams call and the library source does not. */
+const EXTERNAL_NAMES = new Set(["activate", "deactivate", "onActivate", "onDeactivate", "confirm", "_handleDataLoss"]);
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LIB_SRC = "packages/lib/src";
@@ -45,21 +50,26 @@ for (const doc of docs) {
 			);
 		}
 
-		// Rule 2: a name in backticks is a name of the library source.
-		for (const [, code] of diagram.matchAll(/`([^`\n]+)`/g)) {
-			for (const [name] of code.matchAll(IDENTIFIER)) {
-				names++;
-				if (!libNames.has(name)) {
-					errors.push(`${where}: the Mermaid block names \`${name}\`, which ${LIB_SRC} does not have`);
-				}
+		// Rule 2: GitHub prints a backtick in a label as it is, and rejects a label that starts with one.
+		if (diagram.includes("`")) errors.push(`${where}: the Mermaid block has a backtick, write the name plainly`);
+
+		// Rule 3: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
+		// Only labels are read: a flowchart node `id("label")` is no call.
+		const labels = /^\s*flowchart/.test(diagram)
+			? [...diagram.matchAll(/"([^"\n]*)"/g)].map(([, label]) => label)
+			: [...diagram.matchAll(/^[^:\n]*:(.*)$/gm)].map(([, label]) => label);
+		for (const [, name] of labels.join("\n").matchAll(CODE_NAME)) {
+			names++;
+			if (!libNames.has(name) && !EXTERNAL_NAMES.has(name)) {
+				errors.push(`${where}: the Mermaid block names ${name}, which ${LIB_SRC} does not have`);
 			}
 		}
 	}
 	if (blocks > blocksBefore) docsWithBlocks++;
 }
-// None found means the fence or the backtick format changed and nothing above checked it.
+// None found means the fence or the name format changed and nothing above checked it.
 if (blocks === 0) errors.push("no Mermaid block found in the docs");
-if (names === 0) errors.push("no name in backticks found in a Mermaid block");
+if (names === 0) errors.push("no call or private name found in a Mermaid block");
 
 if (errors.length > 0) {
 	console.error(`Diagram check failed:\n- ${errors.join("\n- ")}`);

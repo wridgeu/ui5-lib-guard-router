@@ -178,75 +178,94 @@ export default class Component extends UIComponent {
 
 ## How it works
 
-The native chain of `sap.m.routing.Router` stays as it is; the library adds the parts with the thick border. The dashed parts are optional surroundings.
+The native chain of `sap.m.routing.Router` stays as it is; the library puts its guards in front of it.
 
 ```mermaid
 flowchart TD
-    bar["Address bar, back and forward:<br/>the browser changes the hash"]
-    appCode["Application code calls `navTo()`"]
-    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
-
-    subgraph native ["sap.m.routing.Router (native)"]
-        hash["Hash changer"]
-        match["Route match"]
-        target["Target"]
-        view["View"]
+    subgraph legend ["Legend"]
+        lNative["native UI5"]
+        lAdded["added by the library"]
+        lOptional["optional"]
+        lCommit("commit")
+        lRedirect("redirect")
+        lBlock("block")
+        lError("error")
+        lNative ~~~ lCommit
+        lAdded ~~~ lRedirect
+        lOptional ~~~ lBlock
     end
 
+    bar["Address bar, back, forward:<br/>the browser changes the hash"]
+    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
+    appCode["Application code<br/>calls navTo()"]
+    hash["Hash changer"]
+
     subgraph added ["ui5.guard.router.Router (this library)"]
-        preflight["Preflight of `navTo()`:<br/>guards run before the hash changes"]
-        parse["Override of `parse()`:<br/>guards run after the hash changed"]
+        preflight["Preflight of navTo():<br/>before the hash changes"]
+        parse["Override of parse():<br/>after the hash changed"]
+        sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
         subgraph pipeline ["Guard pipeline"]
             leave["1. Leave guards of the current route"]
             global["2. Global enter guards"]
             enter["3. Enter guards of the target route"]
             leave --> global --> enter
         end
-        commit(["commit:<br/>a `navTo()` writes its hash now"])
-        block(["block:<br/>a hash the browser changed is undone"])
-        redirect(["redirect:<br/>another hop, 10 at most"])
-        error(["error:<br/>a hash the browser changed is undone"])
-        settled(["Event `navigationSettled`"])
+        commit("All guards allow:<br/>commit")
+        redirect("A guard names a route:<br/>redirect")
+        block("A guard returns false:<br/>block")
+        error("A guard throws:<br/>error")
+        settled(["Event navigationSettled"])
     end
 
-    subgraph sources ["Where guards come from"]
-        manifest["manifest.json, block `guardRouter`:<br/>modules under `guards`,<br/>loaded as `guardLoading` says (lazy or block)"]
-        tree["With `inheritance` pattern-tree:<br/>also on the routes whose pattern<br/>extends that of the guarded route"]
-        api["Calls of `addGuard()`,<br/>`addRouteGuard()` and `addLeaveGuard()`"]
+    subgraph native ["sap.m.routing.Router (native): parse()"]
+        match["Route match"] --> target["Target"] --> view["View"]
+        nested["Nested component<br/>(target of type Component)"]
     end
 
-    nested["Target of type Component:<br/>nested component, which can have<br/>a guard router of its own"]
-
+    lBlock ~~~ bar
     bar --> hash
     shell -.-> hash
-    hash -- "hash changed" --> parse
+    hash --> parse
     appCode --> preflight
     preflight --> leave
     parse --> leave
+    sources -.-> pipeline
 
-    pipeline -- "every guard returns true" --> commit
-    pipeline -- "a guard returns false" --> block
-    pipeline -- "an enter guard returns a route" --> redirect
-    pipeline -- "a guard throws or rejects" --> error
-    redirect -- "guards of the new target,<br/>no leave guards" --> global
+    enter --> commit
+    enter --> redirect
+    enter --> block
+    enter --> error
+    commit ~~~ block
+    redirect ~~~ error
+    redirect -- "enter guards<br/>of the target" --> global
 
-    commit -- "native parse()" --> match
-    match --> target --> view
+    commit --> match
     target -.-> nested
+    commit -- "Committed, Bypassed<br/>or Redirected" --> settled
+    block -- "Blocked" --> settled
+    error -- "Error" --> settled
 
-    commit -- "as `Committed` or `Bypassed`,<br/>after a redirect as `Redirected`" --> settled
-    block -- "as `Blocked`" --> settled
-    error -- "as `Error`" --> settled
-
-    manifest --> pipeline
-    manifest -.-> tree -.-> pipeline
-    api --> pipeline
-
-    classDef added stroke-width:3px
-    classDef faint stroke-dasharray:4 4
-    class preflight,parse,leave,global,enter,commit,block,redirect,error,settled,manifest,tree,api added
-    class shell,nested faint
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
+    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    class lNative,bar,appCode,hash,match,target,view native
+    class lAdded,preflight,parse,sources,leave,global,enter,settled added
+    class lOptional,shell,nested optional
+    class lCommit,commit commit
+    class lRedirect,redirect redirect
+    class lBlock,block block
+    class lError,error error
+    style legend fill:none,stroke:#6e7781,stroke-dasharray:2 3
+    style added fill:none,stroke:#0969da,stroke-width:2px
+    style pipeline fill:none,stroke:#0969da
+    style native fill:none,stroke:#6e7781,stroke-width:2px
 ```
+
+A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 
 A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. The detailed diagrams of each step are in the [architecture reference](../../docs/reference/architecture.md#two-entry-point-model-navto-preflight--parse-fallback).
 
@@ -1025,24 +1044,33 @@ What happens to the router depends on whether the manifest declares keep-alive s
 | Declared     | UI5's `Component#deactivate()` stops the router, then calls `onDeactivate()` | `Component#activate()` calls `initialize()`, which runs the guards for the hash the URL shows, then `onActivate()`. No leave guard runs. Returning through an intent without an inner route starts on the default route |
 | Not declared | The launchpad calls `stop()`                                                 | The launchpad calls `initialize(true)`: the router resumes the route the app was on, and its leave guards keep working                                                                                                  |
 
+Declared: the launchpad goes through the component.
+
 ```mermaid
 sequenceDiagram
     participant Shell as Launchpad
     participant Comp as App component
     participant Router as Guard router
-    alt keepAlive supported
-        Shell->>Comp: deactivate()
-        Comp->>Router: stop()
-        Comp->>Comp: onDeactivate()
-        Note over Shell,Router: app hidden
-        Shell->>Comp: activate()
-        Comp->>Router: initialize(): guards run for the hash
-        Comp->>Comp: onActivate()
-    else not declared
-        Shell->>Router: stop()
-        Note over Shell,Router: app hidden
-        Shell->>Router: initialize(true): resumes the route
-    end
+    Shell->>Comp: deactivate()
+    Comp->>Router: stop()
+    Comp->>Comp: onDeactivate()
+    Note over Shell,Router: app hidden
+    Shell->>Comp: activate()
+    Comp->>Router: initialize()
+    Note over Router: guards run<br/>for the hash
+    Comp->>Comp: onActivate()
+```
+
+Not declared: the launchpad calls the router itself.
+
+```mermaid
+sequenceDiagram
+    participant Shell as Launchpad
+    participant Router as Guard router
+    Shell->>Router: stop()
+    Note over Shell,Router: app hidden
+    Shell->>Router: initialize(true)
+    Note over Router: resumes the route
 ```
 
 Guards stay registered while the app is hidden, and so do dirty-state providers: the launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden. The example needs `"keepAlive": { "supported": true }` in the manifest (the Declared row): without it, UI5 does not call `onDeactivate()` and `onActivate()`, and the provider stays registered.
@@ -1129,48 +1157,82 @@ The history in three cases, starting on `home` (the current entry in bold):
 
 `navTo()` runs the guards before any hash is written:
 
+Allowed: the hash is written once the guards have passed.
+
 ```mermaid
 sequenceDiagram
     participant App
     participant Router as Guard router
     participant History as Browser history
     App->>Router: navTo("admin")
-    Router->>Router: leave, global and route guards
-    alt allowed
-        Router->>History: new entry #admin
-        Router-->>App: routeMatched "admin", settles Committed
-    else blocked
-        Router-->>App: settles Blocked, nothing written
-    else redirected to "profile"
-        Router->>Router: enter guards of "profile"
-        Router->>History: new entry #profile
-        Router-->>App: routeMatched "profile", settles Redirected
-    end
+    Router->>Router: leave, global and<br/>route guards allow
+    Router->>History: new entry #35;admin
+    Router-->>App: settles Committed
+    Router-->>App: routeMatched "admin"
+```
+
+Blocked: nothing is written.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Router as Guard router
+    participant History as Browser history
+    App->>Router: navTo("admin")
+    Router->>Router: a guard blocks
+    Router-->>App: settles Blocked
+    Note over History: no entry written
+```
+
+Redirected to `profile`: only the final target is written.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Router as Guard router
+    participant History as Browser history
+    App->>Router: navTo("admin")
+    Router->>Router: an enter guard<br/>redirects to "profile"
+    Router->>Router: global and route guards<br/>of "profile" allow
+    Router->>History: new entry #35;profile
+    Router-->>App: settles Redirected
+    Router-->>App: routeMatched "profile"
 ```
 
 A hash change from the browser arrives after the URL has changed, so the router puts it back or replaces it:
+
+Back, blocked by a leave guard: the router takes the step back.
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Browser
     participant Router as Guard router
-    alt Back, blocked
-        User->>Browser: Back
-        Browser->>Router: hashChanged "home"
-        Router->>Router: leave guards of "detail" block
-        Router->>Browser: history.go(1)
-        Browser->>Router: hashChanged "detail": taken without guards
-        Router-->>User: settles Blocked, history as before
-    else URL bar, redirected
-        User->>Browser: types #admin (new entry)
-        Browser->>Router: hashChanged "admin"
-        Router->>Router: guard of "admin" redirects to "profile"
-        Router->>Router: enter guards of "profile"
-        Router->>Browser: replace the entry with #profile
-        Browser->>Router: hashChanged "profile": commits
-        Router-->>User: settles Redirected
-    end
+    User->>Browser: Back
+    Browser->>Router: hashChanged "home"
+    Router->>Router: leave guard of<br/>"detail" blocks
+    Router->>Browser: history.go(1)
+    Browser->>Router: hashChanged "detail"
+    Note over Router: taken without guards
+    Router-->>User: settles Blocked, history as before
+```
+
+`#admin` typed into the URL bar, redirected: the target replaces the new entry.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Router as Guard router
+    User->>Browser: types #35;admin
+    Note over Browser: new entry #35;admin
+    Browser->>Router: hashChanged "admin"
+    Router->>Router: an enter guard<br/>redirects to "profile"
+    Router->>Router: global and route guards<br/>of "profile" allow
+    Router->>Browser: replaces the entry<br/>with #35;profile
+    Browser->>Router: hashChanged "profile"
+    Note over Router: commits without guards
+    Router-->>User: settles Redirected
 ```
 
 **Settlement of a blocked step.** The browser takes a step asynchronously. A navigation that the router undoes with a step settles once the URL is back: `navigationSettled()` resolves, and the `navigationSettled` event fires, after the `hashChanged` event that started the navigation has returned.
@@ -1194,20 +1256,19 @@ When the parent refuses a hash change, it puts the whole URL back, the nested pa
 
 ```mermaid
 sequenceDiagram
-    actor User
     participant Browser
     participant Parent as Parent router
     participant Child as Nested router
-    Note over Browser: #shell&/child/detail/1
-    User->>Browser: Back to #home
+    Note over Browser: #35;shell&/child/detail/1,<br/>Back to #35;home
     Browser->>Parent: hashChanged "home"
-    Parent->>Parent: leave guard of "shell" blocks
+    Parent->>Parent: leave guard of<br/>"shell" blocks
     Parent->>Browser: history.go(1)
-    Browser->>Child: hashChanged "" (its part of #home)
-    Child->>Child: matches "list"
-    Browser->>Parent: hashChanged "shell": taken without guards, settles Blocked
+    Browser->>Child: hashChanged "", its part of #35;home
+    Note over Child: matches "list"
+    Browser->>Parent: hashChanged "shell"
+    Note over Parent: taken without guards,<br/>settles Blocked
     Browser->>Child: hashChanged "detail/1"
-    Child->>Child: matches "detail" again
+    Note over Child: matches "detail" again
 ```
 
 With `propagateTitle` set on the component target or in the routing config, titles propagate from the nested router to the parent as with the native router. `titleChanged` fires only for navigations that commit; while a navigation waits for async guards, UI5 defers it to the next `routeMatched`.

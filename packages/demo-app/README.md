@@ -9,14 +9,24 @@ The demo supports both standalone preview and a local FLP sandbox preview served
 
 ## Routes
 
-The route map: each arrow is a route with its pattern and what its guards do. An arrow that ends in a cross never shows its view.
+The route map of `demo.app`: each box on the left is a route with its pattern and what its guards do. Blue routes have a guard, an arrow that ends in a cross never shows its view, and the dashed boxes are what a hash without a route gets.
 
 ```mermaid
 flowchart LR
-    bar["Browser address bar<br/>index.html#/HASH"]
-    router{{"Router of demo.app<br/>ui5.guard.router.Router<br/>global: navigationLogger logs and allows"}}
+    subgraph routes ["Routes of demo.app (global guard navigationLogger logs and allows)"]
+        rHome["(empty pattern), route home<br/>leave guard of Home.controller:<br/>logs and allows"]
+        rProtected["protected<br/>enter: permission guard, async,<br/>redirects to home when logged out<br/>leave: dirtyFormGuard blocks<br/>while the form is dirty"]
+        rBlocked["blocked<br/>blockedGuard: always blocks"]
+        rForbidden["forbidden<br/>forbiddenGuard: always<br/>redirects to home"]
+        rAdmin["admin<br/>adminGuard: always<br/>redirects to protected"]
+        rTeam["team, no target<br/>retiredPageGuard: redirects to staff,<br/>which settles on employees"]
+        rEmployees["employees, route employees<br/>(route staff has the same pattern<br/>and never matches)"]
+        rEmployee["employees/{id}, route employee"]
+        rReports["reports"]
+        rNone["no route matches (bypassed)"]
+    end
 
-    subgraph app ["Views of demo.app"]
+    subgraph views ["Views of demo.app"]
         home["Home"]
         protected["Protected"]
         blocked["Blocked"]
@@ -24,34 +34,62 @@ flowchart LR
         admin["Admin"]
         employees["Employees"]
         employee["Employee"]
+        reporting["Component<br/>demo.app.reporting"]
         notFound["NotFound"]
     end
 
-    subgraph reporting ["Component demo.app.reporting (target reports, hash prefix reports)"]
-        nestedRouter{{"Router of demo.app.reporting<br/>ui5.guard.router.Router"}}
+    rHome --> home
+    rProtected --> protected
+    rBlocked --x blocked
+    rForbidden --x forbidden
+    rAdmin --x admin
+    rTeam --> employees
+    rEmployees --> employees
+    rEmployee --> employee
+    rReports --> reporting
+    rNone --> notFound
+
+    classDef plain fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef guarded fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef muted fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    class rEmployees,rEmployee,rReports,home,protected,blocked,forbidden,admin,employees,employee,reporting plain
+    class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam guarded
+    class rNone,notFound muted
+    style routes fill:none,stroke:#6e7781
+    style views fill:none,stroke:#6e7781
+```
+
+The nested component `demo.app.reporting` (target `reports`, hash prefix `reports`) has a guard router of its own:
+
+```mermaid
+flowchart LR
+    subgraph routes ["Routes of demo.app.reporting"]
+        rOverview["(empty pattern), route overview"]
+        rSales["sales"]
+        rConfidential["confidential<br/>confidentialGuard: redirects<br/>to overview while locked"]
+        rNone["no route matches (bypassed)"]
+    end
+
+    subgraph views ["Views of demo.app.reporting"]
         overview["Overview"]
         sales["Sales"]
         confidential["Confidential"]
-        nestedNotFound["NotFound"]
+        notFound["NotFound"]
     end
 
-    bar -- "hash" --> router
+    rOverview --> overview
+    rSales --> sales
+    rConfidential --> confidential
+    rNone --> notFound
 
-    router -- "(empty pattern), route home<br/>leave guard of Home.controller: logs and allows" --> home
-    router -- "protected<br/>enter: permission guard, async, redirects to home when logged out<br/>leave: dirtyFormGuard blocks while the form is dirty" --> protected
-    router -- "blocked<br/>blockedGuard: always blocks" --x blocked
-    router -- "forbidden<br/>forbiddenGuard: always redirects to home" --x forbidden
-    router -- "admin<br/>adminGuard: always redirects to protected" --x admin
-    router -- "employees, route employees<br/>(route staff has the same pattern and never matches)" --> employees
-    router -- "team, no target<br/>retiredPageGuard: redirects to staff,<br/>which settles on employees" --> employees
-    router -- "employees/{id}, route employee" --> employee
-    router -- "reports" --> nestedRouter
-    router -- "(bypassed)" --> notFound
-
-    nestedRouter -- "(empty pattern), route overview" --> overview
-    nestedRouter -- "sales" --> sales
-    nestedRouter -- "confidential<br/>confidentialGuard: redirects to overview while locked" --> confidential
-    nestedRouter -- "(bypassed)" --> nestedNotFound
+    classDef plain fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef guarded fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef muted fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    class rOverview,rSales,overview,sales,confidential plain
+    class rConfidential guarded
+    class rNone,notFound muted
+    style routes fill:none,stroke:#6e7781
+    style views fill:none,stroke:#6e7781
 ```
 
 The hash of a nested route follows that of the parent route, for example `#/reports&/reports/sales`.

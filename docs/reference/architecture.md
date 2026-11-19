@@ -193,36 +193,44 @@ the hash. With the default `navToPreflight: "guard"`, programmatic `navTo()` cal
 guards in the preflight path (see below); the hash change they cause re-enters `parse()` in
 the committing phase, which commits without running the guards again.
 
+The hashes that `parse()` handles without the guards:
+
 ```mermaid
 flowchart TD
     start(["parse(newHash)"]) --> destroyed{"router destroyed?"}
     destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
     destroyed -- "no" --> outdated{"report out of date?<br/>(_reportOutdated)"}
-    outdated -- "yes" --> ret(["return"])
+    outdated -- "yes" --> ret1(["return"])
     outdated -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
-    suppress -- "yes" --> ret
+    suppress -- "yes" --> ret2(["return"])
     suppress -- "no" --> back{"undo started and root hash<br/>equals undo.fullHash?"}
-    back -- "yes" --> adopt["adopt the hash without guards<br/>_finishRestore(newHash)"] --> ret
+    back -- "yes" --> adopt(["adopt the hash without guards<br/>_finishRestore(newHash)"])
     back -- "no" --> redir{"committing or awaitingHash<br/>phase for newHash?"}
     redir -- "yes" --> bypass(["_commitNavigation()"])
-    redir -- "no" --> samehash{same as _currentHash?}
+    redir -- "no" --> samehash{"same as _currentHash?"}
+    samehash -- "no" --> guards(["the guards run"])
     samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
-    moved -- "yes" --> canceldup["evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"] --> ret
+    moved -- "yes" --> canceldup(["evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"])
     moved -- "no" --> match(["super.parse()<br/>the route matches again"])
-    samehash -- "no" --> cancelprev["resolve route<br/>_cancelPendingNavigation()"]
-    cancelprev --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
-    handlermoved -- "yes" --> ret
-    handlermoved -- "no" --> setup["_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
+```
 
+Every other hash runs the guards:
+
+```mermaid
+flowchart TD
+    cancelprev["resolve route<br/>_cancelPendingNavigation()"] --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
+    handlermoved -- "yes" --> ret(["return"])
+    handlermoved -- "no" --> setup["_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
     setup --> evaluate["_pipeline.evaluate(context)"]
     evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
-    stale -- "current" --> apply{"_applyDecision()"}
     stale -- "stale" --> discard(["discard result"])
-
+    stale -- "current" --> apply{"_applyDecision()"}
     apply -- "allow" --> commit(["_commitNavigation()"])
-    apply -- "block" --> block(["_blockNavigation()<br/>undoes the hash change"])
     apply -- "redirect" --> redirect(["_startRedirectChain()"])
+    apply -- "block" --> block(["_blockNavigation()<br/>undoes the hash change"])
     apply -- "error" --> errornav(["_errorNavigation()<br/>undoes the hash change"])
+    commit ~~~ block
+    redirect ~~~ errornav
 ```
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
@@ -528,13 +536,15 @@ A hash change that is no step and is blocked by a synchronous guard:
 sequenceDiagram
     participant Root as Root hash changer
     participant Router as Guard router
-    Root->>Router: _onHashReported("b"), then parse("b")
-    Router->>Router: guards block, _describeUndo() records first "b"
-    Router->>Router: _undoHashChange(): fullHash unknown, restoring with awaitsReport
-    Root->>Router: _onRootHashChanged(newHash "b", oldHash "a")
+    Root->>Router: _onHashReported("b"),<br/>then parse("b")
+    Router->>Router: _describeUndo():<br/>first "b"
+    Router->>Router: guards block
+    Router->>Router: _undoHashChange():<br/>fullHash unknown
+    Note over Router: restoring,<br/>with awaitsReport
+    Root->>Router: _onRootHashChanged():<br/>newHash "b", oldHash "a"
     Router->>Root: replaceHash("a")
-    Root->>Router: parse("a"): undo started, root hash is fullHash
-    Router->>Router: adopt "a" without guards, settle Blocked
+    Root->>Router: parse("a")
+    Note over Router: root hash is fullHash:<br/>adopts "a" without<br/>guards, settles Blocked
 ```
 
 ### Routers that share a hash changer
@@ -563,14 +573,14 @@ hash that puts the URL back, as the URL shows them.
 ```mermaid
 sequenceDiagram
     participant HC as Shared hash changer
-    participant A as Router A (informed first)
+    participant A as Router A<br/>(informed first)
     participant B as Router B
     HC->>A: "page1"
-    A->>HC: guard redirects: navTo("detail/1", replace)
+    A->>HC: guard redirects:<br/>replaces with "detail/1"
     HC->>A: "detail/1", commits
     HC->>B: "detail/1", commits
     HC->>B: "page1" (stale report)
-    B->>B: hash changer shows "detail/1", reported before: dropped
+    Note over B: hash changer shows<br/>"detail/1", reported<br/>before: dropped
 ```
 
 ### Why parse() remains authoritative
@@ -598,50 +608,31 @@ route. All of them get the one context of the navigation. On a redirect hop
 
 ```mermaid
 flowchart TD
-    start(["evaluate(context)"]) --> lcheck{"leave guards for fromRoute<br/>and alsoLeaving?<br/>(skipped on redirect hops)"}
+    start(["evaluate(context)"]) --> phase1
 
-    subgraph phase1 ["Phase 1: leave guards"]
-        lrun["_runGuards(leaveGuards)"]
-        lfin["_continueGuardsAsync()"]
+    subgraph phase1 ["Phase 1: leave guards of fromRoute and alsoLeaving (none on a redirect hop)"]
+        direction LR
+        lrun["_runGuards()"] -- "Promise" --> lfin["_continueGuardsAsync()"]
     end
 
     subgraph phase2 ["Phase 2: global guards"]
-        gsync["_runGuards(globalGuards)"]
-        gfin["_continueGuardsAsync()"]
+        direction LR
+        grun["_runGuards()"] -- "Promise" --> gfin["_continueGuardsAsync()"]
     end
 
-    subgraph phase3 ["Phase 3: route guards"]
-        rcheck{"guards for toRoute<br/>and alsoEntering?"}
-        rsync["_runGuards(routeGuards)"]
-        rfin["_continueGuardsAsync()"]
+    subgraph phase3 ["Phase 3: route guards of toRoute and alsoEntering"]
+        direction LR
+        rrun["_runGuards()"] -- "Promise" --> rfin["_continueGuardsAsync()"]
     end
 
-    lcheck -- "present" --> lrun
-    lcheck -- "none" --> gsync
-    lrun -- "sync, all true" --> gsync
-    lrun -- "Promise" --> lfin
-    lfin -- "all true, not aborted" --> gsync
+    phase1 -- "all true, not aborted" --> phase2
+    phase2 -- "all true, not aborted" --> phase3
+    phase3 -- "all true" --> allow(["allow"])
 
-    gsync -- "sync, all true" --> rcheck
-    gsync -- "Promise" --> gfin
-    gfin -- "all true, not aborted" --> rcheck
-
-    rcheck -- "none" --> allow(["allow"])
-    rcheck -- "present" --> rsync
-    rsync -- "sync, all true" --> allow
-    rsync -- "Promise" --> rfin
-    rfin -- "all true" --> allow
-
-    lrun -- "non-true" --> block(["block"])
-    lfin -- "non-true or aborted" --> block
-    gsync -- "first non-true" --> result(["block or redirect"])
-    gfin -- "first non-true or aborted" --> result
-    rsync -- "first non-true" --> result
-    rfin -- "first non-true or aborted" --> result
-
-    phase1 -- "throws" --> error(["error<br/>(block if aborted)"])
-    phase2 -- "throws" --> error
-    phase3 -- "throws" --> error
+    phase1 -- "non-true or aborted" --> block(["block"])
+    phase2 -- "first non-true or aborted" --> result(["block or redirect"])
+    phase3 -- "first non-true or aborted" --> result
+    phase1 & phase2 & phase3 -- "throws" --> error(["error<br/>(block if aborted)"])
 ```
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
@@ -709,15 +700,15 @@ sequenceDiagram
     participant Router as Router State
     participant Nav2 as Nav 2: parse("b")
 
-    Nav1->>Router: _startAttempt(): gen = 1
+    Nav1->>Router: _startAttempt():<br/>gen = 1
     Nav1->>Nav1: await guard...
-    Nav2->>Router: _cancelPendingNavigation(): gen = 2
-    Router-->>Nav1: abort signal, settle Cancelled
-    Nav2->>Router: _startAttempt(): gen = 3
+    Nav2->>Router: _cancelPendingNavigation():<br/>gen = 2
+    Router-->>Nav1: abort signal,<br/>settles Cancelled
+    Nav2->>Router: _startAttempt():<br/>gen = 3
     Nav2->>Nav2: await guard...
-    Nav1->>Router: check: gen(1) != current(3)
+    Nav1->>Router: check:<br/>gen 1 != current 3
     Note over Nav1: DISCARD (stale)
-    Nav2->>Router: check: gen(3) == current(3)
+    Nav2->>Router: check:<br/>gen 3 == current 3
     Note over Nav2: APPLY result
 ```
 
@@ -746,24 +737,21 @@ result carries a `NavigationOutcome` enum value indicating how the navigation re
 
 ```mermaid
 flowchart TD
-    call(["navigationSettled()"]) --> pending{phase is evaluating<br/>or restoring?}
+    call(["navigationSettled()"]) --> pending{"phase is evaluating,<br/>awaitingHash or restoring?"}
     pending -- "no (idle or committing)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
     pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
+    push -. "flushed by" .-> actions
 
-    subgraph "Terminal actions"
-        commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
-        block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
-        cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
-        redirect["_redirect()"] -- "unknown target, loop, or depth cap:<br/>_blockNavigation()" --> fredirect["Blocked"]
-        errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
-        redirect -- "target without valid hash:<br/>_errorNavigation()" --> ferror
+    subgraph actions ["Terminal actions"]
+        direction LR
+        commit["_commitNavigation()"] --> fcommit["Committed, Bypassed<br/>or Redirected"]
+        block["_blockNavigation()"] --> fblock["Blocked"]
+        errornav["_errorNavigation()"] --> ferror["Error"]
+        cancel["_cancelPendingNavigation()<br/>(if pending)"] --> fcancel["Cancelled,<br/>while restoring: its result"]
+        redirect["_redirect()"] -- "unknown target, loop<br/>or depth cap" --> fblock
+        redirect -- "target without<br/>valid hash" --> ferror
+        redirect -- "target is the<br/>shown route" --> fredirect["Redirected"]
     end
-
-    push -.-> commit
-    push -.-> block
-    push -.-> cancel
-    push -.-> redirect
-    push -.-> errornav
 ```
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
@@ -838,8 +826,8 @@ sees a cross-app hash. In SAPUI5 1.144.0 and 1.149.0 (`sap/ushell/renderer/Shell
   cross-app hash change, before the data-loss check.
 - `_handleDataLoss` asks the dirty flag and the dirty-state providers (in-app changes
   included; a provider tells them apart by `isCrossAppNavigation`). If the app is dirty, it
-  starts to put the previous hash back, restarts the app router with `initialize(true)` while
-  the URL still shows the target, and then shows the browser's `confirm()` dialog. If the user
+  restarts the app router with `initialize(true)` while the URL still shows the target, starts
+  to put the previous hash back, and then shows the browser's `confirm()` dialog. If the user
   confirms, the shell sets the target hash again. If the user cancels, the app stays on its
   route with its router running.
 - The same `initialize(true)` restart runs when a navigation fails and the shell goes back to
@@ -855,18 +843,21 @@ sequenceDiagram
     actor User
     participant Shell as Launchpad
     participant Router as Guard router
-    Note over Router: route "protected", form dirty
-    User->>Shell: cross-app navigation to #Other-display
+    Note over Router: route "protected",<br/>form dirty
+    User->>Shell: cross-app navigation<br/>to #35;Other-display
     Shell->>Router: stop()
-    Shell->>Shell: _handleDataLoss: dirty, start to put #App-preview&/protected back
-    Shell->>Router: initialize(true): resumes "protected"
+    Shell->>Router: _handleDataLoss():<br/>initialize(true)
+    Note over Router: resumes "protected"
+    Shell->>Shell: starts to put<br/>#35;App-preview&/protected back
     Shell->>User: confirm()
     User-->>Shell: Cancel
-    Note over Router: URL shows #App-preview&/protected again, no hashChanged
-    User->>Router: link to #App-preview&/employees: parse("employees")
+    Note over Shell,Router: URL shows #35;App-preview&/protected<br/>again, no hashChanged
+    User->>Shell: link to<br/>#35;App-preview&/employees
+    Shell->>Router: parse("employees")
     Router->>Router: leave guard blocks
-    Router->>Shell: replaceHash(oldHash of that event)
-    Shell->>Router: parse("protected"): adopted without guards, settles Blocked
+    Router->>Shell: replaceHash(oldHash<br/>of that event)
+    Shell->>Router: parse("protected")
+    Note over Router: adopted without guards,<br/>settles Blocked
 ```
 
 A hash change that the shell takes over never reaches `parse()`. A `navTo()` whose hash write
@@ -893,25 +884,35 @@ routers of all kept apps. Embedded apps (`appIntegration/contracts/EmbeddedUI5Ha
 `isKeepAliveSupported()` reads the manifest entry. Apps in an iframe are hidden and shown by
 the app runtime the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
 
+The component supports keep-alive:
+
 ```mermaid
 sequenceDiagram
     participant Shell as Launchpad
     participant Comp as App component
     participant Router as Guard router
     Shell->>Router: stop() on the cross-app hash change
-    alt keep-alive supported
-        Shell->>Comp: deactivate()
-        Comp->>Router: stop()
-        Comp->>Comp: onDeactivate()
-        Note over Shell,Router: app hidden
-        Shell->>Comp: activate()
-        Comp->>Router: initialize(): parses the hash, guards run
-        Comp->>Comp: onActivate()
-    else not supported
-        Shell->>Router: stop()
-        Note over Shell,Router: app hidden
-        Shell->>Router: initialize(true): resumes the route
-    end
+    Shell->>Comp: deactivate()
+    Comp->>Router: stop()
+    Comp->>Comp: onDeactivate()
+    Note over Shell,Router: app hidden
+    Shell->>Comp: activate()
+    Comp->>Router: initialize()
+    Note over Router: parses the hash,<br/>guards run
+    Comp->>Comp: onActivate()
+```
+
+It does not:
+
+```mermaid
+sequenceDiagram
+    participant Shell as Launchpad
+    participant Router as Guard router
+    Shell->>Router: stop() on the<br/>cross-app hash change
+    Shell->>Router: stop()
+    Note over Shell,Router: app hidden
+    Shell->>Router: initialize(true)
+    Note over Router: resumes the route
 ```
 
 The dirty-state providers of a hidden embedded app stay registered: the shell asks them on
@@ -1253,22 +1254,30 @@ all routers: `lastStep` (the last step through the history, from the Navigation 
 
 How a navigation moves through the phases, with the `NavigationOutcome` it settles with:
 
+A navigation that commits:
+
 ```mermaid
 stateDiagram-v2
     [*] --> idle
     idle --> evaluating: parse() of a new hash, navTo()
+    idle --> committing: navTo() that skips the guards
     evaluating --> evaluating: redirect hop
-    evaluating --> committing: navTo() or redirect allowed, hash write pending
-    evaluating --> idle: hash change allowed → Committed or Bypassed
-    committing --> idle: parse() receives the hash → Committed, Bypassed or Redirected
+    evaluating --> committing: allowed
     committing --> awaitingHash: component targets, UI5 writes the hash later
-    awaitingHash --> idle: parse() receives the hash → Committed or Redirected
-    awaitingHash --> idle: superseded, stop() or destroy() → Cancelled
+    awaitingHash --> committing: parse() receives the hash
+    committing --> idle: hash is there → Committed, Bypassed or Redirected
+```
+
+A navigation that does not:
+
+```mermaid
+stateDiagram-v2
     evaluating --> idle: Blocked, Error, Redirected to the shown route, URL already right
-    evaluating --> restoring: Blocked, Error, Redirected to the shown route, URL must come back
-    restoring --> idle: URL is back → settles with its result
-    restoring --> idle: superseded, stop() or destroy() → settles with its result
+    evaluating --> restoring: the same, URL must come back
+    restoring --> idle: URL is back, superseded, stop() or destroy() → its result
     evaluating --> idle: superseded, stop() or destroy() → Cancelled
+    awaitingHash --> idle: superseded, stop() or destroy() → Cancelled
+    committing --> idle: hash write refused → Blocked
 ```
 
 ## Monorepo Tooling
