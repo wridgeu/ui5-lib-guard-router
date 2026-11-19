@@ -915,15 +915,17 @@ The FLP spec files of the demo app are listed in the [demo README](../../package
 
 ## UI5 Internals the Router Relies On
 
-The router overrides and calls public and protected API of `sap.m.routing.Router`, with two
-exceptions. Both concern a component that is displayed as a routing target
-(`"type": "Component"`) of a parent router, and no public contract covers either of them:
+The router overrides and calls public and protected API of `sap.m.routing.Router`, with three
+exceptions that no public contract covers. The first two concern a component that is displayed
+as a routing target (`"type": "Component"`) of a parent router, the third the title history:
 
 1. The private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`, by which a
    router tells UI5 that a route match is in progress.
 2. The way a component target waits for the router of a nested component: it subscribes the
    bare resolve function of a Promise to `routeMatched`. The router recognizes that function by
    its shape.
+3. The private member `_bLastHashReplaced` of `sap.ui.core.routing.Router`, by which `navTo()`
+   tells the title history that it has replaced a history entry.
 
 No other private UI5 member is read or written.
 
@@ -1058,9 +1060,30 @@ matches and it displays no view. The parent route still displays the component c
 fires `routeMatched`, and the browser hash stays as the parent set it. If the guard redirects
 instead, the parent route waits for the route that the redirect ends on.
 
-### Tests that pin both dependencies
+### `_bLastHashReplaced`: a title that replaces the one before it
 
-Both dependencies are pinned by tests on both UI5 lanes. The tests, what fails when UI5 changes,
+**What UI5 uses it for.** `navTo()` with `bReplace` sets the member to `true` before it replaces
+the hash. When the next matched route gets its title, `Router#fireTitleChanged` removes the last
+entry of the title history (`getTitleHistory()`) before it adds the new one, and clears the
+member: the history entry that was replaced is the one that title belonged to.
+
+**Why the guard router is involved.** A hash change that a guard redirects has reached the
+browser, so the router writes the redirect target with `navTo(target, ..., true)`: the target
+takes the history entry of the redirected hash. If the hash change added that entry (a link, the
+address bar, `setHash()`), the entry never had a title, because its route never matched. UI5
+would remove the title of the route before it, whose entry is still in the browser history.
+
+**What the router does.** If UI5's `History` reports the direction `NewEntry` for the hash
+change, the router sets the member to `false` after `navTo()` has set it and before the target
+route matches (`_commitNavigation()`). The title of the target is then added to the title
+history, as after a native navigation to the target. The router leaves the member alone for a
+redirected `navTo()` call, where the call says whether an entry is replaced, and for a hash
+change that replaced an entry or stepped through the browser history: there the title history
+is what UI5 makes of `navTo(target, ..., true)`.
+
+### Tests that pin the dependencies
+
+The dependencies are pinned by tests on both UI5 lanes. The tests, what fails when UI5 changes,
 and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#private-ui5-coupling).
 
 ## Internal State
@@ -1192,12 +1215,13 @@ that order, and `wdio-qunit.conf.ts` takes the pages from the test suite.
   parity/native/       the same steps on a native and a guard router
   parity/nested/       a component displayed as a routing target  (page of its own)
   parity/guarded/      guard decisions and their native equivalents  (page of its own)
+  parity/entries/      history entries of guard decisions, same comparison  (page of its own)
   upstream-parity/     vendored OpenUI5 router tests
   fixtures/            components, manifests and guard modules the tests load
   testHelpers.ts       helpers shared by all folders
 ```
 
-The three pages "of their own" step through the browser history. Chrome ignores a history
+The four pages "of their own" step through the browser history. Chrome ignores a history
 step on a page that changed the hash about 200 times within ten seconds, so no other tests
 are added to them. For the parity folders see [upstream-parity.md](./upstream-parity.md).
 
