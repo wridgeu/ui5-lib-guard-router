@@ -1,8 +1,6 @@
 import type Log from "sap/base/Log";
-import type List from "sap/m/List";
 import type NavContainer from "sap/m/NavContainer";
 import type Page from "sap/m/Page";
-import type StandardListItem from "sap/m/StandardListItem";
 import type HashChanger from "sap/ui/core/routing/HashChanger";
 import type UIComponent from "sap/ui/core/UIComponent";
 import type View from "sap/ui/core/mvc/View";
@@ -36,8 +34,6 @@ declare global {
 			function require(name: "sap/ui/core/Component"): { getComponentById(id: string): TestedComponent };
 			function require(name: "sap/ui/core/routing/HashChanger"): typeof HashChanger;
 			function require(name: "sap/base/Log"): typeof Log;
-			function require(name: "sap/m/List"): typeof List;
-			function require(name: "sap/m/StandardListItem"): typeof StandardListItem;
 			function require(name: "sap/m/NavContainer"): typeof NavContainer | undefined;
 			function require(name: "sap/m/Page"): typeof Page | undefined;
 			function require(name: "sap/ushell/Container"): typeof Container | undefined;

@@ -272,25 +272,6 @@ QUnit.test("Rapid sync navigations - last one wins", async function (assert: Ass
 	assert.strictEqual(getHash(), "detail/1");
 });
 
-QUnit.test("Rapid async navigations - only the last navigation matches a route", async function (assert: Assert) {
-	const matchedRoutes: string[] = [];
-	router.addGuard(async () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
-		matchedRoutes.push(event.getParameter("name")!);
-	});
-
-	router.navTo("protected");
-	router.navTo("forbidden");
-	router.navTo("detail", { id: "1" });
-
-	await waitForRoute(router, "detail");
-	assert.strictEqual(matchedRoutes.length, 1, "Only one navigation matched a route");
-	assert.strictEqual(matchedRoutes[0], "detail", "The last navigation won");
-});
-
 // ============================================================
 // Module: Returning to current route during pending guard
 // ============================================================

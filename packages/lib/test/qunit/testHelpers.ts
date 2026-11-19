@@ -103,11 +103,7 @@ export function createdRouterHooks(current: () => GuardRouter): { beforeEach: ()
 
 /** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
 export function createRouterUnsafe(routes: object[], config: unknown, ...rest: unknown[]): GuardRouter {
-	const router: unknown = Reflect.construct(GuardRouterClass, [routes, config, ...rest]);
-	if (!(router instanceof GuardRouterClass)) {
-		throw new Error("The guard router class constructed no guard router");
-	}
-	return router;
+	return Reflect.construct(GuardRouterClass, [routes, config, ...rest]) as GuardRouter;
 }
 
 /** {@link createRouterWithOptions} for invalid `guardRouter` values. */
@@ -331,9 +327,8 @@ export function getHash(): string {
  * A captured log call. UI5 passes objects such as the router itself as details; keeping them
  * would hand a cyclic value to a failing assertion, which wdio cannot transfer out of the browser.
  */
-function toLogEntry(message: string, details: unknown): CapturedLogEntry {
-	const text = String(details);
-	return { message, details: details === undefined ? undefined : text };
+function toLogEntry(message: string, details: string | Error | undefined): CapturedLogEntry {
+	return { message, details: details === undefined ? undefined : String(details) };
 }
 
 /** Messages a stubbed `Log` method received; a message logged under another component says so. */

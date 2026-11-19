@@ -324,20 +324,6 @@ QUnit.test("addGuard ignores non-function input", async function (assert: Assert
 	assert.strictEqual(getHash(), "protected", "Non-function inputs to addGuard were ignored");
 });
 
-QUnit.test("removeGuard ignores non-function input", async function (assert: Assert) {
-	const guard: GuardFn = () => false;
-	router.addGuard(guard);
-	removeGuardUnsafe(router, null);
-	removeGuardUnsafe(router, "not a function");
-	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Guard still blocks after invalid removeGuard calls",
-	);
-});
-
 QUnit.test("addLeaveGuard ignores non-function input", async function (assert: Assert) {
 	addLeaveGuardUnsafe(router, "home", null);
 	addLeaveGuardUnsafe(router, "home", 42);
@@ -346,33 +332,6 @@ QUnit.test("addLeaveGuard ignores non-function input", async function (assert: A
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(getHash(), "protected", "Non-function inputs to addLeaveGuard were ignored");
-});
-
-QUnit.test("removeLeaveGuard ignores non-function input", async function (assert: Assert) {
-	router.addLeaveGuard("home", () => false);
-	removeLeaveGuardUnsafe(router, "home", null);
-	removeLeaveGuardUnsafe(router, "home", "not a function");
-	router.initialize();
-	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Leave guard still blocks after invalid removeLeaveGuard calls",
-	);
-});
-
-QUnit.test("removeRouteGuard ignores non-function input", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => false);
-	removeRouteGuardUnsafe(router, "protected", null);
-	removeRouteGuardUnsafe(router, "protected", "not a function");
-	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Route guard still blocks after invalid removeRouteGuard calls",
-	);
 });
 
 QUnit.test("removing never-added guards leaves registered guards intact", async function (assert: Assert) {

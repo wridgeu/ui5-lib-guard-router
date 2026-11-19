@@ -9,12 +9,7 @@ const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
 /** The views display `router.getRouteMeta(route)` as JSON. The placeholder text of a view that never displayed it fails the parse. */
 async function readDisplayedMeta(ref: ControlRef): Promise<Record<string, unknown>> {
 	const control = await getControl(ref);
-	const text: unknown = await control.getProperty("text");
-	const meta: unknown = typeof text === "string" ? JSON.parse(text) : undefined;
-	if (typeof meta !== "object" || meta === null || Array.isArray(meta)) {
-		throw new Error(`The control "${ref.viewId}/${ref.id}" displays no JSON object`);
-	}
-	return { ...meta };
+	return JSON.parse((await control.getProperty("text")) as string) as Record<string, unknown>;
 }
 
 async function openEmployees(): Promise<void> {

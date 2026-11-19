@@ -18,7 +18,6 @@ import {
 	until,
 } from "./parityRecorder";
 import { GuardRouterClass, initHashChanger, loadModule, getHash } from "../testHelpers";
-import { isRecord } from "ui5/guard/router/GuardConfig";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -90,20 +89,11 @@ export interface Scenario {
 	history?: true;
 }
 
-function isParentManifest(value: unknown): value is ParentManifest {
-	const ui5 = isRecord(value) ? value["sap.ui5"] : undefined;
-	if (!isRecord(ui5) || !isRecord(ui5.componentUsages) || !isRecord(ui5.routing)) return false;
-	return isRecord(ui5.componentUsages.child) && isRecord(ui5.routing.config);
-}
-
 /** The parent manifest of the fixture with the router class and the child of `flavor`. */
 export async function loadParentManifest(flavor: Flavor): Promise<ParentManifest> {
 	const { routerClass, child, guards } = FLAVORS[flavor];
 	const response = await fetch(sap.ui.require.toUrl(`${FIXTURE_PATH}/manifest.json`));
-	const manifest: unknown = await response.json();
-	if (!isParentManifest(manifest)) {
-		throw new Error(`${FIXTURE_PATH}/manifest.json has no child usage or no routing config`);
-	}
+	const manifest = (await response.json()) as ParentManifest;
 	manifest["sap.ui5"].componentUsages.child.name = `${FIXTURE}.${child}`;
 	const config = manifest["sap.ui5"].routing.config;
 	config.routerClass = routerClass;
