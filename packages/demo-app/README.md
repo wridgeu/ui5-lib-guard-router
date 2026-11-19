@@ -252,7 +252,10 @@ From the monorepo root:
 ```bash
 npm run test:e2e
 npm run test:e2e:flp
+npm run test:e2e:flp:149 # the FLP tests on SAPUI5 1.149.0
 ```
+
+`test:e2e:flp:149` serves the same `ui5-flp.yaml` with `--framework-version 1.149.0`. In 1.149 the launchpad keeps its dirty state in `sap/ushell/navigation/DirtyState` (see [flp-dirty-state.md](../../docs/research/flp-dirty-state.md)), so this lane runs the shell integration against the newer implementation. CI runs both lanes.
 
 Each command starts and stops its own demo server for you. Standalone and FLP test lanes use dedicated ports so they can run alongside other suites without colliding.
 

@@ -1214,6 +1214,11 @@ stateDiagram-v2
   (demo app in the FLP preview,  (same suite, OpenUI5 1.120.0)
    SAPUI5 with sap.ushell)
 
+  test:e2e:flp:149
+       |
+  packages/demo-app/test/flp/
+  (same specs, SAPUI5 1.149.0 through `ui5 serve --framework-version`)
+
   CI also runs:
   - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)
   - windows-smoke: QUnit smoke on windows-latest
