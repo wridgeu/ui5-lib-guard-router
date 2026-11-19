@@ -2,7 +2,14 @@ import MobileRouter from "sap/m/routing/Router";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import coreLibrary from "sap/ui/core/library";
 import type { GuardRouter } from "ui5/guard/router/types";
-import { captureHashWrites, flushPromises, GuardRouterClass, initHashChanger } from "../../testHelpers";
+import {
+	callUnsafe,
+	captureHashWrites,
+	flushPromises,
+	GuardRouterClass,
+	initHashChanger,
+	recordSettlements,
+} from "../../testHelpers";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -58,6 +65,61 @@ QUnit.test("ext router has additional guard methods", function (assert: Assert) 
 	assert.ok(typeof extRouter.removeLeaveGuard === "function", "has removeLeaveGuard");
 	assert.ok(typeof extRouter.navigationSettled === "function", "has navigationSettled");
 });
+
+QUnit.test(
+	"an attach call without a handler registers a listener, as with the native router",
+	function (assert: Assert) {
+		callUnsafe(nativeRouter, "attachRouteMatched", { some: "data" });
+		callUnsafe(extRouter, "attachRouteMatched", { some: "data" });
+		assert.ok(nativeRouter.hasListeners("routeMatched"), "the native router leaves the check to EventProvider");
+		assert.strictEqual(extRouter.hasListeners("routeMatched"), nativeRouter.hasListeners("routeMatched"));
+
+		callUnsafe(nativeRouter, "attachEvent", "navigationSettled", { some: "data" });
+		callUnsafe(extRouter, "attachNavigationSettled", { some: "data" });
+		assert.strictEqual(
+			extRouter.hasListeners("navigationSettled"),
+			nativeRouter.hasListeners("navigationSettled"),
+			"attachNavigationSettled() registers like attachEvent()",
+		);
+	},
+);
+
+QUnit.test(
+	"routes without a name in a routes array take no other name than with the native router",
+	async function (assert: Assert) {
+		// UI5 registers both unnamed routes under the one name "undefined". A route added as "0" is a new route.
+		const routes = () => [{ pattern: "first" }, { pattern: "second" }, { name: "page", pattern: "page" }];
+		const native = new MobileRouter(routes(), { async: true });
+		const ext = new GuardRouterClass(routes(), {
+			async: true,
+			guardRouter: {
+				inheritance: "pattern-tree",
+				guards: { page: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"] },
+			},
+		});
+		try {
+			assert.strictEqual(native.getRoute("undefined")?.getPattern(), "second");
+			assert.strictEqual(ext.getRoute("undefined")?.getPattern(), "second");
+			assert.strictEqual(native.getRoute("0"), undefined, "the index of an unnamed route names no route");
+			assert.strictEqual(ext.getRoute("0"), undefined);
+
+			const statuses = recordSettlements(ext);
+			ext.initialize();
+			await flushPromises();
+			ext.addRoute({ name: "0", pattern: "page/detail" });
+			ext.navTo("0");
+			await ext.navigationSettled();
+			assert.deepEqual(
+				statuses,
+				["bypassed", "blocked"],
+				"a route added under that name is new: it inherits the guard",
+			);
+		} finally {
+			native.destroy();
+			ext.destroy();
+		}
+	},
+);
 
 // ============================================================
 // Module: Route matching parity

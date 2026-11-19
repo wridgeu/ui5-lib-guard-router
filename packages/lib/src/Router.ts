@@ -30,11 +30,6 @@ import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 type Direction = ReturnType<History["getDirection"]>;
 
-/** Whether `value` is a function, by which UI5 tells the handler from the data in the arguments of an attach method. */
-function isCallable(value: unknown): value is (...args: unknown[]) => void {
-	return typeof value === "function";
-}
-
 /**
  * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
  * not a copy, because UIComponent adds `targetParent` (the ID of the root view) to its config
@@ -284,10 +279,17 @@ export default class Router extends MobileRouter implements GuardRouter {
 		);
 		this._pendingGuardDescriptors = parsed.guards;
 
-		// Collect route names for pattern-tree traversal the way UI5 names the routes:
-		// an entry's own name, or its key in an object map when it has none.
-		const routeConfigs = Object.entries(routes ?? {}).map(([key, r]: [string, unknown]) => ({
-			name: isRecord(r) && typeof r.name === "string" ? r.name : key,
+		// Collect route names for pattern-tree traversal the way the constructor of
+		// sap.ui.core.routing.Router names the routes: it turns an array into a map keyed by the
+		// name of each entry, so that entries without a name share the key "undefined", and it
+		// names an entry of a map that has no name by its key.
+		const nameOf = (r: unknown): string | undefined =>
+			isRecord(r) && typeof r.name === "string" ? r.name : undefined;
+		const routeMap: object = Array.isArray(routes)
+			? Object.fromEntries(routes.map((r: unknown) => [nameOf(r) ?? "undefined", r]))
+			: (routes ?? {});
+		const routeConfigs = Object.entries(routeMap).map(([key, r]: [string, unknown]) => ({
+			name: nameOf(r) ?? key,
 			greedy: isRecord(r) && r.greedy,
 		}));
 		this._routeNames = routeConfigs.map((r) => r.name);
@@ -350,13 +352,16 @@ export default class Router extends MobileRouter implements GuardRouter {
 		oListener?: object,
 	): this;
 	override attachRouteMatched(fnFunction: (evt: Router$RouteMatchedEvent) => void, oListener?: object): this;
-	override attachRouteMatched(oData: object, fnFunction?: object, oListener?: object): this {
+	override attachRouteMatched(
+		oData: object,
+		fnFunction: (evt: Router$RouteMatchedEvent) => void,
+		oListener?: object,
+	): this {
 		if (isPromiseResolver(oData) && (!this.isInitialized() || this._isMatching())) {
 			this._matchWaiters.push(oData);
 		}
-		if (isCallable(oData)) return super.attachRouteMatched(oData, fnFunction);
-		if (isCallable(fnFunction)) return super.attachRouteMatched(oData, fnFunction, oListener);
-		return this;
+		// The arguments go on as received: EventProvider#attachEvent tells the two call forms apart.
+		return super.attachRouteMatched(oData, fnFunction, oListener);
 	}
 
 	/**
@@ -853,10 +858,13 @@ export default class Router extends MobileRouter implements GuardRouter {
 		oListener?: object,
 	): this;
 	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
-	attachNavigationSettled(oData: object, fnFunction?: object, oListener?: object): this {
-		if (isCallable(oData)) return this.attachEvent("navigationSettled", oData, fnFunction);
-		if (isCallable(fnFunction)) return this.attachEvent("navigationSettled", oData, fnFunction, oListener);
-		return this;
+	attachNavigationSettled(
+		oData: object,
+		fnFunction: (evt: Router$NavigationSettledEvent) => void,
+		oListener?: object,
+	): this {
+		// The arguments go on as received: EventProvider#attachEvent tells the two call forms apart.
+		return this.attachEvent("navigationSettled", oData, fnFunction, oListener);
 	}
 
 	/**
