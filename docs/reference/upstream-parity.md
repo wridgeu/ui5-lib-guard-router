@@ -2,11 +2,13 @@
 
 ## Purpose
 
-This repository keeps four complementary compatibility layers for the core router:
+This repository keeps these complementary compatibility layers for the core router:
 
 - `packages/lib/test/qunit/parity/native/` (`NativeCompat.qunit.ts`, `NativeCompatTraces.qunit.ts`) - fast local differential tests authored in this repo
 - `packages/lib/test/qunit/parity/nested/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
 - `packages/lib/test/qunit/parity/guarded/GuardedNavigationParity.qunit.ts` - local differential tests that compare what guards decide with the native navigation the decision stands for (see [Guard decisions and their native equivalents](#guard-decisions-and-their-native-equivalents))
+- `packages/lib/test/qunit/parity/entries/GuardedEntryParity.qunit.ts` - more tests of that kind, on a page of their own
+- `packages/demo-app/test/flp/flp-native-parity.e2e.ts` - one app with the native and with the guard router in the Fiori launchpad sandbox (see [Fiori launchpad](#fiori-launchpad))
 - `packages/lib/test/qunit/upstream-parity/` - a vendored OpenUI5 parity lane with pinned upstream source snapshots and local executable ports
 
 The vendored lane exists to answer a specific question:
@@ -17,7 +19,7 @@ It is a conformance-style test layer, not a replacement for the library's own fe
 
 The library README sums up the result per behavior and cites the test for each row:
 [Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter).
-This page describes how the comparison works. All four layers run on both QUnit lanes, OpenUI5
+This page describes how the comparison works. The QUnit layers run on both QUnit lanes, OpenUI5
 1.144.0 (`npm run test:qunit`) and 1.120.0 (`npm run test:qunit:compat:120`).
 
 ## Contract
@@ -143,8 +145,10 @@ for the child's first page; the one for the parent's first page depends on timin
 
 ### What differs on purpose
 
-These behaviors exist only with guards that block, redirect or decide asynchronously. They are
-not compared with the native router. The tests that pin them are in
+These behaviors exist only with guards that block, redirect or decide asynchronously. A native
+router has none of them, so the comparison is with the native navigation that a decision stands
+for (see [Guard decisions and their native equivalents](#guard-decisions-and-their-native-equivalents)).
+The tests that pin the behaviors themselves are in
 `packages/lib/test/qunit/router/manifest/Instantiation.qunit.ts`, module "Router - Manifest-driven
 instantiation".
 
@@ -185,19 +189,60 @@ without it.
 
 ### Guard decisions and their native equivalents
 
-`GuardedNavigationParity.qunit.ts` runs the same fixture app with the `native` and the `guard`
-flavor. A guarded scenario and a native scenario that stands for its outcome must leave the
-same trace from a given step on, browser history steps, titles and the pages of both
-`NavContainer`s included. A second `native` run is the control. The suite has a page of its
-own, because Chrome ignores history steps once a page has changed the hash about 200 times
-within ten seconds.
+`GuardedNavigationParity.qunit.ts` and `GuardedEntryParity.qunit.ts` run the same fixture app
+with the `native` and the `guard` flavor. A guarded scenario and a native scenario that stands
+for its outcome must leave the same trace from a given step on, browser history steps, titles
+and the pages of both `NavContainer`s included. A second `native` run is the control.
 
-| Guarded navigation                                    | Native equivalent                                     |
-| ----------------------------------------------------- | ----------------------------------------------------- |
-| A `navTo()` in the child that a guard redirects       | A `navTo()` to the redirect target                    |
-| A browser back in the child that a leave guard blocks | No step: later steps go back and forward as before    |
-| A history step that the parent and the child block    | No step                                               |
-| A history step that only the parent blocks            | No step, after the child's round trip described above |
+These two suites also record what the browser does with its history entries, as the
+Navigation API reports it (`recordHistory()` in `parityRecorder.ts`): `history push` for a new
+entry, `history replace` for the current entry replaced (UI5's `History` also replaces the state
+of an entry after each hash change), `history traverse <n>` for a step of n entries.
+`history.length` and the index of the current entry are not compared: the browser keeps 50
+entries, and both stop growing there.
+
+Each suite has a page of its own, and the tests are split over two pages, because Chrome
+ignores history steps and hash changes once a page has changed its history entries about 200
+times within ten seconds. UI5 does not notice an ignored hash change, the record of the browser
+does. The two pages make about 140 and 90 changes.
+
+| Guarded navigation                                                                                      | Native equivalent                                             |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| A `navTo()` in the child that a guard redirects                                                         | A `navTo()` to the redirect target                            |
+| A browser back in the child that a leave guard blocks                                                   | No step: later steps go back and forward as before            |
+| A history step that the parent and the child block                                                      | No step                                                       |
+| A history step that only the parent blocks                                                              | No step, after the child's round trip described above         |
+| A `navTo()` in the child that a guard blocks                                                            | No navigation                                                 |
+| An address bar entry in the child that a guard redirects                                                | An address bar entry of the redirect target                   |
+| A `navTo()` of the parent that a guard redirects to the route that is shown, with `componentTargetInfo` | A `navTo()` to that route with the same `componentTargetInfo` |
+| `Targets#display()` while every guard of the parent and of the child blocks                             | `Targets#display()`                                           |
+
+A redirected step through the browser history (back, forward) is not compared: the title
+history of UI5 has no native equivalent for it (see
+[`_bLastHashReplaced`](./architecture.md#_blasthashreplaced-a-title-that-replaces-the-one-before-it)).
+`History.qunit.ts` pins that the step has its entry replaced with the target.
+
+Two more equivalents are compared on a router without a component, in
+`NativeCompatTraces.qunit.ts`: leave guards run for the routes that the native router matched
+for the hash before a navigation, and enter guards for the routes that it matches after it,
+greedy routes included; and after `stop()` and `initialize(true)`, the leave guard runs for the
+route that the native router fires `switched` for on the next navigation.
+
+### Fiori launchpad
+
+`flp-native-parity.e2e.ts` runs one app twice in the launchpad sandbox of the demo
+(`packages/demo-app/test/flp/parity/native/` and `.../guard/`, which differ in the router class
+of the manifest). Each run starts on a deep link, navigates in the app and back, cancels a
+cross-app navigation at the launchpad's question about unsaved data, hides the app behind
+another one (`sap-keep-alive=true`), shows it again and navigates. After each step the test
+records the URL, the routing events of the router so far, and whether the router is initialized
+and stopped. The guard router has no guards, except for one step: after the cancelled cross-app
+navigation it blocks a hash change, where the native app does nothing. The records of the two
+runs must be equal.
+
+What a guard decides in the launchpad beyond that (leave guards and the launchpad's own
+question, redirects, nested components) has no native counterpart in the sandbox and is pinned
+by the other specs in `packages/demo-app/test/flp/`.
 
 `NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
 redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
@@ -225,8 +270,9 @@ routers the hash changer of the root (described in
 
 ## Private UI5 Coupling
 
-The vendored lane covers public behavior. The router also depends on two things in UI5 that no
-public contract protects. Both concern a component displayed as a routing target. The reasons
+The vendored lane covers public behavior. The router also depends on three things in UI5 that no
+public contract protects. Two concern a component displayed as a routing target, one the title
+history. The reasons
 and the mechanisms are described in
 [UI5 Internals the Router Relies On](./architecture.md#ui5-internals-the-router-relies-on).
 
@@ -234,6 +280,7 @@ and the mechanisms are described in
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Private member `sap.ui.core.routing.Router#_bMatchingProcessStarted`                                                                                                                                         | Replaced by an accessor in `Router._mirrorMatchingProcess()`: reads `true` during a native route match and while a navigation waits for async guards                                                                                                                  | OpenUI5 1.144.0, OpenUI5 1.120.0         |
 | `Target#waitForComponentTarget` waits for a nested router with `oRouter.attachRouteMatched(resolve)`, the bare resolve function of a Promise, while the router is not initialized or the member reads `true` | `Router.attachRouteMatched()` remembers a listener with the exact shape of a Promise resolve function (`isPromiseResolver()` in `GuardPipeline.ts`) under that condition, and `Router._settleMatchWaiters()` resolves it when a navigation ends without a route match | OpenUI5 1.144.0, OpenUI5 1.120.0, Chrome |
+| Private member `sap.ui.core.routing.Router#_bLastHashReplaced`                                                                                                                                               | Set to `false` in `Router._commitNavigation()` for the target of a redirected hash change that added a history entry, so that UI5 adds the title of the target to the title history instead of replacing the last one                                                 | OpenUI5 1.144.0, OpenUI5 1.120.0         |
 
 Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:compat:120`):
 
@@ -241,6 +288,7 @@ Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:c
 - `packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`, module "GuardPipeline - Promise resolve functions"
 - `packages/lib/test/qunit/router/manifest/Instantiation.qunit.ts`, module "Router - Manifest-driven instantiation",
   the tests on a component loaded as a routing target and on parent routes of a nested component
+- `GuardedEntryParity.qunit.ts: a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target`
 
 What fails when UI5 or the browser changes:
 
@@ -250,6 +298,7 @@ What fails when UI5 or the browser changes:
 | `Target#waitForComponentTarget` no longer waits while the member reads `true`                                                                      | "a parent route waits for the route that a nested component's first navigation is redirected to", "a parent route matches although an async guard blocks a nested component's first navigation" (the parent route matches before the child's guard has decided)                                                                                                                                        |
 | The component target no longer subscribes the bare resolve function of a Promise with `attachRouteMatched()`, for example a function that wraps it | "a parent route matches although an async guard blocks a nested component's first navigation", "a parent route matches although a guard blocks a nested component that is displayed again" (both time out)                                                                                                                                                                                             |
 | The engine prints or shapes a Promise resolve function differently                                                                                 | "the resolve function of a Promise is recognized by its exact shape". The assertion on the text `function () { [native code] }` documents Chrome and fails alone if only the text changes: the router reads the text from a real Promise at load time and keeps working. If the name or the length changes, the function is no longer recognized and the nested component tests above time out as well |
+| `_bLastHashReplaced` is renamed, or `fireTitleChanged` no longer reads it                                                                          | "a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target" (the title history lacks the title of the route before the redirect)                                                                                                                                                                                                         |
 
 ### UI5 source locations
 
@@ -257,28 +306,31 @@ Where UI5 writes and reads `_bMatchingProcessStarted` and where the component ta
 verified against the sources of each version. OpenUI5 1.120.0 keeps the async variants in
 `sap/ui/core/routing/async/` and `sap/m/routing/async/`.
 
-| Location                                                       | OpenUI5 1.144.0                                   | OpenUI5 1.120.0                                     |
-| -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
-| `Route#_routeMatched` sets the member to `true`                | `sap/ui/core/routing/Route.js` line 745           | `sap/ui/core/routing/async/Route.js` line 49        |
-| `Route#_routeMatched` sets the member to `false`               | `sap/ui/core/routing/Route.js` line 831           | `sap/ui/core/routing/async/Route.js` line 135       |
-| Sync routers (`async: false`) set and clear it                 | `sap/ui/core/routing/sync/Route.js` lines 44, 128 | `sap/ui/core/routing/sync/Route.js` lines 44, 128   |
-| `Target#waitForComponentTarget` creates the Promise            | `sap/ui/core/routing/Target.js` line 786          | `sap/ui/core/routing/async/Target.js` line 245      |
-| Condition for waiting (reads the member)                       | `sap/ui/core/routing/Target.js` line 819          | `sap/ui/core/routing/async/Target.js` line 275      |
-| `oRouter.attachRouteMatched(resolve)`                          | `sap/ui/core/routing/Target.js` line 821          | `sap/ui/core/routing/async/Target.js` line 277      |
-| A stopped nested router is initialized                         | `sap/ui/core/routing/Target.js` lines 823-826     | `sap/ui/core/routing/async/Target.js` lines 279-282 |
-| `Target#suspend` stops the nested router                       | `sap/ui/core/routing/Target.js` line 619          | `sap/ui/core/routing/async/Target.js` line 81       |
-| `display` handler of the `Router` constructor reads the member | `sap/ui/core/routing/Router.js` line 289          | `sap/ui/core/routing/Router.js` line 264            |
-| `Router#fireTitleChanged` reads the member                     | `sap/ui/core/routing/Router.js` line 1527         | `sap/ui/core/routing/Router.js` line 1495           |
-| `TargetHandler#_chainNavigation` is called                     | `sap/m/routing/Target.js` line 61                 | `sap/m/routing/async/Target.js` line 25             |
+| Location                                                        | OpenUI5 1.144.0                                   | OpenUI5 1.120.0                                     |
+| --------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
+| `Route#_routeMatched` sets the member to `true`                 | `sap/ui/core/routing/Route.js` line 745           | `sap/ui/core/routing/async/Route.js` line 49        |
+| `Route#_routeMatched` sets the member to `false`                | `sap/ui/core/routing/Route.js` line 831           | `sap/ui/core/routing/async/Route.js` line 135       |
+| Sync routers (`async: false`) set and clear it                  | `sap/ui/core/routing/sync/Route.js` lines 44, 128 | `sap/ui/core/routing/sync/Route.js` lines 44, 128   |
+| `Target#waitForComponentTarget` creates the Promise             | `sap/ui/core/routing/Target.js` line 786          | `sap/ui/core/routing/async/Target.js` line 245      |
+| Condition for waiting (reads the member)                        | `sap/ui/core/routing/Target.js` line 819          | `sap/ui/core/routing/async/Target.js` line 275      |
+| `oRouter.attachRouteMatched(resolve)`                           | `sap/ui/core/routing/Target.js` line 821          | `sap/ui/core/routing/async/Target.js` line 277      |
+| A stopped nested router is initialized                          | `sap/ui/core/routing/Target.js` lines 823-826     | `sap/ui/core/routing/async/Target.js` lines 279-282 |
+| `Target#suspend` stops the nested router                        | `sap/ui/core/routing/Target.js` line 619          | `sap/ui/core/routing/async/Target.js` line 81       |
+| `display` handler of the `Router` constructor reads the member  | `sap/ui/core/routing/Router.js` line 289          | `sap/ui/core/routing/Router.js` line 264            |
+| `Router#fireTitleChanged` reads the member                      | `sap/ui/core/routing/Router.js` line 1527         | `sap/ui/core/routing/Router.js` line 1495           |
+| `Router#navTo` sets `_bLastHashReplaced`                        | `sap/ui/core/routing/Router.js` line 915          | `sap/ui/core/routing/Router.js` line 885            |
+| `Router#fireTitleChanged` reads and clears `_bLastHashReplaced` | `sap/ui/core/routing/Router.js` lines 1475, 1502  | `sap/ui/core/routing/Router.js` lines 1445, 1472    |
+| `TargetHandler#_chainNavigation` is called                      | `sap/m/routing/Target.js` line 61                 | `sap/m/routing/async/Target.js` line 25             |
 
 Procedure:
 
 1. Open the routing sources of the new UI5 version: `sap/ui/core/routing/Route.js` (`_routeMatched`),
    `Target.js` (`waitForComponentTarget`, `suspend`) and `Router.js` (the `display` handler in the
-   constructor, `fireTitleChanged`). In 1.120.0 the async variants are in `sap/ui/core/routing/async/`.
+   constructor, `fireTitleChanged`, `navTo`). In 1.120.0 the async variants are in `sap/ui/core/routing/async/`.
 2. Verify where the member is written: `true` synchronously inside `parse()` when a route matches,
    `false` when its targets are displayed, before `routeMatched`.
-3. Verify every reader of the member.
+3. Verify every reader of the member, and that `navTo()` with `bReplace` still sets
+   `_bLastHashReplaced` and `fireTitleChanged` still reads and clears it.
 4. Verify how the component target waits for the nested router: under which condition it waits,
    what it subscribes to `routeMatched` and through which method, whether anything else can
    release the wait, and when it starts a stopped router.

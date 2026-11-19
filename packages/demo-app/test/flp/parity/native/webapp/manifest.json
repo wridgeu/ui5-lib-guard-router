@@ -1,0 +1,29 @@
+{
+	"_version": "2.0.0",
+	"sap.app": {
+		"id": "demo.parity.native",
+		"type": "application",
+		"title": "Parity App",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.ui5": {
+		"dependencies": {
+			"libs": {
+				"sap.m": {}
+			}
+		},
+		"routing": {
+			"config": {
+				"routerClass": "sap.m.routing.Router"
+			},
+			"routes": [
+				{ "name": "home", "pattern": "" },
+				{ "name": "page1", "pattern": "page1" },
+				{ "name": "detail", "pattern": "detail/{id}" },
+				{ "name": "blocked", "pattern": "blocked" }
+			]
+		}
+	}
+}

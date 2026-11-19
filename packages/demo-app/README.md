@@ -290,10 +290,13 @@ FLP-specific coverage lives in `test/flp/` and is split across seven spec files:
 | `flp-cross-app.e2e.ts`       | Dirty cross-app navigation through the `Navigation` service's `navigate()`: user confirms, navigation completes                                                                                                                                                                                                                                           |
 | `flp-clean-cross-app.e2e.ts` | Clean cross-app navigation through the `Navigation` service's `navigate()`: no dirty prompt, navigation completes                                                                                                                                                                                                                                         |
 | `flp-nested.e2e.ts`          | Nested component inside the shell: nested hash behind the shell intent, guarded nested route, browser back, re-display                                                                                                                                                                                                                                    |
+| `flp-native-parity.e2e.ts`   | The same app with the native and with the guard router (isolated): deep link, navigation, cancelled cross-app navigation, keep-alive; the two must leave the same record                                                                                                                                                                                  |
 
-The cross-app and keep-alive specs are isolated because they navigate to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
+The cross-app, keep-alive and native-parity specs are isolated because they navigate to Shell-home, leaving the sandbox unrecoverable. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
 
 `flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds a minimal component (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
+
+`flp-native-parity.e2e.ts` compares the guard router with the native one in the launchpad: `test/flp/parity/native/` and `test/flp/parity/guard/` hold the same component with routing, once with `sap.m.routing.Router` and once with `ui5.guard.router.Router` (intents `paritynative-display` and `parityguard-display`). The spec is isolated as well: each run loads the launchpad with `sap-keep-alive=true`.
 
 ## Framework
 

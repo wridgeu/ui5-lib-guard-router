@@ -69,8 +69,8 @@ export function recordRouter(who: string, router: Router, trace: string[], route
 
 /**
  * Record what the browser hash does: `hashSet` adds a history entry, `hashReplaced` does not,
- * `hashChanged` is the hash the browser reports. The pair set/replaced stands for the history
- * length, which the browser caps and which therefore cannot be compared between two runs.
+ * `hashChanged` is the hash the browser reports. The pair set/replaced is what UI5 asks the
+ * browser to do; {@link recordHistory} records what the browser does.
  */
 export function recordHashes(trace: string[]): () => void {
 	const hashChanger = HashChanger.getInstance();
@@ -85,6 +85,26 @@ export function recordHashes(trace: string[]): () => void {
 		for (const eventId of eventIds) {
 			hashChanger.detachEvent(eventId, record);
 		}
+	};
+}
+
+/**
+ * Record what the browser does with its history entries (Navigation API): `push` adds one,
+ * `replace` changes the current one, `traverse <n>` is a step of n entries. Only for a page
+ * that changes its entries less than 200 times: Chrome ignores the changes beyond that number
+ * within ten seconds, and UI5 writes the state of an entry after each hash change, which
+ * counts. `history.length` and the index of the current entry are not recorded: the browser
+ * keeps 50 entries, and both stop growing there.
+ */
+export function recordHistory(trace: string[]): () => void {
+	const record = (event: NavigationCurrentEntryChangeEvent): void => {
+		const type = event.navigationType;
+		const offset = type === "traverse" ? ` ${window.navigation.currentEntry!.index - event.from.index}` : "";
+		trace.push(`history ${type}${offset} "${window.location.hash}"`);
+	};
+	window.navigation.addEventListener("currententrychange", record);
+	return () => {
+		window.navigation.removeEventListener("currententrychange", record);
 	};
 }
 

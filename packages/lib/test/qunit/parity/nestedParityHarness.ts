@@ -6,8 +6,18 @@ import View from "sap/ui/core/mvc/View";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type Router from "sap/ui/core/routing/Router";
 import type UIComponent from "sap/ui/core/UIComponent";
-import { drain, recordHashes, recordLogs, recordRouter, settle, until } from "./parityRecorder";
-import { initHashChanger, loadModule } from "../testHelpers";
+import type { GuardRouter } from "ui5/guard/router/types";
+import {
+	drain,
+	firstDifference,
+	recordHashes,
+	recordHistory,
+	recordLogs,
+	recordRouter,
+	settle,
+	until,
+} from "./parityRecorder";
+import { GuardRouterClass, initHashChanger, loadModule } from "../testHelpers";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -75,6 +85,8 @@ export interface Scenario {
 	 * itself does two things in an order that depends on how fast a view loads.
 	 */
 	anyOrder?: true;
+	/** Record what the browser does with its history entries, on a page that `recordHistory` allows it for. */
+	history?: true;
 }
 
 /** The parent manifest of the fixture with the router class and the child of `flavor`. */
@@ -149,6 +161,7 @@ export async function run(
 	initHashChanger();
 	HashChanger.getInstance().setHash(scenario.startHash);
 	const stopHashes = recordHashes(trace);
+	const stopHistory = scenario.history && recordHistory(trace);
 	const stopLogs = recordLogs(trace, currentPageWarnings);
 	probe.created = (component) => {
 		recordRouter(components.length === 0 ? "parent" : "child", component.getRouter(), trace);
@@ -191,6 +204,7 @@ export async function run(
 	} finally {
 		probe.created = undefined;
 		stopLogs();
+		if (stopHistory) stopHistory();
 		stopHashes();
 		container?.destroy();
 		for (const component of components.toReversed()) {
@@ -284,3 +298,64 @@ export const browserForward = (expect: string[]): Step => ({
 	},
 	expect,
 });
+
+/** The trace from the step `label` on. */
+function fromStep(trace: string[], label: string): string[] {
+	return trace.slice(trace.indexOf(`step ${label}`));
+}
+
+/**
+ * Run `guarded` with the guard router and `native` with the native router, and compare the traces
+ * from the step `from` on (default: all of it): after what its guards decided, the guard router
+ * must be in the state, and behave, as the native router after the navigation that the decision
+ * stands for. That includes the browser history (its entries as the browser reports them, and
+ * steps back and forward in it), the title history and the pages of both NavContainers. The
+ * second native run is the control.
+ * `check` asserts what the guards of the guarded run did.
+ */
+export function equivalenceTest(
+	title: string,
+	native: Scenario,
+	guarded: Scenario,
+	from?: string,
+	check?: (assert: Assert) => void,
+): void {
+	QUnit.test(title, async function (assert: Assert) {
+		const cut = (trace: string[]): string[] => (from === undefined ? trace : fromStep(trace, from));
+		const record = async (flavor: Flavor, scenario: Scenario): Promise<string[]> =>
+			cut(await run(flavor, { ...scenario, history: true }));
+		const nativeTrace = await record("native", native);
+		const guardTrace = await record("guard", guarded);
+		const control = await record("native", native);
+
+		assert.ok(nativeTrace.length > 1, "the native router recorded the compared steps");
+		assert.strictEqual(
+			firstDifference(control, nativeTrace),
+			undefined,
+			"control: a second run with the native router leaves the same trace",
+		);
+		assert.strictEqual(
+			firstDifference(guardTrace, nativeTrace),
+			undefined,
+			"the guard router behaves like the native router after the equivalent navigation",
+		);
+		check?.(assert);
+	});
+}
+
+/** The child router of the guard flavor. */
+export function guardChild(app: App): GuardRouter {
+	const router = app.childRouter();
+	if (!(router instanceof GuardRouterClass)) {
+		throw new Error("The child router is not a guard router");
+	}
+	return router;
+}
+
+/** The parent router of the guard flavor. */
+export function guardParent(app: App): GuardRouter {
+	if (!(app.parentRouter instanceof GuardRouterClass)) {
+		throw new Error("The parent router is not a guard router");
+	}
+	return app.parentRouter;
+}

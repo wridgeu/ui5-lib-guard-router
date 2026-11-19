@@ -74,23 +74,27 @@ for (const doc of docs) {
 }
 
 // Rule 5: a citation `<test file>: <test title>` names a test of that file. The file is given
-// by its path below the QUnit folder or by its name, if no other test file has that name.
-const testFiles = [...onDisk, ...ports];
+// by its path below the QUnit folder or by its name, if no other test file has that name. A test
+// of the demo app (`*.e2e.ts`) is cited the same way.
+const E2E = "packages/demo-app/test";
+const e2eFiles = globSync("**/*.e2e.ts", { cwd: path.join(repoRoot, E2E) }).map((file) => `${E2E}/${posix(file)}`);
+const testFiles = [...[...onDisk, ...ports].map((file) => `${QUNIT}/${file}`), ...e2eFiles];
 const titlesOf = (file) =>
 	new Set(
-		[...read(`${QUNIT}/${file}`).matchAll(/\b(?:QUnit\.test|\w+Test)\(\s*"((?:\\.|[^"\\])*)"/g)].map(([, title]) =>
+		[...read(file).matchAll(/\b(?:QUnit\.test|\w+Test|it)\(\s*"((?:\\.|[^"\\])*)"/g)].map(([, title]) =>
 			title.replace(/\\(.)/g, "$1"),
 		),
 	);
-const citation = /`([^`\s]+\.qunit\.ts): ([^`]+)`/g;
+const citation = /`([^`\s]+\.(?:qunit|e2e)\.ts): ([^`]+)`/g;
 // The same for a module: `<test file>`, module "<name>", or: module "<name>" of `<test file>`.
 const moduleCitations = [
 	/`(?<cited>[^`\s]+\.qunit\.ts)`, module "(?<name>[^"]+)"/g,
 	/\bmodule "(?<name>[^"]+)" of `(?<cited>[^`\s]+\.qunit\.ts)`/gi,
 ];
 function citedFile(doc, cited) {
-	const name = cited.startsWith(`${QUNIT}/`) ? cited.slice(QUNIT.length + 1) : cited;
-	const files = testFiles.filter((file) => file === name || path.posix.basename(file) === name);
+	const files = testFiles.filter(
+		(file) => file === cited || file === `${QUNIT}/${cited}` || path.posix.basename(file) === cited,
+	);
 	if (files.length !== 1) errors.push(`${doc} cites ${cited}, which names ${files.length} test files`);
 	return files.length === 1 ? files[0] : undefined;
 }
@@ -100,14 +104,14 @@ for (const doc of docs) {
 	for (const [, cited, title] of text.matchAll(citation)) {
 		const file = citedFile(doc, cited);
 		if (file && !titlesOf(file).has(title.replaceAll("\\|", "|"))) {
-			errors.push(`${doc} cites a test that ${QUNIT}/${file} does not have: "${title}"`);
+			errors.push(`${doc} cites a test that ${file} does not have: "${title}"`);
 		}
 	}
 	for (const pattern of moduleCitations) {
 		for (const { groups } of text.matchAll(pattern)) {
 			const file = citedFile(doc, groups.cited);
-			if (file && moduleFiles.get(groups.name) !== file) {
-				errors.push(`${doc} cites a module that ${QUNIT}/${file} does not have: "${groups.name}"`);
+			if (file && `${QUNIT}/${moduleFiles.get(groups.name)}` !== file) {
+				errors.push(`${doc} cites a module that ${file} does not have: "${groups.name}"`);
 			}
 		}
 	}

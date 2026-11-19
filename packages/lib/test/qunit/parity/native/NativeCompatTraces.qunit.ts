@@ -317,6 +317,112 @@ QUnit.test("greedy routes match and fire their events as with the native router"
 	assert.strictEqual(firstDifference(guarded, native), undefined, "and with guards that allow");
 });
 
+/** Per step of `trace`, what `pattern` captures in the lines of that step. */
+function perStep(trace: string[], pattern: RegExp): string[][] {
+	const steps: string[][] = [];
+	for (const line of trace) {
+		if (line.startsWith("step ")) steps.push([]);
+		const captured = pattern.exec(line)?.[1];
+		if (captured !== undefined) steps.at(-1)?.push(captured);
+	}
+	return steps;
+}
+
+/** As its first step, the guard router gets a leave and an enter guard per route that allow and record their run in the trace. */
+function withRecordingGuards(routes: { name: string }[], steps: TraceStep[]): TraceStep[] {
+	const [first, ...rest] = steps;
+	return [
+		(router, trace) => {
+			if (!(router instanceof GuardRouterClass)) throw new Error("Not a guard router");
+			for (const { name } of routes) {
+				router.addLeaveGuard(name, () => trace.push(`guard leave ${name}`) > 0);
+				router.addRouteGuard(name, () => trace.push(`guard enter ${name}`) > 0);
+			}
+			first?.(router, trace);
+		},
+		...rest,
+	];
+}
+
+const withoutGuardLines = (trace: string[]): string[] => trace.filter((line) => !line.startsWith("guard "));
+
+QUnit.test(
+	"leave and enter guards run for the routes that the native router matched before and matches after a navigation, a greedy route that still matches included",
+	async function (assert: Assert) {
+		const routes = [...TRACE_ROUTES, { name: "audit", pattern: "detail/:rest*:", greedy: true }];
+		const steps: TraceStep[] = [
+			(router) => router.initialize(),
+			navTo("detail", { id: "1" }),
+			browserHash("detail/2"),
+			navTo("page1"),
+		];
+		const native = await traceRouterWith(routes, () => new MobileRouter(routes, { async: true }), steps);
+		const guard = await traceRouterWith(
+			routes,
+			() => new GuardRouterClass(routes, { async: true }),
+			withRecordingGuards(routes, steps),
+		);
+
+		const matched = perStep(native, /^router route:(\S+) matched /);
+		assert.deepEqual(
+			matched,
+			[["home"], ["detail", "audit"], ["detail", "audit"], ["page1"]],
+			"the native router matches the greedy route again for the second detail hash",
+		);
+		assert.deepEqual(
+			perStep(guard, /^guard enter (\S+)$/),
+			matched,
+			"enter guards run for the routes that the native router matches for the hash",
+		);
+		assert.deepEqual(
+			perStep(guard, /^guard leave (\S+)$/),
+			[[], ...matched.slice(0, -1)],
+			"leave guards run for the routes that the native router matched for the hash before",
+		);
+		assert.strictEqual(
+			firstDifference(withoutGuardLines(guard), native),
+			undefined,
+			"and the guard router leaves the trace of the native router",
+		);
+	},
+);
+
+QUnit.test(
+	"after stop() and initialize(true), the leave guard runs for the route that the native router switches from",
+	async function (assert: Assert) {
+		const steps: TraceStep[] = [
+			(router) => router.initialize(),
+			navTo("page1"),
+			(router) => router.stop(),
+			(router) => router.initialize(true),
+			navTo("detail", { id: "1" }),
+		];
+		const config = { async: true };
+		const native = await traceRouter(() => new MobileRouter(TRACE_ROUTES, config), steps);
+		const guard = await traceRouter(
+			() => new GuardRouterClass(TRACE_ROUTES, config),
+			withRecordingGuards(TRACE_ROUTES, steps),
+		);
+
+		const switched = perStep(native, /^router route:(\S+) switched /);
+		assert.deepEqual(
+			switched,
+			[[], ["home"], ["page1"], [], ["page1"]],
+			"the native router switches from the route when it stops, and again on the navigation after initialize(true)",
+		);
+		assert.deepEqual(
+			perStep(guard, /^guard leave (\S+)$/),
+			switched.with(2, []),
+			"leave guards run for the route that the native router switches from on each navigation",
+		);
+		assert.strictEqual(
+			firstDifference(withoutGuardLines(guard), native),
+			undefined,
+			"and the guard router leaves the trace of the native router",
+		);
+	},
+);
+
 QUnit.test("a hash that several routes could match resolves to the same route", function (assert: Assert) {
 	const routes = [
 		{ name: "detail", pattern: "detail/{id}" },

@@ -145,16 +145,16 @@ export function installDialogHandler(accept: boolean): { record: DialogRecord; c
  * Trigger cross-app navigation via the FLP Navigation service.
  * Does not install a dialog handler. Callers handle dialogs separately.
  */
-export async function triggerFlpCrossAppNavigation(): Promise<void> {
-	await browser.execute(async () => {
+export async function triggerFlpCrossAppNavigation(shellHash = "Shell-home"): Promise<void> {
+	await browser.execute(async (target: string) => {
 		const Container: typeof UshellContainer | undefined = sap.ui.require("sap/ushell/Container");
 		if (!Container) {
 			throw new Error("FLP container is not available");
 		}
 		const navigation = await Container.getServiceAsync("Navigation");
 		// Not awaited: a dirty-state confirm() blocks the page until the caller handles the dialog.
-		void navigation.navigate({ target: { shellHash: "Shell-home" } });
-	});
+		void navigation.navigate({ target: { shellHash: target } });
+	}, shellHash);
 }
 
 /**

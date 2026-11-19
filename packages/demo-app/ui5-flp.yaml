@@ -34,6 +34,17 @@ server:
                         intent:
                             object: peer
                             action: display
+                      # The same app with the native and with the guard router (test/flp/flp-native-parity.e2e.ts).
+                      - target: /parity/native
+                        local: test/flp/parity/native
+                        intent:
+                            object: paritynative
+                            action: display
+                      - target: /parity/guard
+                        local: test/flp/parity/guard
+                        intent:
+                            object: parityguard
+                            action: display
 resources:
     configuration:
         paths:

@@ -1,17 +1,15 @@
-import type { GuardContext, GuardResult, GuardRouter } from "ui5/guard/router/types";
-import { GuardRouterClass } from "../../testHelpers";
-import { firstDifference } from "../parityRecorder";
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
 import {
-	type App,
 	browserBack,
 	browserForward,
 	CHILD_DETAIL,
 	CHILD_LIST,
 	childDetail,
+	equivalenceTest,
+	guardChild,
+	guardParent,
 	PARENT_HOME,
 	PARENT_SHELL,
-	run,
-	type Scenario,
 	showChild,
 	type Step,
 } from "../nestedParityHarness";
@@ -19,53 +17,12 @@ import {
 /**
  * Differential tests for what guards decide, on the app of the nested parity tests: after a
  * redirect or a block, the guard router must be in the state, and behave, as the native router
- * after the navigation that the decision stands for. A page of their own: Chrome ignores history
- * steps once a page has changed the hash about 200 times within ten seconds.
+ * after the navigation that the decision stands for. A page of their own, and no more tests
+ * than these: Chrome ignores history steps and hash changes once a page has changed the hash about
+ * 200 times within ten seconds. More such tests are in ../entries.
  */
 
 QUnit.module("GuardedParity - guard decisions and their native equivalents");
-
-/** The trace from the step `label` on. */
-function fromStep(trace: string[], label: string): string[] {
-	return trace.slice(trace.indexOf(`step ${label}`));
-}
-
-/**
- * Run `guarded` with the guard router and `native` with the native router, and compare the traces
- * from the step `from` on (default: all of it): after what its guards decided, the guard router
- * must be in the state, and behave, as the native router after the navigation that the decision
- * stands for. That includes the browser history (the steps go back and forward in it), the
- * title history and the pages of both NavContainers. The second native run is the control.
- */
-function equivalenceTest(title: string, native: Scenario, guarded: Scenario, from?: string): void {
-	QUnit.test(title, async function (assert: Assert) {
-		const cut = (trace: string[]): string[] => (from === undefined ? trace : fromStep(trace, from));
-		const nativeTrace = cut(await run("native", native));
-		const guardTrace = cut(await run("guard", guarded));
-		const control = cut(await run("native", native));
-
-		assert.ok(nativeTrace.length > 1, "the native router recorded the compared steps");
-		assert.strictEqual(
-			firstDifference(control, nativeTrace),
-			undefined,
-			"control: a second run with the native router leaves the same trace",
-		);
-		assert.strictEqual(
-			firstDifference(guardTrace, nativeTrace),
-			undefined,
-			"the guard router behaves like the native router after the equivalent navigation",
-		);
-	});
-}
-
-/** The child router of the guard flavor. */
-function guardChild(app: App): GuardRouter {
-	const router = app.childRouter();
-	if (!(router instanceof GuardRouterClass)) {
-		throw new Error("The child router is not a guard router");
-	}
-	return router;
-}
 
 const redirectDetailOneToSeven = (context: GuardContext): GuardResult =>
 	context.toArguments.id === "1" ? { route: "detail", parameters: { id: "7" } } : true;
@@ -153,14 +110,6 @@ equivalenceTest(
 	},
 	"browser back",
 );
-
-/** The parent router of the guard flavor. */
-function guardParent(app: App): GuardRouter {
-	if (!(app.parentRouter instanceof GuardRouterClass)) {
-		throw new Error("The parent router is not a guard router");
-	}
-	return app.parentRouter;
-}
 
 /** Prefixes of the hash changes of a history step to the parent's home route that is taken back to detail/1. */
 const HOME_AND_BACK = ['hash hashChanged  {"newHash":""', 'hash hashChanged  {"newHash":"shell&/child/detail/1"'];
