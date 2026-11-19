@@ -35,3 +35,15 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 		await getAppComponentId(),
 	);
 }
+
+/** The dirty state in the `form` model, which the leave guard of "protected" reads. */
+export async function getDirtyState(): Promise<unknown> {
+	return browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const isDirty: unknown = Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
+			return isDirty;
+		},
+		await getAppComponentId(),
+	);
+}

@@ -65,6 +65,7 @@ export const CONTROLS = {
 		"protectedPage",
 		"dirtyCheckbox",
 		"dirtyStatus",
+		"clearDirtyAndGoHomeBtn",
 		"protectedFlpDirtyProviderStatus",
 		"protectedCurrentHashText",
 		...SETTLEMENT_PANEL,

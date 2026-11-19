@@ -1,5 +1,5 @@
-import { CONTROLS, expectControlText } from "../shared/controls";
-import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
+import { CONTROLS, expectControlText, press } from "../shared/controls";
+import { getDirtyState, getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 import { expectHashToBe, waitForPage, waitForRuntimeSettlement } from "./helpers/wait";
 import { fireEvent } from "./helpers/browser";
 import { getHistoryEntryIndex, getHistoryLength } from "../shared/history";
@@ -62,6 +62,17 @@ describe("Leave Guard - Dirty Form", () => {
 		await fireEvent(CONTROLS.protected.protectedPage, "navButtonPress");
 
 		await expectLeftToHome(settlementRevision);
+	});
+
+	it("should clear the dirty state and go home with the clear button", async () => {
+		await setDirtyOnProtected(true);
+		const settlementRevision = await getRuntimeSettlementRevision();
+
+		await press(CONTROLS.protected.clearDirtyAndGoHomeBtn);
+
+		// Committed on Home, not blocked: the button clears the state before it navigates.
+		await expectLeftToHome(settlementRevision);
+		expect(await getDirtyState()).toBe(false);
 	});
 
 	it("should block browser back when form is dirty", async () => {
