@@ -1215,9 +1215,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 		const currentHash = this._currentHash;
 		if (newHash === currentHash) {
-			if (this._phase.kind === "evaluating" && this._phase.attempt.restoreHash) {
-				// The URL is back on the committed hash, which ends the navigation that had moved it away.
-				this._cancelPendingNavigation();
+			if (this._pendingRestoresHash()) {
+				// The URL is back on the committed hash, whose route was never left. That ends the
+				// navigation that had moved it away; one that waits for UI5 to write its hash goes on.
+				if (this._phase.kind === "evaluating") this._cancelPendingNavigation();
+				else this._undo = null;
 			} else {
 				// The committed hash is reported again, and its route matches again as it does
 				// natively: UI5 has written the hash of a navigation with component targets, or has

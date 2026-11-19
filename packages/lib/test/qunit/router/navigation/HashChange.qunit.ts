@@ -8,8 +8,8 @@ import {
 	captureErrorsAsync,
 	captureHashWrites,
 	captureWarningsAsync,
-	createRouterUnsafe,
 	getHash,
+	GuardRouterClass,
 	flushPromises,
 	recordSettlements,
 	type SinonTestContext,
@@ -333,6 +333,24 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"a hash change back to the committed hash matches no route again while an allowed navTo() waits for its hash",
+	async function (assert: Assert) {
+		const matched: string[] = [];
+		const statuses = await supersedePendingHashChange(() => {
+			router.attachRouteMatched((event) => matched.push(String(event.getParameter("name"))));
+			// With component targets UI5 writes the hash in a later task.
+			router.navTo("protected", {}, { nested: { route: "list" } });
+			HashChanger.getInstance().setHash("");
+		});
+		await flushPromises();
+
+		assert.deepEqual(matched, ["protected"], "the route that was never left does not match again");
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Committed]);
+		assert.strictEqual(getHash(), "protected");
+	},
+);
+
 // ============================================================
 // Module: Sequential navigation with dynamic guard state
 // ============================================================
@@ -582,6 +600,21 @@ QUnit.test("a navTo() with component targets commits when UI5 writes the hash", 
 	assert.strictEqual(getHash(), "protected", "the hash is written by then");
 });
 
+/**
+ * Start a navTo() with component targets whose hash UI5 never writes, as when a nested component
+ * fails to load or the hash changer refuses the hash. Resolves with the status of every settlement since.
+ */
+async function navToWithoutHashWrite(test: SinonTestContext): Promise<string[]> {
+	router.initialize();
+	await waitForRoute(router, "home");
+	const statuses = recordSettlements(router);
+	const setHash = test.stub(router.getHashChanger(), "setHash");
+	router.navTo("protected", {}, { nested: { route: "list" } });
+	await flushPromises();
+	setHash.restore();
+	return statuses;
+}
+
 QUnit.test(
 	"a navTo() with component targets whose hash UI5 never writes does not commit",
 	async function (this: SinonTestContext, assert: Assert) {
@@ -590,15 +623,7 @@ QUnit.test(
 			leftRoute = context.fromRoute;
 			return true;
 		});
-		router.initialize();
-		await waitForRoute(router, "home");
-		const statuses = recordSettlements(router);
-
-		// UI5 does not write the hash if a nested component fails to load, or if the hash changer refuses it.
-		const setHash = this.stub(router.getHashChanger(), "setHash");
-		router.navTo("protected", {}, { nested: { route: "list" } });
-		await flushPromises();
-		setHash.restore();
+		const statuses = await navToWithoutHashWrite(this);
 		assert.deepEqual(statuses, [], "the navigation is still pending");
 
 		router.navTo("forbidden");
@@ -608,10 +633,23 @@ QUnit.test(
 	},
 );
 
+for (const end of ["stop", "destroy"] as const) {
+	QUnit.test(
+		`${end}() cancels a navTo() with component targets whose hash UI5 never writes`,
+		async function (this: SinonTestContext, assert: Assert) {
+			const statuses = await navToWithoutHashWrite(this);
+			const settled = router.navigationSettled();
+			router[end]();
+			assert.deepEqual(statuses, [NavigationOutcome.Cancelled]);
+			assert.deepEqual(await settled, { status: NavigationOutcome.Cancelled, route: "home", hash: "" });
+		},
+	);
+}
+
 QUnit.test("a navTo() with component targets on a router that is not async does not commit", function (assert: Assert) {
 	router.destroy();
 	// UI5 rejects component targets on such a router: it logs an error and writes no hash.
-	router = createRouterUnsafe(
+	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
 			{ name: "protected", pattern: "protected" },

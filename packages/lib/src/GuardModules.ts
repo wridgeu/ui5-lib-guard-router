@@ -37,7 +37,8 @@ function positionOf(exportKey: string): number {
  * Detect the export shape of a loaded guard module and extract guard functions.
  *
  * Shapes and the names they get (`moduleName` is the last path segment):
- * - function        → single guard, named `moduleName` (or the export key when one is given)
+ * - function        → single guard, named `moduleName` (or the export key when one is given);
+ *                     an export key that names a function among its own properties picks that one
  * - Array           → ordered guards, named `moduleName#index` (non-functions warned and skipped)
  * - plain object    → guards in key order, named by key (non-functions warned and skipped)
  *
@@ -47,13 +48,18 @@ function positionOf(exportKey: string): number {
  * the exports of a module with only named exports as the object `{ __esModule: true, ... }`.
  *
  * When `exportKey` is set, only the matching export is returned.
- * When `exportKey` is set on a function export, the key is ignored with a debug log.
+ * When `exportKey` is set on a function export that has no such function, the key is ignored with a debug log.
  */
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
 	const moduleName = moduleNameOf(modulePath);
 
 	if (isGuardFn(moduleExport)) {
 		if (exportKey !== undefined) {
+			// A named export beside the default export, which the transpiler has collapsed onto it.
+			if (Object.hasOwn(moduleExport, exportKey)) {
+				const named: unknown = Reflect.get(moduleExport, exportKey);
+				if (isGuardFn(named)) return [{ name: exportKey, fn: named }];
+			}
 			Log.debug(
 				`guardRouter.guards: "${modulePath}#${exportKey}" is a single function, ignoring export key`,
 				undefined,
@@ -105,10 +111,9 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 
 		if (exportKey !== undefined) {
 			// A key wins over a position. A position that is not a number or out of range finds no entry.
-			const entry: [string, unknown] | undefined =
-				moduleExport[exportKey] === undefined
-					? entries[positionOf(exportKey)]
-					: [exportKey, moduleExport[exportKey]];
+			const entry: [string, unknown] | undefined = Object.hasOwn(moduleExport, exportKey)
+				? [exportKey, moduleExport[exportKey]]
+				: entries[positionOf(exportKey)];
 			if (entry === undefined) {
 				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
 				return [];

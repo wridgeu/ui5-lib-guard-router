@@ -21,6 +21,24 @@ QUnit.test("function export", function (this: SinonTestContext, assert) {
 	assert.deepEqual(logMessages(debug), [`guardRouter.guards: "${PATH}#x" is a single function, ignoring export key`]);
 });
 
+QUnit.test(
+	"a named export beside the default export of a transpiled module is picked by key",
+	async function (this: SinonTestContext, assert) {
+		const debug = this.stub(Log, "debug");
+		const path = "ui5/guard/router/qunit/fixtures/guards/defaultWithNamedExportGuard";
+		const mod = await loadModule<GuardFn & { named: GuardFn }>(path);
+
+		assert.deepEqual(resolveModuleExports(mod, path), [{ name: "defaultWithNamedExportGuard", fn: mod }]);
+		assert.deepEqual(resolveModuleExports(mod, path, "named"), [{ name: "named", fn: mod.named }]);
+		assert.strictEqual(debug.callCount, 0, "the export key is not ignored");
+		assert.deepEqual(
+			resolveModuleExports(mod, path, "length"),
+			[{ name: "length", fn: mod }],
+			"a property that is no function is no guard",
+		);
+	},
+);
+
 QUnit.test("array export", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
 	assert.deepEqual(resolveModuleExports([a, "x", b], PATH), [
@@ -71,7 +89,7 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 		"a key wins over an index",
 	);
 	assert.strictEqual(warning.callCount, 0);
-	for (const key of ["2", "-1", "missing", "1faGuard", "1.5", " 1"]) {
+	for (const key of ["2", "-1", "missing", "1faGuard", "1.5", " 1", "toString", "constructor"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports(mod, PATH, key), [], `#${key}`);
 		assert.deepEqual(logMessages(warning), warned(`#${key} - key not found, skipping`));
