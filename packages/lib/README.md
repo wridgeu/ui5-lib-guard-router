@@ -248,9 +248,26 @@ flowchart TD
     style added fill:none,stroke:#0969da,stroke-width:2px
     style pipeline fill:none,stroke:#0969da
     style native fill:none,stroke:#6e7781,stroke-width:2px
-```
 
-Grey is the native `sap.m.routing.Router`, blue with a thick border is what the library adds, and light grey with a dashed border is optional. The outcomes are green (commit), amber (redirect), red (block) and dark red (error).
+    subgraph parts ["Parts"]
+        direction LR
+        lNative["native UI5"] ~~~ lAdded["library"] ~~~ lOptional["optional"]
+    end
+    subgraph outcomes ["Outcomes"]
+        direction LR
+        lCommit("commit") ~~~ lRedirect("redirect") ~~~ lBlock("block") ~~~ lError("error")
+    end
+    native ~~~ parts ~~~ outcomes
+    class lNative native
+    class lAdded added
+    class lOptional optional
+    class lCommit commit
+    class lRedirect redirect
+    class lBlock block
+    class lError error
+    style parts fill:none,stroke:none
+    style outcomes fill:none,stroke:none
+```
 
 A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 
