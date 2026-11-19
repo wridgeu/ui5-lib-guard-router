@@ -26,11 +26,11 @@ export function chromeProfileHooks(
 			process.env[PROFILE_ROOT_ENV] = profileRoot;
 		},
 		// Runs in the worker: one profile per session, so no spec sees state another left behind.
-		beforeSession: (_config, capabilities) => {
+		beforeSession: (_config, capabilities: WebdriverIO.Capabilities) => {
 			const root = process.env[PROFILE_ROOT_ENV];
 			if (!root) throw new Error("onPrepare has not created the folder for the Chrome profiles");
 			const profileDir = mkdtempSync(join(root, "session-"));
-			const options = ((capabilities as WebdriverIO.Capabilities)["goog:chromeOptions"] ??= {});
+			const options = (capabilities["goog:chromeOptions"] ??= {});
 			(options.args ??= []).push(`--user-data-dir=${profileDir}`, ...extraArgs);
 		},
 		onComplete: () => {
