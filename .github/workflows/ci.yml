@@ -49,6 +49,9 @@ jobs:
             - name: Check test layout
               run: npm run check:layout
 
+            - name: Check diagrams
+              run: npm run check:diagrams
+
             - name: Test the lint plugins and scripts
               run: npm run test:tooling
 

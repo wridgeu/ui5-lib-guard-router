@@ -85,8 +85,9 @@ npm run typecheck    # TypeScript strict mode
 npm run lint         # oxlint, with type-aware rules
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
+npm run check:diagrams # every Mermaid block in the docs parses; a name in backticks in a block exists in packages/lib/src
 npm run test:tooling # node --test for the lint plugins in tools/ and the scripts in scripts/ (*.test.mjs)
-npm run check        # all of the above (fmt:check + lint + typecheck + check:layout + test:tooling)
+npm run check        # all of the above (fmt:check + lint + typecheck + check:layout + check:diagrams + test:tooling)
 npm run fmt          # auto-format all files
 npm run lint:fix     # auto-fix lint issues
 npm run pack:smoke   # install the packed library in a temp consumer and typecheck it
