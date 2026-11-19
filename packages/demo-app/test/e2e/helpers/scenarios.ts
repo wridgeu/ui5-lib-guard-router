@@ -6,7 +6,7 @@ import { fireEvent } from "./browser";
 /**
  * Reset the auth model to logged-out state.
  */
-async function resetAuth(): Promise<void> {
+export async function resetAuth(): Promise<void> {
 	await browser.execute(
 		(componentId: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
