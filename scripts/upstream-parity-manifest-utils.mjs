@@ -50,7 +50,7 @@ export function validateUpstreamParityManifest(manifest) {
 			}
 		}
 
-		if (typeof manifest.upstream.repo !== "string" || !/^[^\s]+\/[^\s]+$/.test(manifest.upstream.repo)) {
+		if (typeof manifest.upstream.repo !== "string" || !/^[^\s/]+\/[^\s/]+$/.test(manifest.upstream.repo)) {
 			errors.push(`Manifest upstream repo is invalid: ${String(manifest.upstream.repo)}`);
 		}
 

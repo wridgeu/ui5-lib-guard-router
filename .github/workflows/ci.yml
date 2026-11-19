@@ -49,6 +49,9 @@ jobs:
             - name: Check test layout
               run: npm run check:layout
 
+            - name: Test the lint plugins and scripts
+              run: npm run test:tooling
+
             - name: Verify vendored OpenUI5 router files
               run: npm run verify:openui5-router-vendor
 

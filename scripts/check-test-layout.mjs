@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { testTitles } from "./test-titles.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const QUNIT = "packages/lib/test/qunit";
@@ -79,12 +80,7 @@ for (const doc of docs) {
 const E2E = "packages/demo-app/test";
 const e2eFiles = globSync("**/*.e2e.ts", { cwd: path.join(repoRoot, E2E) }).map((file) => `${E2E}/${posix(file)}`);
 const testFiles = [...[...onDisk, ...ports].map((file) => `${QUNIT}/${file}`), ...e2eFiles];
-const titlesOf = (file) =>
-	new Set(
-		[...read(file).matchAll(/\b(?:QUnit\.test|\w+Test|it)\(\s*"((?:\\.|[^"\\])*)"/g)].map(([, title]) =>
-			title.replace(/\\(.)/g, "$1"),
-		),
-	);
+const titlesOf = (file) => testTitles(read(file));
 const citation = /`([^`\s]+\.(?:qunit|e2e)\.ts): ([^`]+)`/g;
 // The same for a module: `<test file>`, module "<name>", or: module "<name>" of `<test file>`.
 const moduleCitations = [

@@ -16,7 +16,7 @@
  * of what the rest of the comment text looks like.
  */
 const KEEPER_RE =
-	/(?:^|\s)(?:TODO|FIXME|HACK|BUG|NOTE|SAFETY|PERF|IMPORTANT|XXX|LICENSE|COPYRIGHT|eslint-disable|eslint-enable|@ts-ignore|@ts-expect-error|@ts-nocheck|@ts-check|@type|@param|@returns?|@throws|@see|@example|@deprecated|@override|@internal|@public|@private|@protected|@readonly|@satisfies|istanbul\s+ignore|c8\s+ignore|vitest)/i;
+	/(?:^|\s)(?:TODO|FIXME|HACK|BUG|NOTE|SAFETY|PERF|IMPORTANT|XXX|LICENSE|COPYRIGHT|eslint-disable|eslint-enable|@ts-ignore|@ts-expect-error|@ts-nocheck|@ts-check|@type|@typedef|@param|@returns?|@throws|@see|@example|@deprecated|@override|@internal|@public|@private|@protected|@readonly|@satisfies|istanbul\s+ignore|c8\s+ignore|vitest)\b/i;
 
 /**
  * Words that signal a comment is explaining *why*, not *what*.
@@ -30,7 +30,7 @@ const EXPLAINS_WHY_RE =
  */
 function commentText(node) {
 	return node.value
-		.replace(/^\s*\*\s?/gm, " ")
+		.replace(/^[ \t]*\*[ \t]?/gm, " ")
 		.replace(/\s+/g, " ")
 		.trim();
 }
@@ -247,7 +247,7 @@ const noNarratorComment = {
  * Flags decorative section-divider comments made of repeated symbols
  * or labelled banners like `// --- Helpers ---`.
  */
-const SECTION_DIVIDER_RE = /^\s*[-=*#~_/\\]{3,}\s*(?:\w[\w\s]*\s*[-=*#~_/\\]*)?$/;
+const SECTION_DIVIDER_RE = /^[-=*#~_/\\]{3,}(?:\s*[^\W_]+(?:_+[^\W_]+)*(?:\s+[^\W_]+(?:_+[^\W_]+)*)*\s*[-=*#~_/\\]*)?$/;
 
 const noSectionDivider = {
 	meta: {
