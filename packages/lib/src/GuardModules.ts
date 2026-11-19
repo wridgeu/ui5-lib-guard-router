@@ -34,8 +34,12 @@ function positionOf(exportKey: string): number {
  * Shapes and the names they get (`moduleName` is the last path segment):
  * - function        → single guard, named `moduleName` (or the export key when one is given)
  * - Array           → ordered guards, named `moduleName#index` (non-functions warned and skipped)
- * - plain object    → guards in key order, named by key (non-functions warned and skipped);
- *                     the named exports of a transpiled ES module are such an object
+ * - plain object    → guards in key order, named by key (non-functions warned and skipped)
+ *
+ * The module is read as the value it returns to the UI5 loader, which has no ES module
+ * interop. The UI5 transpiler (babel-plugin-transform-modules-ui5) returns a default export
+ * as that value, with named exports beside it collapsed onto it as properties, and returns
+ * the exports of a module with only named exports as the object `{ __esModule: true, ... }`.
  *
  * When `exportKey` is set, only the matching export is returned.
  * When `exportKey` is set on a function export, the key is ignored with a debug log.
@@ -87,7 +91,7 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 	}
 
 	if (isRecord(moduleExport)) {
-		// A transpiled ES module with named exports is such an object, with the marker `__esModule` as its first key.
+		// The transpiler's object of a module with only named exports has `__esModule` as an enumerable first key.
 		const entries = Object.entries(moduleExport).filter(([key]) => key !== "__esModule");
 		if (entries.length === 0) {
 			guardWarning(modulePath, "exported an empty object, skipping");

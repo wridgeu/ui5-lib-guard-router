@@ -539,7 +539,7 @@ export default function dirtyFormGuard(context: GuardContext): boolean {
 
 ### Guard module format
 
-Each entry in the guard array is a module whose default export is one of three shapes:
+Each entry in the guard array is a module. The router reads it as the value the module returns to UI5's loader, which for a transpiled ES module is its default export. That value is one of three shapes:
 
 **Shape 1: Function (single guard)**
 
@@ -584,7 +584,7 @@ export default {
 };
 ```
 
-Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function they are no guards, next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
 > [!NOTE]
 > When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
