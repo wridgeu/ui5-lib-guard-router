@@ -43,7 +43,7 @@ flowchart LR
     rNone --> notFound
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
     class rEmployees,rEmployee,rReports,home,protected,employees,employee,reporting native
     class rHome,rProtected,rBlocked,rForbidden,rAdmin,rTeam added
@@ -76,7 +76,7 @@ flowchart LR
     rNone --> notFound
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
     class rOverview,rSales,overview,sales,confidential native
     class rConfidential added

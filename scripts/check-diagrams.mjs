@@ -14,13 +14,13 @@ const EXTERNAL_NAMES = new Set(["activate", "deactivate", "onActivate", "onDeact
 /** The classes of the diagram style (CONTRIBUTING.md, "Diagram style"). */
 const PALETTE = {
 	native: "fill:#6e7781,stroke:#424a53,color:#ffffff",
-	added: "fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff",
+	added: "fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff",
 	optional: "fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328",
-	decision: "fill:#ddf4ff,stroke:#0969da,color:#1f2328",
-	commit: "fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff",
-	redirect: "fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff",
-	block: "fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff",
-	error: "fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff",
+	decision: "fill:#ddf4ff,stroke:#0072B2,color:#1f2328",
+	commit: "fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000",
+	redirect: "fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000",
+	block: "fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000",
+	error: "fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff",
 };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

@@ -201,20 +201,20 @@ flowchart TD
     destroyed -- "otherwise" --> outdated["report out of date (_reportOutdated):<br/>return"]
     outdated -- "otherwise" --> suppress["hash equals _suppressedHash:<br/>return"]
     suppress -- "otherwise" --> back["undo started and root hash equals undo.fullHash:<br/>adopt the hash without guards, _finishRestore(newHash)"]
-    back -- "otherwise" --> redir["committing or awaitingHash phase for newHash:<br/>_commitNavigation()"]
+    back -- "otherwise" --> redir["✓ committing or awaitingHash phase for newHash:<br/>_commitNavigation()"]
     redir -- "otherwise" --> moved["same as _currentHash, a pending navigation had moved the URL:<br/>evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"]
     moved -- "otherwise" --> again["same as _currentHash:<br/>super.parse(), the route matches again"]
     again -- "otherwise" --> guards(["the guards run"])
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
     class destroyed,outdated,suppress,again native
     class start,back,moved,guards added
     class redir commit
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Every other hash runs the guards:
 
@@ -227,20 +227,20 @@ flowchart TD
     evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
     stale -- "stale" --> discard(["discard result"])
     stale -- "current" --> apply{"_applyDecision()"}
-    apply -- "allow" --> commit(["_commitNavigation()"])
-    apply -- "redirect" --> redirect(["_startRedirectChain()"])
-    apply -- "block" --> block(["_blockNavigation()<br/>undoes the hash change"])
-    apply -- "error" --> errornav(["_errorNavigation()<br/>undoes the hash change"])
+    apply -- "allow" --> commit(["✓ _commitNavigation()"])
+    apply -- "redirect" --> redirect(["↪ _startRedirectChain()"])
+    apply -- "block" --> block(["✕ _blockNavigation()<br/>undoes the hash change"])
+    apply -- "error" --> errornav(["⚠ _errorNavigation()<br/>undoes the hash change"])
     commit ~~~ block
     redirect ~~~ errornav
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef decision fill:#ddf4ff,stroke:#0969da,color:#1f2328
-    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
-    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
-    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0072B2,color:#1f2328
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
     class ret,discard native
     class cancelprev,setup,evaluate added
     class handlermoved,stale,apply decision
@@ -250,7 +250,7 @@ flowchart TD
     class errornav error
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
 awaits that Promise and calls the remaining guards of the same phase one at a time with
@@ -556,10 +556,10 @@ sequenceDiagram
     box rgba(110, 119, 129, 0.2) UI5
         participant Root as Root hash changer
     end
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
-    rect rgba(207, 34, 46, 0.15)
+    rect rgba(213, 94, 0, 0.15)
         Root->>Router: _onHashReported("b"),<br/>then parse("b")
         Router->>Router: _describeUndo():<br/>first "b"
         Router->>Router: guards block
@@ -600,7 +600,7 @@ sequenceDiagram
     box rgba(110, 119, 129, 0.2) UI5
         participant HC as Shared hash changer
     end
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant A as Router A<br/>(informed first)
         participant B as Router B
     end
@@ -640,21 +640,21 @@ flowchart TD
     start(["evaluate(context)"]) --> p1["Phase 1: leave guards of fromRoute<br/>and alsoLeaving, none on a redirect hop<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
     p1 -- "all true,<br/>not aborted" --> p2["Phase 2: global guards<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
     p2 -- "all true,<br/>not aborted" --> p3["Phase 3: route guards of toRoute<br/>and alsoEntering<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
-    p3 -- "all true" --> allow(["allow"])
+    p3 -- "all true" --> allow(["✓ allow"])
 
-    p1 -- "non-true<br/>or aborted" --> block(["block"])
-    p2 -- "first non-true<br/>or aborted" --> result(["block, or redirect<br/>to the route returned"])
+    p1 -- "non-true<br/>or aborted" --> block(["✕ block"])
+    p2 -- "first non-true<br/>or aborted" --> result(["↪ block, or redirect<br/>to the route returned"])
     p3 -- "first non-true<br/>or aborted" --> result
 
     allow ~~~ throws["a guard throws<br/>in any phase"]
-    throws --> error(["error<br/>(block if aborted)"])
+    throws --> error(["⚠ error<br/>(block if aborted)"])
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
-    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
-    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
     class throws native
     class start,p1,p2,p3 added
     class allow commit
@@ -663,7 +663,7 @@ flowchart TD
     class error error
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
 A guard that throws or rejects ends evaluation in any phase; see error handling below.
@@ -772,21 +772,21 @@ flowchart TD
     push -. "flushed by" .-> actions
 
     subgraph actions ["Terminal actions"]
-        commit["_commitNavigation():<br/>Committed, Bypassed or Redirected"]
-        settle["_settleUncommitted(), redirect to the shown route:<br/>Redirected"]
-        block["_blockNavigation(), also from _redirect()<br/>for an unknown target, a loop or the depth cap:<br/>Blocked"]
-        errornav["_errorNavigation(), also from _redirect()<br/>for a target without valid hash:<br/>Error"]
+        commit["✓ _commitNavigation():<br/>Committed, Bypassed or Redirected"]
+        settle["↪ _settleUncommitted(), redirect to the shown route:<br/>Redirected"]
+        block["✕ _blockNavigation(), also from _redirect()<br/>for an unknown target, a loop or the depth cap:<br/>Blocked"]
+        errornav["⚠ _errorNavigation(), also from _redirect()<br/>for a target without valid hash:<br/>Error"]
         cancel["_cancelPendingNavigation(), if a navigation is pending:<br/>Cancelled, while restoring its result"]
         commit ~~~ settle ~~~ block ~~~ errornav ~~~ cancel
     end
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
-    classDef decision fill:#ddf4ff,stroke:#0969da,color:#1f2328
-    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
-    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
-    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0072B2,color:#1f2328
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
     class cancel native
     class call,immediate,push added
     class pending decision
@@ -794,10 +794,10 @@ flowchart TD
     class settle redirect
     class block block
     class errornav error
-    style actions fill:none,stroke:#0969da
+    style actions fill:none,stroke:#0072B2
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
 `_errorNavigation`, `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
@@ -889,10 +889,10 @@ sequenceDiagram
     box rgba(110, 119, 129, 0.2) Fiori launchpad
         participant Shell as Launchpad
     end
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
-    rect rgba(207, 34, 46, 0.15)
+    rect rgba(213, 94, 0, 0.15)
         Note over Router: route "protected",<br/>form dirty
         User->>Shell: cross-app<br/>navigation
         Shell->>Router: stop()
@@ -943,7 +943,7 @@ sequenceDiagram
         participant Shell as Launchpad
     end
     participant Comp as App component
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     Shell->>Router: stop() on the cross-app hash change
@@ -964,7 +964,7 @@ sequenceDiagram
     box rgba(110, 119, 129, 0.2) Fiori launchpad
         participant Shell as Launchpad
     end
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     Shell->>Router: stop() on the<br/>cross-app hash change
@@ -1327,12 +1327,12 @@ stateDiagram-v2
     committing --> idle: hash is there → Committed, Bypassed or Redirected
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     class idle native
     class evaluating,committing,awaitingHash added
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
 
@@ -1346,12 +1346,12 @@ stateDiagram-v2
     committing --> idle: refused
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     class idle native
     class evaluating,committing,awaitingHash,restoring added
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. Green, amber, red and dark red are commit, redirect, block and error ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 ## Monorepo Tooling
 

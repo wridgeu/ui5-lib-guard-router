@@ -197,10 +197,10 @@ flowchart TD
             enter["3. Enter guards of the target route"]
             leave --> global --> enter
         end
-        commit("All guards allow:<br/>commit")
-        redirect("A guard names a route:<br/>redirect")
-        block("A guard returns false:<br/>block")
-        error("A guard throws:<br/>error")
+        commit("✓ All guards allow:<br/>commit")
+        redirect("↪ A guard names a route:<br/>redirect")
+        block("✕ A guard returns false:<br/>block")
+        error("⚠ A guard throws:<br/>error")
         settled(["Event navigationSettled:<br/>Committed, Bypassed, Redirected,<br/>Blocked or Error"])
     end
 
@@ -232,12 +232,12 @@ flowchart TD
     error --> settled
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
-    classDef added fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
     classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
-    classDef commit fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff
-    classDef redirect fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff
-    classDef block fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff
-    classDef error fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
     class bar,appCode,hash,match,target,view native
     class preflight,parse,sources,leave,global,enter,settled added
     class shell,nested optional
@@ -245,8 +245,8 @@ flowchart TD
     class redirect redirect
     class block block
     class error error
-    style added fill:none,stroke:#0969da,stroke-width:2px
-    style pipeline fill:none,stroke:#0969da
+    style added fill:none,stroke:#0072B2,stroke-width:2px
+    style pipeline fill:none,stroke:#0072B2
     style native fill:none,stroke:#6e7781,stroke-width:2px
 
     subgraph parts ["Parts"]
@@ -255,7 +255,7 @@ flowchart TD
     end
     subgraph outcomes ["Outcomes"]
         direction LR
-        lCommit("commit") ~~~ lRedirect("redirect") ~~~ lBlock("block") ~~~ lError("error")
+        lCommit("✓ commit") ~~~ lRedirect("↪ redirect") ~~~ lBlock("✕ block") ~~~ lError("⚠ error")
     end
     native ~~~ parts ~~~ outcomes
     class lNative native
@@ -1056,7 +1056,7 @@ sequenceDiagram
         participant Shell as Launchpad
     end
     participant Comp as App component
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     Shell->>Comp: deactivate()
@@ -1076,7 +1076,7 @@ sequenceDiagram
     box rgba(110, 119, 129, 0.2) Fiori launchpad
         participant Shell as Launchpad
     end
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     Shell->>Router: stop()
@@ -1174,11 +1174,11 @@ Allowed: the hash is written once the guards have passed.
 ```mermaid
 sequenceDiagram
     participant App
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     participant History as Browser history
-    rect rgba(26, 127, 55, 0.15)
+    rect rgba(0, 158, 115, 0.15)
         App->>Router: navTo("admin")
         Router->>Router: leave, global and<br/>route guards allow
         Router->>History: new entry #35;admin
@@ -1192,11 +1192,11 @@ Blocked: nothing is written.
 ```mermaid
 sequenceDiagram
     participant App
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     participant History as Browser history
-    rect rgba(207, 34, 46, 0.15)
+    rect rgba(213, 94, 0, 0.15)
         App->>Router: navTo("admin")
         Router->>Router: a guard blocks
         Router-->>App: settles Blocked
@@ -1209,11 +1209,11 @@ Redirected to `profile`: only the final target is written.
 ```mermaid
 sequenceDiagram
     participant App
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
     participant History as Browser history
-    rect rgba(154, 103, 0, 0.2)
+    rect rgba(240, 228, 66, 0.15)
         App->>Router: navTo("admin")
         Router->>Router: an enter guard<br/>redirects to "profile"
         Router->>Router: global and route guards<br/>of "profile" allow
@@ -1231,10 +1231,10 @@ Back, blocked by a leave guard: the router takes the step back.
 sequenceDiagram
     actor User
     participant Browser
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
-    rect rgba(207, 34, 46, 0.15)
+    rect rgba(213, 94, 0, 0.15)
         User->>Browser: Back
         Browser->>Router: hashChanged "home"
         Router->>Router: leave guard of<br/>"detail" blocks
@@ -1251,10 +1251,10 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant Browser
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Router as Guard router
     end
-    rect rgba(154, 103, 0, 0.2)
+    rect rgba(240, 228, 66, 0.15)
         User->>Browser: types #35;admin
         Note over Browser: new entry #35;admin
         Browser->>Router: hashChanged "admin"
@@ -1289,11 +1289,11 @@ When the parent refuses a hash change, it puts the whole URL back, the nested pa
 ```mermaid
 sequenceDiagram
     participant Browser
-    box rgba(9, 105, 218, 0.15) This library
+    box rgba(0, 114, 178, 0.15) This library
         participant Parent as Parent router
         participant Child as Nested router
     end
-    rect rgba(207, 34, 46, 0.15)
+    rect rgba(213, 94, 0, 0.15)
         Note over Browser: #35;shell&/child/detail/1,<br/>Back to #35;home
         Browser->>Parent: hashChanged "home"
         Parent->>Parent: leave guard of<br/>"shell" blocks

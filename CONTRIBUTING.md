@@ -105,21 +105,21 @@ Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, s
 
 ### Diagram style
 
-Every Mermaid diagram uses this palette; `check:diagrams` rejects a `classDef` that differs from it. The colours are readable in the light and the dark theme of GitHub.
+Every Mermaid diagram uses this palette; `check:diagrams` rejects a `classDef` that differs from it. The fills are taken from the Okabe-Ito set, which stays apart under colour-vision deficiency, and no meaning rests on colour alone: an outcome also has a symbol at the start of its label, and an error a dashed border. The text has a contrast of at least 4.5:1 on its fill, and the colours are readable in the light and the dark theme of GitHub.
 
-| Class      | Meaning                                 | `classDef`                                                       |
-| ---------- | --------------------------------------- | ---------------------------------------------------------------- |
-| `native`   | Native UI5, or nothing the library does | `fill:#6e7781,stroke:#424a53,color:#ffffff`                      |
-| `added`    | What the library adds                   | `fill:#0969da,stroke:#54aeff,stroke-width:3px,color:#ffffff`     |
-| `optional` | Optional surroundings                   | `fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328` |
-| `decision` | A decision                              | `fill:#ddf4ff,stroke:#0969da,color:#1f2328`                      |
-| `commit`   | Outcome commit                          | `fill:#1a7f37,stroke:#4ac26b,stroke-width:3px,color:#ffffff`     |
-| `redirect` | Outcome redirect                        | `fill:#9a6700,stroke:#d4a72c,stroke-width:3px,color:#ffffff`     |
-| `block`    | Outcome block                           | `fill:#cf222e,stroke:#ff8182,stroke-width:3px,color:#ffffff`     |
-| `error`    | Outcome error                           | `fill:#82071e,stroke:#ff8182,stroke-width:3px,color:#ffffff`     |
+| Class      | Meaning                                 | Cue besides colour                       | `classDef`                                                                        |
+| ---------- | --------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
+| `native`   | Native UI5, or nothing the library does | thin border                              | `fill:#6e7781,stroke:#424a53,color:#ffffff`                                       |
+| `added`    | What the library adds                   | thick border                             | `fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff`                      |
+| `optional` | Optional surroundings                   | dashed thin border                       | `fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328`                  |
+| `decision` | A decision                              | diamond                                  | `fill:#ddf4ff,stroke:#0072B2,color:#1f2328`                                       |
+| `commit`   | Outcome commit                          | label starts with ✓                      | `fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000`                      |
+| `redirect` | Outcome redirect                        | label starts with ↪                      | `fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000`                      |
+| `block`    | Outcome block                           | label starts with ✕                      | `fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000`                      |
+| `error`    | Outcome error                           | label starts with ⚠, dashed thick border | `fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff` |
 
-- A flowchart or state diagram that uses the classes has a legend: the two rows "Parts" and "Outcomes" at the foot of the overview in the library README, or one line under the figure that names the colours.
-- A sequence diagram puts the library's participants in `box rgba(9, 105, 218, 0.15) This library` and those of UI5 or the launchpad in `box rgba(110, 119, 129, 0.2)`. A diagram of one outcome wraps its messages in a `rect`: `rgba(26, 127, 55, 0.15)` committed, `rgba(154, 103, 0, 0.2)` redirected, `rgba(207, 34, 46, 0.15)` blocked.
+- A flowchart or state diagram that uses the classes has a legend: the two rows "Parts" and "Outcomes" at the foot of the overview in the library README, or one line under the figure that names the colours and symbols.
+- A sequence diagram puts the library's participants in `box rgba(0, 114, 178, 0.15) This library` and those of UI5 or the launchpad in `box rgba(110, 119, 129, 0.2)`. A diagram of one outcome wraps its messages in a `rect`: `rgba(0, 158, 115, 0.15)` committed, `rgba(240, 228, 66, 0.15)` redirected, `rgba(213, 94, 0, 0.15)` blocked. Its caption names the outcome.
 - One diagram per case, no wider than three participants: GitHub measures a figure once and cuts it off at the bottom when the column grows afterwards, so a figure must fit the column without being scaled (about 750px).
 - No backtick in a label, and `#35;` for a `#` in a sequence diagram: Mermaid drops the rest of the line after a `#`.
 
