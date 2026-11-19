@@ -28,6 +28,7 @@ import { expandForNewRoute, expandToDescendants, type RoutePattern } from "./Pat
 import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
+type Direction = ReturnType<History["getDirection"]>;
 
 /**
  * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
@@ -100,8 +101,8 @@ interface NavigationAttempt {
 	readonly generation: number;
 	/** Whether the URL shows a hash that never committed, so that it must be restored unless this attempt moves it. */
 	readonly restoreHash: boolean;
-	/** Whether the navigation started with a hash change that added a history entry. */
-	readonly newEntry: boolean;
+	/** How the browser got to the hash that started the navigation; `undefined` after `navTo()` or `parse()`. */
+	readonly direction: Direction | undefined;
 }
 
 interface PhaseIdle {
@@ -119,8 +120,8 @@ interface PhaseCommitting {
 	readonly kind: "committing";
 	readonly route: string;
 	readonly origin: "preflight" | "redirect" | "parse";
-	/** Whether the route replaces a history entry that has no title (see {@link RedirectChainContext.newEntry}). */
-	readonly newEntry?: boolean;
+	/** How the browser got to the history entry that the route replaces (see {@link RedirectChainContext.direction}). */
+	readonly direction?: Direction;
 }
 
 /** A navigation that did not commit waits for the URL to be back before it settles. */
@@ -155,10 +156,10 @@ interface RedirectChainContext {
 	/** Whether the target replaces the current history entry: as the `navTo()` call asked, always after a hash change. */
 	readonly replace: boolean | undefined;
 	/**
-	 * Whether the target replaces a history entry that a hash change has just added. That entry
-	 * got no title, so the title of the target is a new one in the title history of UI5.
+	 * How the browser got to the history entry that the target replaces, for the title history
+	 * of UI5 (see {@link Router._alignTitleHistory}); `undefined` after `navTo()` or `parse()`.
 	 */
-	readonly newEntry: boolean;
+	readonly direction: Direction | undefined;
 	/** Shared AbortSignal from the original navigation. */
 	readonly signal: AbortSignal;
 	/** Shared generation counter from the original navigation. */
@@ -1187,8 +1188,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (this._currentHash !== currentHash) return;
 		this._undo = undoing ? null : this._describeUndo(pendingUndo, reported);
 
-		const newEntry = reported && History.getInstance().getDirection() === HistoryDirection.NewEntry;
-		const attempt = this._startAttempt(newHash, toRoute, true, newEntry);
+		const direction = reported ? History.getInstance().getDirection() : undefined;
+		const attempt = this._startAttempt(newHash, toRoute, true, direction);
 		const { generation } = attempt;
 
 		const context = this._createGuardContext(routeInfo, newHash, attempt.controller.signal);
@@ -1282,7 +1283,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * attempt is stale: also one that a navigationSettled handler started while this
 	 * navigation cancelled its predecessor, which is aborted here without a settlement.
 	 */
-	private _startAttempt(hash: string, route: string, restoreHash: boolean, newEntry = false): NavigationAttempt {
+	private _startAttempt(hash: string, route: string, restoreHash: boolean, direction?: Direction): NavigationAttempt {
 		if (this._phase.kind === "evaluating") this._phase.attempt.controller.abort();
 		const attempt: NavigationAttempt = {
 			hash,
@@ -1290,7 +1291,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			controller: new AbortController(),
 			generation: ++this._parseGeneration,
 			restoreHash,
-			newEntry,
+			direction,
 		};
 		this._phase = { kind: "evaluating", attempt };
 		return attempt;
@@ -1363,11 +1364,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * follow it. With `hashPending`, the route matches when `parse()` gets the
 	 * hash (see {@link _commitAfterNavTo}).
 	 */
+	/**
+	 * Leave the title history of UI5 (`getTitleHistory()`) as after the native equivalent of a
+	 * redirected hash change: the hash change, then `navTo(target, ..., true)`. The route of the
+	 * hash change never matched, so UI5 has not handled its title:
+	 * - A new entry or a step forward would have added a title, which the title of the target
+	 *   replaces: UI5 must not remove the title of the route before it.
+	 * - A step back would have removed the title of the route that was left, so that the target
+	 *   replaces the title of the entry the step arrived at: UI5 removes the first for the
+	 *   replaced hash, the router removes the second, under the condition of UI5 for a step back.
+	 */
+	private _alignTitleHistory(direction: Direction | undefined): void {
+		if (direction === HistoryDirection.NewEntry || direction === HistoryDirection.Forwards) {
+			Reflect.set(this, "_bLastHashReplaced", false);
+		} else if (direction === HistoryDirection.Backwards) {
+			const titles: { title: string; isHome?: boolean }[] = this.getTitleHistory();
+			const left = titles.at(-1);
+			const replaced = titles.at(-2);
+			if (left && replaced && !left.isHome && left.title !== replaced.title) titles.splice(-2, 1);
+		}
+	}
+
 	private _commitNavigation(hash: string, route: string, hashPending = false): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
-		// UI5 drops the last title of its title history when navTo() replaces a history entry. The
-		// entry that this route replaces has no title, so the title of the route before it stays.
-		if (this._phase.kind === "committing" && this._phase.newEntry) Reflect.set(this, "_bLastHashReplaced", false);
+		if (this._phase.kind === "committing") this._alignTitleHistory(this._phase.direction);
 		// The URL has moved on: a hash change that was to put it back is not awaited any more.
 		this._undo = null;
 		this._currentHash = hash;
@@ -1539,7 +1559,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					);
 					break;
 				}
-				this._phase = { kind: "committing", route: toRoute, origin: "redirect", newEntry: chain.newEntry };
+				this._phase = { kind: "committing", route: toRoute, origin: "redirect", direction: chain.direction };
 				try {
 					// Writing the hash the URL already shows changes nothing, except that a nested
 					// router would add its prefix for an empty hash (see _restoreHash).
@@ -1642,7 +1662,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			attemptedHash: hash,
 			restoreHash: attempt.restoreHash,
 			replace,
-			newEntry: attempt.newEntry,
+			direction: attempt.direction,
 			fromRoute: this._currentRoute,
 			fromHash: this._currentHash ?? "",
 			signal: attempt.controller.signal,

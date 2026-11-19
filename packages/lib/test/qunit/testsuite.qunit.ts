@@ -71,6 +71,14 @@ const tests: Record<string, TestPage> = {
 			testTimeout: 30000,
 		},
 	},
+	"parity/steps": {
+		title: "Redirected steps through the browser history and their native equivalents",
+		files: ["RedirectedStepParity"],
+		// Each test starts the fixture app three times.
+		qunit: {
+			testTimeout: 30000,
+		},
+	},
 	"parity/entries": {
 		title: "History entries of guard decisions and their native equivalents",
 		files: ["GuardedEntryParity"],

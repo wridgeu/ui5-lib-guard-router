@@ -922,9 +922,9 @@ The FLP spec files of the demo app are listed in the [demo README](../../package
 
 ## UI5 Internals the Router Relies On
 
-The router overrides and calls public and protected API of `sap.m.routing.Router`, with three
+The router overrides and calls public and protected API of `sap.m.routing.Router`, with four
 exceptions that no public contract covers. The first two concern a component that is displayed
-as a routing target (`"type": "Component"`) of a parent router, the third the title history:
+as a routing target (`"type": "Component"`) of a parent router, the other two the title history:
 
 1. The private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`, by which a
    router tells UI5 that a route match is in progress.
@@ -933,6 +933,8 @@ as a routing target (`"type": "Component"`) of a parent router, the third the ti
    its shape.
 3. The private member `_bLastHashReplaced` of `sap.ui.core.routing.Router`, by which `navTo()`
    tells the title history that it has replaced a history entry.
+4. `getTitleHistory()` returns the array of the title history itself, not a copy. The router
+   removes one entry from it after a redirected step back.
 
 No other private UI5 member is read or written.
 
@@ -1067,7 +1069,7 @@ matches and it displays no view. The parent route still displays the component c
 fires `routeMatched`, and the browser hash stays as the parent set it. If the guard redirects
 instead, the parent route waits for the route that the redirect ends on.
 
-### `_bLastHashReplaced`: a title that replaces the one before it
+### `_bLastHashReplaced` and `getTitleHistory()`: the title history after a redirected hash change
 
 **What UI5 uses it for.** `navTo()` with `bReplace` sets the member to `true` before it replaces
 the hash. When the next matched route gets its title, `Router#fireTitleChanged` removes the last
@@ -1080,13 +1082,30 @@ takes the history entry of the redirected hash. If the hash change added that en
 address bar, `setHash()`), the entry never had a title, because its route never matched. UI5
 would remove the title of the route before it, whose entry is still in the browser history.
 
-**What the router does.** If UI5's `History` reports the direction `NewEntry` for the hash
-change, the router sets the member to `false` after `navTo()` has set it and before the target
-route matches (`_commitNavigation()`). The title of the target is then added to the title
-history, as after a native navigation to the target. The router leaves the member alone for a
-redirected `navTo()` call, where the call says whether an entry is replaced, and for a hash
-change that replaced an entry or stepped through the browser history: there the title history
-is what UI5 makes of `navTo(target, ..., true)`.
+The same holds for a step forward: UI5 removes the title of an entry when the user steps back
+from it, so the entry ahead has no title. After a step back it is the other way round. The entry
+the step arrived at has a title, below the title of the route that was left. Natively the step
+back removes the title of the route that was left (unless it is the home entry or both titles
+are equal), and `navTo(target, ..., true)` then replaces the title of the entry. The guard
+router keeps the route of the step from matching, so UI5 handles no title for it, and removes
+only one of the two.
+
+**What the router does** (`_alignTitleHistory()`, called by `_commitNavigation()` for the target
+of a redirected hash change, by the direction that UI5's `History` reports for the hash change):
+
+| Direction              | The router                                                                                                                                                                  | Title history: from `[A, B]` on `B`; for a step back, from `[A, B, C]` on `C` to `B` |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `NewEntry`, `Forwards` | Sets `_bLastHashReplaced` to `false` after `navTo()` has set it and before the target route matches: UI5 adds the title of the target                                       | `[A, B, target]`                                                                     |
+| `Backwards`            | Removes the entry below the last one from the array that `getTitleHistory()` returns, under UI5's condition for a step back; UI5 then replaces the last one with the target | `[A, target]`                                                                        |
+| `Unknown`              | Nothing: the hash change replaced an entry                                                                                                                                  | What UI5 makes of `navTo(target, ..., true)`                                         |
+
+That is the title history after the native equivalent, the hash change followed by
+`navTo(target, ..., true)`, as long as the route that is left, the route of the hash change and
+the target have different titles. UI5 reports a title only when the title or its target differs
+from the one it reported last. With titles that repeat, the native title history depends on the
+title of the route that the guard router keeps from matching, and the two can differ. The
+router leaves the title history alone for a redirected `navTo()` call, where the call says
+whether an entry is replaced.
 
 ### Tests that pin the dependencies
 
@@ -1224,12 +1243,13 @@ that order, and `wdio-qunit.conf.ts` takes the pages from the test suite.
   parity/nested/       a component displayed as a routing target  (page of its own)
   parity/guarded/      guard decisions and their native equivalents  (page of its own)
   parity/entries/      history entries of guard decisions, same comparison  (page of its own)
+  parity/steps/        redirected browser back and forward, same comparison  (page of its own)
   upstream-parity/     vendored OpenUI5 router tests
   fixtures/            components, manifests and guard modules the tests load
   testHelpers.ts       helpers shared by all folders
 ```
 
-The four pages "of their own" step through the browser history. Chrome ignores a history
+The five pages "of their own" step through the browser history. Chrome ignores a history
 step on a page that changed the hash about 200 times within ten seconds, so no other tests
 are added to them. For the parity folders see [upstream-parity.md](./upstream-parity.md).
 
