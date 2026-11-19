@@ -13,7 +13,7 @@ async function loadPage(): Promise<void> {
 	const page = suite.tests[name];
 	if (!page) throw new Error(`Test page "${name}" is not registered in testsuite.qunit.ts`);
 	for (const file of page.files) {
-		await loadModule(`${QUNIT_FOLDER}/${file}.qunit`);
+		await loadModule(`${QUNIT_FOLDER}/${name}/${file}.qunit`);
 	}
 }
 

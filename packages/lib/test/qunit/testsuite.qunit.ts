@@ -1,6 +1,6 @@
 /**
- * A test page: its files are loaded one after the other, in the listed order (see loadPage.ts).
- * A file is named by its path below this folder, without ".qunit.ts".
+ * A test page is a folder: the key is its path below this folder, `files` are its test files
+ * without ".qunit.ts". loadPage.ts loads them one after the other, in the listed order.
  */
 interface TestPage {
 	title: string;
@@ -9,108 +9,67 @@ interface TestPage {
 }
 
 const tests: Record<string, TestPage> = {
-	GuardPipeline: {
-		title: "QUnit Tests for ui5.guard.router.GuardPipeline",
-		files: ["unit/GuardPipeline", "unit/GuardPipelineAsync"],
+	unit: {
+		title: "Modules of the library without a router",
+		files: ["GuardPipeline", "GuardPipelineAsync", "GuardConfig", "GuardModules", "PatternTree", "RouteMeta"],
 	},
-	GuardConfig: {
-		title: "QUnit Tests for ui5.guard.router.GuardConfig",
-		files: ["unit/GuardConfig"],
+	"router/guards": {
+		title: "Router: guard API, enter guards, leave guards, greedy routes",
+		files: ["GuardApi", "EnterGuards", "LeaveGuards", "GreedyRoutes"],
 	},
-	GuardModules: {
-		title: "QUnit Tests for ui5.guard.router.GuardModules",
-		files: ["unit/GuardModules"],
+	"router/lifecycle": {
+		title: "Router: lifecycle and options",
+		files: ["Lifecycle", "Options"],
 	},
-	PatternTree: {
-		title: "QUnit Tests for ui5.guard.router.PatternTree",
-		files: ["unit/PatternTree"],
+	"router/navigation": {
+		title: "Router: hash changes, navTo preflight, redirects",
+		files: ["HashChange", "NavToPreflight", "Redirects", "RedirectTargetGuards"],
 	},
-	RouteMeta: {
-		title: "QUnit Tests for ui5.guard.router.RouteMeta",
-		files: ["unit/RouteMeta"],
+	"router/async": {
+		title: "Router: async guards, concurrency, abort",
+		files: ["AsyncGuards", "Concurrency", "Abort"],
 	},
-	Router: {
-		title: "QUnit Tests for ui5.guard.router.Router",
-		files: ["router/guards/GuardApi", "router/lifecycle/Lifecycle"],
+	"router/settlement": {
+		title: "Router: navigationSettled",
+		files: ["NavigationSettled", "SettlementErrors", "SettlementReentrancy"],
 	},
-	RouterGuards: {
-		title: "QUnit Tests for Router Guard Behavior",
-		files: [
-			"router/guards/EnterGuards",
-			"router/guards/LeaveGuards",
-			"router/guards/GreedyRoutes",
-			"router/navigation/RedirectToShownRoute",
-		],
+	"router/meta": {
+		title: "Router: route metadata and inheritance",
+		files: ["RouteMetadata", "Inheritance", "PatternAncestry"],
 	},
-	RouterAsync: {
-		title: "QUnit Tests for Router Async and Concurrency",
-		files: ["router/async/AsyncGuards", "router/async/Concurrency", "router/async/Abort"],
+	"router/manifest": {
+		title: "Router: guards declared in the manifest",
+		files: ["DeclarativeGuards", "Instantiation", "CherryPick", "MultiGuardModules", "InvalidConfig", "GuardOrder"],
 	},
-	RouterNavigation: {
-		title: "QUnit Tests for Router Navigation Paths",
-		files: [
-			"router/navigation/HashChange",
-			"router/navigation/NavToPreflight",
-			"router/navigation/Redirects",
-			"router/navigation/RedirectTargetGuards",
-		],
+	"parity/native": {
+		title: "Parity with the native router",
+		files: ["NativeCompat", "NativeCompatTraces"],
 	},
-	RouterHistory: {
-		title: "QUnit Tests for Router and Browser History",
-		files: ["router/history/History"],
+	"upstream-parity": {
+		title: "Vendored OpenUI5 router tests",
+		files: ["Current"],
 	},
-	RouterSettlement: {
-		title: "QUnit Tests for Router Settlement and Lifecycle",
-		files: [
-			"router/settlement/NavigationSettled",
-			"router/settlement/SettlementErrors",
-			"router/settlement/SettlementReentrancy",
-			"router/lifecycle/DestroySettlement",
-			"router/guards/LeaveGuardSettlement",
-		],
+	// The pages below step through the browser history. Chrome ignores such a step on a page that
+	// changed the hash about 200 times within ten seconds, so no other test joins these pages.
+	"router/history": {
+		title: "Router: browser history",
+		files: ["History"],
 	},
-	RouterOptions: {
-		title: "QUnit Tests for Router Options",
-		files: ["router/lifecycle/Options"],
-	},
-	RouterManifestGuards: {
-		title: "QUnit Tests for Router Manifest Guards",
-		files: [
-			"router/manifest/DeclarativeGuards",
-			"router/manifest/Instantiation",
-			"router/manifest/CherryPick",
-			"router/manifest/MultiGuardModules",
-			"router/manifest/InvalidConfig",
-			"router/manifest/GuardOrder",
-		],
-	},
-	RouterRouteMeta: {
-		title: "QUnit Tests for Router Route Metadata and Inheritance",
-		files: ["router/meta/RouteMetadata", "router/meta/Inheritance", "router/meta/PatternAncestry"],
-	},
-	NativeRouterCompat: {
-		title: "QUnit Tests for Native Router Compatibility",
-		files: ["parity/native/NativeCompat", "parity/native/NativeCompatTraces"],
-	},
-	NestedRouterParity: {
-		title: "QUnit Tests for Native Router Parity in Nested Components",
-		files: ["parity/nested/NestedRouterParity"],
+	"parity/nested": {
+		title: "Parity with the native router in nested components",
+		files: ["NestedRouterParity"],
 		// Each test starts the fixture app four times.
 		qunit: {
 			testTimeout: 30000,
 		},
 	},
-	GuardedNavigationParity: {
-		title: "QUnit Tests for Guard Decisions and their Native Equivalents",
-		files: ["parity/guarded/GuardedNavigationParity"],
+	"parity/guarded": {
+		title: "Guard decisions and their native equivalents",
+		files: ["GuardedNavigationParity"],
 		// Each test starts the fixture app three times.
 		qunit: {
 			testTimeout: 30000,
 		},
-	},
-	UpstreamParity: {
-		title: "QUnit Tests for Vendored OpenUI5 Router Parity",
-		files: ["upstream-parity/Current"],
 	},
 };
 

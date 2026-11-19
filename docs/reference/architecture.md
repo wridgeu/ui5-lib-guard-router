@@ -23,7 +23,7 @@ ui5-lib-guard-router/
     |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
-    |       |-- qunit/              QUnit tests (unit)
+    |       |-- qunit/              QUnit tests, one folder per test page (see Test Architecture)
     |       |-- wdio-qunit.conf.ts  runs QUnit in headless Chrome
     |       |-- wdio-qunit.stryker.conf.ts  QUnit run per Stryker mutant
     |
@@ -1173,12 +1173,33 @@ stateDiagram-v2
     and runs the QUnit suite once per mutant (report: reports/mutation/)
 ```
 
-The QUnit suites are registered in `packages/lib/test/qunit/testsuite.qunit.ts`. They run
-against the library in isolation, with programmatic Router instances and fixture components:
-guard lifecycle, sync and async pipelines, redirects, settlement, options, manifest guards,
-the helper modules, and parity with the native router (`parity/native`,
-`parity/nested`, `parity/guarded` and the vendored `upstream-parity` lane, see
-[upstream-parity.md](./upstream-parity.md)).
+The QUnit tests run against the library in isolation, with programmatic Router instances and
+fixture components. They are grouped by topic below `packages/lib/test/qunit/`. A folder is one
+test page: `testsuite.qunit.ts` registers it with its files, `loadPage.ts` loads the files in
+that order, and `wdio-qunit.conf.ts` takes the pages from the test suite.
+
+```
+  unit/                modules without a router: GuardPipeline, GuardConfig, GuardModules,
+                       PatternTree, RouteMeta
+  router/guards/       guard API, enter guards, leave guards, greedy routes
+  router/lifecycle/    initialize, stop, destroy, router options
+  router/navigation/   hash changes, navTo preflight, redirects, guards on redirect targets
+  router/async/        async guards, concurrent navigations, AbortSignal
+  router/settlement/   navigationSettled(), its event, errors, navigating from handlers
+  router/meta/         route metadata, inheritance, pattern ancestry
+  router/manifest/     guards declared in the manifest
+  router/history/      browser back and forward               (page of its own)
+  parity/native/       the same steps on a native and a guard router
+  parity/nested/       a component displayed as a routing target  (page of its own)
+  parity/guarded/      guard decisions and their native equivalents  (page of its own)
+  upstream-parity/     vendored OpenUI5 router tests
+  fixtures/            components, manifests and guard modules the tests load
+  testHelpers.ts       helpers shared by all folders
+```
+
+The three pages "of their own" step through the browser history. Chrome ignores a history
+step on a page that changed the hash about 200 times within ten seconds, so no other tests
+are added to them. For the parity folders see [upstream-parity.md](./upstream-parity.md).
 
 E2E tests run against the demo app served by `ui5 serve`, exercising real browser navigation,
 hash changes, and the full UI5 component lifecycle. FLP preview tests run the demo app under
