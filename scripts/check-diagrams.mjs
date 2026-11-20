@@ -1,17 +1,21 @@
 // Checks every Mermaid block of the docs: it parses, has no backtick, keeps to the diagram style, and the library code it names exists (comments name none).
+// The route maps of the demo README show the routes and manifest guards of the demo manifests.
 // Usage: npm run check:diagrams
 import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
+import mainManifest from "../packages/demo-app/webapp/manifest.json" with { type: "json" };
+import reportingManifest from "../packages/demo-app/webapp/reporting/manifest.json" with { type: "json" };
+import { routeMapErrors } from "./route-map.mjs";
 import { sourceNames } from "./source-names.mjs";
 
 /** A call (`name(`) or a private name (`_name`) in a diagram. */
 const CODE_NAME = /(?<![\w$.])(?:[\w$]+\.)*(_[\w$]+|[A-Za-z$][\w$]*(?=\())/g;
 /** Names of UI5, the launchpad and the browser that the diagrams call and the library source does not. */
 const EXTERNAL_NAMES = new Set(["activate", "deactivate", "onActivate", "onDeactivate", "confirm", "_handleDataLoss"]);
-/** The classes of the diagram style (CONTRIBUTING.md, "Diagram style"). */
+/** @type {Record<string, string>} The classes of the diagram style (CONTRIBUTING.md, "Diagram style"). */
 const PALETTE = {
 	native: "fill:#6e7781,stroke:#424a53,color:#ffffff",
 	added: "fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff",
@@ -44,6 +48,7 @@ const libNames = new Set(
 	),
 );
 
+/** @type {string[]} */
 const errors = [];
 let blocks = 0;
 let names = 0;
@@ -93,6 +98,23 @@ for (const doc of docs) {
 // None found means the fence or the name format changed and nothing above checked it.
 if (blocks === 0) errors.push("no Mermaid block found in the docs");
 if (names === 0) errors.push("no call or private name found in a Mermaid block");
+
+// Rule 5: the route maps of the demo README, in this order, match the routing of the demo manifests.
+const DEMO_README = "packages/demo-app/README.md";
+const routeMaps = [...read(DEMO_README).matchAll(/^```mermaid\r?\n([\s\S]*?)^```$/gm)].map(([, diagram]) => diagram);
+for (const [
+	index,
+	{
+		"sap.ui5": { routing },
+	},
+] of [mainManifest, reportingManifest].entries()) {
+	const mapErrors = routeMapErrors(routeMaps[index] ?? "", {
+		routes: routing.routes,
+		bypassed: routing.config.bypassed !== undefined,
+		guards: routing.config.guardRouter.guards,
+	});
+	errors.push(...mapErrors.map((error) => `${DEMO_README}, route map ${index + 1}: ${error}`));
+}
 
 if (errors.length > 0) {
 	console.error(`Diagram check failed:\n- ${errors.join("\n- ")}`);
