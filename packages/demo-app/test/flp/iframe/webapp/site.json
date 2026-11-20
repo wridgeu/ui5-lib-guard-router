@@ -15,7 +15,7 @@
 				"title": "UI5 Guard Router Demo",
 				"crossNavigation": {
 					"inbounds": {
-						"guardiframe-display": {
+						"target": {
 							"semanticObject": "guardiframe",
 							"action": "display",
 							"signature": {
@@ -29,7 +29,7 @@
 				"technology": "URL"
 			},
 			"sap.integration": {
-				"urlTemplateId": "demo.iframe.ui5"
+				"urlTemplateId": "demo.ui5appruntime"
 			}
 		},
 		"demo.peer": {
@@ -38,7 +38,7 @@
 				"title": "Peer App",
 				"crossNavigation": {
 					"inbounds": {
-						"peer-display": {
+						"target": {
 							"semanticObject": "peer",
 							"action": "display",
 							"signature": {
@@ -63,14 +63,23 @@
 		}
 	},
 	"urlTemplates": {
-		"demo.iframe.ui5": {
+		"demo.ui5appruntime": {
 			"identification": {
-				"id": "demo.iframe.ui5"
+				"id": "demo.ui5appruntime"
 			},
 			"payload": {
-				"urlTemplate": "/iframe/ui5appruntime.html?sap-ui-app-id=demo.app#guardiframe-display",
+				"urlTemplate": "/iframe/ui5appruntime.html{?appId}#{+semanticObject}-{+action}{+routePrefix}{+innerAppRoute}",
 				"parameters": {
-					"names": {}
+					"names": {
+						"appId": {
+							"renameTo": "sap-ui-app-id",
+							"value": "{./sap.app/id}"
+						},
+						"semanticObject": "{./sap.app/crossNavigation/inbounds/target/semanticObject}",
+						"action": "{./sap.app/crossNavigation/inbounds/target/action}",
+						"routePrefix": "{if({&innerAppRoute:.}) '&/'}",
+						"innerAppRoute": "{&innerAppRoute:.}"
+					}
 				},
 				"capabilities": {
 					"navigationMode": "embedded",
