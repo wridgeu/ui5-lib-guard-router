@@ -1,160 +1,70 @@
 # Vendored OpenUI5 Router Parity Suite
 
-This folder contains the repository's vendored OpenUI5 router parity lane.
-
-## Purpose
-
-The parity lane supplements the local differential tests in `../parity/` with a pinned upstream reference set.
-It verifies inherited `sap.m.routing.Router` behavior when no guards are registered.
-
-It does **not** verify guard-specific behavior.
+This folder runs OpenUI5's own router tests, pinned to one upstream tag, against the guard router with no guards registered.
+It checks inherited `sap.m.routing.Router` behavior. It does **not** check guard behavior.
+It complements the local differential tests in `../parity/`.
 
 ## Structure
 
 ```text
 upstream-parity/
   Current.qunit.ts       test page entry; imports the current port set
-  adapters/              shared local harness helpers
-  vendor-manifest.json   pinned upstream provenance and raw-to-port mapping
-  ports/                 executable local ports/wrappers
+  adapters/              shared harness helpers
+  vendor-manifest.json   upstream provenance and raw-to-port mapping
+  ports/                 executable local ports
   vendor/                raw upstream snapshots
 ```
 
-## Raw Vendor Rule
+Current mapping (one raw file to one port):
 
-- Files under `vendor/openui5/<tag>/raw/` must stay byte-for-byte identical to upstream.
-- Do not format, rewrite imports, or add local comments there.
-- Put local execution logic in `ports/` and `adapters/` only.
+- raw: `vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js`
+- port: `ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts`
 
-## Lean Mapping Model
+Vendor only raw files that a port executes. Do not keep raw support modules unless they are worth reviewing or porting.
 
-The current parity lane is intentionally lean:
+## Rules
 
-- only vendor upstream files that we actively keep as raw provenance and execute through a local port
-- keep that mapping one-to-one wherever possible
+- Files under `vendor/openui5/<tag>/raw/` stay byte-for-byte identical to upstream. Do not format them, rewrite imports or add comments.
+- Local logic goes in `ports/` and `adapters/` only. Keep ports thin.
+- Raw files are refreshed by the script. Ports are maintained by hand.
 
-For the current import set:
-
-- `Router.qunit.js`
-    - raw source: `vendor/openui5/1.144.0/raw/src/sap.m/test/sap/m/qunit/routing/async/Router.qunit.js`
-    - local port: `ports/openui5/1.144.0/sap.m.routing.Router/Router.qunit.ts`
-
-We do **not** keep additional raw support modules unless they are independently worth reviewing or porting later.
-
-## Provenance
-
-`vendor-manifest.json` is the source of truth for:
-
-- upstream repo, tag, and commit SHA
-- tracked raw source files
-- raw snapshot paths
-- raw snapshot checksums
-- local executable port paths
-- adaptation notes
-
-`vendor-manifest.json` is intentionally lightweight and internal to this repository.
-The custom verifier enforces both its structural rules and its repo-state rules.
+`vendor-manifest.json` is the source of truth for the upstream repo, tag and commit SHA, the raw file paths and checksums, the port paths and adaptation notes. `npm run verify:openui5-router-vendor` checks its structure, the raw file checksums and the `Current.qunit.ts` wiring.
 
 ## Scripts
 
-- `npm run test:qunit` (includes the upstream parity suite)
-- `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest`
-- `npm run verify:openui5-router-vendor`
+- `npm run test:qunit`: runs the QUnit suite, including this one
+- `npm run vendor:openui5-router-tests -- --tag <version> [--write-manifest]`: fetches raw files; with `--write-manifest`, also updates the manifest
+- `npm run verify:openui5-router-vendor`: checks the manifest and raw files
 
-## General Procedure
+To refresh the current version, re-fetch the pinned raw files and keep the manifest, `Current.qunit.ts` and `ports/` on the same tag.
 
-Use this folder in two modes:
+## Bump the upstream version
 
-- `refresh existing upstream version`
-    - re-fetch the already pinned raw files for the current version
-    - keep `vendor-manifest.json`, `Current.qunit.ts`, and the versioned `ports/` layout on the same upstream tag
-- `bump to a new upstream version`
-    - add a new raw snapshot under a new `vendor/openui5/<tag>/raw/` tree
-    - migrate or add matching executable ports under `ports/openui5/<tag>/`
-    - point `Current.qunit.ts` at the new current port set
-    - update `vendor-manifest.json` only after the versioned ports are in place
+Example: `1.144.0` to `1.145.0`.
 
-The important rule is:
+1. Start from a green branch:
 
-- raw files can be refreshed mechanically
-- ports are maintained manually
+    ```bash
+    npm run verify:openui5-router-vendor
+    npm run test:qunit
+    ```
 
-The vendoring script helps with the first part. It does not safely regenerate the second part.
+2. Fetch the new raw snapshot. This writes `vendor/openui5/1.145.0/raw/` and leaves the manifest unchanged:
 
-## How To Bump Upstream Parity
+    ```bash
+    npm run vendor:openui5-router-tests -- --tag 1.145.0
+    ```
 
-Example: bump from `1.144.0` to `1.145.0`.
+3. Diff the old and new raw trees. Decide which upstream changes affect the ports and whether a new port is needed.
 
-1. Inspect the current state
+4. Copy the ports to `ports/openui5/1.145.0/`, update them, and point `Current.qunit.ts` at the new set.
 
-```bash
-npm run verify:openui5-router-vendor
-npm run test:qunit
-```
+5. Update the manifest (tag, commit SHA, raw paths, checksums):
 
-Make sure the current branch is green before changing the upstream version.
+    ```bash
+    npm run vendor:openui5-router-tests -- --tag 1.145.0 --write-manifest
+    ```
 
-2. Fetch the new raw upstream snapshot without touching the manifest yet
+    The script refuses if any `portFilePath` still points at another version.
 
-```bash
-npm run vendor:openui5-router-tests -- --tag 1.145.0
-```
-
-This writes the raw files into `vendor/openui5/1.145.0/raw/`, but it does not switch the active version in `vendor-manifest.json`.
-
-3. Review the upstream diff
-
-- compare the old and new raw trees
-- identify which upstream changes are relevant to the local executable ports
-- decide whether the existing port still represents the right subset or whether a new port should be added
-
-4. Migrate the executable ports
-
-- copy or move the current port files into `ports/openui5/1.145.0/`
-- update the new port files so they still reflect the intended upstream cases
-- keep the ports thin; put shared helpers in `adapters/`
-- update `Current.qunit.ts` to import the new current port set
-- keep the raw-to-port mapping explicit in `vendor-manifest.json`
-
-5. Update the manifest only after the ports are ready
-
-```bash
-npm run vendor:openui5-router-tests -- --tag 1.145.0 --write-manifest
-```
-
-This refreshes:
-
-- `manifest.upstream.tag`
-- `manifest.upstream.commitSha`
-- raw file paths
-- raw file checksums
-
-The script intentionally refuses a version bump if `portFilePath` entries still point at the old version.
-
-6. Verify and run the parity suite again
-
-```bash
-npm run verify:openui5-router-vendor
-npm run test:qunit
-```
-
-If the current branch is meant to be release-ready, also run the broader validation lanes used for the library.
-
-## What Is Automatic vs Manual?
-
-Automatic or assisted:
-
-- fetching raw upstream files
-- updating raw file checksums
-- updating raw file paths in the manifest
-- validating the manifest structure and required fields in the custom verifier
-- verifying raw-file integrity and current entrypoint wiring
-
-Manual:
-
-- deciding which upstream files are worth porting
-- updating `ports/` to match the intended upstream scenarios
-- deciding whether an upstream change affects the public parity contract we care about
-- updating `Current.qunit.ts` when the active version changes
-
-That split is deliberate. The raw vendor tree should be mechanical; the executable ports require engineering judgment.
+6. Run `npm run verify:openui5-router-vendor` and `npm run test:qunit` again.

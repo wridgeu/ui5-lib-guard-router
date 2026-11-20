@@ -1,16 +1,14 @@
 # Analysis: Async Guard Support vs Fully Async Router Rewrite
 
-> **Status**: Rejected. A fully async router rewrite is not recommended: the sync-first model is correct for UI5. See the [feature index](./README.md).
+> **Status**: Rejected. A fully async router rewrite is not recommended: the sync-first model is correct for UI5. The recommended alternative, a unified guard pipeline, shipped as [Feature 09](./09-guard-pipeline-extraction.md).
 
 ## Context: OpenUI5 Issue #3411
 
-The UI5 team has been trying to solve navigation interception since December 2021
+The UI5 team has worked on navigation interception since December 2021
 ([UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), backlog item CPOUI5FRAMEWORK-338).
-The issue is still open and labeled "in progress" as of 2024.
+At the time of this analysis (October 2024) the issue was open and labeled "in progress".
 
-### The UI5 Team's Dilemma
-
-The team proposed adding `preventDefault()` support to `beforeRouteMatched`:
+The team proposed `preventDefault()` support on `beforeRouteMatched`:
 
 ```js
 this.getRouter().attachBeforeRouteMatched(function (oEvent) {
@@ -20,7 +18,7 @@ this.getRouter().attachBeforeRouteMatched(function (oEvent) {
 });
 ```
 
-But they immediately acknowledged the problem: **this can only be synchronous**:
+They noted that this can only be synchronous:
 
 > The downside of this solution is that the `hasAccess` method has to return synchronously.
 > You can not perform any async backend calls here because the response of the backend call
@@ -28,7 +26,7 @@ But they immediately acknowledged the problem: **this can only be synchronous**:
 >
 > _@flovogt, UI5 team_
 
-A year later (Sept 2022), the team explicitly stated:
+In September 2022:
 
 > Currently, the team does a great job of eliminating synchronous tasks in the framework
 > and offering asynchronous options. Introducing a new synchronous concept fits not really
@@ -37,33 +35,29 @@ A year later (Sept 2022), the team explicitly stated:
 >
 > _@flovogt, UI5 team_
 
-As of October 2024, no solution has been implemented. The community workarounds include:
+The community workarounds:
 
-- Checking permissions before `navTo()` (doesn't cover URL bar / deep links)
-- Checking in `onInit` / `attachPatternMatched` (view loads and flashes before redirect)
-- Monkey-patching `HashChanger` or `CrossApplicationNavigation` (fragile, bad practice)
-- Hard redirect via `URLHelper.redirect()` (full page reload, loses state)
+- Checking permissions before `navTo()` (misses the URL bar and deep links)
+- Checking in `onInit` / `attachPatternMatched` (the view loads and flashes before the redirect)
+- Monkey-patching `HashChanger` or `CrossApplicationNavigation` (fragile)
+- A hard redirect via `URLHelper.redirect()` (full page reload, loses state)
 
-### What a `parse()` Override Already Provides
+### What a router subclass already provides
 
-A `parse()` override satisfies the same core requirements:
+| UI5 team's requirement               | Subclass approach                                                   |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| Intercept **before** target loading  | Guards run before `MobileRouter.prototype.parse()`                  |
+| Support async checks (backend calls) | Guards may return a Promise                                         |
+| Keep the sync event model            | Sync-first: no deferral when guards are sync                        |
+| Handle concurrent navigations        | Generation counter discards stale results                           |
+| Leave no stale history entries       | `navTo()` preflight; `_restoreHash()` with `replaceHash` for others |
+| Work for all navigation sources      | `navTo()` preflight plus `parse()` for URL bar and back/forward     |
 
-| UI5 Team's Requirements                   | `parse()` Override Approach                            |
-| ----------------------------------------- | ------------------------------------------------------ |
-| Must intercept **before** target loading  | `parse()` runs before `MobileRouter.prototype.parse()` |
-| Must support async checks (backend calls) | Async guards with Promise return                       |
-| Must not break the sync event model       | Sync-first: no overhead when guards are sync           |
-| Must handle concurrent navigations        | Generation counter discards stale results              |
-| Must not leave stale history entries      | `_restoreHash()` with `replaceHash`                    |
-| Must work for all navigation sources      | `parse()` catches `navTo`, URL bar, back/forward       |
+`beforeRouteMatched` fires **after** the hash has changed and route matching has begun. Intercepting in `parse()` is earlier: before route matching, target loading and events.
 
-The `beforeRouteMatched` approach the UI5 team proposed is fundamentally flawed because it fires
-**after** the hash has already changed and route matching has begun. Intercepting at `parse()` is
-earlier, before any route matching, target loading, or event firing occurs.
+## What "fully async like TanStack" would mean for UI5
 
-## What "Fully Async Like TanStack" Would Actually Mean for UI5
-
-### Current UI5 Flow (Half Sync, Half Async)
+### UI5 flow: half sync, half async
 
 ```
 HashChanger.fireHashChanged()               ← SYNC: event fires
@@ -79,10 +73,9 @@ HashChanger.fireHashChanged()               ← SYNC: event fires
             → fireRoutePatternMatched()    ← ASYNC: event fires after views ready
 ```
 
-The **sync half** (hash change → route match → begin target loading) has no gap for async work.
-The **async half** (target/view loading → post-load events) already uses Promises.
+The sync half (hash change, route match, start of target loading) has no gap for async work. The async half (view loading, post-load events) already uses Promises.
 
-### TanStack's Fully Async Flow (For Comparison)
+### TanStack flow, for comparison
 
 ```
 navigate()
@@ -97,18 +90,15 @@ navigate()
     → notify subscribers                    ← ASYNC
 ```
 
-Navigation is a **state machine**: `idle → pending → loading → committed → settled`.
-Everything between `navigate()` and `committed` can be interrupted or replaced.
+Navigation is a state machine: `idle → pending → loading → committed → settled`. Everything before `committed` can be interrupted or replaced.
 
-### Three Levels of "Making UI5 Async"
+### Three levels
 
-There's a spectrum. Each level includes the previous:
+Each level includes the previous one.
 
----
+#### Level 1: async guard hook on a router subclass
 
-#### Level 1: Async Guard Hook on a Router Subclass
-
-**Scope**: Override `parse()` on a subclass, run guards before calling `super.parse()`.
+Override `parse()` (and `navTo()`) in a subclass and run guards before calling `super`.
 
 ```
 HashChanger.fireHashChanged()
@@ -118,22 +108,14 @@ HashChanger.fireHashChanged()
     → If blocked: _restoreHash()
 ```
 
-**What changes in the framework**: Nothing. It's a subclass.
+- **Framework changes**: none.
+- **Gains**: async-capable guards before route matching; sync guards are not deferred.
+- **Not covered**: async inside route matching, or between `beforeRouteMatched` and target loading; native framework support.
+- **Cost**: this library.
 
-**What you get**: Async-capable guards before route matching. Sync guards have zero overhead.
+#### Level 2: native async guards in `sap.ui.core.routing.Router`
 
-**What you don't get**: No async in the route matching itself, no async between
-`beforeRouteMatched` and target loading, no native framework support.
-
-**Cost**: Already done. This library is that subclass.
-
----
-
-#### Level 2: Native Async Guard Support in `sap.ui.core.routing.Router`
-
-**Scope**: The UI5 framework adds a guard registry and makes `parse()` await guards before
-delegating to crossroads. This is what the UI5 team has been trying to design since 2021
-([#3411](https://github.com/UI5/openui5/issues/3411)).
+The framework adds a guard registry, and `parse()` awaits guards before delegating to crossroads. This is what #3411 is trying to design.
 
 ```
 HashChanger.fireHashChanged()
@@ -144,8 +126,6 @@ HashChanger.fireHashChanged()
     → If allowed: crossroads._oRouter.parse(hash)  ← existing flow resumes
     → If blocked: restore hash
 ```
-
-**What changes in the framework**:
 
 | Module                 | Change                                                                        | Risk                             |
 | ---------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
@@ -158,29 +138,15 @@ HashChanger.fireHashChanged()
 | `sap.m.routing.Router` | Inherit guard support                                                         | Low                              |
 | `sap.f.routing.Router` | Inherit guard support, verify FCL interaction                                 | Medium                           |
 
-**What you get**: Native guard support. Apps don't need a library. Works with all router
-subclasses (sap.m, sap.f). Test tools can be updated to understand pending navigations.
+- **Gains**: native guards in every router subclass (sap.m, sap.f), no library; test tools can learn about pending navigations.
+- **Not covered**: no data loading phase, no route middleware, no navigation state machine.
+- **Cost**: about 500 lines across 2-3 modules. The hard part is backward compatibility and test tool updates, not the code.
 
-**What you don't get**: Not a full pipeline like TanStack. No data loading phase, no
-route-level middleware, no navigation state machine.
+The `parse()` → `crossroads.parse()` call is synchronous and deeply entrenched. An async gap needs either (a) always deferring `crossroads.parse()` to a microtask, which breaks the sync contract, or (b) a dual path: sync when possible, async when needed. Option (b) keeps UI5's sync fast path.
 
-**Cost estimate**: ~500 lines of framework changes across 2-3 modules. The hard part is
-not the code; it's the backward compatibility guarantee and test tool updates.
+#### Level 3: full TanStack-style async pipeline
 
-**Why the UI5 team hasn't done it**: The `parse()` → `crossroads.parse()` call is synchronous
-and deeply entrenched. Inserting an async gap requires either:
-
-- (a) Always deferring `crossroads.parse()` to a microtask (breaks sync contract), or
-- (b) Using a dual-path approach (sync when possible, async when needed)
-
-Option (b) preserves UI5's synchronous fast path while still supporting async guards.
-
----
-
-#### Level 3: Full TanStack-Style Async Pipeline
-
-**Scope**: Rearchitect UI5 routing so the entire navigation is a managed async pipeline with
-states, cancellation, and middleware phases.
+Rearchitect routing so the whole navigation is a managed async pipeline with states, cancellation and middleware phases.
 
 ```
 Router.navTo("route", params)
@@ -198,8 +164,6 @@ Router.navTo("route", params)
     → state: SETTLED
 ```
 
-**What changes in the framework**:
-
 | Module                 | Change                                                                                                           | Risk                          |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `Router.js`            | **Rewrite**: Replace `parse()` delegation with navigation state machine                                          | **Very High**                 |
@@ -214,64 +178,32 @@ Router.navTo("route", params)
 | crossroads.js          | Replace or wrap (sync pattern matching is fine, but integration changes)                                         | Medium                        |
 | Backward compat        | Every app using `attachBeforeRouteMatched`, `attachRouteMatched`, `attachRoutePatternMatched` needs verification | **Very High**                 |
 
-**What you get**: Full modern router capabilities:
+- **Gains**: a navigation state machine, route middleware (`beforeLoad`, `loader`), leave and enter guards as first-class concepts, data prefetching before render, cancellation via AbortSignal, no view flash on rejection.
+- **Not needed for UI5**: SSR, the View Transitions API, preloading on hover, type-safe route paths.
+- **Cost**: 2000-5000 lines across 8+ modules. A multi-quarter project with a phased, backward-compatible rollout.
 
-- Navigation state machine (pending/loading/committed/settled)
-- Route-level middleware (beforeLoad, loader, like TanStack)
-- Leave guards and enter guards as first-class concepts
-- Data pre-fetching before view renders
-- Cancellation via AbortSignal
-- No view flash on guard rejection
+The return does not justify this. UI5 apps are mostly enterprise CRUD with simple routing. TanStack's complexity comes from React's rendering model and SSR, streaming and suspense, which do not apply to UI5. Level 2 is the more likely path for the UI5 team.
 
-**What you don't get that TanStack has** (and UI5 doesn't need):
-
-- SSR support
-- View transitions API
-- Preloading on hover
-- Type-safe route paths (TypeScript-first)
-
-**Cost estimate**: 2000-5000 lines of framework changes across 8+ modules. Multi-quarter
-project for the UI5 team. Would require a phased rollout with backward-compatible mode.
-
-**Why the UI5 team will probably never do this**: The ROI doesn't justify it. UI5 apps are
-predominantly enterprise CRUD with simple routing needs. TanStack's complexity is driven
-by React's rendering model and modern web patterns (SSR, streaming, suspense) that don't
-apply to UI5. The UI5 team is more likely to pursue Level 2, native guard support without
-a full pipeline rewrite.
-
-### Summary: Level Comparison
+### Level comparison
 
 | Aspect             | Level 1 (Subclass) | Level 2 (Native Guards) | Level 3 (Full Pipeline)       |
 | ------------------ | ------------------ | ----------------------- | ----------------------------- |
 | Async guards       | Yes                | Yes                     | Yes                           |
-| Leave guards       | Feature 01         | Possible                | Yes                           |
+| Leave guards       | Yes                | Possible                | Yes                           |
 | Data loading phase | No                 | No                      | Yes                           |
 | Navigation states  | No                 | No                      | Yes (pending/loading/settled) |
-| AbortSignal        | Feature (additive) | Possible                | Yes                           |
+| AbortSignal        | Yes                | Possible                | Yes                           |
 | Framework changes  | None               | 2-3 modules             | 8+ modules                    |
 | Breaking changes   | None               | Minimal                 | Significant                   |
 | Timeline           | Available today    | Months                  | Quarters/Years                |
 | Who does it        | App/library code   | UI5 team                | UI5 team                      |
 | Risk               | Low (subclass)     | Medium                  | Very High                     |
 
-### Where the Subclassed Approach Fits
+The subclass is a complete Level 1 solution and shows that Level 2 is feasible: UI5 does not need to make everything async to support async guards. It only needs to detect when a guard returns a Promise and defer in that case.
 
-A router subclass is a complete **Level 1** solution and shows that **Level 2** is feasible.
-The dual-path sync/async design shows that UI5 does not need to
-make _everything_ async to support async guards. You just need to detect when a guard
-returns a Promise and defer only in that case.
+If UI5 ships native guards, migrating means replacing `ui5.guard.router.Router` with `sap.m.routing.Router` and mapping `addGuard()`, `addRouteGuard()` and `addLeaveGuard()` to the native API.
 
-If UI5 adopts the same idea natively, the migration would be:
-
-1. Replace `ui5.guard.router.Router` with native `sap.m.routing.Router`
-2. Map `addGuard()` → native guard API
-3. Map `addRouteGuard()` → native per-route guard API
-4. Map `addLeaveGuard()` → native leave guard API (if supported)
-
-Level 3 is likely unnecessary for the routing problems this library targets. The proposed
-features in this folder cover the main guard and middleware use cases without a framework rewrite.
-
-## Current Architecture: Sync-First with Async Fallback
+## Current architecture: sync-first with async fallback
 
 ```
 navTo() preflight, or hashChanged → parse()
@@ -283,45 +215,33 @@ navTo() preflight, or hashChanged → parse()
                └─ Router discards the decision if _parseGeneration changed
 ```
 
-The dual-path approach:
+1. **Sync fast path**: when all guards return plain values, guard evaluation and route activation happen in the same tick as the `hashChanged` event.
+2. **Async fallback**: when a guard returns a Promise, the decision becomes async. A generation counter detects stale results.
 
-1. **Sync fast path**: When all guards return non-Promise values, the entire guard evaluation +
-   route activation happens in the same tick as the `hashChanged` event
-2. **Async fallback**: When any guard returns a Promise, the decision for that
-   navigation becomes async, with a generation counter for staleness detection
+Why this fits UI5:
 
-### Why Sync-First Fits UI5
+- **No guards**: the pipeline returns `allow` synchronously and the router commits in the same tick.
+- **Sync guards**: the framework sees the navigation complete within the event handler.
+- **Async when needed**: backend permission checks, `MessageBox.confirm()` dialogs.
+- **Generation counter plus one AbortController per navigation**: lighter than TanStack's per-match AbortControllers, and enough for UI5's single-hash model.
 
-The sync-first approach matches UI5's routing model well:
-
-- **Minimal overhead without guards**: The pipeline returns `allow` synchronously and the router commits in the same tick
-- **Same-tick for sync guards**: Framework sees navigation as complete within the event handler
-- **Async when needed**: Backend permission checks, `MessageBox.confirm()` dialogs, etc.
-- **Generation counter + one AbortController per navigation**: Lighter than per-match AbortControllers (TanStack's approach),
-  sufficient for UI5's single-hash navigation model
-
-### Dual-Path Complexity
-
-`GuardPipeline.ts` has five guard-running methods:
+`GuardPipeline.ts` holds the dual-path logic in five methods:
 
 - `_runForEach()`: runs leave or enter guards route by route (greedy routes), sync until a run returns a Promise
 - `_runGuards()`: the sync loop, shared by leave and enter guards
-- `_continueGuardsAsync()`: async continuation, shared by leave and enter guards
-- `_runEnterGuards()`: coordinator for global, then route enter guards
+- `_continueGuardsAsync()`: the async continuation, shared by leave and enter guards
+- `_runEnterGuards()`: global enter guards, then route enter guards
 - `_runRouteGuards()`: route enter guards, if any are registered
 
-Together they are a small amount of dual-path logic, including error logging. This is not a maintenance burden.
+This is a small amount of code, including error logging, and not a maintenance burden.
 
-## Costs of a Fully Async Pipeline
+## Alternatives considered
 
-### Option A: Always-Async Pipeline
+### Option A: always-async pipeline
 
 ```typescript
-parse(this: RouterInstance, newHash: string): void {
-    // ... suppress/redirect/dedup checks (still sync) ...
+parse(newHash: string): void {
     const generation = ++this._parseGeneration;
-    const context = { /* ... */ };
-
     Promise.resolve()
         .then(() => this._runLeaveGuards(context))
         .then((r) => r !== true ? r : this._runGlobalGuards(context))
@@ -330,195 +250,51 @@ parse(this: RouterInstance, newHash: string): void {
             if (generation !== this._parseGeneration) return;
             this._applyGuardResult(result, newHash, toRoute);
         })
-        .catch((error) => {
+        .catch(() => {
             if (generation !== this._parseGeneration) return;
             this._restoreHash();
         });
 }
 ```
 
-**What this gains**: Simpler code (~25 lines vs ~36), single code path, easier to reason about
+Gains one code path and slightly less code. Loses:
 
-**What this loses**:
+- **The sync fast path**: every navigation pays a microtask delay, even with no guards.
+- **Test tool compatibility**: `waitForUI5()` breaks for all navigations, not only async-guarded ones.
+- **The sync guarantee**: code that expects `navTo()` to complete synchronously (`navTo("home"); assert(getCurrentRoute() === "home")`) breaks.
+- **Initial navigation timing**: `router.initialize()` defers the first route match to a microtask.
 
-- **Zero-overhead fast path**: Every navigation pays a microtask delay, even with no guards
-- **Test tool compatibility**: `waitForUI5()` breaks for _all_ navigations, not just async-guarded ones
-- **Sync guard guarantee**: Code that depends on `navTo()` completing synchronously (e.g.,
-  `navTo("home"); assert(getCurrentRoute() === "home")`) would break
-- **Initial navigation timing**: App startup with `router.initialize()` would defer the first
-  route match to a microtask
+### Option B: async inside, sync outside
 
-### Option B: Async-Internal, Sync-External
+Keep `parse()` synchronous, unify the internal pipeline on Promises, and detect whether the result settled synchronously. This cannot work: `Promise.then()` always runs in a microtask, even for a resolved Promise. JavaScript has no way to read a Promise's value synchronously.
 
-Keep `parse()` synchronous but unify the internal pipeline. Detect whether the result settled
-synchronously.
-
-**Problem**: `Promise.then()` is ALWAYS a microtask, even for already-resolved Promises. There is
-no way to synchronously extract a value from a Promise in JavaScript. This approach fundamentally
-doesn't work.
-
-### Option C: Custom Sync/Async Result Wrapper
-
-Create a custom type that can be either sync or async:
+### Option C: a sync-or-async result type
 
 ```typescript
 type MaybeAsync<T> = T | Promise<T>;
 ```
 
-This is essentially what the current code already does with the `isPromiseLike()` check. The dual-path
-is already the minimal implementation of this pattern.
+This is what the code does with the `isPromiseLike()` check. The dual path is the minimal form of this pattern.
 
-### Cost Summary
+### Cost summary
 
-| Change                     | Sync Fast Path | Test Tools | Code Simplicity    | Async Guards |
-| -------------------------- | -------------- | ---------- | ------------------ | ------------ |
-| Keep current (sync-first)  | Preserved      | Compatible | Good (~36 lines)   | Supported    |
-| Always-async (Option A)    | **Lost**       | **Broken** | Better (~25 lines) | Supported    |
-| Current + unified pipeline | Preserved      | Compatible | Good (~50 lines)   | Supported    |
+Line counts are from the time of the analysis.
 
-**The cost of going fully async is high (broken tests, lost sync guarantee) for minimal gain
-(~11 fewer lines of code). The dual-path is the correct trade-off.**
+| Change                     | Sync fast path | Test tools | Code size | Async guards |
+| -------------------------- | -------------- | ---------- | --------- | ------------ |
+| Keep current (sync-first)  | Preserved      | Compatible | ~36 lines | Supported    |
+| Always-async (Option A)    | **Lost**       | **Broken** | ~25 lines | Supported    |
+| Current + unified pipeline | Preserved      | Compatible | ~50 lines | Supported    |
 
-## What a Rewrite Could Improve (Without Going Fully Async)
+Going fully async costs broken test tools and the lost sync guarantee for about 11 fewer lines. The dual path is the right trade-off.
 
-### Unified Guard Pipeline
+## Recommendation and outcome
 
-Instead of separate `_runEnterGuards`, `_runRouteGuards`, and `_runLeaveGuards`, create
-a single pipeline concept:
+Do not rewrite to fully async. Instead:
 
-```typescript
-interface GuardPhase {
-    name: string;
-    guards: GuardFn[];
-    context: GuardContext | LeaveGuardContext;
-}
+1. **Unify the guard pipeline** so a new phase does not touch `parse()`. Shipped as `GuardPipeline` ([Feature 09](./09-guard-pipeline-extraction.md)).
+2. **Pass an `AbortSignal` in the guard context**, so async guards can cancel `fetch()` and similar work when superseded. Shipped as `GuardContext.signal`. The generation counter stays the primary staleness check.
+3. **Keep the generation counter.**
+4. **Add lifecycle events if observability is needed.** Shipped as the `navigationSettled` event and `navigationSettled()` Promise, with a `NavigationOutcome` per navigation ([Feature 10](./10-navigation-outcome-error.md)).
 
-_buildPipeline(newHash, toRoute, routeInfo): GuardPhase[] {
-    const phases: GuardPhase[] = [];
-
-    // Phase 1: Leave guards
-    if (this._currentRoute && this._leaveGuards.has(this._currentRoute)) {
-        phases.push({
-            name: "leave",
-            guards: this._leaveGuards.get(this._currentRoute)!,
-            context: leaveContext
-        });
-    }
-
-    // Phase 2: Global enter guards
-    if (this._globalGuards.length > 0) {
-        phases.push({
-            name: "global",
-            guards: this._globalGuards,
-            context: enterContext
-        });
-    }
-
-    // Phase 3: Route-specific enter guards
-    if (toRoute && this._enterGuards.has(toRoute)) {
-        phases.push({
-            name: "route",
-            guards: this._enterGuards.get(toRoute)!,
-            context: enterContext
-        });
-    }
-
-    return phases;
-}
-
-_runPipeline(phases: GuardPhase[]): GuardResult | Promise<GuardResult> {
-    for (const phase of phases) {
-        const result = this._runGuards(phase.guards, phase.context);
-        if (isThenable(result)) {
-            return this._finishPipelineAsync(result, phases, currentPhaseIndex);
-        }
-        if (result !== true) return result;
-    }
-    return true;
-}
-```
-
-**Benefit**: Adding new phases (e.g., "resolve" guards for data pre-loading) doesn't require
-modifying `parse()` or the guard runner; just add a phase to `_buildPipeline()`.
-
-### AbortSignal in Guard Context
-
-For long-running async guards, pass an `AbortSignal` so guards can clean up when superseded:
-
-```typescript
-interface GuardContext {
-	// ... existing ...
-	signal: AbortSignal; // Aborted when navigation is superseded
-}
-
-// In parse():
-this._currentAbortController?.abort();
-this._currentAbortController = new AbortController();
-const context = {
-	// ...
-	signal: this._currentAbortController.signal,
-};
-
-// In an async guard:
-router.addGuard(async (context) => {
-	const response = await fetch("/api/check-permission", {
-		signal: context.signal, // Automatically cancelled if navigation superseded
-	});
-	return response.ok;
-});
-```
-
-This is additive; guards that don't use `signal` are unaffected. The generation counter remains
-the primary staleness mechanism; the signal is a convenience for guards that interact with
-cancellable APIs.
-
-### Navigation Lifecycle Events
-
-Fire events at key points in the navigation lifecycle:
-
-```typescript
-router.fireEvent("beforeGuardEvaluation", { context });
-router.fireEvent("navigationBlocked", { context, reason: "guard" | "leaveGuard" });
-router.fireEvent("navigationRedirected", { context, redirectTo: "routeName" });
-```
-
-Useful for analytics, logging, and debugging. Could be added incrementally.
-
-## Recommendation
-
-**Do not rewrite to fully async.** The sync-first design is correct for UI5's architecture and
-already solves the problem the UI5 team has been stuck on for 3+ years. Instead:
-
-1. **Refactor to a unified pipeline** when implementing leave guards, as this simplifies adding
-   new guard phases without the complexity or performance cost of going fully async
-2. **Add `AbortSignal` to guard context** as a low-cost enhancement for async guards
-3. **Keep the generation counter** as the primary staleness mechanism
-4. **Consider lifecycle events** if observability becomes a need
-
-### Positioning Relative to OpenUI5 #3411
-
-This library is a working answer to the community's request. The `parse()` override approach:
-
-- Was suggested by community members in the issue thread (Oct 2024)
-- Works today without framework changes
-- Supports both sync and async guards
-- Handles all navigation sources (navTo, URL bar, back/forward)
-- Doesn't require the multi-module framework changes the UI5 team would need
-
-If the UI5 team ever implements native guard support, the migration path is straightforward:
-replace `ui5.guard.router.Router` with the native `sap.m.routing.Router` and map guard
-registrations to the new API.
-
-## Comparison Table
-
-| Aspect                   | Current (Sync-First) | Fully Async         | Unified Pipeline (Recommended) |
-| ------------------------ | -------------------- | ------------------- | ------------------------------ |
-| No-guard overhead        | Zero                 | Microtask delay     | Zero                           |
-| Sync guard latency       | Same-tick            | Microtask delay     | Same-tick                      |
-| Async guard latency      | Microtask            | Microtask           | Microtask                      |
-| Test tool compat         | Full                 | Broken (waitForUI5) | Full                           |
-| Code complexity          | Low (~36 lines)      | Lower (~25 lines)   | Medium (~50 lines)             |
-| Extensibility            | Medium (add methods) | High (single chain) | High (add phases)              |
-| New phase addition       | Modify parse()       | Add .then()         | Add to \_buildPipeline()       |
-| Solves #3411             | Yes                  | Yes                 | Yes                            |
-| Framework changes needed | None                 | None                | None                           |
+This library answers the request in #3411 without framework changes. A `parse()` override was suggested by community members in the issue thread (October 2024). It supports sync and async guards and covers every navigation source.

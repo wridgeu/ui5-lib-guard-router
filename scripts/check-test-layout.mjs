@@ -122,13 +122,11 @@ for (const doc of docs) {
 	for (const [, cited, name] of text.matchAll(moduleAfterFile)) checkModuleCitation(doc, cited, name);
 	for (const [, name, cited] of text.matchAll(moduleBeforeFile)) checkModuleCitation(doc, cited, name);
 }
-// The parity table of the library README is made of such citations: none found means the
-// format changed and nothing above checked it.
-const readme = read("packages/lib/README.md");
-const parityStart = readme.indexOf("\n## Compatibility with `sap.m.routing.Router`");
-const paritySection = readme.slice(parityStart, readme.indexOf("\n## ", parityStart + 1));
-if (parityStart === -1 || ![...paritySection.matchAll(citation)].length) {
-	errors.push('packages/lib/README.md: no test citation found in "Compatibility with `sap.m.routing.Router`"');
+// The compatibility table is made of such citations: none found means the format changed and
+// nothing above checked it.
+const COMPATIBILITY = "docs/guides/native-router-compatibility.md";
+if (![...read(COMPATIBILITY).matchAll(citation)].length) {
+	errors.push(`${COMPATIBILITY}: no test citation found`);
 }
 
 if (errors.length > 0) {

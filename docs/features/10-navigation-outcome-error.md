@@ -1,184 +1,86 @@
 # NavigationOutcome.Error
 
-> **Status**: Implemented. Guard errors settle as `NavigationOutcome.Error`, distinct from `Blocked`.
+> **Status**: Implemented (1.4.0). Guard errors settle as `NavigationOutcome.Error`, distinct from `Blocked`.
 
 ## Context
 
-Issue #50: distinguish guard errors from intentional blocks.
-
-When a guard throws (sync) or rejects (async), the pipeline catches the error, logs it, and returns `{ action: "block" }`. The settlement outcome is `NavigationOutcome.Blocked`. The application cannot distinguish between:
-
-- **Intentional block**: guard returned `false` (user not authorized)
-- **Guard failure**: guard threw an error (fetch failed, bug in guard code)
-
-These require different UX. "Access denied" is not "something went wrong."
+Issue #50. A guard that throws or rejects used to settle as `NavigationOutcome.Blocked`. The app could not tell an intentional block (the guard returned `false`) from a failure (a fetch failed, a bug in the guard). These need different UX: "Access denied" is not "Something went wrong".
 
 ## Decision
 
-Add `NavigationOutcome.Error` to the enum and an optional `error` field on `NavigationResult`. The error field carries the raw thrown/rejected value (`unknown`) — no wrapping or structured envelope.
+Add `NavigationOutcome.Error` and an optional `error` field on `NavigationResult`. The field carries the raw thrown or rejected value (`unknown`), without a wrapper.
 
-### Why raw passthrough (`error?: unknown`) instead of a structured envelope?
+### Why the raw value instead of a structured envelope?
 
-A structured envelope (e.g., `{ guardIndex, phase, originalError }`) was considered but rejected:
+An envelope such as `{ guardIndex, phase, originalError }` was rejected:
 
-- `guardIndex` is positional and fragile — meaningless if guards are added/removed dynamically
-- `phase` (`"enter"` / `"leave"`) leaks pipeline internals into the public API
-- The Router's `.catch()` handlers in `navTo()` and `parse()` catch pipeline promise failures where no guard metadata is available, requiring a fallback shape that undermines the structure
-- Console logging already provides full diagnostics (guard index, phase, route) for debugging
-- The consumer's typical action is `String(result.error)` for display or forwarding to an error tracking service — both need the raw value
+- `guardIndex` is positional. It means nothing once guards are added or removed at runtime.
+- `phase` (`"enter"` / `"leave"`) leaks pipeline internals into the public API.
+- Some failures happen outside any guard (applying an async decision, a redirect target without a valid hash). They have no guard metadata, so the envelope would need a fallback shape.
+- The console log already names the guard index, the guard name and the route.
+- Consumers display `String(result.error)` or forward the value to an error tracker. Both need the raw value.
 
-## Type changes
+## Types
 
-### NavigationOutcome
-
-`packages/lib/src/NavigationOutcome.ts`
+All changes are additive.
 
 ```typescript
-const NavigationOutcome = Object.freeze({
-	Committed: "committed",
-	Bypassed: "bypassed",
-	Blocked: "blocked",
-	Redirected: "redirected",
-	Cancelled: "cancelled",
-	Error: "error", // NEW
-});
-```
+// NavigationOutcome.ts
+Error: "error", // @since 1.4.0
 
-### GuardDecision
-
-`packages/lib/src/GuardPipeline.ts`
-
-New variant added to the discriminated union:
-
-```typescript
+// GuardPipeline.ts
 export type GuardDecision =
 	| { action: "allow" }
 	| { action: "block" }
 	| { action: "redirect"; target: string | GuardRedirect }
-	| { action: "error"; error: unknown }; // NEW
-```
+	| { action: "error"; error: unknown };
 
-### NavigationResult
-
-`packages/lib/src/types.ts`
-
-```typescript
+// types.ts
 export interface NavigationResult {
 	status: NavigationOutcome;
 	route: string;
 	hash: string;
-	error?: unknown; // NEW — present when status is Error
+	error?: unknown; // present when status is Error
 }
 ```
 
-All changes are additive. No existing types change shape.
+`library.ts` registers the imported `NavigationOutcome` object with `DataType.registerEnum`, so the new value needs no change there.
 
-## GuardPipeline changes
+## Pipeline
 
-### File
+`_runGuards()` and `_continueGuardsAsync()` catch a guard's error, log it with `Log.error` and re-throw it. `evaluate()` catches the re-thrown error (sync `try/catch`, async `.catch()`) and returns `{ action: "error", error }`. Because the error leaves the guard loops as an exception, no loop needs to pass a decision object through.
 
-`packages/lib/src/GuardPipeline.ts`
+If the context's signal is already aborted, the catch returns `false` without logging. The navigation was cancelled, so its error is expected and settles nothing.
 
-### Error decision instead of silent block
+| Guard returns or throws         | Decision                                   |
+| ------------------------------- | ------------------------------------------ |
+| `true`                          | `{ action: "allow" }`                      |
+| `false`                         | `{ action: "block" }`                      |
+| non-empty string                | `{ action: "redirect", target: <string> }` |
+| `GuardRedirect` object          | `{ action: "redirect", target: <object> }` |
+| any other value                 | logs a warning, `{ action: "block" }`      |
+| throws or rejects               | logs, `{ action: "error", error }`         |
+| throws after the signal aborted | `{ action: "block" }`, no log              |
 
-> **As implemented:** the catch blocks do not return a `GuardDecision`. They log the error and re-throw it; when the signal is already aborted they return `false` without logging. `evaluate()` catches the re-thrown error (sync `try/catch`, async `.catch()`) and returns `{ action: "error", error }`, so the passthrough logic described below was not needed. The plan below is kept as the design record.
+## Router
 
-The pipeline currently catches guard errors and returns `false`, which `evaluate()` maps to `{ action: "block" }`. The three catch blocks change to return `{ action: "error", error }` directly — a new variant of `GuardDecision`.
+`_errorNavigation(error, attemptedHash?, restoreHash = true)` is the counterpart of `_blockNavigation()`. It sets the phase to idle and settles `{ status: Error, route, hash, error }` through `_settleUncommitted()`. The hash is restored before the settlement fires, so handlers run on the final URL. The exception is a first navigation (nothing committed yet) on a non-empty hash: the settlement fires first, then the empty hash is restored and parsed as a navigation of its own.
 
-**`_runGuards()` catch block** — sync enter guard throws:
+Each decision switch has a `case "error"`:
 
-Currently returns `false`. Changes to return `{ action: "error", error }`. Return type widens from `GuardResult` to `GuardResult | GuardDecision` (specifically the error variant).
+- `_applyDecision()` (hash change): `_errorNavigation(decision.error, hash)`.
+- `_applyPreflightDecision()` (`navTo`): `_errorNavigation(decision.error, targetHash, attempt.restoreHash)`. The preflight never changes the hash; it restores it only after superseding a pending hash change.
+- `_applyRedirectDecision()` (a redirect hop, see [11](./11-guards-on-redirect-targets.md)): `_errorNavigation(decision.error, chain.attemptedHash, chain.restoreHash)`.
 
-**`_runLeaveGuards()` catch block** — sync leave guard throws:
+The pipeline turns every guard failure into a decision, so its Promise never rejects. `_applyWhenDecided()` instead guards the application of an async decision: an error thrown there is logged (`Navigation failed after its guards had settled`) and settles the navigation as `Error` if it has not settled yet. `_redirect()` reports a redirect target without a valid hash through `_errorNavigation()` itself.
 
-Currently returns `false` (`boolean`). Changes to return `{ action: "error", error }`. Return type widens from `boolean` to `boolean | GuardDecision`.
-
-**`_continueGuardsAsync()` catch block** — async guard throws/rejects:
-
-Currently returns `false`. Changes to return `{ action: "error", error }`. The existing `!context.signal.aborted` check is preserved — when the signal is already aborted, the error is expected and the method returns `false` (plain block), not an error decision. This keeps the existing behavior where cancelled navigations don't surface as errors.
-
-### `evaluate()` changes
-
-Both the leave-guard and enter-guard result paths need the same passthrough logic: if the result already has an `action` property (i.e., it is a `GuardDecision`), return it directly instead of mapping it.
-
-**Leave-guard path:** The sync check `if (leaveResult !== true) return { action: "block" }` and the async `.then` callback `if (allowed !== true) return { action: "block" }` must first check whether the result is already a `GuardDecision` (the error variant) and pass it through. Without this, a leave-guard error decision would be silently converted to a plain block.
-
-**Enter-guard path:** The `processEnterResult` function that maps `true`/`false`/`string`/`GuardRedirect` to decisions must also check for an existing `GuardDecision` and pass it through.
-
-Updated result normalization:
-
-| Guard returns / pipeline catches | Pipeline decision                          |
-| -------------------------------- | ------------------------------------------ |
-| `true`                           | `{ action: "allow" }`                      |
-| `false`                          | `{ action: "block" }`                      |
-| non-empty string                 | `{ action: "redirect", target: <string> }` |
-| `GuardRedirect` object           | `{ action: "redirect", target: <object> }` |
-| any other value                  | logs warning, `{ action: "block" }`        |
-| guard throws/rejects             | `{ action: "error", error: <thrown> }`     |
-| guard throws after signal abort  | `{ action: "block" }` (unchanged)          |
-
-### Logging
-
-`Log.error()` calls stay in all catch blocks, but only for errors that become an `"error"` decision. An error thrown after the signal was aborted produces a `"block"` decision without a log entry.
-
-## Router changes
-
-### File
-
-`packages/lib/src/Router.ts`
-
-### New method: `_errorNavigation()`
-
-```typescript
-private _errorNavigation(error: unknown, attemptedHash?: string, restoreHash = true): void
-```
-
-Parallel to `_blockNavigation()`. Same structure:
-
-- Clears phase to idle
-- Optionally restores the browser hash to the previous state
-- Flushes settlement with `{ status: NavigationOutcome.Error, route, hash, error }`
-
-The hash is restored before the settlement fires, so handlers run on the final URL. The exception is a first navigation (nothing committed yet) on a non-empty hash: the settlement fires first, then the empty hash is restored and parsed as a navigation of its own.
-
-### `_applyDecision()` and `_applyPreflightDecision()`
-
-Add `case "error"` to the existing switch on `decision.action`:
-
-- `_applyDecision()`: calls `_errorNavigation(decision.error, hash)` (with default `restoreHash: true`)
-- `_applyPreflightDecision()`: calls `_errorNavigation(decision.error, targetHash, attempt.restoreHash)` (the preflight never changes the hash; it only restores it after superseding a pending hash change)
-
-Redirect chain hops (see [11](./11-guards-on-redirect-targets.md)) do the same in `_applyRedirectDecision()`, which `_applyWhenDecided()` calls for an async hop, passing `chain.attemptedHash` and `chain.restoreHash`.
-
-### `.catch()` handlers in `navTo()` and `parse()`
-
-These currently call `_blockNavigation()` when the pipeline promise fails. They change to call `_errorNavigation()` instead — a pipeline promise rejection is an error, not an intentional block.
-
-> **As implemented:** the pipeline turns every guard failure into an `error` decision, so its Promise does not reject and there are no `.catch()` handlers for it. `_applyWhenDecided()` wraps the application of an async decision instead: an error thrown there is logged (`Navigation failed after its guards had settled`) and settles the navigation as `Error` only if it had not settled yet. A redirect target without a valid hash is reported by `_redirect()` itself, through `_errorNavigation()`.
-
-### Unchanged
-
-- `navigationSettled()` — already passes through the full `NavigationResult`, the new `error` field flows naturally
-- `navigationSettled` event — same, carries the full result
-- `_lastSettlement` — stores full `NavigationResult`, idle replay returns Error status with error field when the last settlement was an error
-- `_blockNavigation()` — unchanged, still used for intentional blocks
-- All other Router methods and state management
-
-## library.ts
-
-### File
-
-`packages/lib/src/library.ts`
-
-The `DataType.registerEnum` call passes the imported `NavigationOutcome` object, so the new `Error: "error"` value added in `NavigationOutcome.ts` flows through automatically. No code change in `library.ts` itself — verify the new value is registered by confirming the import chain.
+`navigationSettled()`, the `navigationSettled` event and the idle replay of `_lastSettlement` pass the full `NavigationResult`, so `error` reaches them without changes.
 
 ## App usage
 
 ```typescript
 const result = await router.navigationSettled();
 switch (result.status) {
-	case NavigationOutcome.Committed:
-		break;
 	case NavigationOutcome.Blocked:
 		MessageToast.show("Access denied");
 		break;
@@ -188,39 +90,11 @@ switch (result.status) {
 }
 ```
 
-## Testing
+## Tests
 
-### Existing test updates
+- `test/qunit/unit/GuardPipelineAsync.qunit.ts`: throws and rejections give an `error` decision and are logged; `false` still gives `block`.
+- `test/qunit/router/settlement/SettlementErrors.qunit.ts` and the router suites: each failure settles as `Error` with `result.error`; `false` still settles as `Blocked`; `error` is absent on other outcomes; the event and the idle replay carry it.
 
-Tests in the Router test files and `GuardPipelineAsync.qunit.ts` that currently assert `NavigationOutcome.Blocked` when a guard throws need updating to assert `NavigationOutcome.Error` instead.
+## Compatibility
 
-### New test cases
-
-**GuardPipeline tests** (`packages/lib/test/qunit/unit/GuardPipelineAsync.qunit.ts`):
-
-1. Sync enter guard that throws → `{ action: "error", error: <thrown> }`
-2. Async enter guard that rejects → `{ action: "error", error: <rejected> }`
-3. Sync leave guard that throws → `{ action: "error", error: <thrown> }`
-4. Guard returning `false` → `{ action: "block" }` (regression — not Error)
-5. Guard error after signal abort → `{ action: "block" }` (unchanged behavior)
-
-**Router tests** (`packages/lib/test/qunit/router/`):
-
-6. Sync guard throw → `NavigationOutcome.Error` with error on result
-7. Async guard reject → `NavigationOutcome.Error` with error on result
-8. Leave guard throw → `NavigationOutcome.Error` with error on result
-9. Guard returning `false` → `NavigationOutcome.Blocked` (regression)
-10. `result.error` is `undefined` for non-error settlements (Committed, Blocked, Redirected, etc.)
-11. `navigationSettled` event carries the error field
-12. Idle replay after error → returns Error status with error
-
-## Scope
-
-- Additive change: new enum value, new optional field, new decision variant
-- No breaking changes to existing API
-- Existing guards and settlement consumers continue to work unchanged
-- Guards that throw still block navigation (same behavior), just with a different settlement status
-
-## Dependencies
-
-None. Built on the extracted `GuardPipeline` from #48.
+Additive: a new enum value, a new optional field, a new decision variant. A guard that throws still keeps the previous route; only the settlement status changes from `Blocked` to `Error`.

@@ -1,11 +1,9 @@
 # ui5-lib-guard-router Demo App
 
-Demo application showcasing `ui5.guard.router.Router` with authentication-based navigation guards.
-
-The demo supports both standalone preview and a local FLP sandbox preview served from a virtual endpoint.
+Demo app for `ui5.guard.router.Router`: enter, leave and redirect guards, route metadata, and a nested component with a guard router of its own. It runs standalone on OpenUI5 and in a local Fiori launchpad (FLP) preview on SAPUI5.
 
 > [!CAUTION]
-> The auth and permission scenarios in this demo are illustrative UX examples only. Keep real authorization and validation on the server.
+> The auth and permission scenarios are UX examples. Keep real authorization and validation on the server.
 
 ## Routes
 
@@ -93,13 +91,9 @@ The hash of a nested route follows that of the parent route, for example `#/repo
 
 ## Guards
 
-Guard registration happens in three ways: declarative manifest guards, programmatic guards in `Component.ts`, and controller-level guards.
+The demo registers guards in three ways: in the manifest (modules in `webapp/guards/`), in `Component.ts` (factories in `webapp/guards.ts`) and in a controller.
 
-The guard factories that the demo registers programmatically live in `webapp/guards.ts`.
-
-Individual guard modules for declarative manifest registration live in `webapp/guards/` as standalone files.
-
-**Declarative** (manifest.json `guardRouter.guards`): Registered by the router during `initialize()`. With the default `guardLoading: "lazy"`, a module that is not loaded yet is loaded on first navigation.
+**Manifest** (`guardRouter.guards`): registered by the router in `initialize()`. With the default `guardLoading: "lazy"`, a module is loaded on the first navigation that needs it.
 
 | Guard module              | Type         | Route       | Description                                  |
 | ------------------------- | ------------ | ----------- | -------------------------------------------- |
@@ -109,14 +103,14 @@ Individual guard modules for declarative manifest registration live in `webapp/g
 | `guards.retiredPageGuard` | Route enter  | `team`      | Always redirects to the alias route `staff`  |
 | `guards.dirtyFormGuard`   | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
 
-**Programmatic** (`Component.ts`): Registers guards during `init()` for the component lifetime. The permission guard closes over the auth model; manifest guards reach the component through `context.ownerComponent` instead.
+**Programmatic** (`Component.ts`): registered in `init()` for the lifetime of the component. The permission guard closes over the auth model. Manifest guards reach the component through `context.ownerComponent` instead.
 
 | Guard                          | Type        | Route       | Description                                           |
 | ------------------------------ | ----------- | ----------- | ----------------------------------------------------- |
 | `adminGuard`                   | Route enter | `admin`     | Always redirects to `protected` (redirect chain demo) |
 | `createAsyncPermissionGuard()` | Route enter | `protected` | Async login check with `AbortSignal` support          |
 
-**Controller level** (`Home.controller.ts`): Demonstrates per-controller guard lifecycle.
+**Controller** (`Home.controller.ts`): added in `onInit()`, removed in `onExit()`.
 
 | Guard                     | Type        | Route  | Description                       |
 | ------------------------- | ----------- | ------ | --------------------------------- |
@@ -140,7 +134,7 @@ The retired `team` page has a manifest guard (`guards/retiredPageGuard.ts`) that
 
 ## Nested component (Reports)
 
-The `reports` route displays a second component, `demo.app.reporting` (`webapp/reporting/`), through a routing target of type `Component`. The nested component has its own manifest, its own `ui5.guard.router.Router` and its own manifest guards. Use it to try nested routing with guards, standalone and in the FLP preview.
+The `reports` route displays a second component, `demo.app.reporting` (`webapp/reporting/`), through a routing target of type `Component`. It has its own manifest, its own `ui5.guard.router.Router` and its own manifest guards.
 
 **Wiring**
 
@@ -208,7 +202,7 @@ All controllers extend `BaseController`, which provides shared helpers: `getRout
 
 ### Demo-only helpers
 
-These files power the runtime inspector panels and hash-driven scenario buttons in the UI. They are isolated from the library and exist solely to make the demo interactive.
+These files drive the runtime panels and the scenario buttons. The library does not use them.
 
 | File                         | Purpose                                                                                                                                                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -241,69 +235,36 @@ The root component and the nested reporting component each have their own bundle
 
 ## FLP preview
 
-The `start:flp` script launches a local FLP sandbox at `/test/flp.html#app-preview`. This endpoint is virtual, generated by the `fiori-tools-preview` middleware, not a physical file.
+`npm run start:flp` opens a local FLP sandbox at `/test/flp.html#app-preview`. The page is virtual: the `fiori-tools-preview` middleware generates it.
 
-**Enhanced homepage (CDM mode):** The FLP preview uses `enhancedHomePage: true`, which bootstraps the shell via CDM (`container.init('cdm')`) instead of the classic `sandbox.js`. This provides a more complete UShell service layer (`ShellNavigationHashChanger`, the `Navigation` service, dirty-state infrastructure) that closely matches production FLP behavior. Requires UI5 >= 1.123.0.
-
-**Why SAPUI5?** The FLP sandbox requires `sap.ushell`, which is not available in OpenUI5. The FLP config (`ui5-flp.yaml`) uses SAPUI5 (with `sap.ushell` and `sap.tnt` for the shell) while the standalone config (`ui5.yaml`) uses OpenUI5. Both pin version 1.144.0. The app's root view has no `sap.m.Shell`: in the FLP the launchpad provides the shell.
-
-**Typings:** The demo compiles against `@sapui5/types`, so `flp/ContainerAdapter.ts` uses the official `sap/ushell/Container` types. The container is looked up at runtime via `sap.ui.require` rather than imported, because standalone mode runs on OpenUI5 without `sap.ushell`. The library itself compiles against `@openui5/types` to stay OpenUI5-compatible.
+- **CDM mode.** `enhancedHomePage: true` starts the shell through CDM (`container.init('cdm')`) instead of `sandbox.js`. That brings the `ShellNavigationHashChanger`, the `Navigation` service and the dirty-state handling of a production launchpad. It needs UI5 1.123.0 or later.
+- **SAPUI5.** The sandbox needs `sap.ushell`, which OpenUI5 lacks. `ui5-flp.yaml` uses SAPUI5 (with `sap.ushell` and `sap.tnt`), `ui5.yaml` uses OpenUI5, both at 1.144.0. The root view has no `sap.m.Shell`; in the FLP the launchpad provides it.
+- **Typings.** The demo compiles against `@sapui5/types`, so `flp/ContainerAdapter.ts` uses the `sap/ushell/Container` types. It looks the container up at runtime with `sap.ui.require` instead of importing it, because the standalone app has no `sap.ushell`. The library compiles against `@openui5/types`.
 
 > [!NOTE]
 > `Container.registerDirtyStateProvider` is deprecated since UI5 1.146 in favor of `sap/ushell/navigation/DirtyState`. The demo targets 1.144, where `DirtyState` does not exist yet, so it keeps the Container API. Switch to `DirtyState` once the minimum version is 1.146 or later.
 
-**What's different in FLP mode:**
+**In the FLP:**
 
-- The runtime inspector shows "FLP Preview" as launch mode and "sap.ushell.Container available"
-- The dirty-state provider is registered via `sap.ushell.Container.registerDirtyStateProvider`
-- Cross-app navigation (hash changes to routes outside the app) triggers the FLP dirty-state popup instead of the router's leave guard, avoiding a conflict where both would fire
+- The runtime panel shows "FLP Preview" as launch mode and "sap.ushell.Container available".
+- The dirty-state provider is registered with `sap.ushell.Container.registerDirtyStateProvider`.
+- A cross-app navigation shows the launchpad's dirty-state popup. The router's leave guard does not run for it, so the user is asked once.
+- `crossNavigation.inbounds` in `manifest.json` defines the tile's semantic object `guarddemo` and action `display`.
 
-The `crossNavigation.inbounds` configuration in `manifest.json` defines the semantic object (`guarddemo`, action `display`) used by the FLP tile.
-
-**Keep-alive:** the manifests of the app and of the nested reporting component declare `sap.ui5/keepAlive/supported` (UI5 supports keep-alive only when every nested component does). With `?sap-keep-alive=true` the launchpad hides the app instead of destroying it when the user opens another app. UI5 then stops the router and calls `Component.onDeactivate()`, which deregisters the dirty-state provider through `RuntimeCoordinator.deactivate()`. When the app is shown again, UI5 calls `router.initialize()`, which parses the hash through the guards, and `onActivate()` registers the provider again. Returning through the intent without an inner route starts on the default route. The setup and its reasons are in the library README, [Keep-alive apps](../lib/README.md#keep-alive-apps).
+**Keep-alive.** Both manifests, of the app and of the nested component, declare `sap.ui5/keepAlive/supported`; UI5 keeps an app alive only if every nested component supports it. With `?sap-keep-alive=true` the launchpad hides the app instead of destroying it. UI5 stops the router and calls `Component.onDeactivate()`, which deregisters the dirty-state provider through `RuntimeCoordinator.deactivate()`. When the app is shown again, UI5 calls `router.initialize()`, which runs the guards for the hash, and `onActivate()` registers the provider again. An intent without an inner route starts on the default route. See [Keep-alive apps](../lib/README.md#keep-alive-apps) in the library README.
 
 ## Running
 
-From the monorepo root:
+`npm start` and `npm run start:flp` work from the monorepo root and from this directory. In this directory:
 
 ```bash
-npm start         # standalone
-npm run start:flp # FLP sandbox preview
-```
-
-Or from this directory:
-
-```bash
-npm start
-# => opens http://localhost:8080/index.html
-
-npm run start:flp
-# => opens http://localhost:8080/test/flp.html#app-preview
-```
-
-## Scripts
-
-```bash
-# Start dev server with livereload and open the standalone app
-npm start
-
-# Start dev server with livereload and open the FLP sandbox preview
-npm run start:flp
-
-# Dev server without auto-open (used by E2E test runner)
-npm run serve
-
-# FLP preview server without auto-open (used by FLP E2E smoke tests)
-npm run serve:flp
-
-# Build
+npm start         # dev server with livereload, opens http://localhost:8080/index.html
+npm run start:flp # opens http://localhost:8080/test/flp.html#app-preview
+npm run serve     # dev server without opening a browser (used by the E2E tests)
+npm run serve:flp # FLP preview without opening a browser (used by the FLP tests)
 npm run build
-
-# Type check
 npm run typecheck
-
-# Remove dist and .ui5 cache
-npm run clean
+npm run clean     # remove dist and the .ui5 cache
 ```
 
 ## E2E tests
@@ -316,9 +277,9 @@ npm run test:e2e:flp
 npm run test:e2e:flp:149 # the FLP tests on SAPUI5 1.149.0
 ```
 
-`test:e2e:flp:149` serves the same `ui5-flp.yaml` with `--framework-version 1.149.0`. In 1.149 the launchpad keeps its dirty state in `sap/ushell/navigation/DirtyState` (see [flp-dirty-state.md](../../docs/research/flp-dirty-state.md)), so this lane runs the shell integration against the newer implementation. Both lanes run every spec file of `test/flp/` (one wdio configuration, `test/wdio-flp.conf.ts`), the comparison with the native router and the iframe spec included. CI runs both lanes.
+`test:e2e:flp:149` serves the same `ui5-flp.yaml` with `--framework-version 1.149.0`. In 1.149 the launchpad keeps its dirty state in `sap/ushell/navigation/DirtyState` (see [flp-dirty-state.md](../../docs/research/flp-dirty-state.md)), so this lane tests the shell integration against the newer code. Both FLP lanes run every spec file of `test/flp/` with one wdio configuration, `test/wdio-flp.conf.ts`. CI runs both.
 
-Each command starts and stops its own demo server for you. Standalone and FLP test lanes use dedicated ports so they can run alongside other suites without colliding.
+Each command starts and stops its own server on its own port.
 
 Test files are in `test/e2e/`:
 
@@ -345,7 +306,7 @@ Helpers of the standalone suite are in `test/e2e/helpers/`: `wait.ts` waits for 
 
 The E2E configuration (`test/wdio.conf.ts`) loads the app with `sap-ui-language=en`, because the expected texts and number formats are those of English.
 
-FLP-specific coverage lives in `test/flp/` and is split across nine spec files:
+FLP tests are in `test/flp/`:
 
 | File                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -359,7 +320,7 @@ FLP-specific coverage lives in `test/flp/` and is split across nine spec files:
 | `flp-native-parity.e2e.ts`     | The same app with the native and with the guard router (isolated): deep link, navigation, cancelled cross-app navigation, keep-alive; the two must leave the same record                                                                                                                                                                                                                     |
 | `flp-iframe-keep-alive.e2e.ts` | The demo app in an iframe (isolated, launchpad page of its own), `sap-keep-alive=true`: router stopped while hidden, the kept component with its unsaved data shown again on its default route, guards run once afterwards; the app runtime asks about unsaved data with the context of the iframe: on the first `navTo()` after showing, not on a cross-app navigation the app starts later |
 
-The cross-app, clean cross-app and keep-alive specs are isolated because they end on Shell-home, leaving the sandbox unrecoverable; the native-parity and iframe specs are isolated for the reasons given below. wdio creates a fresh browser session per spec file, so no ordering constraints exist.
+The cross-app, clean cross-app and keep-alive specs end on Shell-home, from which the sandbox does not recover, so each is a spec file of its own. The native-parity and iframe specs are isolated for the reasons below. wdio starts a browser session per spec file, so the order does not matter.
 
 `flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds a minimal component (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
 

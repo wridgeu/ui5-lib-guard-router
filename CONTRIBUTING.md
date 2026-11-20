@@ -1,8 +1,8 @@
 # Contributing
 
-Issues and pull requests are always welcome. If you spot a bug, have a question, or want to propose an improvement, please file an issue. If you already have a fix or documentation update in mind, feel free to open a PR directly.
+Issues and pull requests are welcome. For a bug, question or idea, open an issue. For a fix or docs change, a PR is fine directly.
 
-The docs are mapped in [docs/README.md](docs/README.md); the architecture, including the test architecture, is in [docs/reference/architecture.md](docs/reference/architecture.md).
+The docs are mapped in [docs/README.md](docs/README.md). The architecture, including the test architecture, is in [docs/reference/architecture.md](docs/reference/architecture.md).
 
 ## Prerequisites
 
@@ -39,9 +39,9 @@ npm run test:e2e:flp:149 # the same FLP tests on SAPUI5 1.149.0 (`ui5 serve --fr
 npm run test:mutation # Stryker mutation testing of packages/lib, one file at a time (slow; reports in reports/mutation/<File>.html)
 ```
 
-Each test command automatically starts and stops its own server. The suites use dedicated test ports so standalone, compatibility, and FLP lanes can run side by side without colliding.
+Each test command starts and stops its own server on its own port, so the lanes can run side by side.
 
-`test:mutation` runs Stryker once per source file, each against a fresh server. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`. Results are kept per file in `reports/mutation/incremental/`, so a repeated run only tests new or changed mutants; any change under `packages/lib/test/` discards them, and `--force` discards them on demand. Stryker edits the sources in place: if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do).
+`test:mutation` runs Stryker once per source file, each against a fresh server. Pass files or line ranges to narrow it: `npm run test:mutation -- packages/lib/src/Router.ts:200-400`. Results are kept per file in `reports/mutation/incremental/`, so a repeated run tests only new or changed mutants. Any change under `packages/lib/test/` discards them, and so does `--force`. Stryker edits the sources in place: if a run is interrupted, copy the files from `.stryker-tmp/backup-*/` back over `packages/lib/src` and delete `.stryker-tmp` (the script refuses to start until you do).
 
 ### Test conventions
 
@@ -49,12 +49,7 @@ Each test command automatically starts and stops its own server. The suites use 
 - Tests pass values the types forbid (as an untyped JavaScript caller could) through the helpers in `packages/lib/test/qunit/testHelpers.ts` (`callUnsafe()`, the `*Unsafe` wrappers, `createRouterUnsafe()`) instead of casting.
 - The few tests that inspect internal state read them with `Reflect.get()`, e.g. `Reflect.get(router, "_oConfig")`. The library uses TypeScript `private` rather than `#private` fields because UI5's class system relies on prototype-based inheritance and metadata introspection.
 
-The vendored parity sources themselves are maintained with:
-
-```bash
-npm run vendor:openui5-router-tests -- --tag 1.144.0 --write-manifest
-npm run verify:openui5-router-vendor
-```
+Maintenance of the vendored upstream tests: [their README](packages/lib/test/qunit/upstream-parity/README.md).
 
 ## Where tests go
 
@@ -101,7 +96,7 @@ npm run commitlint   # validate the latest commit message locally
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
-Linting also includes a few repo-local custom oxlint JS plugins from `tools/`, so some rule names and diagnostics differ from upstream oxlint.
+Lint also runs the repo's own oxlint JS plugins from `tools/`, so some rule names and messages are not upstream oxlint ones.
 
 ### Diagram style
 
@@ -138,17 +133,16 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
 3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.149, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
-For a local preview of what release-please would do next, run `npm run release:plan`. It wraps the official `release-please release-pr --dry-run` CLI, prefers `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` when set, and otherwise falls back to `gh auth token` when the GitHub CLI is available.
+`npm run release:plan` previews the next release with `release-please release-pr --dry-run`. It uses `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` if set, otherwise `gh auth token`.
 
-Short maintainer conventions:
+Maintainer conventions:
 
-- Use `[skip ci]` only for docs-only or issue-only commits that do not affect shipped code, tests, or build/release configuration.
-- Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
-- Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
+- Use `[skip ci]` only for commits that touch nothing but docs or issues. Never for library or demo code, tests, tooling, workflows or release files.
+- Do not bump versions by hand. release-please owns versions and release commits.
 - The minimum UI5 version (1.120.0) is `minUI5Version` in `packages/lib/src/manifest.json`; `packages/lib/ui5.compat-1.120.yaml` tests it. If it changes, update both, the badge and box in `README.md` and the Compatibility box in `packages/lib/README.md`.
 - If the development UI5 version (1.144.0) changes, update `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, the demo manifests, `packages/demo-app/README.md` and the Compatibility box in `packages/lib/README.md`. The UI5 type packages in the root `package.json` only need to be at least that version.
-  Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
-- For UI5 version or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
+  Also bump the vendored upstream tests: fetch the new tag, migrate the versioned ports, then run `--write-manifest`, which refuses while a port still points at the old version. The steps are in [the upstream parity README](packages/lib/test/qunit/upstream-parity/README.md#bump-the-upstream-version).
+- For a UI5 version change or anything that affects a release, run `npm run check`, `npm run test:full` and `npm run pack:check`.
 
 | File                            | Purpose                                                                                                                                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

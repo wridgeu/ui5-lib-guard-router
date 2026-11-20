@@ -4,28 +4,27 @@
 
 ## Problem
 
-When a guard redirects (e.g., unauthenticated user → login page), the original destination is available in the guard's context but not easily passed to the redirect target. Developers must manually encode it:
+When a guard redirects (for example, an unauthenticated user to the login page), the guard context knows the original destination, but the redirect target does not. Apps pass it by hand:
 
 ```typescript
-// Current workaround: manual hash encoding
+// Workaround: pass the original hash as a route parameter
 router.addGuard((context) => {
-	if (!isLoggedIn && context.toRoute !== "login") {
-		// Must manually pass the original destination
+	if (!isLoggedIn() && context.toRoute !== "login") {
 		return { route: "login", parameters: { returnTo: context.toHash } };
 	}
 	return true;
 });
 
-// Login controller must manually decode and navigate
-const returnTo = this.getRoute().getParameter("returnTo");
+// Login controller: read the parameter from the route's patternMatched arguments
+const returnTo = event.getParameter("arguments").returnTo;
 if (returnTo) {
 	HashChanger.getInstance().setHash(returnTo);
 }
 ```
 
-This is error-prone (encoding/decoding, hash vs route name confusion) and doesn't compose well with complex route parameters.
+This is error-prone (encoding a hash inside a hash, hash vs. route name) and does not compose with complex route parameters.
 
-Ember.js solves this with a **transition object**, a first-class representation of the intercepted navigation that can be stored and retried.
+Ember.js solves this with a **transition object**: the intercepted navigation as a value that can be stored and retried.
 
 ## Proposed API
 
@@ -38,7 +37,7 @@ interface NavigationIntent {
 	/** Target hash */
 	readonly toHash: string;
 	/** Parsed route parameters */
-	readonly toArguments: Record<string, string | Record<string, string>>;
+	readonly toArguments: RouteInfo["arguments"];
 	/** Source route name */
 	readonly fromRoute: string;
 	/** Source hash */
@@ -53,7 +52,7 @@ interface NavigationIntent {
 	/**
 	 * Retry the navigation, bypassing all guards.
 	 * Use when the blocking condition is definitely resolved
-	 * (e.g., user just logged in).
+	 * (the user just logged in).
 	 */
 	retrySkipGuards(): void;
 
@@ -70,14 +69,12 @@ interface NavigationIntent {
 
 ### GuardContext Integration
 
+`GuardContext` gains one field. All existing fields (`signal`, `bag`, `toMeta`, `fromMeta`, `ownerComponent`, ...) stay as they are.
+
 ```typescript
 interface GuardContext {
-	toRoute: string;
-	toHash: string;
-	toArguments: Record<string, string | Record<string, string>>;
-	fromRoute: string;
-	fromHash: string;
-	transition: NavigationIntent; // NEW
+	// ...existing fields
+	transition: NavigationIntent;
 }
 ```
 
@@ -86,7 +83,7 @@ interface GuardContext {
 ### Auth Guard with Resume
 
 ```typescript
-// Guard registration (e.g., in Component.ts)
+// Guard registration, for example in Component.ts
 router.addGuard((context) => {
     const auth = component.getModel("auth") as JSONModel;
 
@@ -98,7 +95,7 @@ router.addGuard((context) => {
     return true;
 });
 
-// In Login.controller.ts -- after successful login
+// Login.controller.ts, after a successful login
 async onLoginSuccess() {
     const auth = this.getOwnerComponent()!.getModel("auth") as JSONModel;
     auth.setProperty("/isLoggedIn", true);
@@ -116,12 +113,10 @@ async onLoginSuccess() {
 ### Form Guard with Retry
 
 ```typescript
-// Combined with leave guard (Feature 01)
+// Leave guard (Feature 01): could store context.transition for a "Save and continue" button.
+// Returning a confirmation result is simpler.
 router.addLeaveGuard("editOrder", (context) => {
 	if (!formModel.getProperty("/isDirty")) return true;
-
-	// Could store context.transition for a "Save & Continue" button
-	// But for leave guards, the simpler pattern is just returning false
 	return new Promise((resolve) => {
 		MessageBox.confirm("Discard changes?", {
 			onClose: (action) => resolve(action === "OK"),
@@ -134,32 +129,12 @@ router.addLeaveGuard("editOrder", (context) => {
 
 ### Creating the NavigationIntent
 
-Created inside `parse()`, with a closure over the router instance and the current generation:
-
-```typescript
-parse(this: RouterInstance, newHash: string): void {
-    // ... existing checks ...
-
-    const generation = ++this._parseGeneration;
-
-    const context: GuardContext = {
-        toRoute,
-        toHash: newHash,
-        toArguments: routeInfo ? routeInfo.arguments : {},
-        fromRoute: this._currentRoute,
-        fromHash: this._currentHash ?? "",
-        transition: this._createNavigationIntent(newHash, toRoute, routeInfo, generation)
-    };
-
-    // ... run guards with context ...
-}
-```
+`_createGuardContext()` would create the intent, with a closure over the router and the generation of the navigation attempt.
 
 ### NavigationIntent Factory
 
 ```typescript
 _createNavigationIntent(
-    this: RouterInstance,
     toHash: string,
     toRoute: string,
     routeInfo: RouteInfo | null,
@@ -197,59 +172,28 @@ _createNavigationIntent(
 
 ### Staleness
 
-The `isStale()` check uses two conditions:
+`isStale()` is true when either holds:
 
-1. **`used`**: The intent's `retry()` or `retrySkipGuards()` was already called
-2. **`generation !== router._parseGeneration`**: A newer navigation has started since this intent was created
+1. **`used`**: `retry()` or `retrySkipGuards()` was already called.
+2. **`generation !== router._parseGeneration`**: a newer navigation has started since the intent was created.
 
-This prevents ghost navigations from stored intents that are no longer relevant.
+This prevents ghost navigations from stored intents that no longer apply. The hops of a redirect chain keep the generation, so an intent stored by a guard that redirects to login stays fresh until the next navigation starts. Any navigation on the login page before the retry makes it stale.
 
 ## Design Decisions
 
 ### Not Serializable
 
-The `NavigationIntent` holds a closure over the router instance. It cannot be serialized to `sessionStorage` for cross-session resume. This is intentional:
-
-- For cross-session resume (page refresh during login), use `context.toHash` and store it as a string
-- The intent is designed for in-memory "redirect and resume" flows within a single session
-- Attempting to serialize router references would be fragile and error-prone
+The `NavigationIntent` holds a closure over the router. It cannot be stored in `sessionStorage`. This is intentional: the intent is for in-memory "redirect and resume" within one session. To resume across a page reload, store `context.toHash` as a string.
 
 ### retry() Re-runs Guards
 
-`retry()` navigates through the normal pipeline, so guards run again. This is the safe default: if conditions haven't actually changed, the guard will block again rather than allowing unauthorized access.
+`retry()` navigates through the normal pipeline, so guards run again. This is the safe default: if the condition has not changed, the guard blocks again instead of letting the user through.
 
-`retrySkipGuards()` is the escape hatch for when the developer is certain the condition is resolved (e.g., user just completed login). It uses Feature 02 (Guard Bypass, shipped as `skipGuards`).
+`retrySkipGuards()` is for when the app knows the condition is resolved (the user just logged in). It uses `navTo(..., { skipGuards: true })` ([Feature 02](./02-guard-bypass.md)).
 
 ### One-Shot Usage
 
-Both `retry()` and `retrySkipGuards()` set `used = true` and are no-ops on subsequent calls. This prevents accidental double-navigation from UI event handlers.
-
-## Types
-
-```typescript
-// In types.ts
-export interface NavigationIntent {
-    readonly toRoute: string;
-    readonly toHash: string;
-    readonly toArguments: Record<string, string | Record<string, string>>;
-    readonly fromRoute: string;
-    readonly fromHash: string;
-    retry(): void;
-    retrySkipGuards(): void;
-    isStale(): boolean;
-    readonly id: number;
-}
-
-// GuardContext gains one field; all existing fields (signal, bag, toMeta, fromMeta,
-// ownerComponent, ...) stay as they are
-export interface GuardContext {
-    // ...existing fields
-    transition: NavigationIntent;
-}
-
-// RouterInstance addition
-_createNavigationIntent(toHash: string, toRoute: string, routeInfo: RouteInfo | null, generation: number): NavigationIntent;
-```
+`retry()` and `retrySkipGuards()` set `used = true`; later calls do nothing. This prevents double navigation from UI event handlers.
 
 ## Test Cases
 
@@ -266,12 +210,10 @@ _createNavigationIntent(toHash: string, toRoute: string, routeInfo: RouteInfo | 
 
 ## Dependencies
 
-- **Feature 02 (Guard Bypass)**: Implemented as the `skipGuards` option on `navTo()`, so
-  `retrySkipGuards()` can be built on it. In practice `retry()` (which re-runs guards) is usually
-  enough — if the blocking condition is resolved (e.g., user logged in), guards pass naturally.
+- **Feature 02 (Guard Bypass)**: shipped as `skipGuards`, so `retrySkipGuards()` can build on it. Usually `retry()` is enough: once the condition is resolved (the user logged in), the guards pass.
 
 ## Compatibility
 
-- Additive property on `GuardContext`; existing guards that don't use `transition` are unaffected
-- No changes to guard return types or execution flow
-- The `NavigationIntent` methods are thin wrappers around existing `navTo()`
+- Additive property on `GuardContext`. Guards that do not read `transition` are unaffected.
+- No change to guard return types or execution flow.
+- The `NavigationIntent` methods are thin wrappers around `navTo()`.

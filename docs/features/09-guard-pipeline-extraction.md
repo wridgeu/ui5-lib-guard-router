@@ -4,217 +4,92 @@
 
 ## Context
 
-Issue #40: extract the guard evaluation logic from `Router.ts` into a standalone `GuardPipeline` class.
-
-The guard pipeline spans ~200 lines across 8 private methods and 3 storage fields in `Router.ts` (1,067 lines total). The logic is pure — it depends only on guard arrays, the context, and the abort signal. It has no dependency on router state (`_currentHash`, phase state machine, settlement resolvers, etc.) beyond reading the current route name to look up leave guards.
-
-Issues #38 (state machine) and #39 (navigation attempt) are merged, making the boundary between pipeline logic and router state management clear.
+Issue #40. The guard evaluation logic was ~200 lines of private methods and three storage fields in `Router.ts`. It depends only on the guard arrays, the context and the abort signal, not on router state (`_currentHash`, the phase, settlement). After the state machine (#38) and the navigation attempt (#39) landed, that boundary was clear enough to extract.
 
 ## Decision
 
-Full extraction: `GuardPipeline` owns guard storage and all evaluation logic. The Router delegates guard management and calls `pipeline.evaluate()`.
+`GuardPipeline` owns guard storage and all evaluation. The Router validates input, resolves overloads, and calls `pipeline.evaluate()`.
 
-### Why not stateless (evaluation only)?
+Rejected alternatives:
 
-A stateless pipeline that receives guard arrays as arguments leaks internal structure (`Map<string, GuardFn[]>`) across the boundary and doesn't improve testability — tests would still need to construct the maps manually. Owning storage makes the pipeline self-contained.
+- **A stateless pipeline** that receives the guard arrays as arguments. It leaks `Map<string, GuardFn[]>` across the boundary, and tests would still have to build those maps.
+- **A standalone function.** No natural place for guard storage; same leak.
 
-### Why not a standalone function?
-
-No natural place for guard storage management. Same leaky-internals problem as the stateless approach.
-
-## GuardPipeline class
-
-### File
-
-`packages/lib/src/GuardPipeline.ts`
-
-### Public API
+## API
 
 ```typescript
 class GuardPipeline {
 	addGlobalGuard(guard: GuardFn): void;
 	removeGlobalGuard(guard: GuardFn): void;
-	addEnterGuard(route: string, guard: GuardFn): void;
+	addEnterGuard(route: string, guard: GuardFn, before?: GuardFn): void;
 	removeEnterGuard(route: string, guard: GuardFn): void;
-	addLeaveGuard(route: string, guard: GuardFn): void;
+	addLeaveGuard(route: string, guard: GuardFn, before?: GuardFn): void;
 	removeLeaveGuard(route: string, guard: GuardFn): void;
 
-	evaluate(context: GuardContext, options?: { skipLeaveGuards?: boolean }): GuardDecision | Promise<GuardDecision>;
+	evaluate(
+		context: GuardContext,
+		options?: { skipLeaveGuards?: boolean; alsoLeaving?: string[]; alsoEntering?: string[] },
+	): GuardDecision | Promise<GuardDecision>;
 
 	clear(): void;
 }
 ```
 
-### Design principles
+- `before` inserts a guard in front of another guard of the same route. With `inheritance: "pattern-tree"`, `addRoute()` uses it to put the guards a new route inherits from shallower routes in front of the route's own deeper ones.
+- `skipLeaveGuards` is set on redirect hops (see [11](./11-guards-on-redirect-targets.md)).
+- `alsoLeaving` / `alsoEntering` name the greedy routes that are left or entered with the main ones. Their guards run after those of `context.fromRoute` / `context.toRoute`, with the same context.
+- `evaluate()` stays synchronous while every guard returns a plain value and returns a Promise from the first thenable on.
 
-- **No input validation.** The pipeline trusts its caller (the Router). All `typeof guard !== "function"` checks and warning logs stay on the Router.
-- **No `RouteGuardConfig` handling.** The Router resolves the `GuardFn | RouteGuardConfig` overload and calls `addEnterGuard` / `addLeaveGuard` separately.
-- **`evaluate()` receives a complete `GuardContext`** (with signal already attached). The Router builds the full context (including signal) before calling. `context.fromRoute` controls leave-guard lookup: when it is the empty string, leave guards are skipped entirely (initial navigation where no route is active yet).
-- **Methods return `void`**, not `this`. Fluent chaining is a Router API concern.
+## Design rules
 
-### Dependencies
+- **No input validation.** The pipeline trusts the Router. The `typeof guard !== "function"` checks and their warnings stay on the Router (`_isFn`).
+- **No `RouteGuardConfig` handling.** The Router resolves the `GuardFn | RouteGuardConfig` overload and calls `addEnterGuard` / `addLeaveGuard`.
+- **`evaluate()` gets a complete `GuardContext`**, signal included. An empty `context.fromRoute` skips leave guards (the first navigation, or after a hash that matched no route).
+- **Methods return `void`.** Fluent chaining is a Router concern.
+- **Only `sap/base/Log`** from UI5: a stateless utility with no coupling to the Router or the component lifecycle.
 
-The pipeline imports `sap/base/Log` for guard validation warnings and error logging (thrown guards). This is the only `sap/*` dependency and is acceptable because `Log` is a stateless utility with no runtime coupling to the Router or UI5 component lifecycle. All other imports come from `./types`.
+## Evaluation
 
-### Internal structure
+Order: leave guards (`fromRoute`, then `alsoLeaving`), global guards, route enter guards (`toRoute`, then `alsoEntering`). The first result that is not `true` ends the run. Between async steps the pipeline checks `context.signal.aborted` and blocks if it is set. Each guard array is copied before iteration, so a guard can remove itself (a one-shot guard) without affecting the current run.
 
-**Private fields:**
-
-- `_globalGuards: GuardFn[]`
-- `_enterGuards: Map<string, GuardFn[]>`
-- `_leaveGuards: Map<string, GuardFn[]>`
-
-**Private methods (moved from Router):**
-
-- `_runForEach(routes, context, run, start)` — runs leave or enter guards route by route (greedy routes), sync until a run returns a Promise
-- `_runEnterGuards(entering, context)` — global guards, then the route guards of each entering route; reads `this._globalGuards` directly
-- `_runRouteGuards(toRoute, context)`
-- `_runGuards(guards, context, route, onBlock, label)` — the sync loop for leave and enter guards
-- `_continueGuardsAsync(pendingResult, guards, currentIndex, context, onBlock, label, route)`
-- `_validateGuardResult(result)`
-- `_validateLeaveGuardResult(result)`
-
-**Guard map helpers** (`addToGuardMap`, `removeFromGuardMap`) become private methods on the class.
-
-**Module-level utilities:**
-
-- `isGuardRedirect` — private to module
-- `isPromiseLike` — exported from module (Router and `GuardModules.ts` import it instead of maintaining a duplicate)
-- `nameGuard` — exported; `GuardModules.ts` uses it to name manifest guards. The private `describeGuard` adds the name to the error log of a guard that throws (`Enter guard [1] "checks#1" on route "admin" threw, navigation failed`)
-
-### Exported types
-
-- `GuardDecision` — the normalized pipeline result, promoted from a Router-internal type to an inter-module contract:
-
-```typescript
-type GuardDecision =
-	| { action: "allow" }
-	| { action: "block" }
-	| { action: "redirect"; target: string | GuardRedirect }
-	| { action: "error"; error: unknown };
-```
-
-### Result normalization
-
-`evaluate()` maps raw `GuardResult` values from guards into `GuardDecision`:
-
-| Guard returns          | Pipeline decision                          |
+| Guard returns          | Decision                                   |
 | ---------------------- | ------------------------------------------ |
 | `true`                 | `{ action: "allow" }`                      |
 | `false`                | `{ action: "block" }`                      |
 | non-empty string       | `{ action: "redirect", target: <string> }` |
 | `GuardRedirect` object | `{ action: "redirect", target: <object> }` |
-| any other value        | logs warning, `{ action: "block" }`        |
-| guard throws / rejects | `{ action: "error", error }`               |
+| any other value        | logs a warning, `{ action: "block" }`      |
+| throws or rejects      | `{ action: "error", error }`               |
 
-Leave guards are boolean-only: any non-boolean return logs a warning and blocks.
+Leave guards are boolean-only: any other value logs a warning and blocks.
 
-### Error handling
+A guard that throws or rejects is logged with `Log.error` and re-thrown; `evaluate()` turns it into an `error` decision. If the signal is already aborted, the error is swallowed and the guard counts as a block. [10](./10-navigation-outcome-error.md) has the design.
 
-If a guard function throws (sync) or its Promise rejects (async), the pipeline catches the error, logs it via `Log.error`, and re-throws. `evaluate()` catches the re-thrown error and returns `{ action: "error", error }`. If the context's abort signal is already aborted at the time of the error, the error is swallowed and the pipeline returns `false` (mapped to `{ action: "block" }`) — the navigation was cancelled, the error is expected. See `docs/features/10-navigation-outcome-error.md` for the full design.
+## Module exports
 
-### `clear()` behavior
+- `GuardDecision`: the normalized result, an inter-module contract between pipeline and Router.
+- `isPromiseLike`: duck-typed thenable check, shared with `Router.ts` and `GuardModules.ts`.
+- `nameGuard`: `GuardModules.ts` names manifest guards after their module. The error log of a throwing guard then shows the name: `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
+- `LOG_COMPONENT`, the log component of the whole library, and `isPromiseResolver`, which `Router#attachRouteMatched` uses to recognize a component target that waits for the router.
 
-Resets `_globalGuards` to an empty array and clears both `_enterGuards` and `_leaveGuards` maps.
+## Router side
 
-## Router changes
-
-### File
-
-`packages/lib/src/Router.ts`
-
-### New imports
-
-```typescript
-import GuardPipeline, { type GuardDecision } from "./GuardPipeline";
-```
-
-### New field
-
-```typescript
-private _pipeline = new GuardPipeline();
-```
-
-### Removed
-
-- `_globalGuards`, `_enterGuards`, `_leaveGuards` fields
-- `_evaluateGuards`, `_runLeaveGuards`, `_runEnterGuards`, `_runRouteGuards`, `_runGuards`, `_continueGuardsAsync`, `_validateGuardResult`, `_validateLeaveGuardResult` methods (8 methods). Router later got a thin `_evaluateGuards(context, redirectHop)` back: it calls `this._pipeline.evaluate()` with the greedy routes that leave and enter, and skips leave guards on a redirect hop
-- Module-level `isGuardRedirect`, `addToGuardMap`, `removeFromGuardMap` functions
-- `GuardContextBase` type (Router now builds the full `GuardContext` with signal directly)
-
-### Delegation pattern
-
-Public guard methods keep validation and overload resolution, then delegate:
+The Router holds `private _pipeline = new GuardPipeline()`. Public guard methods validate, resolve overloads, then delegate:
 
 ```typescript
 addGuard(guard: GuardFn): this {
-  if (!this._isFn(guard, "addGuard")) return this; // warns "addGuard: not a function, ignoring"
-  this._pipeline.addGlobalGuard(guard);
-  return this;
+	if (!this._isFn(guard, "addGuard")) return this; // warns "addGuard: not a function, ignoring"
+	this._pipeline.addGlobalGuard(guard);
+	return this;
 }
 ```
 
-Evaluation call sites change from:
+`_createGuardContext(routeInfo, toHash, signal, chain?)` builds the full context (route and hash fields, `signal`, `bag`, `toMeta` / `fromMeta`, `ownerComponent`). `_evaluateGuards(context, redirectHop)` calls `evaluate()` with the greedy routes and `skipLeaveGuards: redirectHop`.
 
-```typescript
-const decision = this._evaluateGuards(context, controller.signal);
-```
+`destroy()` calls `_pipeline.clear()`. `stop()` does not: guard registrations survive a stop and restart.
 
-to (`_createGuardContext` builds the full context: route and hash fields, `signal`, and the later additions `bag`, `toMeta`/`fromMeta` and `ownerComponent`):
+Router state stays on the Router: decision application (`_applyPreflightDecision`, `_applyDecision`, `_redirect`), settlement, the phase state machine, hash restore, unknown-route warnings (`_handleUnknownRouteRegistration`, which needs `getRoute()`) and `isRouteGuardConfig`. No public API changed.
 
-```typescript
-const context = this._createGuardContext(routeInfo, toHash, controller.signal);
-const decision = this._pipeline.evaluate(context);
-```
+## Tests
 
-`destroy()` calls `this._pipeline.clear()` instead of manually clearing the three collections. `stop()` does **not** call `clear()` — it intentionally preserves guard registrations across stop/restart cycles, matching the current behavior.
-
-### Unchanged
-
-- `navTo()`, `parse()` — same control flow; the guard logic they reach through `_evaluateGuards()` is in `this._pipeline.evaluate()`
-- `_applyPreflightDecision`, `_applyDecision`, `_redirect`, `_blockNavigation`, `_commitNavigation`, `_restoreHash` — all Router state management
-- `NavigationAttempt`, `RouterPhase`, phase state machine
-- `_warnIfRouteUnknown` (since renamed `_handleUnknownRouteRegistration`) — stays on Router (needs `this.getRoute()`)
-- `isRouteGuardConfig` — stays on Router (API overload resolution)
-- Settlement logic
-- All public API signatures
-
-## Testing
-
-### Existing tests
-
-All 234 existing tests in `Router.qunit.ts` pass unchanged. The Router's public API does not change.
-
-### New test file
-
-`packages/lib/test/qunit/unit/GuardPipeline.qunit.ts`
-
-Focused unit tests for the pipeline in isolation — no Router, no HashChanger, no UI5 runtime. Just `new GuardPipeline()`, add guards, call `evaluate()`, assert the decision.
-
-**Coverage areas:**
-
-- Empty pipeline returns `{ action: "allow" }`
-- Global guard blocks / allows / redirects
-- Route-specific enter guard blocks / allows / redirects
-- Leave guard blocks / allows
-- Leave guard cannot redirect (validation → block)
-- Pipeline order: leave → global enter → route enter
-- Short-circuit on first non-true result
-- Mixed sync/async guard chains
-- Abort signal checked between async guards
-- Guard self-removal during iteration (snapshot copy)
-- Invalid return values → validation warnings → block
-- Sync guard throws → error
-- Async guard rejects → error
-- Guard throws after signal aborted → block without logging
-- `clear()` removes all guards
-- Add/remove by reference semantics
-- `context.fromRoute` empty string → leave guards skipped
-
-**What pipeline tests do NOT cover:** hash changes, history, settlement, redirects, phase transitions. That is Router territory, already tested.
-
-## Scope
-
-- Internal refactor only — no public API changes
-- No new dependencies beyond `sap/base/Log` (already used by Router)
-- No changes to `packages/lib/src/types.ts`, `packages/lib/src/NavigationOutcome.ts`, or `manifest.json`
+`packages/lib/test/qunit/unit/GuardPipeline.qunit.ts` and `GuardPipelineAsync.qunit.ts` test the pipeline alone: `new GuardPipeline()`, add guards, call `evaluate()`, assert the decision. No Router, HashChanger or UI5 runtime. They cover the decisions above, pipeline order and short-circuit, mixed sync and async chains, aborts between guards, self-removal during a run, invalid return values, throws and rejections, `clear()`, add and remove by reference, and an empty `fromRoute`. Hash changes, history, settlement, redirects and phases are tested through the Router.

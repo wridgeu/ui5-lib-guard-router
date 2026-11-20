@@ -1,6 +1,6 @@
 # Guard Integration Patterns
 
-Common guard patterns for `ui5.guard.router.Router`. Each section describes a pattern, its guard type, and where to find the reference implementation.
+Guard patterns for `ui5.guard.router.Router`, with the guard type and the demo app file that implements each one.
 
 ## Pattern overview
 
@@ -52,7 +52,7 @@ export function createAuthGuard(authModel: JSONModel): GuardFn {
 
 ## Redirect and resume
 
-When a guard redirects (e.g., unauthenticated user sent to login), the original destination is lost. Store the target route and its arguments as plain data, then resume with `router.navTo()` after the blocking condition is resolved.
+A redirect to a login page loses the original destination. Store the target route and its arguments, then call `router.navTo()` after login.
 
 ```typescript
 router.addGuard((context) => {
@@ -67,7 +67,7 @@ router.addGuard((context) => {
 });
 ```
 
-In the login controller, resume the original navigation after a successful login:
+In the login controller:
 
 ```typescript
 onLoginSuccess(): void {
@@ -85,9 +85,9 @@ onLoginSuccess(): void {
 }
 ```
 
-`router.navTo()` is the standard UI5 router API for navigation. Guards re-run on the resumed navigation, which is the safe default — the auth guard passes because the user just logged in.
+Guards run again on the resumed navigation. The auth guard now passes.
 
-For cross-session flows (IdP redirect with page reload), in-memory model data does not survive. Store the destination in `sessionStorage` instead. There are two variants:
+An IdP redirect reloads the page, so model data is lost. Store the destination in `sessionStorage` instead, in one of two ways.
 
 **Variant A: store route name and arguments, resume with `navTo()`**
 
@@ -103,7 +103,7 @@ sessionStorage.setItem(
 ```
 
 ```typescript
-// After IdP callback — in Component.init(), after router.initialize()
+// After the IdP callback, in Component.init(), after router.initialize()
 const raw = sessionStorage.getItem("returnTo");
 if (raw) {
 	sessionStorage.removeItem("returnTo");
@@ -115,7 +115,7 @@ if (raw) {
 }
 ```
 
-This uses the standard router API and guards run on the resumed navigation. Because `router.initialize()` already processes the current hash, this causes two navigations: one for the initial hash (typically the default route) and one for the pending destination. For most apps with synchronous guards this is not noticeable, but apps with async guards may see a brief flicker.
+Guards run on the resumed navigation. `router.initialize()` has already processed the current hash, so this makes two navigations: one to the initial hash (usually the default route) and one to the stored destination. With async guards the first route can flash briefly.
 
 **Variant B: store the hash, restore with `HashChanger` before the router starts**
 
@@ -124,15 +124,11 @@ This uses the standard router API and guards run on the resumed navigation. Beca
 sessionStorage.setItem("returnTo", context.toHash);
 ```
 
-Import `HashChanger` at the top of the component file:
+In `Component.init()`, before `router.initialize()`:
 
 ```typescript
 import HashChanger from "sap/ui/core/routing/HashChanger";
-```
 
-Then in `Component.init()`, before `router.initialize()`:
-
-```typescript
 const returnTo = sessionStorage.getItem("returnTo");
 if (returnTo) {
 	sessionStorage.removeItem("returnTo");
@@ -141,11 +137,11 @@ if (returnTo) {
 router.initialize(); // picks up the restored hash on first parse
 ```
 
-`HashChanger` is not commonly used in application code, but it avoids the double-navigation of Variant A. The hash is set before `router.initialize()`, so the router processes the restored hash on its first parse. `setHash()` writes a browser history entry; for the initial app load after an IdP callback this is typically acceptable.
+This avoids the second navigation of Variant A: the router parses the restored hash first. `setHash()` adds a browser history entry.
 
 ## Async permission check with AbortSignal
 
-Async guard that performs a backend call. Pass `context.signal` to `fetch()` so the request is cancelled when a newer navigation supersedes the pending one.
+Pass `context.signal` to `fetch()` so the request is cancelled when a newer navigation supersedes this one.
 
 ```typescript
 router.addRouteGuard("dashboard", async (context) => {
@@ -159,13 +155,11 @@ router.addRouteGuard("dashboard", async (context) => {
 
 Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. When a guard Promise rejects, the router logs an error and settles the navigation as `NavigationOutcome.Error`. A rejection after the signal was aborted (the navigation was superseded) is not logged.
 
-Reference: `createAsyncPermissionGuard` in `guards.ts`. See the [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) for the full pattern with a busy indicator.
+Reference: `createAsyncPermissionGuard` in `guards.ts`. The [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) has the full pattern; the [busy indicator example](../../packages/lib/README.md#navigation-settlement) shows a busy indicator while guards run.
 
 ## Async guard timeout
 
-If an async guard's fetch hangs (dead endpoint, no timeout), the navigation stays in the evaluating phase indefinitely. The `AbortSignal` on `context.signal` only fires on supersede or router stop/destroy, not on "too slow."
-
-Combine `context.signal` with `AbortSignal.timeout()` using `AbortSignal.any()` to enforce a hard deadline:
+If a guard's fetch hangs, the navigation never settles. `context.signal` aborts only on supersede, `stop()` or `destroy()`, not on a slow response. Combine it with `AbortSignal.timeout()` through `AbortSignal.any()`:
 
 ```typescript
 router.addRouteGuard("dashboard", async (context) => {
@@ -179,10 +173,10 @@ router.addRouteGuard("dashboard", async (context) => {
 });
 ```
 
-When the timeout fires, `fetch` rejects with a `TimeoutError`. Since the guard's Promise rejects, the navigation settles as `NavigationOutcome.Error`. Wrap the `await` in a `try/catch` if you need to distinguish timeout from supersede or return a redirect instead of an error.
+On timeout, `fetch` rejects with a `TimeoutError` and the navigation settles as `NavigationOutcome.Error`. Catch it to tell a timeout from a supersede, or to return a redirect instead.
 
 > [!NOTE]
-> `AbortSignal.any()` requires Node 20+ / modern browsers (Safari 17.4+, Chrome 116+, Firefox 124+). For broader compatibility, use a manual `AbortController` with `setTimeout`:
+> `AbortSignal.any()` needs Chrome 116+, Firefox 124+ or Safari 17.4+. For older browsers, use an `AbortController` with `setTimeout`:
 >
 > ```typescript
 > router.addRouteGuard("dashboard", async (context) => {
@@ -200,7 +194,7 @@ When the timeout fires, `fetch` rejects with a `TimeoutError`. Since the guard's
 
 ## Always block
 
-Return `false` to block navigation unconditionally. A blocked `navTo()` never changes the hash; for browser-initiated navigation the hash reverts to the previous route.
+Return `false` to block. A blocked `navTo()` never changes the hash. A blocked browser navigation restores the previous hash.
 
 ```typescript
 router.addRouteGuard("maintenance", () => false);
@@ -210,7 +204,7 @@ Reference: `guards/blockedGuard.ts` (a manifest guard module).
 
 ## Always redirect
 
-Return a route name string to redirect unconditionally.
+Return a route name to redirect.
 
 ```typescript
 router.addRouteGuard("old-page", () => "new-page");
@@ -222,7 +216,7 @@ The navigation settles on the route that matches the target's hash. With overlap
 
 ## Dirty form leave guard
 
-Leave guard that checks a model property before allowing navigation away from a route. Returns `boolean` only (no redirects).
+A leave guard returns a boolean only. It cannot redirect.
 
 ```typescript
 router.addRouteGuard("editor", {
@@ -232,7 +226,7 @@ router.addRouteGuard("editor", {
 });
 ```
 
-For a confirmation dialog before leaving, return the result of a `MessageBox.confirm` wrapped in a Promise. See the [library README leave guard tip](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) for guidance on making blocked navigation visible to the user.
+To ask the user, return a Promise that resolves with the answer of `MessageBox.confirm`. The [library README](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) shows how to make a blocked navigation visible.
 
 As a factory that takes the form model; the demo app declares `guards/dirtyFormGuard.ts` in the manifest instead, which reads the model through `context.ownerComponent`:
 
@@ -253,7 +247,7 @@ The guard needs no bypass for the Fiori launchpad. Cross-app navigation happens 
 
 ## Redirect with parameters
 
-Return a `GuardRedirect` object to redirect while forwarding route parameters.
+Return a `GuardRedirect` object to redirect with route parameters.
 
 ```typescript
 router.addRouteGuard("old-detail", (context) => ({
@@ -282,7 +276,7 @@ See the [library README redirect example](../../packages/lib/README.md#redirect-
 
 ## Error handling in guards
 
-A guard that throws (sync) or rejects (async) settles navigation as `NavigationOutcome.Error`. This is distinct from `NavigationOutcome.Blocked` (guard returned `false`), allowing the app to show different UX for "access denied" vs "something went wrong." The thrown value is available on `result.error`.
+A guard that throws or rejects settles the navigation as `NavigationOutcome.Error`, not `NavigationOutcome.Blocked`, so the app can tell "access denied" from "something went wrong". The thrown value is on `result.error`.
 
 Sync:
 
@@ -306,7 +300,7 @@ router.addRouteGuard("risky", async (context) => {
 });
 ```
 
-Handling the distinction:
+Handle both outcomes:
 
 ```typescript
 const result = await router.navigationSettled();
@@ -320,7 +314,7 @@ switch (result.status) {
 }
 ```
 
-Enable debug logging to see all guard errors. See the [Debugging and Troubleshooting section](../../packages/lib/README.md#debugging-and-troubleshooting) in the library README.
+To see all guard errors, enable debug logging ([Debugging and Troubleshooting](../../packages/lib/README.md#debugging-and-troubleshooting)).
 
 To try both outcomes, register guards that fail on demand. No scenario of the demo app settles as `Error`, so it registers neither:
 
@@ -351,7 +345,7 @@ router.addRouteGuard("risky", createAsyncErrorDemoGuard(errorModel));
 
 ## Guard factories
 
-Wrap guard logic in a factory function when the guard depends on external state (models, services, configuration). The factory captures dependencies via closure; the returned function is the guard.
+When a guard depends on models, services or configuration, write a factory that takes them and returns the guard.
 
 ```typescript
 function createRoleGuard(userModel: JSONModel, requiredRole: string): GuardFn {
@@ -369,10 +363,10 @@ The `create*` functions in `guards.ts` and in the sections above follow this pat
 
 ## Factory pattern for manifest guards
 
-When multiple routes need the same guard logic with different parameters (e.g., different required roles), use a factory function that returns the guard and create thin wrappers for each manifest registration:
+A manifest guard module exports a guard, not a factory. To reuse one guard with different parameters, export each configured guard from its own thin module:
 
 ```typescript
-// guards/requireRole.ts — shared factory (not a guard module itself)
+// guards/requireRole.ts: shared factory, not a guard module
 import type { GuardFn } from "ui5/guard/router/types";
 
 export function createRoleGuard(role: string): GuardFn {
@@ -384,7 +378,7 @@ export function createRoleGuard(role: string): GuardFn {
 ```
 
 ```typescript
-// guards/adminGuard.ts — thin wrapper for manifest registration
+// guards/adminGuard.ts
 import { createRoleGuard } from "./requireRole";
 export default createRoleGuard("admin");
 ```
@@ -395,7 +389,7 @@ import { createRoleGuard } from "./requireRole";
 export default createRoleGuard("analyst");
 ```
 
-Wire the guard modules in the manifest:
+Declare the modules in the manifest:
 
 ```json
 "guardRouter": {
@@ -405,8 +399,6 @@ Wire the guard modules in the manifest:
 	}
 }
 ```
-
-This keeps guard logic in a single place while letting each route configure its own parameters through the manifest.
 
 ## Controller-level guard lifecycle
 
@@ -457,7 +449,7 @@ The demo app does not use the object form. See the [library README object form e
 
 ## Chained authorization (redirect chain guards)
 
-When a guard redirects to another route, that route's guards also run. This enables multi-step authorization chains where each route independently decides whether to allow, block, or redirect further.
+When a guard redirects, the guards of the target route run too. Each route decides on its own whether to allow, block or redirect again.
 
 ```typescript
 // Route "admin" requires admin role, redirects non-admins to "dashboard"
@@ -474,19 +466,17 @@ router.addRouteGuard("dashboard", () => {
 // then "dashboard"'s guard checks onboarding and may redirect to "onboarding".
 ```
 
-On redirect hops, `context.fromRoute` and `context.fromHash` always refer to the **original** source route (where the user currently is), not the intermediate redirect target. This lets guards reason about where the user is coming from, regardless of how many hops preceded them.
-
-Leave guards run only on the first hop (the initial navigation). Redirect chain hops skip leave guards to avoid re-prompting the user after they already confirmed leaving.
-
-The router detects redirect loops (e.g., A → B → A) via a visited-hash set, and caps chain depth at 10 hops. Both safeguards block the navigation and log an error. See the [library README redirect chain section](../../packages/lib/README.md#redirect-chains) for details.
+- On every hop, `context.fromRoute` and `context.fromHash` are the route the user is on, not the previous redirect target.
+- Leave guards run only on the first hop, so the user is not asked twice.
+- A hash visited twice (A → B → A) or a chain longer than 10 hops blocks the navigation and logs an error. See [Redirect chains](../../packages/lib/README.md#redirect-chains).
 
 ## Nested route guard patterns
 
-UI5 supports nested routing through component targets. Guards are scoped to their router instance, so nested protection requires one of two patterns.
+Guards belong to one router instance. Protect nested routes in one of two ways.
 
 ### Flat routes with naming convention
 
-Use a global guard with prefix matching when all routes live on a single router:
+When all routes are on one router, match a route name prefix in a global guard:
 
 ```typescript
 router.addGuard((context) => {
@@ -497,11 +487,9 @@ router.addGuard((context) => {
 });
 ```
 
-This works well when admin routes follow a consistent naming convention (e.g., `admin`, `adminUsers`, `adminSettings`).
-
 ### Component-based nesting
 
-When using nested components, each component registers its own guards on its own router. The parent component's guards protect the parent route (which loads the child component). The child component's guards protect its internal routes. This matches UI5's component isolation model:
+Each component registers guards on its own router. The parent's guards protect the route that loads the child component. The child's guards protect the child's routes:
 
 ```typescript
 // Parent Component.ts
@@ -513,7 +501,7 @@ const router = this.getRouter() as GuardRouter;
 router.addRouteGuard("orderDetail", orderAccessGuard); // protects individual order routes
 ```
 
-The parent guard runs first (protecting access to the child component), and the child's guards run within the child's own routing scope. Guards are cleaned up automatically when each component's router is destroyed.
+The parent guard runs first. Each router drops its guards when it is destroyed.
 
 The demo app contains a runnable version of this pattern with manifest guards: its `reports` route displays the nested component [`demo.app.reporting`](../../packages/demo-app/webapp/reporting/), which declares its own `routerClass` and `guardRouter` block.
 
@@ -538,7 +526,7 @@ See the [demo app README](../../packages/demo-app/README.md#nested-component-rep
 
 ## Settlement for UI feedback
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The result contains `status` (a `NavigationOutcome` enum value), `route`, and `hash`.
+`navigationSettled()` resolves when the guard pipeline finishes, with `status` (a `NavigationOutcome`), `route`, `hash` and, for `Error`, `error`.
 
 ```typescript
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -550,4 +538,4 @@ if (result.status === NavigationOutcome.Blocked) {
 }
 ```
 
-The demo app uses this to display settlement status in the runtime panel. See `RuntimeCoordinator.ts` for the subscription pattern and the [library README settlement section](../../packages/lib/README.md#navigation-settlement) for the full API.
+The demo app shows the result in its runtime panel; see `demo/RuntimeCoordinator.ts`. The full API is in [Navigation settlement](../../packages/lib/README.md#navigation-settlement).

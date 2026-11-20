@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository keeps these complementary compatibility layers for the core router:
+Compatibility layers for the core router:
 
 - `packages/lib/test/qunit/parity/native/` (`NativeCompat.qunit.ts`, `NativeCompatTraces.qunit.ts`) - fast local differential tests authored in this repo
 - `packages/lib/test/qunit/parity/nested/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
@@ -16,10 +16,9 @@ The vendored lane exists to answer a specific question:
 
 > When no guards are registered, does `ui5.guard.router.Router` still behave like the native `sap.m.routing.Router` for inherited routing behavior?
 
-It is a conformance-style test layer, not a replacement for the library's own feature tests.
-
-The library README sums up the result per behavior and cites the test for each row:
-[Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter).
+The library README sums up the result per behavior,
+[Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter),
+and [Native router compatibility](../guides/native-router-compatibility.md) cites the test for each row.
 This page describes how the comparison works. The QUnit layers run on both QUnit lanes, OpenUI5
 1.144.0 (`npm run test:qunit`) and 1.120.0 (`npm run test:qunit:compat:120`).
 
@@ -43,54 +42,9 @@ It does not verify the library's extended behavior:
 
 Those remain covered by the local QUnit, E2E, and FLP suites.
 
-## Layout
+## Vendored lane
 
-```text
-packages/lib/test/qunit/upstream-parity/
-  README.md
-  Current.qunit.ts
-  vendor-manifest.json
-  adapters/
-  ports/
-  vendor/
-```
-
-- `vendor/openui5/<tag>/raw/` keeps exact upstream snapshots
-- `ports/openui5/<tag>/` contains local executable ports/wrappers
-- `Current.qunit.ts` imports the ports for the active tag
-- `adapters/` contains shared local harness helpers
-- `vendor-manifest.json` records provenance and raw-to-port mapping
-- `vendor-manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
-- the custom verifier validates manifest structure as well as repo-state consistency
-
-## Vendoring Rules
-
-- Raw vendored files stay byte-for-byte identical to upstream.
-- Local changes belong in `ports/` and `adapters/`, not in `vendor/`.
-- Every executable port references its upstream source path, tag, and commit SHA.
-- CI never fetches upstream tests dynamically; vendoring happens through maintainer scripts only.
-
-## Scripts
-
-- `npm run test:qunit` - run all QUnit suites including the vendored parity lane
-- `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest` - fetch pinned upstream router test files into the raw vendor tree and refresh manifest provenance
-- `npm run verify:openui5-router-vendor` - validate the manifest structure and verify raw/port mapping
-
-## Maintenance
-
-Update the vendored lane when one of these happens:
-
-- the development UI5 version changes
-- a router compatibility regression is found
-- a major router refactor changes inherited routing behavior
-
-Recommended process:
-
-1. fetch a new raw snapshot with the vendoring script
-2. review the upstream diff
-3. update or add local executable ports only where valuable
-4. for a version bump, migrate the versioned port paths before writing the new manifest version
-5. run `npm run verify:openui5-router-vendor` and `npm run test:qunit` (the parity suite is part of the QUnit lane)
+The vendored lane runs the `Router.qunit.js` entry point of OpenUI5's async `sap.m.routing.Router` QUnit suite, pinned to one upstream tag, and ports two of its cases through a local harness: forward navigation on a `NavContainer` and back navigation by view level. Further cases are ported when they are worth the maintenance. Its layout, the vendoring rules, the scripts and the version bump procedure are in the [folder README](../../packages/lib/test/qunit/upstream-parity/README.md). Update the lane when the development UI5 version changes, when a router compatibility regression is found, or when a refactor changes inherited routing behavior.
 
 ## Nested component targets
 
@@ -222,7 +176,7 @@ does. The pages of the first two suites make about 140 and 90 changes, the third
 For a redirected step through the browser history (`RedirectedStepParity.qunit.ts`) the native
 router displays the page of the step before the target replaces it, and the guard router does
 not: its guards decide before any target is displayed, so the page that a guard turned away
-is never shown, not even for a moment. That is the purpose of a guard. The comparison therefore starts with the first step after the redirect: steps back and
+is never shown. The comparison therefore starts with the first step after the redirect: steps back and
 forward over the replaced entry and its neighbors, with the hash, the routing events, the
 history entries, the pages and the title history after each. Two things stay different on
 purpose and are not compared: right after the redirect, the `NavContainer` of the native run
@@ -237,8 +191,12 @@ matching. How the router aligns the title history is described in
 [the title history after a redirected hash change](./architecture.md#_blasthashreplaced-and-gettitlehistory-the-title-history-after-a-redirected-hash-change).
 `History.qunit.ts` pins that the step has its entry replaced with the target.
 
-Two more equivalents are compared on a router without a component, in
-`NativeCompatTraces.qunit.ts`: leave guards run for the routes that the native router matched
+`NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
+redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
+route that is shown with no navigation at all, and greedy routes, which match and fire their
+events as with the native router. A `parse()` of the current hash matches the route again, as
+it does natively; only a redirect to the route that is shown skips the match. Two more
+equivalents are compared there: leave guards run for the routes that the native router matched
 for the hash before a navigation, and enter guards for the routes that it matches after it,
 greedy routes included; and after `stop()` and `initialize(true)`, the leave guard runs for the
 route that the native router fires `switched` for on the next navigation.
@@ -258,12 +216,6 @@ runs must be equal.
 What a guard decides in the launchpad beyond that (leave guards and the launchpad's own
 question, redirects, nested components) has no native counterpart in the sandbox and is pinned
 by the other specs in `packages/demo-app/test/flp/`.
-
-`NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
-redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
-route that is shown with no navigation at all, and greedy routes, which match and fire their
-events as with the native router. A `parse()` of the current hash matches the route again, as
-it does natively; only a redirect to the route that is shown skips the match.
 
 ## Routers that share a hash changer
 
@@ -305,7 +257,7 @@ Why there is no public alternative:
   another component and subscribes the bare resolve function. `navTo()` and `fireTitleChanged()`
   hand `_bLastHashReplaced` and the title array to each other (source locations below). The
   router depends on these members because it changes when a route matches, and these members are
-  how UI5's own classes learn about that. No other private member is read or written.
+  how UI5's own classes learn about that.
 - **Nothing public or protected can do the same.** `fireTitleChanged()` is private, and overriding
   it would couple to more of UI5 than the two members do. `navTo()` with or without `bReplace`
   cannot express "replace an entry that never got a title" (a new entry or a step forward). Nor
@@ -431,7 +383,3 @@ SAPUI5 sources; the `sap/ui/core` rows are from OpenUI5.
 | Iframe: `window.confirm()` of the app runtime                                                  | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 627                 | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 670                                      |
 | Iframe: a registered provider is not reported to the shell                                     | `appRuntime/ui5/services/Container.js` lines 94-99                      | `appIntegration/PostMessageHandler/AppInfoHandler.js` lines 176-191 (the message is ignored) |
 | A URL app without a URL template opens in a new window                                         | `navigationMode.js` line 354                                            | `navigationMode.js` line 353                                                                 |
-
-## Current Scope
-
-The vendored lane holds the `Router.qunit.js` entry point of the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports two of its cases through the local harness: forward navigation on a `NavContainer` and back navigation by view level. Further cases are ported when they are worth the maintenance.

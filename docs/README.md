@@ -8,6 +8,8 @@ The docs are grouped by who reads them.
 - [Guides](./guides/)
     - [Migration from attachPatternMatched](./guides/migration-from-pattern-matched.md)
     - [Guard integration patterns](./guides/integration-patterns.md)
+    - [Keep-alive apps in the launchpad](./guides/flp-keep-alive.md)
+    - [Native router compatibility: test evidence](./guides/native-router-compatibility.md)
 - [Demo app README](../packages/demo-app/README.md): what the demo shows and how its E2E tests are organized
 
 ## Contributing to the library

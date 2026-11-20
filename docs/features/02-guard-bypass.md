@@ -1,181 +1,49 @@
 # Feature: Guard Bypass
 
-> **Status**: Implemented (Option A) as `GuardNavToOptions.skipGuards` (since 1.5.0). This feature was
-> first deprioritized: most use cases (save & navigate, logout, transition retry) are better solved by
-> updating application state so guards pass naturally — e.g., set `isDirty = false` after saving, set
-> `isLoggedIn = false` before navigating to login. That is still the preferred approach.
-> See the [library README](../../packages/lib/README.md) for the shipped API.
->
-> **Proposal-to-implementation differences:**
->
-> - The options object is the last argument of either `navTo()` form: `navTo(name, params, replace, { skipGuards: true })` or `navTo(name, params, componentTargetInfo, replace, { skipGuards: true })`. The type is `GuardNavToOptions`, not `NavToOptions`, and `navTo()` returns `this`.
-> - There is no `_skipNextGuards` flag. `navTo()` sets the committing phase (origin `"preflight"`) and calls `super.navTo()`; `parse()` then commits without running guards. If the hash did not change, `navTo()` commits directly, so nothing leaks to the next navigation.
-> - The options may also take the place of a `bReplace` that is left out: `navTo(name, params, undefined, { skipGuards: true })`.
-> - A navigation to the hash the router is already on is deduped before `skipGuards` is checked. A `skipGuards` navigation to a target whose guards are still pending cancels that navigation and commits.
-> - Option B (`navToSkipGuards`) was not shipped.
-> - The router-wide `navToPreflight: "bypass"` option skips guards for every `navTo()` call.
->
-> The sketches below are the original proposal. Refer to `Router.ts` (`navTo`) for the source of truth.
+> **Status**: Implemented as `GuardNavToOptions.skipGuards` (since 1.5.0). See the [library README](../../packages/lib/README.md) for the API. `Router.ts` (`navTo`) is the source of truth.
+
+## Prefer state over bypass
+
+Most cases that seem to need a bypass are better solved by updating application state so the guards pass on their own: set `isDirty = false` after saving, set `isLoggedIn = false` before navigating to login. This keeps the guards the single place that decides. For that reason the feature was first deprioritized, and state updates remain the preferred approach.
 
 ## Problem
 
-Before this feature, every `navTo()` call went through the full guard pipeline (except redirects via the committing/redirect phase). There was no way to programmatically skip guards for a specific navigation. This becomes critical when leave guards (Feature 01) are added:
+Every `navTo()` runs the full guard pipeline. Some navigations should not:
 
-- **Save & Navigate**: User saves a form, then navigates away. The leave guard shouldn't fire because the data is already saved.
-- **Logout**: Navigate to login regardless of any guards. The user explicitly wants to leave.
-- **Admin redirects**: System-initiated navigation that shouldn't be subject to user-facing guards.
-- **Transition retry**: After resolving a guard condition (e.g., logging in), retry the original navigation without re-evaluating guards (Feature 03).
+- **Save and navigate**: the form is saved, so the dirty-form leave guard ([Feature 01](./01-leave-guards.md)) should not ask.
+- **Logout**: the user explicitly leaves, whatever the guards say.
+- **System navigation**: navigation the app starts on its own, not subject to user-facing guards.
 
-## Proposed API
+## API
 
-### Option A: navTo Options Parameter (Recommended)
-
-```typescript
-// Extend navTo with an options parameter
-router.navTo("home", {}, undefined, true, { skipGuards: true });
-```
-
-### Option B: Dedicated Method
+The options object is the last argument of either `navTo()` form. It may also take the place of an omitted `bReplace`:
 
 ```typescript
-// Convenience method that sets skipGuards internally
-router.navToSkipGuards("home", {});
-// Equivalent to: router.navTo("home", {}, undefined, false, { skipGuards: true })
+router.navTo("orderList", {}, false, { skipGuards: true });
+router.navTo("orderList", {}, undefined, { skipGuards: true });
+router.navTo("orderList", {}, componentTargetInfo, false, { skipGuards: true });
 ```
 
-**Recommendation**: Implement Option A (navTo options) as the mechanism. Option B can be added as sugar if the verbose signature is a pain point.
+The type is `GuardNavToOptions`. `navTo()` returns `this`.
 
-## Usage Examples
+The router option `navToPreflight: "bypass"` skips guards for every `navTo()` call.
 
-### Save & Navigate
+## Decisions
 
-```typescript
-// In controller
-async onSave() {
-    await this.saveFormData();
-    // Form is saved -- skip the leave guard that checks for dirty state
-    router.navTo("orderList", {}, undefined, false, { skipGuards: true });
-}
-```
+| Decision                        | Choice                                                                                                     | Reason                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Options argument vs. new method | Options argument on `navTo()`. A dedicated `navToSkipGuards()` was not shipped.                            | One method, no extra API surface. Sugar can be added if the signature proves a pain point.            |
+| How `parse()` skips the guards  | `navTo()` enters the committing phase (origin `"preflight"`) and calls `super.navTo()`; `parse()` commits. | The proposal's `_skipNextGuards` flag could leak to the next navigation when the hash did not change. |
+| Hash unchanged                  | `navTo()` commits directly.                                                                                | Nothing is left set for the next navigation.                                                          |
+| Granularity                     | All guards or none. No `skipLeaveGuards` / `skipEnterGuards`.                                              | No use case yet.                                                                                      |
+| Navigation sources              | `navTo()` only. Browser back/forward and URL entry always run guards.                                      | The bypass is for code that has already validated the transition.                                     |
 
-### Logout
+## Behavior
 
-```typescript
-onLogout() {
-    authModel.setProperty("/isLoggedIn", false);
-    // Skip all guards -- user explicitly wants to leave
-    router.navTo("login", {}, undefined, true, { skipGuards: true });
-}
-```
-
-### With Transition Object (Feature 03)
-
-```typescript
-// After login, resume the original navigation
-const transition = authModel.getProperty("/pendingTransition");
-if (transition && !transition.isStale()) {
-	transition.retrySkipGuards(); // Uses skipGuards internally
-}
-```
-
-## Implementation Sketch
-
-### navTo Override
-
-```typescript
-navTo(
-    this: RouterInstance,
-    routeName: string,
-    parameters?: Record<string, string>,
-    componentTargetInfo?: Record<string, ComponentTargetParameters>,
-    replace?: boolean,
-    options?: NavToOptions
-): void {
-    if (options?.skipGuards) {
-        this._skipNextGuards = true;
-    }
-    MobileRouter.prototype.navTo.apply(this, [routeName, parameters, componentTargetInfo, replace]);
-}
-```
-
-### parse() Check
-
-```typescript
-parse(this: RouterInstance, newHash: string): void {
-    if (this._suppressedHash !== null) { /* ... existing ... */ }
-
-    // Skip guards when explicitly requested (e.g., Save & Navigate)
-    if (this._skipNextGuards) {
-        this._skipNextGuards = false;
-        this._commitNavigation(newHash);
-        return;
-    }
-
-    if (this._phase.kind === "committing") { /* ... existing ... */ }
-    // ... rest of guard pipeline ...
-}
-```
-
-### Flag Safety
-
-The `_skipNextGuards` flag follows a similar pattern to `_suppressedHash`:
-
-- Set immediately before the call that triggers `parse()`
-- Consumed (reset to `false`) at the start of `parse()`
-- `navTo()` triggers `parse()` synchronously via HashChanger, so the flag doesn't leak
-
-**Edge case**: If `navTo()` doesn't change the hash (navigating to the same route), `parse()` may not fire. But `_skipNextGuards` is reset at the top of `parse()`, and same-hash navigations are already deduped. The flag would leak to the _next_ navigation. Mitigation: reset the flag after `navTo()` returns, similar to `_suppressNextParse`:
-
-```typescript
-navTo(this: RouterInstance, ..., options?: NavToOptions): void {
-    if (options?.skipGuards) {
-        this._skipNextGuards = true;
-    }
-    MobileRouter.prototype.navTo.apply(this, [routeName, parameters, componentTargetInfo, replace]);
-    // Reset if navTo didn't trigger parse (same hash, no-op)
-    if (this._skipNextGuards) {
-        this._skipNextGuards = false;
-    }
-}
-```
-
-## Types
-
-```typescript
-interface NavToOptions {
-    skipGuards?: boolean;
-}
-
-// RouterInstance additions
-_skipNextGuards: boolean;
-navTo(
-    routeName: string,
-    parameters?: Record<string, string>,
-    componentTargetInfo?: Record<string, ComponentTargetParameters>,
-    replace?: boolean,
-    options?: NavToOptions
-): void;
-```
-
-## Scope & Limitations
-
-- **Only affects `navTo()` navigations**: Browser back/forward and direct URL entry always run guards. This is intentional; `skipGuards` is for programmatic navigation where the developer has already validated the transition.
-- **Does not affect leave guards and enter guards separately**: `skipGuards` skips the entire pipeline. A more granular `{ skipLeaveGuards: true, skipEnterGuards: false }` could be added later if needed.
-- **Single navigation**: The flag is consumed immediately. It doesn't persist across navigations.
-
-## Test Cases
-
-1. `navTo` with `skipGuards: true` bypasses global guards
-2. `navTo` with `skipGuards: true` bypasses route-specific guards
-3. `navTo` with `skipGuards: true` bypasses leave guards (Feature 01)
-4. `navTo` without `skipGuards` still runs guards (no regression)
-5. Flag doesn't leak to subsequent navigations
-6. Flag is cleaned up if `navTo` doesn't trigger `parse()` (same hash)
-7. `skipGuards` works with `replace: true`
-8. `skipGuards` works with route parameters
+- A navigation to the hash the router is already on is deduped before `skipGuards` is checked.
+- A `skipGuards` navigation to a target whose guards are still pending cancels that navigation and commits.
+- The option applies to one call. It does not persist.
 
 ## Compatibility
 
-- Backward compatible: existing `navTo()` calls without the options parameter behave identically
-- The `options` parameter is the last argument, so existing positional args are unaffected
-- No changes to hash change or direct URL navigation behavior
+`navTo()` calls without the options argument behave as before. The options come last, so existing positional arguments are unaffected.
