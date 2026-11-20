@@ -1300,9 +1300,9 @@ The URL parameter `?sap-ui-log-level=DEBUG` sets the level for all components.
 ## Compatibility
 
 > [!IMPORTANT]
-> **Supported UI5 versions: 1.120 and later**
+> **Supported UI5 versions: 1.136 and later**
 >
-> The package declares `minUI5Version: 1.120.0`, the oldest version that has `DataType.registerEnum` (used for the `NavigationOutcome` enum). CI runs the full suite on OpenUI5 1.144.0, the library QUnit suite with the parity tests on OpenUI5 1.120.0, and the launchpad tests on SAPUI5 1.144.0 and 1.149.0. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+> The package declares `minUI5Version: 1.136.0`, the version that manifest version 2 (`_version` 2.0.0) requires. CI runs the full suite on OpenUI5 1.144.0 and the launchpad tests on SAPUI5 1.144.0 and 1.149.0. It also runs the library QUnit suite with the parity tests on OpenUI5 1.120.0, the oldest version with `DataType.registerEnum` (used for the `NavigationOutcome` enum); that lane catches regressions on older versions, but 1.120 to 1.135 are not supported. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
 
 The router uses public and protected API of `sap.m.routing.Router`, with four exceptions: two UI5 internals for [nested components](#nested-components) (`_bMatchingProcessStarted` and the component target's wait for the nested `routeMatched`), and two for the title history after a redirected hash change (`_bLastHashReplaced` and the array of `getTitleHistory()`). Tests on OpenUI5 1.144.0 and 1.120.0 fail if a UI5 upgrade changes them. Details: [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on).
 

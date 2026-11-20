@@ -213,7 +213,7 @@ We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` becaus
 
 ### 2.7 Minimum UI5 Version
 
-The package declares **1.120.0** as its minimum and is developed against **1.144.0**. The minimum is **1.120** because `DataType.registerEnum` (used for the `NavigationOutcome` enum) requires that version. Other APIs used include [`sap.ui.core.Lib`](https://sdk.openui5.org/#/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
+The package declares **1.136.0** as its minimum, which manifest version 2 requires, and is developed against **1.144.0**. The code itself needs **1.120**, for `DataType.registerEnum` (used for the `NavigationOutcome` enum); CI runs the library suite on 1.120 to keep it that way. Other APIs used include [`sap.ui.core.Lib`](https://sdk.openui5.org/#/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
 
 ---
 
