@@ -34,13 +34,12 @@ export async function waitForPageInFlp(
 }
 
 async function launchFlpApp(): Promise<void> {
-	// The CDM-based FLP preview (enhancedHomePage) takes a while to bootstrap.
 	await waitForComponent(
 		undefined,
 		" If this follows a cross-app navigation, move the test to a separate spec file so it gets its own browser session.",
 	);
 
-	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
+	// A dirty form would make the leave guard block the navigation to Home.
 	await setDirtyState(false);
 	await navigateToRouteInFlp("home");
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home");
@@ -83,13 +82,8 @@ export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 	await expectControlText(CONTROLS.protected.dirtyStatus, isDirty ? "Form has unsaved changes" : "Form is clean");
 }
 
-// ---------------------------------------------------------------------------
-// Dialog helpers: WDIO v9 native dialog API (browser.on('dialog'))
-//
-// WDIO v9 auto-dismisses native dialogs (confirm/alert/prompt) unless a
-// listener is registered. The dialog API intercepts at the WebDriver BiDi
-// protocol level, before the browser auto-resolves the dialog.
-// ---------------------------------------------------------------------------
+// WDIO v9 dismisses native dialogs (confirm/alert/prompt) over WebDriver BiDi unless a
+// "dialog" listener is registered; the listener then has to accept or dismiss them.
 
 type DialogRecord = {
 	called: boolean;
@@ -196,9 +190,7 @@ export async function waitForRouterRunningInFlp(): Promise<void> {
 	);
 }
 
-/**
- * Navigate to a route programmatically via the demo app's router.
- */
+/** navTo(route) through the demo app's router, replacing the current history entry. */
 export async function navigateToRouteInFlp(routeName: string): Promise<void> {
 	await browser.execute(
 		(componentId: string, route: string) => {

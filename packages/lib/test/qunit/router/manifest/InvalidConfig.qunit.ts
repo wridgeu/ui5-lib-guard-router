@@ -14,9 +14,6 @@ let router: GuardRouter;
 
 const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Invalid manifest guard config
-// ============================================================
 QUnit.module("Router - Invalid manifest guard config", hooks);
 
 QUnit.test("guards value is not a plain object (array) warns and registers no guards", async function (assert: Assert) {
@@ -44,7 +41,6 @@ QUnit.test("guards value is not a plain object (array) warns and registers no gu
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// No manifest guards registered, so navigation should be allowed
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "no guards block navigation");
@@ -108,9 +104,6 @@ QUnit.test("'*' with object form warns about leave and still registers enter gua
 	assert.strictEqual(writerValue, "was-here", "enter guard from '*' still registered and ran");
 });
 
-// ============================================================
-// Module: Invalid guard module exports
-// ============================================================
 QUnit.module("Router - Invalid guard module exports", hooks);
 
 QUnit.test("module exporting a primitive warns and is skipped", async function (assert: Assert) {
@@ -141,7 +134,6 @@ QUnit.test("module exporting a primitive warns and is skipped", async function (
 		"warning logged for primitive module export",
 	);
 
-	// No valid guard registered, so navigation should succeed
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "primitive export skipped, navigation allowed");
@@ -217,7 +209,6 @@ QUnit.test("cherry-pick with out-of-range index warns and skips", async function
 		"warning logged for out-of-range index",
 	);
 
-	// No guard registered, navigation should succeed
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "out-of-range index skipped, navigation allowed");

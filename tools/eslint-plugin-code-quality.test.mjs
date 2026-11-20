@@ -9,27 +9,24 @@ RuleTester.it = (name, run) => {
 	void it(name, run);
 };
 
-// Built at runtime: the rule also lints this file.
-const dash = String.fromCodePoint(0x2014);
-
 new RuleTester().run("no-em-dash", plugin.rules["no-em-dash"], {
 	valid: ['// a - b\nconst a = "a - b" + `a - b`;'],
 	invalid: [
 		{
 			name: "in a string",
-			code: `const a = "a ${dash} b";`,
+			code: `const a = "a \u2014 b";`,
 			output: 'const a = "a - b";',
 			errors: [{ messageId: "emDashInString" }],
 		},
 		{
 			name: "in a template literal",
-			code: `const a = \`a ${dash} \${1}\`;`,
+			code: `const a = \`a \u2014 \${1}\`;`,
 			output: "const a = `a - ${1}`;",
 			errors: [{ messageId: "emDashInString" }],
 		},
 		{
 			name: "in a line comment and in a block comment",
-			code: `// a ${dash} b\n/* a ${dash} b */\nlet a;`,
+			code: `// a \u2014 b\n/* a \u2014 b */\nlet a;`,
 			output: "// a -- b\n/* a -- b */\nlet a;",
 			errors: [{ messageId: "emDashInComment" }, { messageId: "emDashInComment" }],
 		},

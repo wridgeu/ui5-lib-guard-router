@@ -12,21 +12,14 @@ import {
 
 let router: GuardRouter;
 
-// ============================================================
-// Module: Router - Guard and metadata inheritance
-// ============================================================
-
 QUnit.module(
 	"Router - Guard and metadata inheritance",
 	createdRouterHooks(() => router),
 );
 
-// === Guard inheritance ======================================================
-
 QUnit.test(
 	"guard on parent route runs for child route when inheritance is pattern-tree",
 	async function (assert: Assert) {
-		// Arrange: blocking guard on "employees", inheritance enabled
 		router = createHierarchicalRouter({
 			guardLoading: "block",
 			inheritance: "pattern-tree",
@@ -38,11 +31,9 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Act: navigate to a child route
 		router.navTo("employee", { id: "42" });
 		const result = await router.navigationSettled();
 
-		// Assert: the ancestor's blocking guard prevents navigation
 		assert.strictEqual(
 			result.status,
 			NavigationOutcome.Blocked,
@@ -52,7 +43,6 @@ QUnit.test(
 );
 
 QUnit.test("guard on parent does NOT run for child when inheritance is none", async function (assert: Assert) {
-	// Arrange: blocking guard on "employees", inheritance disabled (default)
 	router = createHierarchicalRouter({
 		guardLoading: "block",
 		inheritance: "none",
@@ -64,16 +54,14 @@ QUnit.test("guard on parent does NOT run for child when inheritance is none", as
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Act: navigate to a child route
 	router.navTo("employee", { id: "42" });
 	await waitForRoute(router, "employee");
 
-	// Assert: child navigation succeeds because guard was not inherited
 	assert.strictEqual(getHash(), "employees/42", "child route reached without ancestor guard");
 });
 
 QUnit.test("ancestor guards run before descendant guards (depth ordering)", async function (assert: Assert) {
-	// Arrange: bagWriterGuard on ancestor, bagReaderGuard on child.
+	// bagWriterGuard on ancestor, bagReaderGuard on child.
 	// bagWriterGuard writes "writer" to context.bag; bagReaderGuard returns
 	// true only if "writer" exists in the bag. If ancestor runs first the
 	// navigation succeeds; if child runs first it blocks.
@@ -89,11 +77,9 @@ QUnit.test("ancestor guards run before descendant guards (depth ordering)", asyn
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Act: navigate to the child route
 	router.navTo("employee", { id: "42" });
 	const result = await router.navigationSettled();
 
-	// Assert: navigation succeeds because ancestor guard wrote before child guard read
 	assert.strictEqual(
 		result.status,
 		NavigationOutcome.Committed,
@@ -102,9 +88,9 @@ QUnit.test("ancestor guards run before descendant guards (depth ordering)", asyn
 });
 
 QUnit.test("global guards run before inherited route guards (pipeline separation)", async function (assert: Assert) {
-	// Arrange: global bagWriterGuard + inherited bagReaderGuard on child route.
+	// Global bagWriterGuard + inherited bagReaderGuard on child route.
 	// The global guard writes to context.bag, the route guard reads it.
-	// If global runs first → navigation succeeds. If route runs first → blocks.
+	// If global runs first, navigation succeeds; if the route guard runs first, it blocks.
 	// This proves globals and route guards are in separate pipeline stages,
 	// and the depth sort does not displace globals.
 	router = createHierarchicalRouter({
@@ -119,11 +105,9 @@ QUnit.test("global guards run before inherited route guards (pipeline separation
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Act: navigate to a child route that inherits the bagReaderGuard
 	router.navTo("employee", { id: "42" });
 	const result = await router.navigationSettled();
 
-	// Assert: global guard wrote to bag before inherited route guard read it
 	assert.strictEqual(
 		result.status,
 		NavigationOutcome.Committed,
@@ -132,7 +116,6 @@ QUnit.test("global guards run before inherited route guards (pipeline separation
 });
 
 QUnit.test("guard on child does NOT propagate upward to parent", async function (assert: Assert) {
-	// Arrange: blocking guard only on the child route, inheritance enabled
 	router = createHierarchicalRouter({
 		guardLoading: "block",
 		inheritance: "pattern-tree",
@@ -144,18 +127,13 @@ QUnit.test("guard on child does NOT propagate upward to parent", async function 
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Act: navigate to the parent route
 	router.navTo("employees");
 	await waitForRoute(router, "employees");
 
-	// Assert: parent route is reachable; child guard did not propagate up
 	assert.strictEqual(getHash(), "employees", "parent route reached; child guard did not propagate upward");
 });
 
-// === Metadata inheritance ===================================================
-
 QUnit.test("metadata propagates to child routes when inheritance is pattern-tree", function (assert: Assert) {
-	// Arrange: metadata on ancestor, inheritance enabled
 	router = createHierarchicalRouter({
 		inheritance: "pattern-tree",
 		routeMeta: {
@@ -163,13 +141,11 @@ QUnit.test("metadata propagates to child routes when inheritance is pattern-tree
 		},
 	});
 
-	// Assert: child route inherits ancestor metadata
 	const meta = router.getRouteMeta("employee");
 	assert.strictEqual(meta.requiresAuth, true, "child route inherited requiresAuth from ancestor");
 });
 
 QUnit.test("child metadata overrides ancestor metadata on conflict", function (assert: Assert) {
-	// Arrange: both ancestor and child define "level"
 	router = createHierarchicalRouter({
 		inheritance: "pattern-tree",
 		routeMeta: {
@@ -178,13 +154,11 @@ QUnit.test("child metadata overrides ancestor metadata on conflict", function (a
 		},
 	});
 
-	// Assert: child's own value wins
 	const meta = router.getRouteMeta("employee");
 	assert.strictEqual(meta.level, 2, "child metadata overrides ancestor on conflict");
 });
 
 QUnit.test("metadata does NOT propagate when inheritance is none", function (assert: Assert) {
-	// Arrange: metadata on ancestor, inheritance disabled (default)
 	router = createHierarchicalRouter({
 		inheritance: "none",
 		routeMeta: {
@@ -192,13 +166,11 @@ QUnit.test("metadata does NOT propagate when inheritance is none", function (ass
 		},
 	});
 
-	// Assert: child route has no inherited metadata
 	const meta = router.getRouteMeta("employee");
 	assert.deepEqual(meta, {}, "child route has no metadata when inheritance is none");
 });
 
 QUnit.test("metadata merges across multiple ancestor levels", function (assert: Assert) {
-	// Arrange: metadata at two ancestor levels
 	router = createHierarchicalRouter({
 		inheritance: "pattern-tree",
 		routeMeta: {
@@ -207,16 +179,12 @@ QUnit.test("metadata merges across multiple ancestor levels", function (assert: 
 		},
 	});
 
-	// Assert: grandchild merges metadata from both ancestors
 	const meta = router.getRouteMeta("employeeResume");
 	assert.strictEqual(meta.section, "hr", "grandchild inherited section from root ancestor");
 	assert.strictEqual(meta.requiresAuth, true, "grandchild inherited requiresAuth from parent");
 });
 
-// === Integration with toMeta ================================================
-
 QUnit.test("inherited metadata is visible on context.toMeta in guards", async function (assert: Assert) {
-	// Arrange: metadata on ancestor, both inheritance modes enabled
 	router = createHierarchicalRouter({
 		inheritance: "pattern-tree",
 		routeMeta: {
@@ -233,11 +201,9 @@ QUnit.test("inherited metadata is visible on context.toMeta in guards", async fu
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Act: navigate to child route
 	router.navTo("employee", { id: "42" });
 	await waitForRoute(router, "employee");
 
-	// Assert: toMeta includes inherited metadata
 	assert.ok(receivedToMeta !== undefined, "guard received toMeta");
 	assert.strictEqual(receivedToMeta!.section, "hr", "toMeta includes inherited section");
 	assert.strictEqual(receivedToMeta!.requiresAuth, true, "toMeta includes inherited requiresAuth");
@@ -264,13 +230,10 @@ QUnit.test("setRouteMeta invalidates cache so getRouteMeta returns fresh result"
 		},
 	});
 
-	// First read populates cache
 	assert.strictEqual(router.getRouteMeta("employee").section, "hr", "inherited before mutation");
 
-	// Mutate parent runtime metadata
 	router.setRouteMeta("employees", { section: "engineering" });
 
-	// Second read: cache was invalidated, fresh walk
 	assert.strictEqual(router.getRouteMeta("employee").section, "engineering", "inherits updated runtime value");
 });
 
@@ -337,10 +300,6 @@ QUnit.test("metadata propagates when all routes are added after construction", f
 
 	assert.deepEqual(router.getRouteMeta("employee"), { section: "hr" }, "child inherits from its ancestor");
 });
-
-// ============================================================
-// Module: Root-pattern route ("") as universal ancestor
-// ============================================================
 
 QUnit.module(
 	"Router - Root-pattern route as universal ancestor",
@@ -477,9 +436,6 @@ QUnit.test("root-pattern metadata is the shallowest layer in multi-level merge",
 	assert.strictEqual(resumeMeta.detail, true, "employee adds its own key");
 });
 
-// ============================================================
-// Module: Dynamic addRoute() with inheritance
-// ============================================================
 QUnit.module(
 	"Router - Dynamic addRoute() with inheritance",
 	createdRouterHooks(() => router),
@@ -507,7 +463,6 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Dynamically add a child route after initialization
 		router.addRoute({ name: "employee", pattern: "employees/{id}" });
 
 		const meta = router.getRouteMeta("employee");
@@ -538,7 +493,6 @@ QUnit.test("addRoute() registers inherited manifest guards for new descendant ro
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Dynamically add a child route
 	router.addRoute({ name: "employee", pattern: "employees/{id}" });
 
 	router.navTo("employee", { id: "42" });
@@ -668,17 +622,13 @@ QUnit.test("setRouteMeta for unknown route becomes visible after addRoute()", as
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Set metadata for a route that doesn't exist yet
 	router.setRouteMeta("employee", { clearance: "manager" });
 
-	// getRouteMeta returns empty because route doesn't exist
 	const metaBefore = router.getRouteMeta("employee");
 	assert.deepEqual(metaBefore, {}, "unknown route returns empty meta before addRoute");
 
-	// Now add the route
 	router.addRoute({ name: "employee", pattern: "employees/{id}" });
 
-	// Metadata should now be visible (inherits from employees + own runtime)
 	const metaAfter = router.getRouteMeta("employee");
 	assert.strictEqual(metaAfter.clearance, "manager", "pre-set runtime metadata becomes visible after addRoute");
 });

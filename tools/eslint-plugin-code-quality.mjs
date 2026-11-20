@@ -1,9 +1,6 @@
 /**
- * Custom oxlint JS plugin that catches AI-generated code anti-patterns.
- *
- * Detects common patterns left behind by AI coding assistants:
- * console-only error handling, redundant boolean returns, and
- * em-dashes in string literals.
+ * Custom oxlint JS plugin: catch blocks that only log, if/else that returns true/false,
+ * and em-dashes in strings and comments.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
@@ -11,12 +8,8 @@
 /** @import { ESTree, Plugin, Rule } from "@oxlint/plugins" */
 
 /**
- * Detects catch blocks where the only statement is a console call.
- *
- * AI assistants routinely generate `catch (e) { console.error(e); }`
- * as "error handling" which silently swallows the error. The catch
- * should either re-throw, return an error value, or do meaningful
- * recovery.
+ * Detects catch blocks where the only statement is a console call: such a catch swallows
+ * the error. Re-throw, return a failure value, or recover.
  */
 /** @type {Rule} */
 const noConsoleOnlyCatch = {
@@ -97,8 +90,6 @@ const noRedundantBooleanReturn = {
 						messageId: "noRedundantBooleanReturn",
 						fix(fixer) {
 							const condText = context.sourceCode.getText(node.test);
-							// Always wrap in parens so any expression (a === b, typeof x, etc.)
-							// keeps correct precedence after the ! or !! prefix.
 							const replacement = consequent.value ? `return !!(${condText});` : `return !(${condText});`;
 							return fixer.replaceText(node, replacement);
 						},
@@ -133,15 +124,11 @@ function isBooleanLiteral(node) {
 	return node?.type === "Literal" && typeof node.value === "boolean";
 }
 
-// Em-dash character built at runtime so the rule source does not contain it.
-const EM_DASH = String.fromCodePoint(0x2014);
-const EM_DASH_RE = new RegExp(EM_DASH, "g");
+const EM_DASH = /\u2014/;
+const EM_DASH_RE = /\u2014/g;
 
 /**
- * Detects em-dashes (U+2014) in strings and/or comments.
- *
- * Em-dashes are a strong signal of AI-generated text that was pasted
- * without review.
+ * Detects em-dashes (U+2014) in strings, template literals and comments.
  *
  * Auto-fix: replaces with `-` in strings, `--` in comments.
  */
@@ -162,7 +149,7 @@ const noEmDash = {
 	create(context) {
 		return {
 			Literal(node) {
-				if (typeof node.value === "string" && node.value.includes(EM_DASH)) {
+				if (typeof node.value === "string" && EM_DASH.test(node.value)) {
 					context.report({
 						node,
 						messageId: "emDashInString",
@@ -174,7 +161,7 @@ const noEmDash = {
 			},
 			TemplateLiteral(node) {
 				for (const quasi of node.quasis) {
-					if (quasi.value.raw.includes(EM_DASH)) {
+					if (EM_DASH.test(quasi.value.raw)) {
 						context.report({
 							node,
 							messageId: "emDashInString",
@@ -191,7 +178,7 @@ const noEmDash = {
 			},
 			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
-					if (!comment.value.includes(EM_DASH)) continue;
+					if (!EM_DASH.test(comment.value)) continue;
 					context.report({
 						node: comment,
 						messageId: "emDashInComment",

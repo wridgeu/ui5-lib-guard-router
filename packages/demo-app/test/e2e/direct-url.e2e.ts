@@ -58,7 +58,6 @@ describe("Direct URL navigation with guards", () => {
 		await expectControlText(CONTROLS.notFound.settlementRouteText, "(no match)");
 		await expectControlText(CONTROLS.notFound.settlementHashText, "this/does/not/exist");
 
-		// Verify the app recovers by navigating back to a known route
 		const recoveryRevision = await getRuntimeSettlementRevision();
 		await setBrowserHash("#/");
 		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: recoveryRevision });
@@ -71,7 +70,6 @@ describe("Direct URL navigation with guards", () => {
 	it("should handle rapid hash changes in the address bar", async () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 
-		// Rapidly change the hash multiple times
 		await setBrowserHash("#/protected");
 		await setBrowserHash("#/forbidden");
 		await setBrowserHash("#/protected");

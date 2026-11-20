@@ -23,9 +23,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guards on redirect targets
-// ============================================================
 QUnit.module("Router - Guards on redirect targets", standardHooks);
 
 QUnit.test("Guard on redirect target is evaluated", async function (assert: Assert) {
@@ -149,7 +146,6 @@ QUnit.test("Superseding navigation during async redirect chain cancels the chain
 	await waitForRoute(router, "home");
 
 	router.navTo("protected");
-	// Supersede before the async guard resolves
 	router.navTo("detail", { id: "1" });
 	await waitForRoute(router, "detail");
 	await flushPromises();
@@ -253,7 +249,6 @@ QUnit.test("Redirect chain works via parse (browser back/forward)", async functi
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Simulate browser navigation (hash change without navTo)
 	HashChanger.getInstance().setHash("protected");
 	await waitForRoute(router, "forbidden");
 	assert.strictEqual(getHash(), "forbidden", "Parse-path redirect chain resolved");

@@ -18,9 +18,6 @@ let router: GuardRouter;
 
 const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Multi-guard module exports (block loading)
-// ============================================================
 QUnit.module("Router - Multi-guard module exports (block loading)", hooks);
 
 QUnit.test("object module: bare path registers all guards in key order", async function (assert: Assert) {
@@ -155,9 +152,6 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 	);
 });
 
-// ============================================================
-// Module: Multi-guard module exports (lazy loading)
-// ============================================================
 QUnit.module("Router - Multi-guard module exports (lazy loading)", hooks);
 
 QUnit.test("lazy mode: object module bare path registers all guards", async function (assert: Assert) {
@@ -474,9 +468,6 @@ QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (a
 	);
 });
 
-// ============================================================
-// Module: Multi-guard edge cases
-// ============================================================
 QUnit.module("Router - Multi-guard edge cases", hooks);
 
 QUnit.test("empty array module warns and registers no guards", async function (assert: Assert) {
@@ -538,7 +529,6 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Try to leave "home". checkRole returns false, should block
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 

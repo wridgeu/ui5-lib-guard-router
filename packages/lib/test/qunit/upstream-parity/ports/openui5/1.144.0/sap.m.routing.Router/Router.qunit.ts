@@ -9,8 +9,6 @@
  * - Replaced original upstream test bootstrap with local adapter harness
  * - Scoped execution to native-parity mode (no guards registered)
  */
-// sinon is provided as a UMD global by the UI5 test starter -- do not import it
-// (importing resolves a different instance that breaks stub/spy assertions; see commit 66d036d)
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";

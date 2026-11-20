@@ -26,9 +26,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Hash change simulation (direct URL entry)
-// ============================================================
 QUnit.module("Router - Hash change (direct URL entry)", standardHooks);
 
 QUnit.test("Direct hash change to guarded route is blocked", async function (assert: Assert) {
@@ -47,11 +44,9 @@ QUnit.test("Direct hash change to unguarded route proceeds", async function (ass
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Navigate to forbidden (unguarded) so we're away from home
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
-	// Direct hash change to home (unguarded) should proceed
 	HashChanger.getInstance().setHash("");
 	await waitForRoute(router, "home");
 	assert.strictEqual(getHash(), "", "Unguarded route matched via hash change");
@@ -176,9 +171,6 @@ QUnit.test("A blocked default route is evaluated again when its hash is parsed a
 	);
 });
 
-// ============================================================
-// Module: navTo superseding a pending hash change
-// ============================================================
 QUnit.module("Router - navTo superseding a pending hash change", standardHooks);
 
 /**
@@ -351,9 +343,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Sequential navigation with dynamic guard state
-// ============================================================
 QUnit.module("Router - Sequential navigation with changing guards", standardHooks);
 
 QUnit.test("Guard state change between navigations is respected", async function (assert: Assert) {
@@ -378,14 +367,11 @@ QUnit.test("Guard state change between navigations is respected", async function
 QUnit.test("Adding guard mid-session blocks subsequent navigations", async function (assert: Assert) {
 	router.initialize();
 
-	// First nav: no guards, should work
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	// Now add a guard
 	router.addRouteGuard("protected", () => false);
 
-	// Navigate away and back
 	router.navTo("home");
 	await waitForRoute(router, "home");
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard added mid-session blocked navigation");
@@ -399,7 +385,6 @@ QUnit.test("Removing guard mid-session allows subsequent navigations", async fun
 	router.navTo("protected");
 	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Blocked, "First attempt: blocked");
 
-	// Remove the guard
 	router.removeRouteGuard("protected", guard);
 
 	router.navTo("protected");
@@ -407,9 +392,6 @@ QUnit.test("Removing guard mid-session allows subsequent navigations", async fun
 	assert.strictEqual(getHash(), "protected", "Navigation allowed after guard removed");
 });
 
-// ============================================================
-// Module: Guard re-entrancy (guard triggers navigation)
-// ============================================================
 QUnit.module("Router - Guard re-entrancy", standardHooks);
 
 QUnit.test("Guard that returns redirect does not cause infinite loop", async function (assert: Assert) {
@@ -437,9 +419,6 @@ QUnit.test("Multiple route guards with cross-redirects settle correctly", async 
 	assert.strictEqual(getHash(), "", "Cross-redirect chain followed to home");
 });
 
-// ============================================================
-// Module: Nested navigation from routeMatched handler
-// ============================================================
 QUnit.module("Router - Nested navigation from routeMatched handler", standardHooks);
 
 QUnit.test("navTo from routeMatched handler runs leave guards for the NEW route", async function (assert: Assert) {
@@ -460,24 +439,18 @@ QUnit.test("navTo from routeMatched handler runs leave guards for the NEW route"
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Reset counts after initial navigation
 	homeLeaveGuardCallCount = 0;
 	protectedLeaveGuardCallCount = 0;
 
-	// Navigate to protected, then immediately navigate to forbidden from the handler
 	router.getRoute("protected")!.attachPatternMatched(function handler() {
 		router.getRoute("protected")!.detachPatternMatched(handler);
-		// This navTo happens inside the routeMatched event for "protected"
-		// Leave guards for "protected" should run (we're leaving protected to go to forbidden)
 		router.navTo("forbidden");
 	});
 
 	router.navTo("protected");
 	await waitForRoute(router, "forbidden");
 
-	// The home leave guard should have run ONCE (when leaving home to go to protected)
 	assert.strictEqual(homeLeaveGuardCallCount, 1, "Home leave guard ran exactly once (home → protected)");
-	// The protected leave guard should run ONCE (when leaving protected to go to forbidden)
 	assert.strictEqual(
 		protectedLeaveGuardCallCount,
 		1,
@@ -533,9 +506,6 @@ QUnit.test("an allowed navTo matches its route while the hash change is dispatch
 	assert.deepEqual(matchedDuringHashChange, [true], "like the native router, later listeners see the matched route");
 });
 
-// ============================================================
-// Module: Deferred hash change of component targets
-// ============================================================
 QUnit.module("Router - Deferred hash change of component targets", standardHooks);
 
 QUnit.test(
@@ -673,9 +643,6 @@ QUnit.test("a navTo() with component targets on a router that is not async does 
 	assert.strictEqual(leftRoute, "home", "the next navigation leaves the route that is shown");
 });
 
-// ============================================================
-// Module: Hash replaced by another listener of the hash change
-// ============================================================
 QUnit.module("Router - Hash replaced by another listener of the hash change", standardHooks);
 
 for (const [decision, allowed, expected] of [
@@ -715,9 +682,6 @@ for (const [decision, allowed, expected] of [
 	);
 }
 
-// ============================================================
-// Module: Hash change refused by the hash changer
-// ============================================================
 QUnit.module("Router - Hash change refused by the hash changer", standardHooks);
 
 // The Fiori launchpad refuses a hash change while it asks the user about unsaved data.

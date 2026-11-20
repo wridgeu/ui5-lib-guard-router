@@ -27,9 +27,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Router options: constructor
-// ============================================================
 QUnit.module(
 	"Router - Router options - constructor",
 	createdRouterHooks(() => router),
@@ -55,7 +52,6 @@ QUnit.test("UI5 gets the caller's config object without guardRouter", function (
 });
 
 QUnit.test("malformed guardRouter config warns and falls back to default behavior", function (assert: Assert) {
-	// Arrange: create router with non-object config
 	const warnings = captureWarnings(() => {
 		router = createRouterWithOptionsUnsafe("not-an-object");
 	});
@@ -66,7 +62,7 @@ QUnit.test("malformed guardRouter config warns and falls back to default behavio
 		"one warning for the non-object config",
 	);
 
-	// Assert: default "warn" policy is active (registering for unknown route logs a warning)
+	// Registering for an unknown route logs a warning
 	const routeWarnings = captureWarnings(() => {
 		router.addRouteGuard("nonexistent", () => true);
 	});
@@ -82,7 +78,6 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 
 	assert.strictEqual(warnings.length, 1, "one warning for invalid inheritance option");
 
-	// Behavioral proof of fallback: metadata should NOT propagate (default is "none")
 	router.destroy();
 	router = createRouterUnsafe(HIERARCHICAL_ROUTES, {
 		async: true,
@@ -92,25 +87,19 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");
 });
 
-// ============================================================
-// Module: Router options: unknownRouteRegistration
-// ============================================================
 QUnit.module(
 	"Router - unknownRouteRegistration",
 	createdRouterHooks(() => router),
 );
 
 QUnit.test('"ignore" registers silently for unknown routes', function (assert: Assert) {
-	// Arrange
 	router = createRouterWithOptions({ unknownRouteRegistration: "ignore" });
 
-	// Act: register guards for unknown route
 	const warnings = captureWarnings(() => {
 		router.addRouteGuard("nonexistent", () => true);
 		router.addLeaveGuard("nonexistent", () => true);
 	});
 
-	// Assert: no warnings logged
 	assert.strictEqual(warnings.length, 0, "no warnings logged");
 });
 
@@ -130,10 +119,8 @@ async function assertNoGuardRegistered(assert: Assert): Promise<void> {
 }
 
 QUnit.test('"throw" prevents registration and throws', async function (assert: Assert) {
-	// Arrange
 	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
-	// Act & Assert: both registration methods throw
 	assert.throws(
 		() => router.addRouteGuard("nonexistent", () => false),
 		/^Error: addRouteGuard called for unknown route "nonexistent"\. Set guardRouter\.unknownRouteRegistration to "warn" or "ignore" to allow this\.$/,
@@ -149,10 +136,8 @@ QUnit.test('"throw" prevents registration and throws', async function (assert: A
 });
 
 QUnit.test('"throw" with config object is all-or-nothing', async function (assert: Assert) {
-	// Arrange
 	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
 
-	// Act & Assert: config form also throws
 	assert.throws(
 		() => router.addRouteGuard("nonexistent", { beforeEnter: () => false, beforeLeave: () => false }),
 		/unknown route/i,
@@ -161,9 +146,6 @@ QUnit.test('"throw" with config object is all-or-nothing', async function (asser
 	await assertNoGuardRegistered(assert);
 });
 
-// ============================================================
-// Module: Router options: navToPreflight
-// ============================================================
 QUnit.module(
 	"Router - navToPreflight",
 	createdRouterHooks(() => router),
@@ -247,9 +229,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Router options: skipGuards
-// ============================================================
 QUnit.module("Router - skipGuards", {
 	beforeEach: function () {
 		initHashChanger();

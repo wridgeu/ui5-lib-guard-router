@@ -85,11 +85,9 @@ function toErrorDecision(error: unknown): GuardDecision {
  * Standalone guard evaluation pipeline.
  *
  * Owns guard storage (global, enter, leave) and runs the full
- * leave -> global-enter -> route-enter pipeline. Pure logic with
- * no dependency on Router state beyond the current route name
- * passed into evaluate().
- *
- * @namespace ui5.guard.router
+ * leave -> global-enter -> route-enter pipeline. It reads no Router
+ * state: evaluate() receives the context and the greedy routes left
+ * and entered with it.
  */
 export default class GuardPipeline {
 	private _globalGuards: GuardFn[] = [];
@@ -122,9 +120,6 @@ export default class GuardPipeline {
 
 	/**
 	 * Remove a previously registered enter guard by reference.
-	 *
-	 * @param route - Route name.
-	 * @param guard - Guard function to remove.
 	 */
 	removeEnterGuard(route: string, guard: GuardFn): void {
 		this._removeFromGuardMap(this._enterGuards, route, guard);
@@ -147,9 +142,6 @@ export default class GuardPipeline {
 
 	/**
 	 * Remove a previously registered leave guard by reference.
-	 *
-	 * @param route - Route name.
-	 * @param guard - Guard function to remove.
 	 */
 	removeLeaveGuard(route: string, guard: GuardFn): void {
 		this._removeFromGuardMap(this._leaveGuards, route, guard);

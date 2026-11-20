@@ -313,8 +313,9 @@ export interface NavigationResult {
 	route: string;
 	/**
 	 * Hash associated with the settled state.
-	 * For blocked, error, or cancelled navigations this is usually the hash the router stayed on;
-	 * for committed, bypassed, and redirected navigations it is the hash from the winning path.
+	 * For blocked, error, or cancelled navigations it is the hash the router stayed on (`""` before
+	 * the first commit); for committed, bypassed, and redirected navigations it is the hash from the
+	 * winning path.
 	 */
 	hash: string;
 	/**
@@ -328,11 +329,8 @@ export interface NavigationResult {
 
 /**
  * Event object passed to `attachNavigationSettled` handlers.
- * Parameters are identical to {@link NavigationResult}.
- *
- * The source type uses {@link GuardRouter} (the public interface) rather
- * than the concrete Router class to avoid a circular import between
- * `types.ts` and `Router.ts`.
+ * Parameters are identical to {@link NavigationResult}. The event source is typed as the
+ * public {@link GuardRouter} interface.
  *
  * @since 1.3.0
  */

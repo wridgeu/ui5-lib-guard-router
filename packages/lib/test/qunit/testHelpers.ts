@@ -159,14 +159,10 @@ export function setRouteMetaUnsafe(router: GuardRouter, routeName: string, meta:
 	callUnsafe(router, "setRouteMeta", routeName, meta);
 }
 
-/**
- * Initialize HashChanger for tests (idempotent).
- */
+/** Initialize the global HashChanger (UI5's init() is idempotent) and reset the hash. */
 export function initHashChanger(): void {
 	const hashChanger = HashChanger.getInstance();
-	if (!hashChanger.hasListeners("hashChanged")) {
-		hashChanger.init();
-	}
+	hashChanger.init();
 	hashChanger.setHash("");
 }
 
@@ -214,11 +210,7 @@ export function waitForRoute(router: GuardRouter, routeName: string): Promise<vo
 	});
 }
 
-/**
- * Assert that navigation is blocked by the guard pipeline.
- *
- * Calls `navigationSettled()` and verifies the outcome is `Blocked`.
- */
+/** Run `navigate` and assert that it settles as Blocked. */
 export async function assertBlocked(
 	assert: Assert,
 	router: GuardRouter,
@@ -318,7 +310,6 @@ export function isMatching(router: GuardRouter): unknown {
 	return Reflect.get(router, "_bMatchingProcessStarted");
 }
 
-/** Return the current hash from the HashChanger. */
 export function getHash(): string {
 	return HashChanger.getInstance().getHash();
 }
@@ -342,10 +333,7 @@ export function logMessages(stub: sinon.SinonStub): string[] {
 	});
 }
 
-/**
- * Capture `Log.warning` calls during `fn` using a Sinon stub.
- * The stub is restored automatically via `finally` to prevent leaks.
- */
+/** Capture `Log.warning` calls during `fn`. */
 export function captureWarnings(fn: () => void): CapturedLogEntry[] {
 	const stub = sinon.stub(Log, "warning");
 	try {

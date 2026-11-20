@@ -73,7 +73,7 @@ function parseGuardEntry(entry: string, componentNamespace: string): { modulePat
  * - `"*"` key with `string[]` -> global enter guards
  * - Route name with `string[]` (shorthand) -> enter guards
  * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
- * - `"*"` with object form -> warn, treat enter as global
+ * - `"*"` with object form -> log info, treat enter as global
  * - `"*"` leave -> warn, skip (global leave guards not supported)
  * - Invalid entries, object values that are not arrays, unknown object keys -> warn, skip
  */

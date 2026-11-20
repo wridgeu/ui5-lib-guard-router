@@ -70,7 +70,7 @@ function extractSingleCallFromBody(body) {
  * Intentionally allows `setTimeout(resolve, 0)` since it yields to the event loop
  * once (a macrotask), not a timed wait.
  *
- * Scope: e2e test files only (configured via oxlintrc overrides).
+ * Scope: E2E and FLP test files (configured via oxlintrc overrides).
  */
 /** @type {Rule} */
 const noHardWait = {

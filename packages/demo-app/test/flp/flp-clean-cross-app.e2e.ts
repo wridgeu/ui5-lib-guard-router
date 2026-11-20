@@ -21,15 +21,12 @@ describe("FLP clean cross-app navigation (isolated session)", () => {
 		// Asserts that the page shows the clean state.
 		await setDirtyStateInFlp(false);
 
-		// Install a dialog handler to detect whether FLP calls confirm.
-		// With a clean form, the dirty-state provider should return false
-		// and FLP should NOT show any confirmation dialog.
+		// Records a confirm() if FLP shows one: with a clean form the dirty-state provider answers false.
 		const { record, cleanup } = installDialogHandler(true);
 
 		try {
 			await triggerFlpCrossAppNavigation();
 
-			// Navigation should complete to Shell-home without any prompt.
 			await browser.waitUntil(
 				async () => {
 					const hash = await browser.execute(() => window.location.hash);
@@ -41,7 +38,6 @@ describe("FLP clean cross-app navigation (isolated session)", () => {
 				},
 			);
 
-			// Confirm dialog was never triggered. Clean state means no prompt.
 			expect(record.called).toBe(false);
 		} finally {
 			cleanup();

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { npmArgs } from "./npm-command.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const repoUrl = "https://github.com/wridgeu/ui5-lib-guard-router";
@@ -25,36 +25,16 @@ function getGitHubToken() {
 	}
 }
 
-/**
- * Resolve the npm CLI entry point bundled with Node.
- *
- * npm is installed alongside the node binary but outside the normal
- * module resolution paths. We locate it relative to `process.execPath`.
- */
-function resolveNpmCli() {
-	const nodeDir = path.dirname(process.execPath);
-	const candidates = [
-		path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"),
-		path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
-	];
-	for (const candidate of candidates) {
-		if (existsSync(candidate)) return candidate;
-	}
-	throw new Error(`Could not find npm CLI relative to node at ${process.execPath}`);
-}
-
 function main() {
 	const token = getGitHubToken();
 	const extraArgs = process.argv.slice(2);
 
-	// Always invoke via `node <npm-cli> exec release-please --` to avoid
-	// platform-specific .cmd wrappers and shell: true (DEP0190).
-	const npmCli = process.env.npm_execpath ?? resolveNpmCli();
+	const [npm, npmBase] = npmArgs();
 
 	execFileSync(
-		process.execPath,
+		npm,
 		[
-			npmCli,
+			...npmBase,
 			"exec",
 			"release-please",
 			"--",

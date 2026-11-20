@@ -12,10 +12,6 @@ import { isRecord } from "ui5/guard/router/GuardConfig";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
-// ============================================================
-// Module: Recorded behavior parity
-// ============================================================
-
 /** Routes with every kind of pattern segment: mandatory, optional, query and rest. */
 const TRACE_ROUTES = [
 	{ name: "home", pattern: "" },
@@ -447,9 +443,6 @@ QUnit.test("a hash that several routes could match resolves to the same route", 
 	}
 });
 
-// ============================================================
-// Module: Two routers on one hash changer
-// ============================================================
 QUnit.module("NativeCompat - Two routers on one hash changer");
 
 const SHARED_FIXTURE = "ui5.guard.router.qunit.fixtures.manifest";

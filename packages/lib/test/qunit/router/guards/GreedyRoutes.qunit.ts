@@ -5,9 +5,6 @@ import { flushPromises, GuardRouterClass, initHashChanger, waitForRoute, getHash
 
 let router: GuardRouter;
 
-// ============================================================
-// Module: Greedy routes
-// ============================================================
 const GREEDY_ROUTES = [
 	{ name: "home", pattern: "" },
 	{ name: "detail", pattern: "detail/{id}" },

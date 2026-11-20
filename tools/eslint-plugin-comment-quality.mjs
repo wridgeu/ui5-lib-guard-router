@@ -1,8 +1,9 @@
 /**
- * Custom oxlint JS plugin that detects low-quality AI-generated comments.
+ * Custom oxlint JS plugin that flags comments which restate the next statement, narrate a
+ * declaration, divide sections, stand in for missing code, or hedge.
  *
- * Rules use AST correlation (comparing comment text against adjacent code
- * identifiers) rather than broad regex, keeping false-positive rates low.
+ * no-obvious-comment compares a comment with the identifiers of the next statement; the other
+ * rules match narrow phrase patterns.
  * All rules are warn-only (no auto-fix) so the developer decides whether
  * to rewrite the comment or remove it.
  *
@@ -39,7 +40,7 @@ function commentText(node) {
 }
 
 /**
- * Splits a comment into lowercase "words" (strips non-alpha).
+ * Splits a comment into lowercase words of three or more letters.
  *
  * @param {string} text
  * @returns {string[]}
@@ -89,8 +90,8 @@ const FILLER_WORDS = new Set([
  * from the next statement and checks if the comment only contains those
  * names plus filler words.
  *
- * Skips JSDoc (block comments starting with `*`), multi-sentence
- * comments, and comments containing "why" explanations.
+ * Skips block comments, comments over 80 characters or of several sentences, and comments
+ * that explain why.
  */
 /** @type {Rule} */
 const noObviousComment = {
@@ -279,7 +280,7 @@ const noPlaceholderComment = {
 };
 
 /**
- * Flags hedging language that signals low-confidence AI generation.
+ * Flags hedging phrases.
  * Only matches unambiguously uncertain phrases; "should work" is excluded
  * since it commonly means "is expected to work" in test comments.
  */

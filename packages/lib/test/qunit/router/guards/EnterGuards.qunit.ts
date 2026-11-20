@@ -25,9 +25,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guard allows navigation
-// ============================================================
 QUnit.module("Router - Guard allows navigation", standardHooks);
 
 QUnit.test("Guard returning true allows navigation", async function (assert: Assert) {
@@ -72,9 +69,6 @@ QUnit.test("Route-specific guard returning true allows navigation", async functi
 	assert.strictEqual(getHash(), "protected", "Route guard allowed navigation");
 });
 
-// ============================================================
-// Module: Guard blocks navigation
-// ============================================================
 QUnit.module("Router - Guard blocks navigation", standardHooks);
 
 QUnit.test("Guard returning false blocks navigation", async function (assert: Assert) {
@@ -117,9 +111,6 @@ QUnit.test("Guard returning rejected Promise produces Error settlement", async f
 	assert.strictEqual(result.error, rejectedError, "Error is the rejected value");
 });
 
-// ============================================================
-// Module: Guard redirects
-// ============================================================
 QUnit.module("Router - Guard redirects", standardHooks);
 
 QUnit.test("Guard returning string redirects to named route", async function (assert: Assert) {
@@ -142,9 +133,6 @@ QUnit.test("Async guard returning string redirects", async function (assert: Ass
 	assert.strictEqual(getHash(), "protected", "Async guard redirected");
 });
 
-// ============================================================
-// Module: Guard context
-// ============================================================
 QUnit.module("Router - Guard context", standardHooks);
 
 QUnit.test("Guard receives correct context", async function (assert: Assert) {
@@ -177,9 +165,6 @@ QUnit.test("Guard context has no ownerComponent when the router has no owner", a
 	assert.strictEqual(capturedContext!.ownerComponent, undefined, "ownerComponent is undefined");
 });
 
-// ============================================================
-// Module: Guard execution order
-// ============================================================
 QUnit.module("Router - Guard execution order", standardHooks);
 
 QUnit.test("Multiple global guards run sequentially, first rejection wins", async function (assert: Assert) {
@@ -284,9 +269,6 @@ QUnit.test("Navigation commits without any guards", async function (assert: Asse
 	assert.strictEqual(getHash(), "protected");
 });
 
-// ============================================================
-// Module: Guard with invalid return values
-// ============================================================
 QUnit.module("Router - Guard invalid values", standardHooks);
 
 QUnit.test("Guard returning invalid value treats as block", async function (assert: Assert) {
@@ -302,9 +284,6 @@ QUnit.test("Guard returning invalid redirect object treats as block", async func
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Invalid redirect object treated as block");
 });
 
-// ============================================================
-// Module: GuardRedirect object
-// ============================================================
 QUnit.module("Router - GuardRedirect object", standardHooks);
 
 QUnit.test("Guard returning GuardRedirect object redirects to route", async function (assert: Assert) {
@@ -343,9 +322,6 @@ QUnit.test("Async guard returning GuardRedirect works", async function (assert: 
 	assert.strictEqual(getHash(), "forbidden", "Async GuardRedirect redirected");
 });
 
-// ============================================================
-// Module: Initial navigation recovery
-// ============================================================
 QUnit.module("Router - Initial navigation recovery", standardHooks);
 
 QUnit.test("Blocked initial navigation falls back to the default hash", async function (assert: Assert) {
@@ -420,9 +396,6 @@ QUnit.test("Blocked default route can be entered with skipGuards", async functio
 	await homeMatched;
 });
 
-// ============================================================
-// Module: Query and optional parameters
-// ============================================================
 QUnit.module(
 	"Router - Query and optional parameters of a guarded route",
 	createdRouterHooks(() => router),

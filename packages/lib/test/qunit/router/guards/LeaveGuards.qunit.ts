@@ -23,9 +23,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Leave guard invalid return values
-// ============================================================
 QUnit.module("Router - Leave guard invalid values", standardHooks);
 
 QUnit.test("Leave guard returning null treats as block", async function (assert: Assert) {
@@ -72,9 +69,6 @@ QUnit.test("Leave guard returning non-boolean logs a warning", async function (t
 	);
 });
 
-// ============================================================
-// Module: Leave Guards
-// ============================================================
 QUnit.module("Router - Leave Guards", standardHooks);
 
 QUnit.test("Leave guard returning true allows navigation", async function (assert: Assert) {
@@ -146,12 +140,10 @@ QUnit.test("Leave guard only runs when leaving its registered route", async func
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Navigate to protected (leave guard is on "protected", not "home")
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(guardCallCount, 0, "Leave guard did not run when entering its route");
 
-	// Navigate away from protected
 	router.navTo("home");
 	await waitForRoute(router, "home");
 	assert.strictEqual(guardCallCount, 1, "Leave guard ran when leaving its route");
@@ -178,12 +170,10 @@ QUnit.test("Leave guard does not run during redirects", async function (assert: 
 		leaveGuardCallCount++;
 		return true;
 	});
-	// Enter guard on "forbidden" redirects to "home"
 	router.addRouteGuard("forbidden", () => "home");
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Navigate to forbidden (enter guard redirects to home)
 	// The leave guard on "home" should run once (for leaving home to go to forbidden)
 	leaveGuardCallCount = 0;
 	router.navTo("forbidden");
@@ -270,7 +260,6 @@ QUnit.test("removeLeaveGuard prevents guard from running", async function (asser
 QUnit.test(
 	"Stale async leave guard resolution does not affect a superseding navigation",
 	async function (assert: Assert) {
-		// Capture each leave guard invocation's resolver so we can control timing
 		const resolvers: Array<(value: boolean) => void> = [];
 		router.addLeaveGuard(
 			"home",
@@ -282,20 +271,17 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Navigate to "protected". Async leave guard is now pending.
 		router.navTo("protected");
 
 		// Navigate to "forbidden" instead. This supersedes the first navigation.
 		// Both navigations leave "home", so the guard fires twice.
 		router.navTo("forbidden");
 
-		// Allow the second (active) navigation to proceed
 		assert.strictEqual(resolvers.length, 2, "Both leave guard invocations captured");
 		resolvers[1](true);
 		await waitForRoute(router, "forbidden");
 		assert.strictEqual(getHash(), "forbidden", "Second navigation reached forbidden");
 
-		// Now resolve the first stale guard. It should have no effect.
 		resolvers[0](true);
 		await flushPromises();
 
@@ -417,12 +403,10 @@ QUnit.test("removeRouteGuard with object form removes both enter and leave guard
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Enter guard was removed: navigation to protected should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(getHash(), "protected", "Enter guard removed via object form");
 
-	// Leave guard was removed: navigation away from protected should succeed
 	router.navTo("home");
 	await waitForRoute(router, "home");
 	assert.strictEqual(getHash(), "", "Leave guard removed via object form");
@@ -433,17 +417,14 @@ QUnit.test("removeRouteGuard with object form: partial config (beforeEnter only)
 	const leaveGuard: LeaveGuardFn = () => false;
 	router.addRouteGuard("protected", { beforeEnter: enterGuard, beforeLeave: leaveGuard });
 
-	// Remove only the enter guard via object form
 	router.removeRouteGuard("protected", { beforeEnter: enterGuard });
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Enter guard removed: navigation to protected should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(getHash(), "protected", "Enter guard removed, leave guard still active");
 
-	// Leave guard still active: should block
 	await assertBlocked(assert, router, () => router.navTo("home"), "Leave guard still blocks after partial remove");
 });
 
@@ -457,10 +438,7 @@ QUnit.test("removeRouteGuard with object form returns router for chaining", func
 	assert.strictEqual(result, router, "removeRouteGuard with object form returns router");
 });
 
-// ============================================================
-// Module: Leave guards with unmatched routes (FLP cross-app navigation)
-// ============================================================
-QUnit.module("Router - Leave guards with unmatched routes", standardHooks);
+QUnit.module("Router - Leave guards with unmatched routes (FLP cross-app navigation)", standardHooks);
 
 QUnit.test("Leave guard runs for navigation to an unmatched hash", async function (assert: Assert) {
 	assert.expect(3);
@@ -527,9 +505,6 @@ QUnit.test("Guard context has empty toRoute for unmatched hash but valid fromRou
 	assert.strictEqual(capturedContext!.toHash, "cross-app-intent", "toHash is the raw intent hash");
 });
 
-// ============================================================
-// Module: Settlement for leave guard scenarios
-// ============================================================
 QUnit.module("Router - Settlement for leave guard scenarios", standardHooks);
 
 QUnit.test("Leave guard block settlement includes correct route and hash", async function (assert: Assert) {

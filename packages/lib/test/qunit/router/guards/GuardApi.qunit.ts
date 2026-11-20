@@ -31,9 +31,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Library integration
-// ============================================================
 QUnit.module("Router - Library integration");
 
 QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: Assert) {
@@ -60,9 +57,6 @@ QUnit.test("NavigationOutcome values are the documented strings", function (asse
 	);
 });
 
-// ============================================================
-// Module: Drop-in replacement (no guards)
-// ============================================================
 QUnit.module("Router - Drop-in replacement (no guards)", {
 	beforeEach: function () {
 		initHashChanger();
@@ -132,9 +126,6 @@ QUnit.test("getRoute returns undefined for unknown route", function (assert: Ass
 	assert.notOk(router.getRoute("nonexistent"), "getRoute returns undefined for unknown route");
 });
 
-// ============================================================
-// Module: Guard API
-// ============================================================
 QUnit.module("Router - Guard API", standardHooks);
 
 QUnit.test("addGuard / removeGuard affect navigation behavior", async function (assert: Assert) {
@@ -144,12 +135,10 @@ QUnit.test("addGuard / removeGuard affect navigation behavior", async function (
 	const guard: GuardFn = () => false;
 	router.addGuard(guard);
 
-	// Guard is active: navigation should be blocked
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks after addGuard");
 
 	router.removeGuard(guard);
 
-	// Guard removed: navigation should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(getHash(), "protected", "Navigation allowed after removeGuard");
@@ -162,12 +151,10 @@ QUnit.test("addRouteGuard / removeRouteGuard affect navigation behavior", async 
 	const guard: GuardFn = () => false;
 	router.addRouteGuard("protected", guard);
 
-	// Route guard is active: navigation should be blocked
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Route guard blocks after addRouteGuard");
 
 	router.removeRouteGuard("protected", guard);
 
-	// Route guard removed: navigation should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(getHash(), "protected", "Navigation allowed after removeRouteGuard");

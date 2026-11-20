@@ -1,3 +1,4 @@
+import Service from "wdio-ui5-service";
 import { type ControlRef, getAppComponentId } from "../../shared/controls";
 
 /**
@@ -32,4 +33,10 @@ export async function setBrowserHash(hash: string): Promise<void> {
 	await browser.execute((value: string) => {
 		window.location.hash = value;
 	}, hash);
+}
+
+/** Reload the page; a page load drops the wdi5 bridge, so it is injected again. */
+export async function reloadPage(): Promise<void> {
+	await browser.refresh();
+	await new Service().injectUI5();
 }

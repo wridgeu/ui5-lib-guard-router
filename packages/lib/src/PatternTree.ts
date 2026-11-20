@@ -18,10 +18,8 @@ const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*:$/;
  * so these suffixes are stripped.
  */
 function stripInlineQuery(seg: string): string {
-	// Strip mandatory query `{?...}` suffix
 	const mqIdx = seg.indexOf("{?");
 	if (mqIdx !== -1) return seg.slice(0, mqIdx);
-	// Strip optional query `:?...:` suffix
 	const oqIdx = seg.indexOf(":?");
 	if (oqIdx !== -1) return seg.slice(0, oqIdx);
 	return seg;
@@ -57,7 +55,6 @@ export function isPatternAncestor(ancestorPattern: string, candidatePattern: str
 	return ancestorSegments.every((seg, i) => {
 		const candidateSeg = candidateSegments[i];
 		if (seg === candidateSeg) return true;
-		// Treat any two mandatory parameter segments as equivalent
 		return seg.startsWith("{") && candidateSeg.startsWith("{");
 	});
 }

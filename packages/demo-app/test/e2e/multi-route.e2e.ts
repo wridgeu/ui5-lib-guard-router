@@ -31,7 +31,6 @@ describe("Multi-route navigation sequences", () => {
 		await toggleLogin("Logged Out");
 		await pressAndExpectRedirectHome("navProtectedBtn");
 
-		// Login again: Protected is allowed again
 		await loginAndGoToProtected();
 	});
 });

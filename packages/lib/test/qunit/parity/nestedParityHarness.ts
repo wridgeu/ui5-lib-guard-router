@@ -157,8 +157,6 @@ export async function run(
 		trace.push(`state after ${label} ${JSON.stringify(state)}`);
 	};
 
-	// The first router to initialize would otherwise initialize the HashChanger and report its hash.
-	HashChanger.getInstance().init();
 	initHashChanger();
 	HashChanger.getInstance().setHash(scenario.startHash);
 	const stopHashes = recordHashes(trace);

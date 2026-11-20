@@ -21,9 +21,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Edge cases and recovery
-// ============================================================
 QUnit.module("Router - Edge cases and recovery", standardHooks);
 
 QUnit.test("resolving orphaned guard after stop() has no side effect", async function (assert: Assert) {
@@ -97,7 +94,6 @@ QUnit.test("router recovers when a redirect target has no valid hash", async fun
 	);
 	assert.strictEqual(getHash(), "", "the hash never changed");
 
-	// Verify guards still work on subsequent navigation (not permanently bypassed)
 	router.removeRouteGuard("protected", redirectGuard);
 	const blockGuard: GuardFn = () => false;
 	router.addGuard(blockGuard);
@@ -125,9 +121,6 @@ QUnit.test("async redirect failure drains settlement resolvers", async function 
 	assert.strictEqual(result.status, NavigationOutcome.Error, "Async redirect failure settles as Error");
 });
 
-// ============================================================
-// Module: NavigationOutcome.Error
-// ============================================================
 QUnit.module("Router - NavigationOutcome.Error", standardHooks);
 
 QUnit.test("result.error is undefined for non-error settlements", async function (assert: Assert) {
@@ -180,7 +173,6 @@ QUnit.test("idle replay after error returns Error status with error", async func
 	captureErrors(() => router.navTo("protected"));
 	assert.deepEqual(await router.navigationSettled(), failed, "First settlement is Error");
 
-	// Remove guard and query idle settlement
 	router.removeRouteGuard("protected", throwingGuard);
 	assert.deepEqual(await router.navigationSettled(), failed, "Replay returns the same result");
 });
@@ -220,9 +212,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Errors while a navigation is applied
-// ============================================================
 QUnit.module("Router - Errors while a navigation is applied", standardHooks);
 
 QUnit.test(

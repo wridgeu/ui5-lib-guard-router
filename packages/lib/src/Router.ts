@@ -8,6 +8,7 @@ import type { ComponentTargetParameters, RouteInfo, Router$RouteMatchedEvent } f
 import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type UIComponent from "sap/ui/core/UIComponent";
+// Absolute: the d.ts generator of ui5-tooling-transpile rewrites only single-line relative imports.
 import type {
 	GuardFn,
 	GuardContext,
@@ -19,7 +20,7 @@ import type {
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
-} from "./types";
+} from "ui5/guard/router/types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver, LOG_COMPONENT } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
@@ -249,10 +250,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _blockLoad: { start: boolean; ignoreInitialHash?: boolean } | null = null;
 	private _meta: RouteMetaStore;
-	/** Recorded by `addRoute()`, which the UI5 constructor calls for every route: no initializer may reset them after it. */
-	private _routeNames: string[];
+	/** Recorded by `addRoute()`, which the UI5 constructor calls before field setup; `declare` keeps field setup from resetting it. */
+	declare private _routeNames: string[];
 	/** Routes that also match when an earlier route has matched the hash (`greedy: true`). */
-	private _greedyRouteNames: string[];
+	declare private _greedyRouteNames: string[];
 	private readonly _ownerComponent: UIComponent | undefined;
 
 	constructor(routes?: object | object[], config?: GuardRouterConfig, owner?: UIComponent, targetsConfig?: object);
@@ -1547,7 +1548,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			return;
 		}
 
-		// Loop detection: visited set (exact hash match) + depth cap.
 		if (chain.visited.has(targetHash)) {
 			Log.error(
 				`Guard redirect loop detected: ${[...chain.visited, targetHash].join(" -> ")}`,
@@ -1756,10 +1756,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Clear pending state and flush a Blocked settlement.
-	 * When `restoreHash` is true (default), also restores the browser hash
-	 * to `_currentHash`. Preflight callers pass false unless they superseded
-	 * a hash-change navigation: otherwise the hash was never changed.
+	 * Settle as Blocked. With `restoreHash` (default), the hash change of the navigation is
+	 * undone first (see {@link _settleUncommitted}). Preflight callers pass false unless they
+	 * superseded a hash-change navigation: otherwise the hash was never changed.
 	 */
 	private _blockNavigation(attemptedHash?: string, restoreHash = true): void {
 		this._phase = IDLE;

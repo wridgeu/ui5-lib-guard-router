@@ -7,9 +7,6 @@ let router: GuardRouter;
 
 const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Cherry-pick syntax
-// ============================================================
 QUnit.module("Router - Cherry-pick syntax", hooks);
 
 QUnit.test("cherry-pick by name from object module registers only that guard", async function (assert: Assert) {

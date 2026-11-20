@@ -22,9 +22,6 @@ function createRouterConfig(): ConstructorParameters<typeof MobileRouter> {
 	return [routes, config];
 }
 
-// ============================================================
-// Module: API parity
-// ============================================================
 let extRouter: GuardRouter;
 let nativeRouter: MobileRouter;
 
@@ -67,9 +64,6 @@ QUnit.test("an attach call without a handler is passed on to EventProvider", fun
 	assert.ok(extRouter.hasListeners("navigationSettled"), "attachNavigationSettled() registers like attachEvent()");
 });
 
-// ============================================================
-// Module: Route matching parity
-// ============================================================
 QUnit.module("NativeCompat - Route matching", routerPairHooks);
 
 QUnit.test("match() returns identical results for known hashes", function (assert: Assert) {
@@ -95,9 +89,6 @@ QUnit.test("getRouteInfoByHash returns identical info", function (assert: Assert
 	}
 });
 
-// ============================================================
-// Module: Navigation behavior parity
-// ============================================================
 QUnit.module("NativeCompat - Navigation behavior", routerPairHooks);
 
 QUnit.test("getRoute returns routes with the same pattern", function (assert: Assert) {
@@ -111,7 +102,6 @@ QUnit.test("getRoute returns routes with the same pattern", function (assert: As
 });
 
 QUnit.test("initialize/stop behavior matches", function (assert: Assert) {
-	// Both should not be initialized initially
 	assert.notOk(extRouter.isInitialized(), "ext router not initialized");
 	assert.notOk(nativeRouter.isInitialized(), "native router not initialized");
 
@@ -153,9 +143,6 @@ QUnit.test("stop + initialize fires routeMatched identically", async function (a
 	assert.ok(extFired, "guard router fires routeMatched on re-init (native parity)");
 });
 
-// ============================================================
-// Module: Event firing parity
-// ============================================================
 QUnit.module("NativeCompat - Event firing", routerPairHooks);
 
 QUnit.test("bypassed event fires identically for unknown routes", async function (assert: Assert) {
@@ -191,9 +178,6 @@ QUnit.test("bypassed event fires identically for unknown routes", async function
 	HashChanger.getInstance().setHash("unknown/route/here");
 });
 
-// ============================================================
-// Module: URL generation parity
-// ============================================================
 QUnit.module("NativeCompat - URL generation", routerPairHooks);
 
 QUnit.test("getURL generates identical URLs for routes without parameters", function (assert: Assert) {
@@ -225,9 +209,6 @@ QUnit.test("getURL returns undefined for unknown routes", function (assert: Asse
 	assert.strictEqual(extUrl, undefined, "Returns undefined");
 });
 
-// ============================================================
-// Module: navTo with replace parity
-// ============================================================
 QUnit.module("NativeCompat - navTo with replace", routerPairHooks);
 
 QUnit.test("navTo with replace=true updates hash without history entry", async function (assert: Assert) {
@@ -271,9 +252,6 @@ QUnit.test("navTo with replace=false creates history entry (default)", async fun
 	assert.deepEqual(extWrites, nativeWrites, "Both routers issue the same hash write");
 });
 
-// ============================================================
-// Module: Hash change direction handling
-// ============================================================
 QUnit.module("NativeCompat - Hash change direction", routerPairHooks);
 
 QUnit.test("Direct hash changes fire events identically", async function (assert: Assert) {
@@ -325,7 +303,6 @@ QUnit.test("replaceHash behaves identically", async function (assert: Assert) {
 	nativeRouter.initialize();
 	await flushPromises();
 
-	// Use replaceHash directly
 	HashChanger.getInstance().replaceHash("page1", HistoryDirection.NewEntry);
 	await flushPromises();
 

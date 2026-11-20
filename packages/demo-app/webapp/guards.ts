@@ -47,7 +47,7 @@ export function createAsyncPermissionGuard(authModel: JSONModel, simulatedDelayM
 				Log.info(`Async permission check aborted for "${context.toRoute}"`, "", LOG_COMPONENT);
 				return false;
 			}
-			// Re-throw unexpected errors - they will be caught and block navigation
+			// Any other error settles the navigation as "error" and keeps the current route.
 			throw error;
 		}
 	};

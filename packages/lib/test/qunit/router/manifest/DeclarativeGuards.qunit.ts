@@ -15,9 +15,6 @@ let router: GuardRouter;
 
 const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Declarative manifest guards: block loading
-// ============================================================
 QUnit.module("Router - Declarative manifest guards (block loading)", hooks);
 
 QUnit.test("guards from config are registered and functional (block mode)", async function (assert: Assert) {
@@ -124,7 +121,6 @@ QUnit.test("global guards via '*' key are registered", async function (assert: A
 });
 
 QUnit.test("manifest guards run before imperatively registered guards", async function (assert: Assert) {
-	// Arrange: router with bagWriterGuard as manifest guard. It writes to context.bag
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -145,7 +141,7 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Arrange: add imperative guard that reads from context.bag.
+	// The imperative guard reads context.bag.
 	// If the manifest guard ran first, "writer" will already be present.
 	let manifestRanFirst = false;
 	router.addGuard((context: GuardContext) => {
@@ -153,12 +149,9 @@ QUnit.test("manifest guards run before imperatively registered guards", async fu
 		return true;
 	});
 
-	// Act: navigate
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 
-	// Assert: imperative guard observed data written by the manifest guard,
-	// proving the manifest guard executed first.
 	assert.ok(manifestRanFirst, "manifest guard wrote to context.bag before imperative guard ran");
 });
 
@@ -207,7 +200,6 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 		},
 	);
 
-	// Start async module loading, then immediately destroy.
 	router.initialize();
 	router.destroy();
 
@@ -227,9 +219,6 @@ QUnit.test("destroy() during block-mode loading prevents re-initialization", asy
 	assert.notOk(router.isInitialized(), "Router was not re-initialized after destroy() during block loading");
 });
 
-// ============================================================
-// Module: Declarative manifest guards: lazy loading
-// ============================================================
 QUnit.module("Router - Declarative manifest guards (lazy loading)", hooks);
 
 QUnit.test("lazy manifest guard blocks navigation", async function (assert: Assert) {
@@ -268,7 +257,6 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 		{
 			async: true,
 			guardRouter: {
-				// No guardLoading specified; should default to "lazy"
 				unknownRouteRegistration: "ignore",
 				guards: {
 					protected: [`${FIXTURES}/blockGuard`],
@@ -280,7 +268,6 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 	router.initialize();
 	assert.ok(router.isInitialized(), "the router starts within initialize(), which block mode defers");
 
-	// The guard should still work on first navigation (lazy loads it)
 	await waitForRoute(router, "home");
 	router.navTo("protected");
 	const result = await router.navigationSettled();
@@ -288,9 +275,6 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "default lazy mode: guard blocks on first navigation");
 });
 
-// ============================================================
-// Module: Manifest guard module path resolution
-// ============================================================
 QUnit.module("Router - Manifest guard module path resolution", hooks);
 
 QUnit.test('"module:" prefix bypasses namespace resolution', async function (assert: Assert) {
@@ -351,9 +335,6 @@ QUnit.test('"module:" prefix with slash notation (UI5 convention)', async functi
 	);
 });
 
-// ============================================================
-// Module: Block mode module load failure
-// ============================================================
 QUnit.module("Router - Block mode module load failure", hooks);
 
 QUnit.test(
@@ -388,7 +369,6 @@ QUnit.test(
 
 		assert.ok(router.isInitialized(), "router initialized despite load failure");
 
-		// Navigation should still work (no guards registered; the failed module was skipped)
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
 		assert.strictEqual(getHash(), "protected", "navigation works after load failure");

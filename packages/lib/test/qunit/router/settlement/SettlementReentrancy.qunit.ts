@@ -20,9 +20,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Navigating from a navigationSettled handler
-// ============================================================
 QUnit.module("Router - Navigating from a navigationSettled handler", standardHooks);
 
 const never = (): Promise<boolean> => new Promise(() => {});
@@ -145,9 +142,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Guards that navigate
-// ============================================================
 QUnit.module("Router - Guards that navigate", standardHooks);
 
 const STALE_RESULTS: [string, GuardRedirect | boolean][] = [
@@ -266,9 +260,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Hash changes from a navigationSettled handler
-// ============================================================
 QUnit.module("Router - Hash changes from a navigationSettled handler", standardHooks);
 
 /**
@@ -330,9 +321,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: navigationSettled handlers that throw
-// ============================================================
 QUnit.module("Router - navigationSettled handlers that throw", standardHooks);
 
 QUnit.test("the route of a committed navigation is still displayed", async function (assert: Assert) {

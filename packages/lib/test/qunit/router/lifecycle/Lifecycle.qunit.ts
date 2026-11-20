@@ -30,9 +30,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Router lifecycle
-// ============================================================
 QUnit.module("Router - Lifecycle", standardHooks);
 
 QUnit.test("Guards still work after stop and re-initialize", async function (assert: Assert) {
@@ -40,16 +37,13 @@ QUnit.test("Guards still work after stop and re-initialize", async function (ass
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Guard blocks before stop
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks before stop");
 
-	// Stop and re-initialize
 	router.stop();
 	assert.notOk(router.isInitialized(), "Router stopped");
 	router.initialize();
 	assert.ok(router.isInitialized(), "Router re-initialized");
 
-	// Guard should still block after restart
 	await assertBlocked(
 		assert,
 		router,
@@ -490,9 +484,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Destroy during redirect
-// ============================================================
 QUnit.module("Router - Destroy during redirect", standardHooks);
 
 QUnit.test(
@@ -524,9 +515,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: navigationSettled after destroy
-// ============================================================
 QUnit.module("Router - navigationSettled after destroy", standardHooks);
 
 QUnit.test(
@@ -547,10 +535,7 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: The global hash changer is replaced while the router runs
-// ============================================================
-QUnit.module("Router - Replaced hash changer", standardHooks);
+QUnit.module("Router - Global hash changer replaced while the router runs", standardHooks);
 
 /**
  * Replace the global hash changer, as the Fiori launchpad does when its shell starts. The new one

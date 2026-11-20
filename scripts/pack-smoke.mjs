@@ -62,10 +62,8 @@ async function main() {
 						module: "ES2022",
 						moduleResolution: "Bundler",
 						strict: true,
-						// Required: @openui5/types references JQuery and QUnit
-						// globals that are not installed in a minimal consumer project.
-						skipLibCheck: true,
-						types: ["@openui5/types", "ui5-lib-guard-router"],
+						// @openui5/types uses the jQuery and QUnit globals without referencing their types.
+						types: ["@openui5/types", "jquery", "qunit", "ui5-lib-guard-router"],
 					},
 					include: ["consumer.ts"],
 				},

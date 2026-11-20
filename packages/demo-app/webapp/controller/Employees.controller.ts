@@ -23,12 +23,10 @@ export default class EmployeesController extends BaseController {
 		(this.getModel("runtime") as JSONModel).setProperty("/employeesMeta", JSON.stringify(meta));
 	}
 
-	/** Navigate to the Employee detail view for a demo employee. */
 	onNavToEmployee(): void {
 		this.getRouter().navTo("employee", { id: "42" });
 	}
 
-	/** Update the employees route metadata at runtime and refresh the display. */
 	onUpdateMeta(): void {
 		this.getRouter().setRouteMeta("employees", {
 			section: "hr",

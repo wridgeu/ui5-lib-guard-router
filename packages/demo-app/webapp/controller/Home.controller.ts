@@ -94,8 +94,7 @@ export default class HomeController extends BaseController {
 	 * - Memory leaks from orphaned guard references.
 	 * - Guards executing after their controller is gone.
 	 *
-	 * Note: with XMLView caching (viewId), onExit may not fire until the
-	 * view is actually destroyed. Keep this in mind for your cleanup strategy.
+	 * The router caches its target views, so this runs when the component is destroyed.
 	 */
 	override onExit(): void {
 		if (this._leaveGuard) {

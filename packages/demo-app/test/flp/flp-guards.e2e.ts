@@ -48,10 +48,8 @@ describe("FLP guard router hardening", () => {
 		await resetFlpDemo();
 	});
 
-	// --- Enter guard tests ---
-
 	it("redirects navigation to protected route to home when logged out", async () => {
-		// Logged out (resetFlpDemo asserts this). Try to navigate to protected.
+		// Logged out: resetFlpDemo asserts it.
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await navigateToRouteInFlp("protected");
 
@@ -81,8 +79,6 @@ describe("FLP guard router hardening", () => {
 		await expectControlText(CONTROLS.protected.settlementRouteText, "protected");
 	});
 
-	// --- Leave guard tests ---
-
 	it("allows leaving protected page when form is clean", async () => {
 		await loginAndGoToProtectedInFlp();
 		await setDirtyStateInFlp(false);
@@ -102,8 +98,6 @@ describe("FLP guard router hardening", () => {
 		await expectInAppNavigationToHome();
 	});
 
-	// --- Browser history tests ---
-
 	it("handles browser back from protected to home", async () => {
 		await loginAndGoToProtectedInFlp();
 
@@ -117,7 +111,6 @@ describe("FLP guard router hardening", () => {
 
 		await browser.back();
 
-		// Leave guard blocks. Page stays on protected.
 		await waitForProtectedPageInFlp({ afterRevision: settlementRevision });
 		await expectAppHashToBe("protected", { afterRevision: settlementRevision });
 		await expectControlText(CONTROLS.protected.settlementStatus, "Blocked");
@@ -171,7 +164,6 @@ describe("FLP guard router hardening", () => {
 		await loginAndGoToProtectedInFlp();
 		await browserBackToHome();
 
-		// Logout.
 		await press(CONTROLS.home.toggleLoginBtn);
 		await expectControlText(CONTROLS.home.authStatus, "Logged Out");
 
@@ -179,7 +171,6 @@ describe("FLP guard router hardening", () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 		await browser.forward();
 
-		// Enter guard redirects back to home.
 		await expectRedirectedHome(settlementRevision);
 	});
 

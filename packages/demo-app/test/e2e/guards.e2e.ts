@@ -45,7 +45,6 @@ describe("Guard redirects to Home", () => {
 
 describe("Guard redirects unauthenticated navigation", () => {
 	it("should redirect to Home when navigating to Protected while logged out", async () => {
-		// Asserts "Logged Out" on Home.
 		await startAtHome();
 
 		const settlementRevision = await getRuntimeSettlementRevision();

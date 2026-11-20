@@ -21,9 +21,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guard context meta bag
-// ============================================================
 QUnit.module("Router - Guard context meta bag", {
 	beforeEach: function () {
 		initHashChanger();
@@ -146,9 +143,6 @@ QUnit.test("bag is shared across multiple redirect hops", async function (assert
 	assert.strictEqual(finalBag!.get("hop2"), true, "data from second hop survives to third");
 });
 
-// ============================================================
-// Module: Router - Route metadata
-// ============================================================
 QUnit.module(
 	"Router - Route metadata",
 	createdRouterHooks(() => router),
@@ -487,10 +481,6 @@ QUnit.test('setRouteMeta("") is not subject to the unknown-route policy', functi
 
 	assert.deepEqual(router.getRouteMeta(""), { landing: true }, "metadata for the root state is stored");
 });
-
-// ============================================================
-// Module: Multi-hop redirect metadata
-// ============================================================
 
 QUnit.module(
 	"Router - Multi-hop redirect metadata",

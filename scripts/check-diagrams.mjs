@@ -73,14 +73,14 @@ for (const doc of docs) {
 		// Rule 2: GitHub prints a backtick in a label as it is, and rejects a label that starts with one.
 		if (diagram.includes("`")) errors.push(`${where}: the Mermaid block has a backtick, write the name plainly`);
 
-		// Rule 4: a class is one of the diagram style in CONTRIBUTING.md, with its colours.
+		// Rule 3: a class is one of the diagram style in CONTRIBUTING.md, with its colours.
 		for (const [, name, style] of diagram.matchAll(/^\s*classDef (\S+) (.*)$/gm)) {
 			if (PALETTE[name] !== style.trim()) {
 				errors.push(`${where}: the Mermaid block defines the class ${name} other than the diagram style does`);
 			}
 		}
 
-		// Rule 3: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
+		// Rule 4: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
 		// Only labels are read: a flowchart node `id("label")` is no call.
 		// A front matter (`config:`) may precede the diagram type.
 		const labels = /^\s*flowchart/.test(diagram.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ""))

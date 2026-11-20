@@ -22,9 +22,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Redirect to the route that is shown
-// ============================================================
 QUnit.module("Router - Redirect to the route that is shown", standardHooks);
 
 QUnit.test(
@@ -82,9 +79,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: GuardRedirect with componentTargetInfo
-// ============================================================
 QUnit.module("Router - GuardRedirect with componentTargetInfo", standardHooks);
 
 QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at target", async function (assert: Assert) {
@@ -205,9 +199,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Redirect edge cases
-// ============================================================
 QUnit.module("Router - Redirect edge cases", standardHooks);
 
 QUnit.test("Global guard redirect short-circuits route-specific guard", async function (assert: Assert) {
@@ -230,19 +221,12 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-// ============================================================
-// Module: Redirect guard bypass regression
-// ============================================================
-QUnit.module("Router - Redirect guard bypass regression", standardHooks);
+QUnit.module("Router - Redirect: navTo from a navigationSettled handler", standardHooks);
 
 QUnit.test("navTo from navigationSettled handler during redirect still runs guards", async function (assert: Assert) {
 	// A guard on "forbidden" redirects to "home".
 	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
 	// A global guard blocks "protected" (and lets the redirect itself through).
-	//
-	// Regression guard: _flushSettlement fires the navigationSettled event
-	// synchronously. The phase is set to idle before _flushSettlement, so
-	// navTo() from the handler enters the full guard pipeline.
 	router.addRouteGuard("forbidden", () => "home");
 	router.addGuard((ctx: GuardContext) => ctx.toRoute !== "protected");
 

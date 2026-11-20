@@ -21,9 +21,6 @@ let router: GuardRouter;
 
 const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Manifest guard order, shapes and lifecycle
-// ============================================================
 QUnit.module("Router - Manifest guard order, shapes and lifecycle", hooks);
 
 function createBlockRouter(

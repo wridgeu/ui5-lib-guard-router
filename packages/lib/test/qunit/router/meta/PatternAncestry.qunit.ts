@@ -4,17 +4,12 @@ import { GuardRouterClass, waitForRoute, createdRouterHooks } from "../../testHe
 
 let router: GuardRouter;
 
-// ============================================================
-// Module: Pattern ancestry: UI5 pattern syntax edge cases
-// ============================================================
-
 QUnit.module(
 	"Router - Pattern ancestry edge cases",
 	createdRouterHooks(() => router),
 );
 
 QUnit.test("metadata inherits when parent and child use different parameter names", function (assert: Assert) {
-	// Arrange: parent uses {empId}, child uses {id}. Should still be recognized as ancestor
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -35,7 +30,6 @@ QUnit.test("metadata inherits when parent and child use different parameter name
 });
 
 QUnit.test("optional parameter segments do not break ancestry detection", function (assert: Assert) {
-	// Arrange: parent has an optional segment, child extends the mandatory path
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -57,7 +51,6 @@ QUnit.test("optional parameter segments do not break ancestry detection", functi
 });
 
 QUnit.test("inline query parameter suffix does not affect ancestry", function (assert: Assert) {
-	// Arrange: parent pattern has {?query} attached directly (canonical UI5 form)
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -79,7 +72,6 @@ QUnit.test("inline query parameter suffix does not affect ancestry", function (a
 });
 
 QUnit.test("inline optional query suffix does not affect ancestry", function (assert: Assert) {
-	// Arrange: parent pattern has :?query: attached directly
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -105,7 +97,6 @@ QUnit.test("inline optional query suffix does not affect ancestry", function (as
 });
 
 QUnit.test("rest parameter segments do not affect ancestry", function (assert: Assert) {
-	// Arrange: parent has a catch-all rest segment
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -127,7 +118,6 @@ QUnit.test("rest parameter segments do not affect ancestry", function (assert: A
 });
 
 QUnit.test("sibling routes do not inherit from each other", function (assert: Assert) {
-	// Arrange: two routes at the same depth under the same parent
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -149,7 +139,6 @@ QUnit.test("sibling routes do not inherit from each other", function (assert: As
 });
 
 QUnit.test("guard inheritance works with mixed parameter names", async function (assert: Assert) {
-	// Arrange: parent guard on `orders/{orderId}`, child is `orders/{id}/items`
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },

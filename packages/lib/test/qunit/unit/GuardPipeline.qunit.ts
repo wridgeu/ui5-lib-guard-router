@@ -4,9 +4,6 @@ import GuardPipeline, { isPromiseLike } from "ui5/guard/router/GuardPipeline";
 import type { GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
 import { callUnsafe, createGuardContext as createContext, logMessages, type SinonTestContext } from "../testHelpers";
 
-// ============================================================
-// Module: evaluate
-// ============================================================
 QUnit.module("GuardPipeline - evaluate");
 
 QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
@@ -19,9 +16,6 @@ QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
 	assert.deepEqual(pipeline.evaluate(createContext()), { action: "allow" }, "Initial navigation (empty fromRoute)");
 });
 
-// ============================================================
-// Module: guard management
-// ============================================================
 QUnit.module("GuardPipeline - guard management");
 
 QUnit.test("clear removes all guards", function (assert: Assert) {
@@ -92,9 +86,6 @@ QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) 
 	assert.deepEqual(calls, ["leave", "global", "enter"], "Every registered guard is still registered");
 });
 
-// ============================================================
-// Module: guard decisions
-// ============================================================
 QUnit.module("GuardPipeline - guard decisions");
 
 QUnit.test("global guard returning false blocks", function (assert: Assert) {
@@ -161,9 +152,6 @@ QUnit.test("route enter guard returning GuardRedirect object redirects", functio
 	assert.deepEqual(result, { action: "redirect", target: redirect });
 });
 
-// ============================================================
-// Module: execution order
-// ============================================================
 QUnit.module("GuardPipeline - execution order");
 
 QUnit.test("global guards run before route guards and can short-circuit", function (assert: Assert) {
@@ -181,7 +169,6 @@ QUnit.test("global guards run before route guards and can short-circuit", functi
 	void pipeline.evaluate(createContext());
 	assert.deepEqual(order, ["global", "route"], "Global runs first");
 
-	// Reset and test short-circuit
 	const pipeline2 = new GuardPipeline();
 	const called: string[] = [];
 	pipeline2.addGlobalGuard(() => {
@@ -239,9 +226,6 @@ for (const [kind, add, context] of [
 	});
 }
 
-// ============================================================
-// Module: leave guards
-// ============================================================
 QUnit.module("GuardPipeline - leave guards");
 
 QUnit.test("leave guard blocks and skips enter guards", function (assert: Assert) {
@@ -284,7 +268,6 @@ QUnit.test("multiple leave guards run in order and short-circuit on first false"
 	assert.deepEqual(result, { action: "allow" }, "All leave guards pass");
 	assert.deepEqual(order, [1, 2], "Ran in registration order");
 
-	// Short-circuit: second guard blocks
 	const pipeline2 = new GuardPipeline();
 	const called: number[] = [];
 	pipeline2.addLeaveGuard("current", () => {
@@ -305,9 +288,6 @@ QUnit.test("multiple leave guards run in order and short-circuit on first false"
 	assert.deepEqual(called, [1, 2], "Third leave guard never called");
 });
 
-// ============================================================
-// Module: validation
-// ============================================================
 QUnit.module("GuardPipeline - validation");
 
 QUnit.test("isPromiseLike accepts function thenables and rejects non-thenables", function (assert: Assert) {
@@ -371,9 +351,6 @@ QUnit.test("invalid return values treated as block", function (this: SinonTestCo
 	);
 });
 
-// ============================================================
-// Module: snapshot copy
-// ============================================================
 QUnit.module("GuardPipeline - snapshot copy");
 
 QUnit.test("guard can remove itself during iteration", function (assert: Assert) {
@@ -416,9 +393,6 @@ QUnit.test("leave guard can remove itself during iteration", function (assert: A
 	assert.strictEqual(secondGuardCalls, 1, "The leave guard after the self-removing one still ran");
 });
 
-// ============================================================
-// Module: skipLeaveGuards option
-// ============================================================
 QUnit.module("GuardPipeline - skipLeaveGuards option");
 
 QUnit.test("skipLeaveGuards skips leave guards even when fromRoute is set", function (assert: Assert) {
@@ -450,9 +424,6 @@ QUnit.test("skipLeaveGuards defaults to running leave guards", function (assert:
 	assert.deepEqual(r2, { action: "block" }, "Leave guard blocks when options omitted");
 });
 
-// ============================================================
-// Module: greedy routes
-// ============================================================
 QUnit.module("GuardPipeline - greedy routes");
 
 QUnit.test(
