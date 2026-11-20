@@ -482,12 +482,14 @@ QUnit.test(
 QUnit.test(
 	"no enter guard starts on a navigation that was aborted after its async leave guard allowed",
 	async function (assert: Assert) {
-		// The abort comes a number of microtasks after the leave guard has settled.
+		// The abort comes a number of microtasks after the leave guard has settled. The sweep covers
+		// every microtask until the enter guard starts: the first abort blocks, the last finds it started.
+		const started: boolean[] = [];
 		for (let microtasks = 0; microtasks < 6; microtasks++) {
 			const pipeline = new GuardPipeline();
 			const controller = new AbortController();
 			const allowed = Promise.withResolvers<boolean>();
-			let startedAborted = false;
+			let startedAborted: boolean | undefined;
 			pipeline.addLeaveGuard("current", () => allowed.promise);
 			pipeline.addEnterGuard("target", (context) => {
 				startedAborted = context.signal.aborted;
@@ -501,8 +503,11 @@ QUnit.test(
 			allowed.resolve(true);
 			await Promise.all([decision, abort]);
 
-			assert.notOk(startedAborted, `abort ${microtasks} microtasks after the leave guard`);
+			assert.notStrictEqual(startedAborted, true, `abort ${microtasks} microtasks after the leave guard`);
+			started.push(startedAborted !== undefined);
 		}
+		assert.strictEqual(started[0], false, "an abort right after the leave guard blocks before the enter guard");
+		assert.strictEqual(started.at(-1), true, "the last abort comes after the enter guard has started");
 	},
 );
 

@@ -204,6 +204,7 @@ describe("Nested component: nav button without a previous history entry", () => 
 		await setBrowserHash("");
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await setBrowserHash(SALES_HASH);
+		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
 
 		await reloadPage();
@@ -223,6 +224,7 @@ describe("Nested component: nav button without a previous history entry", () => 
 		await setBrowserHash("#/employees");
 		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
 		await setBrowserHash(OVERVIEW_HASH);
+		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 
 		await reloadPage();
