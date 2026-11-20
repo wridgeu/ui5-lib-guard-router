@@ -1030,12 +1030,16 @@ point.
       `Navigation` service of the app runtime. If its dirty flag is set or a provider answers
       `true`, it shows `window.confirm()` in the iframe. On cancel nothing is written: a `navTo()`
       settles as `Blocked`, as after any hash write that the launchpad takes over. On confirm the
-      navigation goes on and the shell hides the app.
+      navigation goes on: the hash is written, or the shell hides the app.
     - The provider is asked with the navigation context of the iframe. After the app is shown
       again, that context is cross-app until the next hash change in the app, because the app
       runtime has replaced the hash with the intent. A provider that answers only for a
       cross-app navigation (`isCrossAppNavigation !== false`) therefore answers for the first
       in-app `navTo()` after an app with unsaved data is shown again, and the user is asked.
+      After the first hash change in the app the context is in-app, also for a cross-app
+      navigation that the app starts: such a provider answers `false`, and the app is hidden
+      with its unsaved data without a question. The app runtime of 1.144.0 and 1.149.0 reads the
+      context from its own `ShellNavigationInternal`, not from the target.
 - 1.144.0 only: on `store` the app runtime saves the list of providers and empties it, before it
   calls `deactivate()`; on `restore` it puts the list back, before it calls `activate()`. An app
   that deregisters its provider in `onDeactivate()` and registers it in `onActivate()` has it in
@@ -1060,8 +1064,10 @@ That setup is in `packages/demo-app/test/flp/iframe/webapp/` (`flp.html`, `confi
 first point: the router is stopped while the app is hidden, the kept component settles
 `Committed` on its default route when it is shown again, with its unsaved data, and its guards
 run once for a navigation after that. A cross-app navigation that starts in the shell hides the
-app without a question. What the app runtime asks about unsaved data, and the provider list of
-1.144.0, are not pinned by a test. Two setups that look similar do not work:
+app without a question. It also pins what the app runtime asks with the context of the iframe:
+the first `navTo()` after the app is shown again asks (cancel settles `Blocked`, confirm
+commits), and a cross-app navigation that the app starts after that does not. The provider list
+of 1.144.0 is not pinned by a test. Two setups that look similar do not work:
 
 - Without the element `content` the component is created and routes, but the app runtime never
   records it as its running app. It answers `store` with `sap.ushell.appRuntime.isInvalidIframe`,

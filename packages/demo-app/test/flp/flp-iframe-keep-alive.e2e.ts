@@ -1,9 +1,11 @@
 import type BaseLog from "sap/base/Log";
 import Service from "wdio-ui5-service";
-import { CONTROLS, getAppComponentId, press, waitForComponent } from "../shared/controls";
+import { CONTROLS, expectControlText, getAppComponentId, press, waitForComponent } from "../shared/controls";
 import { getDirtyState, getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
 import {
+	expectAppHashToBe,
 	expectInAppNavigationBlocked,
+	installDialogHandler,
 	loginAndGoToProtectedInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
@@ -111,5 +113,62 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 			await setDirtyStateInFlp(true);
 			await expectInAppNavigationBlocked();
 		});
+	});
+
+	it("asks about unsaved data with the navigation context of the iframe", async () => {
+		await inDemoApp(async () => {
+			await resetFlpDemo();
+			await loginAndGoToProtectedInFlp();
+			await setDirtyStateInFlp(true);
+		});
+		await triggerFlpCrossAppNavigation("peer-display");
+		await waitForComponent(PEER_APP_ID);
+		await triggerFlpCrossAppNavigation(IFRAME_INTENT);
+
+		await inDemoApp(async () => {
+			await waitForRouterRunningInFlp();
+			await waitForHomePageInFlp();
+
+			// The app runtime asks its providers before a hash write in the iframe. Until the app
+			// changes its hash, the context is the cross-app one of the intent, so the demo's
+			// provider (which ignores in-app navigations) answers dirty. Cancel writes nothing.
+			const cancel = installDialogHandler(false);
+			try {
+				const revision = await getRuntimeSettlementRevision();
+				await press(CONTROLS.home.navProtectedBtn);
+				await browser.waitUntil(() => cancel.record.called && cancel.record.handled, {
+					timeoutMsg: "The app runtime did not ask before the first hash write",
+				});
+				await waitForHomePageInFlp({ afterRevision: revision });
+				await expectControlText(CONTROLS.home.settlementStatus, "Blocked");
+				await expectAppHashToBe("");
+			} finally {
+				cancel.cleanup();
+			}
+
+			const confirm = installDialogHandler(true);
+			try {
+				const revision = await getRuntimeSettlementRevision();
+				await press(CONTROLS.home.navProtectedBtn);
+				await waitForProtectedPageInFlp({ afterRevision: revision });
+				expect(confirm.record.called).toBe(true);
+				await expectAppHashToBe("protected");
+			} finally {
+				confirm.cleanup();
+			}
+		});
+
+		// A cross-app navigation that the app starts is asked about with the same context, which
+		// is now the in-app one of its last hash change: the provider answers clean, and the app
+		// is hidden with its unsaved data without a question.
+		const leave = installDialogHandler(false);
+		try {
+			await inDemoApp(() => triggerFlpCrossAppNavigation("peer-display"));
+			await waitForComponent(PEER_APP_ID);
+			expect(leave.record.called).toBe(false);
+			await inDemoApp(async () => expect(await getDirtyState()).toBe(true));
+		} finally {
+			leave.cleanup();
+		}
 	});
 });
