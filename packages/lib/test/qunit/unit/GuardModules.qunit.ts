@@ -36,6 +36,11 @@ QUnit.test(
 			[{ name: "length", fn: mod }],
 			"a property that is no function is no guard",
 		);
+		assert.deepEqual(
+			resolveModuleExports(mod, path, "call"),
+			[{ name: "call", fn: mod }],
+			"a function the module inherits is no named export",
+		);
 	},
 );
 

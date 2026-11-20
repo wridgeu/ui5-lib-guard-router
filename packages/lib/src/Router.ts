@@ -1694,7 +1694,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _evaluateGuards(context: GuardContext, redirectHop = false): GuardDecision | Promise<GuardDecision> {
 		return this._pipeline.evaluate(context, {
 			skipLeaveGuards: redirectHop,
-			alsoLeaving: redirectHop ? [] : this._greedyMatches(context.fromHash, context.fromRoute),
+			alsoLeaving: this._greedyMatches(context.fromHash, context.fromRoute),
 			alsoEntering: this._greedyMatches(context.toHash, context.toRoute),
 		});
 	}

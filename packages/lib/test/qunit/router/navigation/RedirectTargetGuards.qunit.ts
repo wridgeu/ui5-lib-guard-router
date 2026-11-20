@@ -362,9 +362,9 @@ QUnit.test(
 		setHash.restore();
 
 		router.addGuard(() => false);
-		router.navTo("detail", { id: "1" });
+		router.navTo("forbidden");
 		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next navigation is guarded");
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next navigation to the target is guarded");
 		assert.strictEqual(getHash(), "", "hash unchanged");
 	},
 );
@@ -385,9 +385,9 @@ QUnit.test(
 		setHash.restore();
 
 		router.addGuard(() => false);
-		HashChanger.getInstance().setHash("detail/1");
+		HashChanger.getInstance().setHash("protected");
 		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next hash change is guarded");
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next hash change to the target is guarded");
 		assert.strictEqual(getHash(), "", "hash restored");
 	},
 );

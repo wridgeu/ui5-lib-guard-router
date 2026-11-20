@@ -144,6 +144,77 @@ for (const type of ["enter", "leave"] as const) {
 	}
 }
 
+const CACHED = `${FIXTURES}/lazyCachedGuard`;
+const NAMED = `${FIXTURES}/namedExportGuard`;
+const DEFAULT_WITH_NAMED = `${FIXTURES}/defaultWithNamedExportGuard`;
+
+/** A pattern-tree router on `routes` with the cached fixture guards declared in `guards`. */
+async function createPatternTreeRouter(
+	routes: { name: string; pattern: string }[],
+	guards: GuardRouterOptions["guards"],
+): Promise<LazyProbe> {
+	await Promise.all([CACHED, NAMED, DEFAULT_WITH_NAMED].map((path) => loadModule(path)));
+	const probe = await loadProbe();
+	router = new GuardRouterClass(routes, {
+		async: true,
+		guardRouter: { inheritance: "pattern-tree", unknownRouteRegistration: "ignore", guards },
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+	probe.calls.length = 0;
+	return probe;
+}
+
+QUnit.test(
+	"pattern-tree: addRoute() places an inherited guard among the guards of its own route and type",
+	async function (assert: Assert) {
+		// By pattern depth the entries rank home, top, mid, other, deep. The guard that deep
+		// inherits from top goes in front of the enter guard of deep, not of the leave guard that
+		// deep inherits from mid or of the enter guard of other, which rank in between.
+		const probe = await createPatternTreeRouter(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "mid", pattern: "x/m" },
+				{ name: "other", pattern: "o/{p}" },
+				{ name: "deep", pattern: "x/m/d" },
+			],
+			{
+				home: [`${CACHED}#0`],
+				top: [`${NAMED}#namedFirst`],
+				mid: { leave: [`${NAMED}#namedSecond`] },
+				other: [DEFAULT_WITH_NAMED],
+				deep: [`${CACHED}#1`],
+			},
+		);
+		router.addRoute({ name: "top", pattern: "x" });
+
+		router.navTo("deep");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+		assert.deepEqual(probe.calls, ["cachedFirst", "namedFirst", "cachedSecond"]);
+	},
+);
+
+QUnit.test(
+	"pattern-tree: addRoute() places an inherited guard by rank, not by when the guards after it were added",
+	async function (assert: Assert) {
+		const probe = await createPatternTreeRouter(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "top", pattern: "x" },
+				{ name: "deep", pattern: "x/a/b/d" },
+			],
+			{ top: [`${CACHED}#0`], a: [`${NAMED}#namedFirst`], b: [`${NAMED}#namedSecond`], deep: [`${CACHED}#1`] },
+		);
+		// Deep inherits the guard of b after its own, and then the one of a, which ranks before both.
+		router.addRoute({ name: "b", pattern: "x/a/b" });
+		router.addRoute({ name: "a", pattern: "x/a" });
+
+		router.navTo("deep");
+		assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+		assert.deepEqual(probe.calls, ["cachedFirst", "namedFirst", "namedSecond", "cachedSecond"]);
+	},
+);
+
 QUnit.test("block mode guards the first navigation", async function (assert: Assert) {
 	HashChanger.getInstance().setHash("protected");
 	router = createBlockRouter({ protected: [`${FIXTURES}/blockGuard`] });

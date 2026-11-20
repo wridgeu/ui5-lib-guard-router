@@ -320,6 +320,7 @@ QUnit.test("isPromiseLike accepts function thenables and rejects non-thenables",
 		"plain function is not",
 	);
 	assert.strictEqual(isPromiseLike(null), false, "null is not");
+	assert.strictEqual(isPromiseLike(JSON.parse('{ "then": true }')), false, "data with a then field is not");
 });
 
 QUnit.test("invalid return values treated as block", function (this: SinonTestContext, assert: Assert) {

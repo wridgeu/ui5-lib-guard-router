@@ -510,3 +510,31 @@ QUnit.test(
 		assert.deepEqual(restores, [0, 0, 0, 0, 0], "no hash restore after any of them: the hash never changed");
 	},
 );
+
+QUnit.test(
+	"navTo() called while an allowed navigation writes its hash is guarded, and the allowed navigation still commits",
+	async function (assert: Assert) {
+		let guardCalls = 0;
+		router.addRouteGuard("detail", () => {
+			guardCalls++;
+			return false;
+		});
+		let navigating = false;
+		// Attached before initialize(), so it runs before the router receives the hash change.
+		router.getHashChanger().attachEvent("hashChanged", () => {
+			if (!navigating) return;
+			navigating = false;
+			router.navTo("detail", { id: "1" });
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		navigating = true;
+		router.navTo("protected");
+		await flushPromises();
+		assert.strictEqual(guardCalls, 1, "the guard of the target ran");
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Committed], "blocked, then committed");
+		assert.strictEqual(getHash(), "protected", "the allowed navigation has its hash");
+	},
+);

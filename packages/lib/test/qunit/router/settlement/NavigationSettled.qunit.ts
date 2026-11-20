@@ -8,7 +8,14 @@ import type {
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$BypassedEvent } from "sap/ui/core/routing/Router";
-import { flushPromises, recordSettlements, waitForRoute, routerHooks, getHash } from "../../testHelpers";
+import {
+	flushPromises,
+	recordSettlements,
+	type SinonTestContext,
+	waitForRoute,
+	routerHooks,
+	getHash,
+} from "../../testHelpers";
 
 let router: GuardRouter;
 
@@ -474,10 +481,55 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 	assert.notOk(matched, "patternMatched never fired on the blocked target route");
 });
 
+QUnit.test(
+	"Resolves at once with the last settlement while an allowed navigation writes its hash",
+	async function (assert: Assert) {
+		let whileCommitting: Promise<NavigationResult> | undefined;
+		let navigating = false;
+		// Attached before initialize(), so it runs before the router receives the hash change.
+		router.getHashChanger().attachEvent("hashChanged", () => {
+			if (navigating) whileCommitting = router.navigationSettled();
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		navigating = true;
+		router.navTo("protected");
+		navigating = false;
+		assert.deepEqual(
+			await whileCommitting,
+			{ status: NavigationOutcome.Committed, route: "home", hash: "" },
+			"the navigation was guarded already, so nothing was pending",
+		);
+	},
+);
+
 // ============================================================
 // Module: Restore and settlement invariants
 // ============================================================
 QUnit.module("Router - Restore and settlement invariants", standardHooks);
+
+QUnit.test(
+	"a blocked hash change that is reported without the hash before it is undone to the empty hash",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.addRouteGuard("protected", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		// UI5 reports the first hash change of a page without oldHash.
+		const fireEvent = this.stub(HashChanger.getInstance(), "fireEvent").callsFake(function (
+			this: HashChanger,
+			...args
+		) {
+			if (args[0] === "hashChanged") Reflect.deleteProperty(args[1] ?? {}, "oldHash");
+			return fireEvent.wrappedMethod.apply(this, args);
+		});
+
+		HashChanger.getInstance().setHash("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the hash change is blocked");
+		assert.strictEqual(getHash(), "", "and undone to the empty hash");
+	},
+);
 
 QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async function (assert: Assert) {
 	let matched = false;

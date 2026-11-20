@@ -2,24 +2,17 @@
 
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
-> Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5.
->
-> **Related resources**:
->
-> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](../../docs/research/native-router-navigate-event.md) (detailed comparison with this library)
+> Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5. The native alternative, the `NavContainer` `navigate` event, is sync-only and fires after the route match ([comparison](../../docs/research/native-router-navigate-event.md)).
 
 > [!WARNING]
-> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. Pin your version and review changes before upgrading.
 
 > [!CAUTION]
-> Navigation guards are a UX layer, not a security boundary. They can prevent unauthorized content flashes and steer client-side navigation, but they do **not** replace server-side authorization, backend validation, or service-level access control.
+> Navigation guards are a UX layer, not a security boundary. They do **not** replace server-side authorization, backend validation, or service-level access control.
 
 ## Why
 
-UI5's router has no way to block or redirect navigation before views render. The usual workaround, guard logic in each controller's `attachPatternMatched` callback, flashes unauthorized content, pollutes the browser history and spreads the checks across controllers.
-
-This library solves all three by intercepting at the router level, before any route matching begins.
+UI5's router cannot block or redirect a navigation before views render. The usual workaround, guard logic in each controller's `attachPatternMatched` callback, flashes unauthorized content, pollutes the browser history and spreads the checks across controllers. This library runs the guards at the router level, before route matching. [Migrating from attachPatternMatched guards](../../docs/guides/migration-from-pattern-matched.md) shows the switch.
 
 ## Install
 
@@ -32,7 +25,7 @@ npm install ui5-lib-guard-router
 
 ### TypeScript
 
-Add the library to `compilerOptions.types` so TypeScript can resolve the type declarations. If your app does not already depend on UI5 typings, install them too (`@sapui5/types` works as well):
+If your app does not already depend on UI5 typings, install them (`@sapui5/types` works as well):
 
 ```bash
 npm install -D @openui5/types
@@ -48,7 +41,7 @@ Add both packages to `compilerOptions.types`:
 }
 ```
 
-Then import types from the UI5 module path as needed:
+Import types from the UI5 module path:
 
 ```typescript
 // Core: router interface and guard function signatures
@@ -67,22 +60,13 @@ import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 
 ### Serving the library
 
-The npm package ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`). There are three ways to serve the library in your app:
-
 #### Option A: Pre-built (recommended)
 
-The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it automatically and serves the pre-built JavaScript from `dist/` with no extra configuration:
-
-```bash
-npm install ui5-lib-guard-router
-# That's it. `ui5 serve` picks up the build manifest.
-```
-
-No transpile tooling, no middleware, no additional `ui5.yaml` changes.
+The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it and `ui5 serve` serves the pre-built JavaScript from `dist/`. No `ui5.yaml` change is needed.
 
 #### Option B: Transpile from source
 
-If you prefer to serve from TypeScript sources (e.g. for debugging with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
+To serve from the TypeScript sources (for example to debug with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
 
 ```bash
 npm install -D ui5-tooling-transpile
@@ -98,11 +82,9 @@ server:
               transpileDependencies: true
 ```
 
-This transpiles the library's `.ts` sources on the fly during `ui5 serve`.
-
 #### Option C: Static serving (workaround)
 
-If neither option works for your setup, you can mount the pre-built resources manually using [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar community middleware) and point it at the `dist/resources` folder in `node_modules`:
+If neither option fits your setup, mount the pre-built resources with [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar middleware) pointed at `dist/resources` in `node_modules`:
 
 ```bash
 npm install -D ui5-middleware-servestatic
@@ -276,20 +258,16 @@ flowchart TD
 
 A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 
-A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. The detailed diagrams of each step are in the [architecture reference](../../docs/reference/architecture.md#two-entry-point-model-navto-preflight--parse-fallback).
+A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`.
 
-The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
+The two entry points run the same guards:
 
-- **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
-- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks, the router undoes the hash change. A redirect replaces the history entry of the hash change with the target.
+- **`navTo()` preflight**: guards run before the hash changes. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
+- **`parse()` fallback**: for back/forward, URL bar entries and direct hash changes, guards run after the browser has changed the hash. The router undoes a blocked hash change and replaces the entry of a redirected one with the target, see [Browser history](#browser-history).
 
-[Browser history](#browser-history) describes what each case leaves in the history.
+Where no guard intervenes, `sap.m.routing.Router` behavior (targets, route events, `navTo`, back navigation) is unchanged, see [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
 
-Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
-
-Because it extends the mobile router directly, `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) is unchanged where no guard intervenes, see [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
-
-The guard pipeline stays **synchronous when all guards return plain values** and only becomes async when a guard returns a Promise. From that guard on, the rest of that navigation runs async; the next navigation starts synchronous again. A generation counter discards stale async results when navigations overlap, and an `AbortSignal` is passed to each guard so async work (like `fetch`) can be cancelled early.
+The pipeline stays **synchronous while guards return plain values**. From the first guard that returns a Promise, the rest of that navigation runs async; the next navigation starts synchronous again. Results of a superseded navigation are discarded, and each guard gets an `AbortSignal` to cancel async work such as `fetch`. The diagrams of each step are in the [architecture reference](../../docs/reference/architecture.md#two-entry-point-model-navto-preflight--parse-fallback).
 
 ## API
 
@@ -322,7 +300,7 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 ### Unknown routes during registration
 
-With the default `unknownRouteRegistration: "warn"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` warn when the route name is unknown at registration time, but they still register. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized. `"ignore"` registers without a warning. `"throw"` makes these calls throw and registers nothing. A manifest guard on an unknown route cannot throw to a caller: with `"throw"` it is skipped and logged as `guardRouter.guards: failed to register "<module path>"`, and the router still starts.
+With the default `unknownRouteRegistration: "warn"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` warn when the route name is unknown at registration time, but still register, so guards can be attached before a dynamic `addRoute()`. `"ignore"` registers without a warning. `"throw"` makes these calls throw and registers nothing. A manifest guard on an unknown route cannot throw to a caller: with `"throw"` it is skipped and logged as `guardRouter.guards: failed to register "<module path>"`, and the router still starts.
 
 ### GuardContext
 
@@ -343,7 +321,7 @@ Every guard receives a `GuardContext` object:
 
 ### Return values (`GuardResult`)
 
-Enter guards return `GuardResult`, covering four behaviors:
+Enter guards return a `GuardResult`:
 
 ```
 GuardResult = boolean | string | GuardRedirect
@@ -358,11 +336,11 @@ GuardResult = boolean | string | GuardRedirect
 
 `toArguments` holds the route's parameters as UI5's `Route#getURL()` expects them back. A query parameter of the pattern (`products{?query}` or `products:?query:`) arrives under the key `"?query"` as an object, `{ "?query": { tab: "notes" } }`; an optional parameter that the hash leaves out is `undefined`. Pass the same shape in `GuardRedirect.parameters`.
 
-`GuardRedirect` is the object form of a redirect. Use it when you need to pass route parameters (`parameters`) or nested component targets (`componentTargetInfo`). For simple redirects without parameters, the string shorthand (`return "home"`) is equivalent and shorter.
+Without parameters or component targets, the string form (`return "home"`) is equivalent to `GuardRedirect`.
 
-Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only strict `true` allows navigation; there is no truthy coercion.
+Any other value (`null`, `undefined`, `0`, etc.) blocks. Only strict `true` allows navigation; there is no truthy coercion.
 
-On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
+On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself leaves the app without a view. For a specific destination such as `login`, return a redirect instead of `false`.
 
 A `navTo()` issued while a browser-initiated navigation is still waiting for an async guard supersedes that navigation. If the `navTo()` is then blocked, fails, or targets the current route, the router also restores the previous hash, so the URL does not stay on a hash that never committed.
 
@@ -373,7 +351,7 @@ A `navTo()` issued while a browser-initiated navigation is still waiting for an 
 | `true`                            | Allow leaving the current route |
 | `false` (or any non-`true` value) | Block                           |
 
-Leave guards answer "can I leave?" and cannot redirect. For redirection logic, use enter guards on the target route.
+Leave guards cannot redirect. Redirect from an enter guard of the target route.
 
 ### Lifecycle
 
@@ -392,7 +370,7 @@ The Fiori launchpad stops the app router when the user leaves the app and calls 
 
 ### Navigation settlement
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The returned `NavigationResult` contains the outcome as a `NavigationOutcome` enum value, the route name, and the hash determined by the guard pipeline.
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The `NavigationResult` holds the outcome (`status`, a `NavigationOutcome` value), the `route` and the `hash`.
 
 ```typescript
 import type { NavigationResult } from "ui5/guard/router/types";
@@ -412,9 +390,9 @@ const result: NavigationResult = await router.navigationSettled();
 
 A guard redirect to a route that does not exist settles as `Blocked` because no route change commits; the router logs the target name to help diagnose it. A redirect whose target hash cannot be built (a mandatory route parameter is missing) is a guard failure: the navigation settles as `Error` with the error in `result.error`, whether the guard is sync or async and whether the navigation came from `navTo()` or from a hash change. `navTo()` does not throw for it, and a hash change is restored. The router logs the target name.
 
-An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
+An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash in `hash`.
 
-If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router, this defaults to `Committed` with the instance's current route/hash state. After `stop()`, those fields are reset, so idle calls resolve with empty strings until the next navigation settles or `initialize(true)` resumes the route. Multiple callers waiting on the same pending navigation all receive the same result.
+If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent result, so it is safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router this is `Committed` with the current route and hash. After `stop()`, route and hash are empty strings until the next navigation settles or `initialize(true)` resumes the route. All callers waiting on the same navigation receive the same result.
 
 **App code: busy indicator during async guards**
 
@@ -463,7 +441,7 @@ assert.strictEqual(result.route, "home", "User stays on home");
 
 **Event-based: observe every navigation outcome**
 
-`attachNavigationSettled` fires synchronously after every guard pipeline settlement. Unlike the one-shot `navigationSettled()` Promise, the event fires for every navigation without re-registration:
+The `navigationSettled` event fires synchronously after every settlement:
 
 ```typescript
 router.attachNavigationSettled((event) => {
@@ -474,16 +452,16 @@ router.attachNavigationSettled((event) => {
 });
 ```
 
-A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL has already been restored when the event fires (for a blocked back or forward step, the event waits for that, see [Browser history](#browser-history)), so a handler sees the hash of the route the user is on, and a navigation or hash change it starts is not undone by the restore. (On first load, a blocked non-empty hash settles before the router falls back to the default route.) Two things follow from navigating inside the event:
+A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL is already restored when the event fires (a blocked back or forward step waits for that, see [Browser history](#browser-history)), so the restore does not undo what a handler starts. On first load, a blocked non-empty hash settles before the router falls back to the default route. Navigating inside the handler has two effects:
 
-- A navigation that is left again while it commits (the handler navigates on synchronously for a `Committed` or `Redirected` settlement) is not displayed and fires no `routeMatched`; only the handler's target is.
-- When a navigation is `Cancelled` because another one supersedes it, the event fires before the superseding navigation starts. That navigation continues after the handler returns and supersedes what the handler started: a navigation that already committed is navigated away from, one whose guards are still pending is dropped without a settlement of its own. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
+- A `Committed` or `Redirected` navigation that the handler leaves synchronously is not displayed and fires no `routeMatched`; only the handler's target is.
+- For a navigation `Cancelled` by a newer one, the event fires before the newer navigation starts. The newer navigation then supersedes what the handler started: a committed one is navigated away from, a pending one is dropped without a settlement. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
 
-Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works. A handler that throws does not stop the navigation: the router logs `A navigationSettled handler threw` and completes it.
+`detachNavigationSettled(fnFunction, oListener)` removes the listener; pass the same function and listener as to `attachNavigationSettled`. The standard `attachEvent` / `detachEvent` also work. A handler that throws does not stop the navigation: the router logs `A navigationSettled handler threw` and completes it.
 
 ### Error handling
 
-When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. `Error` indicates an unexpected failure, as opposed to `Blocked` which signals intentional denial.
+When a guard throws or its Promise rejects, the navigation settles as `Error` with the thrown value in `result.error`, and the previous route stays active. `Blocked` is an intended denial, `Error` an unexpected failure.
 
 A guard that calls `navTo()` itself supersedes the navigation it is guarding: that navigation settles as `Cancelled`, and what the guard returns afterwards (`true`, `false` or a redirect) is ignored, for sync and async guards alike. The navigation the guard started decides where the router ends up. To send the user elsewhere from a guard, return a redirect instead.
 
@@ -494,11 +472,10 @@ An error thrown while an allowed navigation is carried out, for example by a `be
 1. **Leave guards** for the current route (registration order)
 2. **Global enter guards** (registration order)
 3. **Route-specific enter guards** for the target (registration order)
-4. Pipeline **short-circuits** at the first non-`true` result
 
-Each phase short-circuits on the first non-`true` result. If a leave guard blocks, no enter guards run. If a global guard redirects, route-specific guards are skipped.
+The pipeline stops at the first non-`true` result: if a leave guard blocks, no enter guard runs; if a global guard redirects, the route-specific guards are skipped.
 
-Leave guards run whenever the hash changes, also when only the parameters of the same route change (`employees/1` to `employees/2`): `fromRoute` and `toRoute` are then equal. A leave guard that should only protect leaving the route compares them.
+Leave guards run on every hash change, also when only the parameters of the same route change (`employees/1` to `employees/2`); `fromRoute` and `toRoute` are then equal. A leave guard that should only protect leaving the route compares them.
 
 **Greedy routes.** UI5 matches a route with `greedy: true` even when an earlier route has matched the hash. The guards of such a route run as well:
 
@@ -511,7 +488,7 @@ Every guard of a navigation gets the same context: `toRoute`, `toArguments` and 
 
 ## Manifest Configuration
 
-Guards can be declared directly in `manifest.json` using the `guardRouter` block inside `sap.ui5.routing.config`. This eliminates boilerplate in `Component.ts` for common guard patterns.
+Guards, route metadata and router options can be declared in the `guardRouter` block inside `sap.ui5.routing.config` of `manifest.json`.
 
 ```json
 {
@@ -557,7 +534,7 @@ When constructing the router in code rather than from the manifest, the config a
 
 ### Declarative guards
 
-The `guards` map wires guard modules to routes without writing code in `Component.ts`.
+The `guards` map wires guard modules to routes.
 
 **Global guards** run on every navigation and are declared under the `"*"` key:
 
@@ -575,7 +552,7 @@ The `guards` map wires guard modules to routes without writing code in `Componen
 }
 ```
 
-The full object form with `enter` and `leave` keys registers both enter and leave guards:
+The object form registers enter and leave guards:
 
 ```json
 "guards": {
@@ -590,7 +567,7 @@ Keys other than `enter` and `leave`, and an `enter` or `leave` value that is not
 
 **Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
 
-To use an absolute module path, prefix it with `"module:"`. Dot notation is used for consistency with relative paths; slash notation (`module:com/shared/guards/authGuard`) is also accepted:
+For an absolute module path, prefix it with `"module:"`. Slash notation (`module:com/shared/guards/authGuard`) is accepted as well:
 
 ```json
 "*": ["module:com.shared.guards.authGuard"]
@@ -629,9 +606,7 @@ export default function authGuard(context: GuardContext): GuardResult {
 }
 ```
 
-The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
-
-Manifest guards have no closure over the component. To read component-scoped state such as models, use `context.ownerComponent` instead of module-level singletons or `ComponentRegistry` lookups, so each component instance sees its own state:
+Manifest guards have no closure over the component. Read component state such as models through `context.ownerComponent`, not module-level singletons or `ComponentRegistry` lookups, so each component instance sees its own state:
 
 ```typescript
 export default function dirtyFormGuard(context: GuardContext): boolean {
@@ -641,7 +616,7 @@ export default function dirtyFormGuard(context: GuardContext): boolean {
 
 ### Guard module format
 
-Each entry in the guard array is a module. The router reads it as the value the module returns to UI5's loader, which for a transpiled ES module is its default export. That value is one of three shapes:
+Each entry in a guard array is a module. The router uses the value the module returns to UI5's loader, for a transpiled ES module its default export. That value has one of three shapes:
 
 **Shape 1: Function (single guard)**
 
@@ -686,10 +661,10 @@ export default {
 };
 ```
 
-Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function only `#name` reaches them (see [Cherry-pick syntax](#cherry-pick-syntax)), next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+A plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function only `#name` reaches them (see [Cherry-pick syntax](#cherry-pick-syntax)), next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
 > [!NOTE]
-> When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
+> A module in a `"leave"` array is a `LeaveGuardFn` and returns `boolean`. A string or `GuardRedirect` from a leave guard is not an error, but like any non-`true` value it blocks.
 
 ### Cherry-pick syntax
 

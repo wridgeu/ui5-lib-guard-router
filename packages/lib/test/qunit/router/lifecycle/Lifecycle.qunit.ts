@@ -611,3 +611,23 @@ QUnit.test(
 		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "destroy() has detached it");
 	},
 );
+
+QUnit.test(
+	"the router stays attached once to the hash changer that has replaced the one it started with after a hash change",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		const replacement = replaceHashChanger();
+		const listeners = hashChangedListeners(replacement);
+
+		replacement.setHash("protected");
+		await waitForRoute(router, "protected");
+		assert.strictEqual(
+			hashChangedListeners(replacement),
+			listeners,
+			"the router has moved its listener, not added one",
+		);
+		router.destroy();
+		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "destroy() has detached it");
+	},
+);

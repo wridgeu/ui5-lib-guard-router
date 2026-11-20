@@ -6,6 +6,7 @@ import {
 	browserForward,
 	CHILD_DETAIL,
 	CHILD_LIST,
+	childDetail,
 	childList,
 	equivalenceTest,
 	guardChild,
@@ -43,24 +44,28 @@ const AFTER_REDIRECT = "first step after the redirect";
 /** The child shows its "not found" page: no route matches, so no guard runs for this entry. */
 const notFound = addressBar("shell&/child/nowhere", [CHILD_NOT_FOUND]);
 
-const replaceWithDetailSeven: Step = {
-	label: "child navTo detail/7, replacing the entry",
+const replaceWithDetail = (id: string): Step => ({
+	label: `child navTo detail/${id}, replacing the entry`,
 	act: (app) => {
-		app.childRouter().navTo("detail", { id: "7" }, true);
+		app.childRouter().navTo("detail", { id }, true);
 	},
 	expect: [CHILD_DETAIL],
-};
+});
+const replaceWithDetailSeven = replaceWithDetail("7");
 
 const redirectListToDetailSeven = (context: GuardContext): GuardResult =>
 	context.toRoute === "list" ? { route: "detail", parameters: { id: "7" } } : true;
 
-/** A history step to the child's list that a guard of the child redirects to detail/7. */
-const redirectedStep = (label: string, step: () => void): Step => ({
+const redirectDetailOneToSeven = (context: GuardContext): GuardResult =>
+	context.toHash === "detail/1" ? { route: "detail", parameters: { id: "7" } } : true;
+
+/** A history step that `guard` of the child redirects, by default from the list to detail/7. */
+const redirectedStep = (label: string, step: () => void, guard = redirectListToDetailSeven): Step => ({
 	label,
 	act: (app: App) => {
 		const child = guardChild(app);
-		child.addGuard(redirectListToDetailSeven);
-		child.attachEventOnce("navigationSettled", () => child.removeGuard(redirectListToDetailSeven));
+		child.addGuard(guard);
+		child.attachEventOnce("navigationSettled", () => child.removeGuard(guard));
 		step();
 	},
 	expect: [CHILD_DETAIL],
@@ -115,6 +120,47 @@ equivalenceTest(
 			...LIST_AHEAD,
 			redirectedStep("browser forward to the list, redirected to detail/7", () => window.history.forward()),
 			...AFTER_FORWARD,
+		],
+	},
+	AFTER_REDIRECT,
+);
+
+/**
+ * On detail/3, with detail/1 one entry back and the title history [list, not found, detail/1,
+ * detail/3]: the step back arrives at a page with the title of the page it leaves, so it removes
+ * no title.
+ */
+const DETAIL_ONE_BEHIND: Step[] = [
+	showChild(),
+	notFound,
+	childDetail("1"),
+	addressBar("shell&/child/elsewhere", [CHILD_NOT_FOUND]),
+	replaceWithDetail("3"),
+];
+
+const AFTER_BACK_TO_DETAIL: Step[] = [
+	{ ...browserForward([CHILD_DETAIL]), label: AFTER_REDIRECT },
+	browserBack([CHILD_DETAIL]),
+];
+
+equivalenceTest(
+	"a redirected browser back to a page with the title of the page it leaves keeps the titles of a native browser back followed by a native navTo() to the target that replaces the entry",
+	{
+		startHash: "",
+		started: [PARENT_HOME],
+		steps: [...DETAIL_ONE_BEHIND, browserBack([CHILD_DETAIL]), replaceWithDetailSeven, ...AFTER_BACK_TO_DETAIL],
+	},
+	{
+		startHash: "",
+		started: [PARENT_HOME],
+		steps: [
+			...DETAIL_ONE_BEHIND,
+			redirectedStep(
+				"browser back to detail/1, redirected to detail/7",
+				() => window.history.back(),
+				redirectDetailOneToSeven,
+			),
+			...AFTER_BACK_TO_DETAIL,
 		],
 	},
 	AFTER_REDIRECT,
