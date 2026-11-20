@@ -172,14 +172,16 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 		}
 	});
 
-	it("opens the app in the iframe on the inner route of a deep link", async () => {
+	it("opens the app in the iframe with the parameters and the inner route of a deep link", async () => {
 		const url = new URL(await browser.getUrl());
-		url.hash = `${IFRAME_INTENT}&/employees`;
+		url.hash = `${IFRAME_INTENT}?greeting=hello&/employees`;
 		await browser.url(url.href);
 		// Only the hash differs from the current page, which the shell would handle in place.
 		await browser.refresh();
 		const frame = $("iframe");
 		await frame.waitForExist();
-		expect(new URL(String(await frame.getProperty("src"))).hash).toBe(`#${IFRAME_INTENT}&/employees`);
+		const src = new URL(String(await frame.getProperty("src")));
+		expect(src.searchParams.get("sap-startup-params")).toBe("greeting=hello");
+		expect(src.hash).toBe(`#${IFRAME_INTENT}&/employees`);
 	});
 });

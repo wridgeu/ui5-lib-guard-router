@@ -5,14 +5,14 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Launchpad with the demo app in an iframe</title>
 		<!--
-			A CDM launchpad for flp-iframe-keep-alive.e2e.ts. Its site (site.json) runs the demo app
+			A CDM launchpad (spaces and pages) for flp-iframe-keep-alive.e2e.ts. Its site (site.json) runs the demo app
 			in an iframe through a URL template. The FLP sandbox of the preview cannot do that: it
 			embeds every app as a component. The CDM bootstrap of sap.ushell brings the local
 			adapters and starts the shell; the meta tag only adds the site.
 		-->
 		<meta
 			name="sap.ushellConfig.site"
-			content='{ "services": { "CommonDataModel": { "adapter": { "config": { "siteDataUrl": "site.json", "ignoreSiteDataPersonalization": true } } } } }'
+			content='{ "ushell": { "spaces": { "enabled": true } }, "services": { "CommonDataModel": { "adapter": { "config": { "siteDataUrl": "site.json", "ignoreSiteDataPersonalization": true } } } } }'
 		/>
 		<script src="../resources/ui5loader.js"></script>
 		<script

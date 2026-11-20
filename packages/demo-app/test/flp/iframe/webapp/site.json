@@ -1,13 +1,12 @@
 {
 	"_version": "3.1.0",
 	"site": {
-		"payload": {
-			"groupsOrder": []
-		}
+		"identification": {
+			"id": "demo.iframe",
+			"title": "Launchpad with the demo app in an iframe"
+		},
+		"payload": {}
 	},
-	"catalogs": {},
-	"groups": {},
-	"visualizations": {},
 	"applications": {
 		"demo.app": {
 			"sap.app": {
@@ -62,18 +61,119 @@
 			}
 		}
 	},
+	"visualizations": {
+		"demo.app": {
+			"vizType": "sap.ushell.StaticAppLauncher",
+			"vizConfig": {
+				"sap.flp": {
+					"target": {
+						"appId": "demo.app",
+						"inboundId": "target"
+					}
+				}
+			}
+		},
+		"demo.peer": {
+			"vizType": "sap.ushell.StaticAppLauncher",
+			"vizConfig": {
+				"sap.flp": {
+					"target": {
+						"appId": "demo.peer",
+						"inboundId": "target"
+					}
+				}
+			}
+		}
+	},
+	"catalogs": {
+		"demo": {
+			"identification": {
+				"id": "demo",
+				"title": "Demo apps"
+			},
+			"payload": {
+				"viz": ["demo.app", "demo.peer"]
+			}
+		}
+	},
+	"pages": {
+		"demo": {
+			"identification": {
+				"id": "demo",
+				"title": "Demo"
+			},
+			"payload": {
+				"layout": {
+					"sectionOrder": ["apps"]
+				},
+				"sections": {
+					"apps": {
+						"id": "apps",
+						"title": "Apps",
+						"layout": {
+							"vizOrder": ["app", "peer"]
+						},
+						"viz": {
+							"app": {
+								"id": "app",
+								"vizId": "demo.app"
+							},
+							"peer": {
+								"id": "peer",
+								"vizId": "demo.peer"
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"menus": {
+		"main": {
+			"identification": {
+				"id": "main"
+			},
+			"payload": {
+				"menuEntries": [
+					{
+						"id": "demo",
+						"title": "Demo",
+						"type": "IBN",
+						"target": {
+							"semanticObject": "Launchpad",
+							"action": "openFLPPage",
+							"parameters": [
+								{
+									"name": "spaceId",
+									"value": "demo"
+								},
+								{
+									"name": "pageId",
+									"value": "demo"
+								}
+							]
+						}
+					}
+				]
+			}
+		}
+	},
 	"urlTemplates": {
 		"demo.ui5appruntime": {
 			"identification": {
 				"id": "demo.ui5appruntime"
 			},
 			"payload": {
-				"urlTemplate": "/iframe/ui5appruntime.html{?appId}#{+semanticObject}-{+action}{+routePrefix}{+innerAppRoute}",
+				"urlTemplate": "/iframe/ui5appruntime.html{?appId,startupParameters}#{+semanticObject}-{+action}{+routePrefix}{+innerAppRoute}",
 				"parameters": {
 					"names": {
 						"appId": {
 							"renameTo": "sap-ui-app-id",
 							"value": "{./sap.app/id}"
+						},
+						"startupParameters": {
+							"renameTo": "sap-startup-params",
+							"value": "{*|join(&,=)}"
 						},
 						"semanticObject": "{./sap.app/crossNavigation/inbounds/target/semanticObject}",
 						"action": "{./sap.app/crossNavigation/inbounds/target/action}",
@@ -87,6 +187,5 @@
 				}
 			}
 		}
-	},
-	"pages": {}
+	}
 }

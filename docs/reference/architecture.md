@@ -1017,9 +1017,11 @@ element with the ID `content`, where the app runtime places the app. The page re
 from a `meta` element named `sap.ushellConfig.ui5appruntime` (`ui5appruntime/config/appIndex/data`),
 which both versions accept. The template builds the URL of the iframe from the app, not from
 literals: `sap-ui-app-id` from `sap.app/id` (through `renameTo`, because a template variable
-cannot contain `-`), the hash from the inbound `target`, and `&/` plus the inner app route of the
-launchpad hash (`{&innerAppRoute:.}`). With a literal hash, a deep link such as
-`#guardiframe-display&/employees` opened the app on its default route.
+cannot contain `-`), `sap-startup-params` from the intent parameters (`{*|join(&,=)}`), the hash
+from the inbound `target`, and `&/` plus the inner app route of the launchpad hash
+(`{&innerAppRoute:.}`). With a literal hash, a deep link such as `#guardiframe-display&/employees`
+opened the app on its default route. The site has the layout of a spaces launchpad: a page with a
+section of tiles, a catalog and a menu entry, without the `groups` of the classic home page.
 
 That setup is in `packages/demo-app/test/flp/iframe/webapp/`: `flp.html` starts the CDM
 bootstrap of `sap.ushell` and adds the site through a `sap.ushellConfig` meta tag, next to
