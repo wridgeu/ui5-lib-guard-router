@@ -34,6 +34,7 @@ ui5-lib-guard-router/
     |-- demo-app/                   demo application
         |-- ui5.yaml                serves lib + app with transpile (OpenUI5)
         |-- ui5-flp.yaml            FLP preview config (SAPUI5, sap.ushell)
+        |-- ui5-test.yaml, ui5-flp-test.yaml  the same without livereload, for the test servers
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"

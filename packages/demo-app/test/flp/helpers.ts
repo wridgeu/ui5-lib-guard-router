@@ -139,6 +139,34 @@ export async function triggerFlpCrossAppNavigation(shellHash = "Shell-home"): Pr
 }
 
 /**
+ * Navigate to another app through the FLP Navigation service and wait until the launchpad has
+ * loaded it (`appLoaded` of the AppLifeCycle service). The URL does not tell: to ask about
+ * unsaved data, the launchpad takes back the target hash that the navigation has written, opens
+ * the confirm dialog and writes the hash again, so the URL shows the target before the dialog.
+ * Does not install a dialog handler; the page script waits through a dialog that a handler answers.
+ */
+export async function navigateCrossAppInFlp(shellHash = "Shell-home"): Promise<void> {
+	await browser.execute(async (target: string) => {
+		const Container: typeof UshellContainer | undefined = sap.ui.require("sap/ushell/Container");
+		if (!Container) {
+			throw new Error("FLP container is not available");
+		}
+		const navigation = await Container.getServiceAsync("Navigation");
+		const appLifeCycle = await Container.getServiceAsync("AppLifeCycle");
+		await new Promise<void>((resolve) => {
+			const listener = {};
+			const onAppLoaded = (): void => {
+				appLifeCycle.detachAppLoaded(onAppLoaded, listener);
+				resolve();
+			};
+			appLifeCycle.attachAppLoaded({}, onAppLoaded, listener);
+			void navigation.navigate({ target: { shellHash: target } });
+		});
+	}, shellHash);
+	expect(await browser.execute(() => window.location.hash)).toContain(shellHash);
+}
+
+/**
  * Trigger cross-app navigation and assert that the FLP dirty-state provider
  * fires a confirm dialog. The dialog is dismissed (user cancels), so the
  * app stays on the current page.

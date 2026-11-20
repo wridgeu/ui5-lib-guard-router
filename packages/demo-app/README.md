@@ -257,8 +257,8 @@ The root component and the nested reporting component each have their own bundle
 ```bash
 npm start         # dev server with livereload, opens http://localhost:8080/index.html
 npm run start:flp # opens http://localhost:8080/test/flp.html#app-preview
-npm run serve     # dev server without opening a browser (used by the E2E tests)
-npm run serve:flp # FLP preview without opening a browser (used by the FLP tests)
+npm run serve     # dev server without opening a browser
+npm run serve:flp # FLP preview without opening a browser
 npm run build
 npm run typecheck
 npm run clean     # remove dist and the .ui5 cache
@@ -274,7 +274,7 @@ npm run test:e2e:flp
 npm run test:e2e:flp:151 # the FLP tests on SAPUI5 1.151.0
 ```
 
-`test:e2e:flp` runs on SAPUI5 1.154.0 from `ui5-flp.yaml`. `test:e2e:flp:151` serves the same file with `--framework-version 1.151.0`, the first version for which the preview starts the new sandbox. Both FLP lanes run every spec file of `test/flp/` with one wdio configuration, `test/wdio-flp.conf.ts`. CI runs both.
+The test servers use `ui5-test.yaml` and `ui5-flp-test.yaml`: `ui5.yaml` and `ui5-flp.yaml` without livereload, whose script in each HTML page would reload the page under test when a source file changes during a run. `test:e2e:flp` runs on SAPUI5 1.154.0 from `ui5-flp-test.yaml`. `test:e2e:flp:151` serves the same file with `--framework-version 1.151.0`, the first version for which the preview starts the new sandbox. Both FLP lanes run every spec file of `test/flp/` with one wdio configuration, `test/wdio-flp.conf.ts`. CI runs both.
 
 Each command starts and stops its own server on its own port.
 

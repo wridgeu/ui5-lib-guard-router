@@ -4,27 +4,22 @@ import { getDirtyState } from "../shared/models";
 import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
+	navigateCrossAppInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
-	triggerFlpCrossAppNavigation,
 	waitForRouterRunningInFlp,
 } from "./helpers";
 
 const PEER_APP_ID = "demo.peer";
 
 /**
- * Navigate to another app through the FLP Navigation service, confirm the unsaved-data prompt
- * if the launchpad shows one, and wait for the URL to show the target. Returns whether the
- * launchpad asked.
+ * Navigate to another app, confirm the unsaved-data prompt if the launchpad shows one, and
+ * wait until the launchpad has loaded the app. Returns whether the launchpad asked.
  */
 async function navigateCrossApp(shellHash: string): Promise<boolean> {
 	const { record, cleanup } = installDialogHandler(true);
 	try {
-		await triggerFlpCrossAppNavigation(shellHash);
-		await browser.waitUntil(async () => (await browser.execute(() => window.location.hash)).includes(shellHash), {
-			timeout: 10000,
-			timeoutMsg: `FLP did not navigate to "${shellHash}"`,
-		});
+		await navigateCrossAppInFlp(shellHash);
 		return record.called;
 	} finally {
 		cleanup();

@@ -1,9 +1,9 @@
 import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
+	navigateCrossAppInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
-	triggerFlpCrossAppNavigation,
 } from "./helpers";
 
 /**
@@ -25,18 +25,7 @@ describe("FLP clean cross-app navigation (isolated session)", () => {
 		const { record, cleanup } = installDialogHandler(true);
 
 		try {
-			await triggerFlpCrossAppNavigation();
-
-			await browser.waitUntil(
-				async () => {
-					const hash = await browser.execute(() => window.location.hash);
-					return hash.includes("Shell-home");
-				},
-				{
-					timeout: 5000,
-					timeoutMsg: "FLP did not complete clean cross-app navigation to Shell-home",
-				},
-			);
+			await navigateCrossAppInFlp();
 
 			expect(record.called).toBe(false);
 		} finally {
