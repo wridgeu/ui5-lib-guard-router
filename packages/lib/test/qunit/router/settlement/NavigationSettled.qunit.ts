@@ -256,9 +256,9 @@ QUnit.test("Unmatched hash settles as 'bypassed' and still fires UI5 bypassed ev
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const bypassedEventPromise = new Promise<string>((resolve) => {
+	const bypassedEventPromise = new Promise<string | undefined>((resolve) => {
 		const onBypassed = (event: Router$BypassedEvent) => {
-			resolve(event.getParameter("hash") as string);
+			resolve(event.getParameter("hash"));
 		};
 		router.attachBypassed(onBypassed);
 	});

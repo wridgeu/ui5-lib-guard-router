@@ -1,6 +1,4 @@
 import type { wdi5Selector } from "wdio-ui5-service";
-import type NavContainer from "sap/m/NavContainer";
-import type Page from "sap/m/Page";
 import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 
 /**
@@ -26,78 +24,89 @@ export type ControlRef = {
 	readonly id: string;
 };
 
-type ViewControls<Ids extends readonly string[]> = { readonly [K in Ids[number]]: ControlRef };
-
-function viewControls<const Ids extends readonly string[]>(
-	viewName: string,
-	viewId: string,
-	ids: Ids,
-	appId = APP_ID,
-): ViewControls<Ids> {
-	return Object.fromEntries(ids.map((id) => [id, { appId, viewName, viewId, id }])) as ViewControls<Ids>;
+/** References to the controls of one view, by control ID. */
+function inView(viewName: string, viewId: string, appId = APP_ID): (id: string) => ControlRef {
+	return (id) => ({ appId, viewName, viewId, id });
 }
 
-const SETTLEMENT_PANEL = [
-	"settlementStatus",
-	"settlementRouteText",
-	"settlementHashText",
-	"settlementHashTechnicalText",
-] as const;
+/** The settlement panel that several views show. */
+function settlementPanel(ref: (id: string) => ControlRef) {
+	return {
+		settlementStatus: ref("settlementStatus"),
+		settlementRouteText: ref("settlementRouteText"),
+		settlementHashText: ref("settlementHashText"),
+		settlementHashTechnicalText: ref("settlementHashTechnicalText"),
+	};
+}
+
+const homeView = inView("demo.app.view.Home", "homeView");
+const protectedView = inView("demo.app.view.Protected", "protectedView");
+const notFoundView = inView("demo.app.view.NotFound", "notFoundView");
+const employeesView = inView("demo.app.view.Employees", "employeesView");
+const employeeView = inView("demo.app.view.Employee", "employeeView");
+const reportsOverviewView = inView("demo.app.reporting.view.Overview", "overviewView", REPORTS_APP_ID);
+const reportsSalesView = inView("demo.app.reporting.view.Sales", "salesView", REPORTS_APP_ID);
+const reportsNotFoundView = inView("demo.app.reporting.view.NotFound", "notFoundView", REPORTS_APP_ID);
+const reportsConfidentialView = inView("demo.app.reporting.view.Confidential", "confidentialView", REPORTS_APP_ID);
 
 export const CONTROLS = {
-	home: viewControls("demo.app.view.Home", "homeView", [
-		"homePage",
-		"authStatus",
-		"toggleLoginBtn",
-		"launchModeText",
-		"ushellStatus",
-		"flpDirtyProviderStatus",
-		"navProtectedBtn",
-		"navBlockedBtn",
-		"navForbiddenBtn",
-		"navAdminBtn",
-		"navToEmployees",
-		"navTeamBtn",
-		"navReportsBtn",
-		...SETTLEMENT_PANEL,
-	]),
-	protected: viewControls("demo.app.view.Protected", "protectedView", [
-		"protectedPage",
-		"dirtyCheckbox",
-		"dirtyStatus",
-		"clearDirtyAndGoHomeBtn",
-		"protectedFlpDirtyProviderStatus",
-		"protectedCurrentHashText",
-		...SETTLEMENT_PANEL,
-	]),
-	notFound: viewControls("demo.app.view.NotFound", "notFoundView", ["notFoundPage", ...SETTLEMENT_PANEL]),
-	employees: viewControls("demo.app.view.Employees", "employeesView", [
-		"employeesPage",
-		"employeesMeta",
-		"navToEmployee",
-		"updateMeta",
-		...SETTLEMENT_PANEL,
-	]),
-	employee: viewControls("demo.app.view.Employee", "employeeView", ["employeePage", "employeeMeta"]),
-	reportsOverview: viewControls(
-		"demo.app.reporting.view.Overview",
-		"overviewView",
-		["overviewPage", "unlockCheckbox", "accessStatus", "navSalesBtn", "navConfidentialBtn"],
-		REPORTS_APP_ID,
-	),
-	reportsSales: viewControls(
-		"demo.app.reporting.view.Sales",
-		"salesView",
-		["salesPage", "salesList"],
-		REPORTS_APP_ID,
-	),
-	reportsNotFound: viewControls("demo.app.reporting.view.NotFound", "notFoundView", ["notFoundPage"], REPORTS_APP_ID),
-	reportsConfidential: viewControls(
-		"demo.app.reporting.view.Confidential",
-		"confidentialView",
-		["confidentialPage"],
-		REPORTS_APP_ID,
-	),
+	home: {
+		homePage: homeView("homePage"),
+		authStatus: homeView("authStatus"),
+		toggleLoginBtn: homeView("toggleLoginBtn"),
+		launchModeText: homeView("launchModeText"),
+		ushellStatus: homeView("ushellStatus"),
+		flpDirtyProviderStatus: homeView("flpDirtyProviderStatus"),
+		navProtectedBtn: homeView("navProtectedBtn"),
+		navBlockedBtn: homeView("navBlockedBtn"),
+		navForbiddenBtn: homeView("navForbiddenBtn"),
+		navAdminBtn: homeView("navAdminBtn"),
+		navToEmployees: homeView("navToEmployees"),
+		navTeamBtn: homeView("navTeamBtn"),
+		navReportsBtn: homeView("navReportsBtn"),
+		...settlementPanel(homeView),
+	},
+	protected: {
+		protectedPage: protectedView("protectedPage"),
+		dirtyCheckbox: protectedView("dirtyCheckbox"),
+		dirtyStatus: protectedView("dirtyStatus"),
+		clearDirtyAndGoHomeBtn: protectedView("clearDirtyAndGoHomeBtn"),
+		protectedFlpDirtyProviderStatus: protectedView("protectedFlpDirtyProviderStatus"),
+		protectedCurrentHashText: protectedView("protectedCurrentHashText"),
+		...settlementPanel(protectedView),
+	},
+	notFound: {
+		notFoundPage: notFoundView("notFoundPage"),
+		...settlementPanel(notFoundView),
+	},
+	employees: {
+		employeesPage: employeesView("employeesPage"),
+		employeesMeta: employeesView("employeesMeta"),
+		navToEmployee: employeesView("navToEmployee"),
+		updateMeta: employeesView("updateMeta"),
+		...settlementPanel(employeesView),
+	},
+	employee: {
+		employeePage: employeeView("employeePage"),
+		employeeMeta: employeeView("employeeMeta"),
+	},
+	reportsOverview: {
+		overviewPage: reportsOverviewView("overviewPage"),
+		unlockCheckbox: reportsOverviewView("unlockCheckbox"),
+		accessStatus: reportsOverviewView("accessStatus"),
+		navSalesBtn: reportsOverviewView("navSalesBtn"),
+		navConfidentialBtn: reportsOverviewView("navConfidentialBtn"),
+	},
+	reportsSales: {
+		salesPage: reportsSalesView("salesPage"),
+		salesList: reportsSalesView("salesList"),
+	},
+	reportsNotFound: {
+		notFoundPage: reportsNotFoundView("notFoundPage"),
+	},
+	reportsConfidential: {
+		confidentialPage: reportsConfidentialView("confidentialPage"),
+	},
 } as const;
 
 /**
@@ -129,8 +138,7 @@ export async function getControl(ref: ControlRef, extra: Partial<wdi5Selector["s
  */
 export async function press(ref: ControlRef): Promise<void> {
 	const control = await getControl(ref);
-	const element = (await control.getWebElement()) as WebdriverIO.Element;
-	await element.click();
+	await $(await control.getWebElement()).click();
 }
 
 /** Wait until a control shows the expected text. Fails with the text (or lookup error) seen last. */
@@ -208,11 +216,13 @@ export async function isPageDisplayed(page: ControlRef, expectedTitle: string): 
 	return browser.execute(
 		(componentId: string, viewId: string, id: string, title: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
+			const Page = sap.ui.require("sap/m/Page");
+			const NavContainer = sap.ui.require("sap/m/NavContainer");
 			const view = Component.getComponentById(componentId).byId(viewId);
-			const control = view?.byId(id) as Page | undefined;
-			const container = view?.getParent() as NavContainer | null | undefined;
-			if (container && container.getCurrentPage() !== view) return false;
-			const domRef = control?.getTitle() === title ? control.getDomRef() : null;
+			const control = view?.byId(id);
+			const container = view?.getParent();
+			if (container instanceof NavContainer && container.getCurrentPage() !== view) return false;
+			const domRef = control instanceof Page && control.getTitle() === title ? control.getDomRef() : null;
 			return domRef ? domRef.checkVisibility({ visibilityProperty: true }) : false;
 		},
 		await getAppComponentId(page.appId),

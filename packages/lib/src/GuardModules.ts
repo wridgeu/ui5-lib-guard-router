@@ -224,7 +224,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 	const moduleName = moduleNameOf(modulePath);
 
 	if (exportKey === undefined) {
-		const cached = sap.ui.require(modulePath) as unknown;
+		const cached: unknown = sap.ui.require(modulePath);
 		if (cached !== undefined) return resolveNamedGuards(cached, modulePath);
 	}
 
@@ -238,7 +238,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 		return runGuardsInOrder(guards, context);
 	};
 	const wrapper = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
-		const mod = sap.ui.require(modulePath) as unknown;
+		const mod: unknown = sap.ui.require(modulePath);
 		if (mod !== undefined) return run(mod, context);
 		return loadGuardModule(modulePath, `lazy load of "${modulePath}" failed`).then((loadedModule) =>
 			context.signal.aborted ? false : run(loadedModule, context),

@@ -1,4 +1,4 @@
-import type JSONModel from "sap/ui/model/json/JSONModel";
+import JSONModel from "sap/ui/model/json/JSONModel";
 import BaseController from "./BaseController";
 
 /**
@@ -18,7 +18,7 @@ import BaseController from "./BaseController";
  */
 export default class ProtectedController extends BaseController {
 	onClearDirtyAndNavHome(): void {
-		(this.getModel("form") as JSONModel).setProperty("/isDirty", false);
+		this.getModel("form", JSONModel).setProperty("/isDirty", false);
 		this.createScenarioRunner().recordAction("actionClearedDirty");
 		this.getRouter().navTo("home");
 	}

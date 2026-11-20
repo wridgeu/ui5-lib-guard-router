@@ -40,7 +40,6 @@
 		"typescript/no-unsafe-call": "error",
 		"typescript/no-unsafe-member-access": "error",
 		"typescript/no-unsafe-return": "error",
-		"typescript/no-unsafe-type-assertion": "error",
 		"typescript/no-unnecessary-type-assertion": "warn",
 		"typescript/no-misused-promises": "error",
 		"typescript/switch-exhaustiveness-check": "error",
@@ -56,13 +55,13 @@
 		"comment-quality/no-section-divider": "warn",
 		"comment-quality/no-placeholder-comment": "warn",
 		"comment-quality/no-hedging-comment": "warn",
-		"typescript/no-unsafe-function-type": "error"
+		"typescript/no-unsafe-function-type": "error",
+		"typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }]
 	},
 	"overrides": [
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
-				"typescript/no-unsafe-type-assertion": "off",
 				"comment-quality/no-section-divider": "off",
 				"test-guardrails/no-browser-pause": "error"
 			}
@@ -75,12 +74,6 @@
 				"typescript/no-unsafe-call": "off",
 				"typescript/no-unsafe-member-access": "off",
 				"typescript/no-unsafe-return": "off"
-			}
-		},
-		{
-			"files": ["packages/demo-app/webapp/**/*.ts"],
-			"rules": {
-				"typescript/no-unsafe-type-assertion": "off"
 			}
 		},
 		{

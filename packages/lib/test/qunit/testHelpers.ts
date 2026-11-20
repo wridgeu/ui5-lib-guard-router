@@ -103,7 +103,9 @@ export function createdRouterHooks(current: () => GuardRouter): { beforeEach: ()
 
 /** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
 export function createRouterUnsafe(routes: object[], config: unknown, ...rest: unknown[]): GuardRouter {
-	return Reflect.construct(GuardRouterClass, [routes, config, ...rest]) as GuardRouter;
+	const router: unknown = Reflect.construct(GuardRouterClass, [routes, config, ...rest]);
+	if (!(router instanceof GuardRouterClass)) throw new TypeError("Reflect.construct did not return a router");
+	return router;
 }
 
 /** {@link createRouterWithOptions} for invalid `guardRouter` values. */
@@ -332,8 +334,11 @@ function toLogEntry(message: string, details: string | Error | undefined): Captu
 /** Messages a stubbed `Log` method received; a message logged under another component says so. */
 export function logMessages(stub: sinon.SinonStub): string[] {
 	return stub.getCalls().map((call) => {
-		const [message, , component] = call.args as [string, unknown, string];
-		return component === "ui5.guard.router.Router" ? message : `${message} (component: ${component})`;
+		const args: unknown[] = call.args;
+		const [message, , component] = args;
+		return component === "ui5.guard.router.Router"
+			? String(message)
+			: `${String(message)} (component: ${String(component)})`;
 	});
 }
 

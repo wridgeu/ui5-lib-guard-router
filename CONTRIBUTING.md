@@ -80,7 +80,7 @@ Rules that keep the layout working:
 
 ```bash
 npm run typecheck    # tsc, strict: lib and demo tsconfigs, and tsconfig.node.json (scripts/, tools/ with checkJs, wdio configs)
-npm run lint         # oxlint, type-aware through oxlint-tsgolint; the no-unsafe-* rules apply everywhere except the vendored ports and the FLP JS fixtures; the tests and the demo webapp may cast (no-unsafe-type-assertion)
+npm run lint         # oxlint, type-aware through oxlint-tsgolint; the no-unsafe-* rules apply everywhere except the vendored ports and the FLP JS fixtures; no file may use a type assertion (`consistent-type-assertions` with `assertionStyle: never`; `as const` is allowed)
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
 npm run check:diagrams # every Mermaid block in the docs parses and has no backtick (GitHub prints it); a call name() or a private _name in a label exists in the code of packages/lib/src, comments aside, or is listed as external in the script; the two route maps of the demo README show every route, pattern and manifest guard of the demo manifests; mermaid is pinned to 12.3.0, the version GitHub renders with

@@ -7,6 +7,6 @@ export function normalizeNavContainerToArgs(args: unknown[], targetPageId: strin
 	});
 }
 
-export function cloneJson<T>(value: T): T {
-	return JSON.parse(JSON.stringify(value)) as T;
+export function cloneJson(value: unknown): unknown {
+	return JSON.parse(JSON.stringify(value));
 }

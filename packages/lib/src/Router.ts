@@ -38,7 +38,7 @@ type Direction = ReturnType<History["getDirection"]>;
 function withoutGuardRouter(config: object): object {
 	const hidden = (key: PropertyKey): boolean => key === "guardRouter";
 	return new Proxy(config, {
-		get: (target, key, receiver) => (hidden(key) ? undefined : (Reflect.get(target, key, receiver) as unknown)),
+		get: (target, key, receiver): unknown => (hidden(key) ? undefined : Reflect.get(target, key, receiver)),
 		has: (target, key) => !hidden(key) && Reflect.has(target, key),
 		ownKeys: (target) => Reflect.ownKeys(target).filter((key) => !hidden(key)),
 		getOwnPropertyDescriptor: (target, key) =>
@@ -94,7 +94,9 @@ interface HashChangeUndo {
 }
 
 /** A manifest guard entry of a route, with the declared entry it stems from: itself, or the entry of an ancestor route. */
-type ManifestGuardDescriptor = GuardDescriptor & { readonly source: GuardDescriptor };
+interface ManifestGuardDescriptor extends GuardDescriptor {
+	readonly source: GuardDescriptor;
+}
 
 /** Snapshot of an in-flight navigation being evaluated by the guard pipeline. */
 interface NavigationAttempt {
@@ -271,7 +273,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		this._greedyRouteNames ??= [];
 		this._mirrorMatchingProcess();
 		let componentNamespace = "";
-		const appConfig = owner?.getManifestEntry("sap.app") as unknown;
+		const appConfig: unknown = owner?.getManifestEntry("sap.app");
 		if (isRecord(appConfig) && typeof appConfig.id === "string") {
 			componentNamespace = appConfig.id;
 		}

@@ -7,6 +7,11 @@ const PATH = "app/guards/auth";
 const a: GuardFn = () => true;
 const b: GuardFn = () => true;
 
+/** A transpiled module whose default export is a guard and that has a named export beside it. */
+interface DefaultWithNamedExport extends GuardFn {
+	named: GuardFn;
+}
+
 function warned(detail: string): string[] {
 	return [`guardRouter.guards: "${PATH}" ${detail}`];
 }
@@ -26,7 +31,7 @@ QUnit.test(
 	async function (this: SinonTestContext, assert) {
 		const debug = this.stub(Log, "debug");
 		const path = "ui5/guard/router/qunit/fixtures/guards/defaultWithNamedExportGuard";
-		const mod = await loadModule<GuardFn & { named: GuardFn }>(path);
+		const mod = await loadModule<DefaultWithNamedExport>(path);
 
 		assert.deepEqual(resolveModuleExports(mod, path), [{ name: "defaultWithNamedExportGuard", fn: mod }]);
 		assert.deepEqual(resolveModuleExports(mod, path, "named"), [{ name: "named", fn: mod.named }]);

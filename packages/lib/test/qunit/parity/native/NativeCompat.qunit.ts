@@ -162,17 +162,17 @@ QUnit.test("bypassed event fires identically for unknown routes", async function
 	const done = assert.async();
 	let extFired = false;
 	let nativeFired = false;
-	let extHash = "";
-	let nativeHash = "";
+	let extHash: string | undefined;
+	let nativeHash: string | undefined;
 
 	extRouter.attachBypassed((event) => {
-		extHash = event.getParameter("hash") as string;
+		extHash = event.getParameter("hash");
 		extFired = true;
 		checkDone();
 	});
 
 	nativeRouter.attachBypassed((event) => {
-		nativeHash = event.getParameter("hash") as string;
+		nativeHash = event.getParameter("hash");
 		nativeFired = true;
 		checkDone();
 	});

@@ -92,14 +92,14 @@ QUnit.test("navTo navigates to named route", async function (assert: Assert) {
 });
 
 QUnit.test("navTo with parameters", async function (assert: Assert) {
-	let matchedArgs: Record<string, string> = {};
+	let matchedArgs: object | undefined;
 	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+		matchedArgs = event.getParameter("arguments");
 	});
 	router.navTo("detail", { id: "42" });
 	await waitForRoute(router, "detail");
 	assert.strictEqual(getHash(), "detail/42", "Hash contains route parameter");
-	assert.strictEqual(matchedArgs.id, "42", "Route argument propagated to matched event");
+	assert.deepEqual(matchedArgs, { id: "42" }, "Route argument propagated to matched event");
 });
 
 QUnit.test("routeMatched event fires", async function (assert: Assert) {

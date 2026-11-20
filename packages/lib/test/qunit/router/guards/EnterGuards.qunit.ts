@@ -318,9 +318,9 @@ QUnit.test("Guard returning GuardRedirect object redirects to route", async func
 });
 
 QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", async function (assert: Assert) {
-	let matchedArgs: Record<string, string> = {};
+	let matchedArgs: object | undefined;
 	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+		matchedArgs = event.getParameter("arguments");
 	});
 	router.addRouteGuard("forbidden", (): GuardRedirect => ({
 		route: "detail",
@@ -330,7 +330,7 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
 	assert.strictEqual(getHash(), "detail/error-403", "Redirect landed with correct params");
-	assert.strictEqual(matchedArgs.id, "error-403", "Redirect parameters propagated to matched event");
+	assert.deepEqual(matchedArgs, { id: "error-403" }, "Redirect parameters propagated to matched event");
 });
 
 QUnit.test("Async guard returning GuardRedirect works", async function (assert: Assert) {

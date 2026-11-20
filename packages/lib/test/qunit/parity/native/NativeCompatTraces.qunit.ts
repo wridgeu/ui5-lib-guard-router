@@ -8,6 +8,7 @@ import type { GuardRouter } from "ui5/guard/router/types";
 import { firstDifference, recordHashes, recordLogs, recordRouter, settle } from "../parityRecorder";
 import { flushPromises, getComponentRouter, getHash, GuardRouterClass, initHashChanger } from "../../testHelpers";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+import { isRecord } from "ui5/guard/router/GuardConfig";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
 
@@ -471,8 +472,10 @@ async function withSharedHashChanger<T extends MobileRouter>(
 	act: (routers: SharedRouters<T>) => Promise<void>,
 ): Promise<string[]> {
 	const response = await fetch(sap.ui.require.toUrl("ui5/guard/router/qunit/fixtures/manifest/manifest.json"));
-	const manifest = (await response.json()) as { "sap.ui5": Record<string, unknown> };
-	manifest["sap.ui5"].routing = {
+	const manifest: unknown = await response.json();
+	const ui5 = isRecord(manifest) ? manifest["sap.ui5"] : undefined;
+	if (!isRecord(manifest) || !isRecord(ui5)) throw new TypeError("the fixture manifest has no sap.ui5 section");
+	ui5.routing = {
 		config: { routerClass, async: true },
 		routes: [
 			{ name: "home", pattern: "" },

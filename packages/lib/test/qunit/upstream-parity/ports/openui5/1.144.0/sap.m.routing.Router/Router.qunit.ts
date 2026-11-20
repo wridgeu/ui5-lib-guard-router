@@ -34,19 +34,19 @@ type ForwardNavigationResult = {
 };
 
 // Views#_getView is private in UI5: the upstream test stubs it in the same way.
+declare module "sap/ui/core/routing/Views" {
+	export default interface Views {
+		_getView(options: { viewName?: string; name?: string }): unknown;
+	}
+}
+
 function stubViewsForSinglePage(targetPage: Page) {
-	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
-	return sinon.stub(prototype, "_getView").callsFake(() => targetPage);
+	return sinon.stub(Views.prototype, "_getView").callsFake(() => targetPage);
 }
 
 function stubViewsByName(viewMap: Record<string, Page>) {
-	const prototype = Views.prototype as unknown as {
-		_getView: (options: { viewName?: string; name?: string }) => unknown;
-	};
-
-	return sinon.stub(prototype, "_getView").callsFake((options: unknown) => {
-		const candidateOptions = options as { viewName?: string; name?: string };
-		const candidate = (candidateOptions.viewName ?? candidateOptions.name ?? "").toLowerCase();
+	return sinon.stub(Views.prototype, "_getView").callsFake((options) => {
+		const candidate = (options.viewName ?? options.name ?? "").toLowerCase();
 		for (const [name, page] of Object.entries(viewMap)) {
 			if (candidate.endsWith(name.toLowerCase()) || candidate.includes(`.${name.toLowerCase()}`)) {
 				return page;

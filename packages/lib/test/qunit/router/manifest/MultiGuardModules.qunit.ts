@@ -358,7 +358,7 @@ QUnit.test("lazy mode: a guard that throws on first load fails the navigation", 
 		router.navTo("protected");
 		const result = await router.navigationSettled();
 		assert.strictEqual(result.status, NavigationOutcome.Error, "navigation fails");
-		assert.strictEqual((result.error as Error).message, "guard failed", "with the thrown error");
+		assert.strictEqual(String(result.error), "Error: guard failed", "with the thrown error");
 	});
 	assert.deepEqual(
 		errors.map((entry) => entry.message),

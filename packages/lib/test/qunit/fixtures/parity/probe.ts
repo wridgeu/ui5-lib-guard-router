@@ -5,8 +5,12 @@ import type UIComponent from "sap/ui/core/UIComponent";
  * and before the router is initialized, so a test can record the first events of that router.
  * `guardOwners` are the IDs of the components whose router ran the fixture's allowing guard.
  */
-const probe = {
-	created: undefined as ((component: UIComponent) => void) | undefined,
-	guardOwners: [] as (string | undefined)[],
+interface Probe {
+	created?: (component: UIComponent) => void;
+	guardOwners: (string | undefined)[];
+}
+
+const probe: Probe = {
+	guardOwners: [],
 };
 export default probe;

@@ -1,4 +1,5 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import RouterHashChanger from "sap/ui/core/routing/RouterHashChanger";
 import type { GuardRouter, NavigationResult } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
@@ -18,6 +19,7 @@ import {
 	captureErrorsAsync,
 	recordHashChanges,
 } from "../../testHelpers";
+import { isRecord } from "ui5/guard/router/GuardConfig";
 
 let router: GuardRouter;
 
@@ -147,7 +149,9 @@ QUnit.test("Re-initialize after stop fires routeMatched like native router", asy
 
 QUnit.test("the hash changer UI5 passes to the router of a nested component is used", async function (assert: Assert) {
 	// createSubHashChanger() is protected in UI5: a component target calls it for its component.
-	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child") as object;
+	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child");
+	if (!(subHashChanger instanceof RouterHashChanger))
+		throw new TypeError("createSubHashChanger() returned no RouterHashChanger");
 	router.destroy();
 	try {
 		// UIComponent passes it as fifth argument when the component is loaded as a routing target.
@@ -560,8 +564,11 @@ function replaceHashChanger(): HashChanger {
 	return replacement;
 }
 
-const hashChangedListeners = (hashChanger: HashChanger): number =>
-	(Reflect.get(hashChanger, "mEventRegistry") as { hashChanged?: unknown[] }).hashChanged?.length ?? 0;
+function hashChangedListeners(hashChanger: HashChanger): number {
+	const registry: unknown = Reflect.get(hashChanger, "mEventRegistry");
+	const listeners = isRecord(registry) ? registry.hashChanged : undefined;
+	return Array.isArray(listeners) ? listeners.length : 0;
+}
 
 QUnit.test(
 	"a hash change is blocked and undone after HashChanger.replaceHashChanger() has replaced the hash changer the router started with",

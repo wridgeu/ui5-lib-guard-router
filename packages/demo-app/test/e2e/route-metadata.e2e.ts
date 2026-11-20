@@ -7,9 +7,9 @@ const EMPLOYEES_META = { section: "hr", requiresAuth: true };
 const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
 
 /** The views display `router.getRouteMeta(route)` as JSON. The placeholder text of a view that never displayed it fails the parse. */
-async function readDisplayedMeta(ref: ControlRef): Promise<Record<string, unknown>> {
+async function readDisplayedMeta(ref: ControlRef): Promise<unknown> {
 	const control = await getControl(ref);
-	return JSON.parse((await control.getProperty("text")) as string) as Record<string, unknown>;
+	return JSON.parse(String(await control.getProperty("text")));
 }
 
 async function openEmployees(): Promise<void> {
