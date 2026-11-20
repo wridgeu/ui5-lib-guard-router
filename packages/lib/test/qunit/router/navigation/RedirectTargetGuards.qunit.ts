@@ -259,21 +259,24 @@ QUnit.test("Redirect chain works via parse (browser back/forward)", async functi
 	assert.strictEqual(getHash(), "forbidden", "Parse-path redirect chain resolved");
 });
 
-QUnit.test("Redirect to current hash evaluates guards and commits", async function (assert: Assert) {
-	let homeGuardCalled = false;
-	router.addRouteGuard("protected", () => "home");
-	router.addRouteGuard("home", () => {
-		homeGuardCalled = true;
-		return true;
-	});
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"A redirect to the current hash runs the guards of its target and settles as Redirected",
+	async function (assert: Assert) {
+		let homeGuardCalled = false;
+		router.addRouteGuard("protected", () => "home");
+		router.addRouteGuard("home", () => {
+			homeGuardCalled = true;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
-	assert.ok(homeGuardCalled, "Guard on redirect target (current hash) was evaluated");
-});
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
+		assert.ok(homeGuardCalled, "Guard on redirect target (current hash) was evaluated");
+	},
+);
 
 QUnit.test("A redirect hop that fails after an async guard settles as Error", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
