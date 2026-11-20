@@ -7,7 +7,7 @@
 
 **Goal:** Add a vendored upstream parity test lane that ports selected public OpenUI5 `sap.m.routing.Router` tests into this repository, runs them against both the native router and `ui5.guard.router.Router`, and proves drop-in compatibility whenever no guards are installed.
 
-**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/parity/native/`. A vendored parity lane pins compatibility against upstream framework behavior and makes regressions easier to detect when the library evolves or when the UI5 baseline changes.
+**Why now:** The library already claims drop-in compatibility with `sap.m.routing.Router`, and it already maintains a local differential suite in `packages/lib/test/qunit/parity/native/`. A vendored parity lane pins compatibility against upstream framework behavior and makes regressions easier to detect when the library evolves or when the development UI5 version changes.
 
 **Architecture:** Keep two test layers and two source forms:
 
@@ -39,7 +39,7 @@ This matters for four reasons:
     - Vendored tests create a second, external reference point.
 
 3. **Release discipline**
-    - When the UI5 baseline changes, a pinned upstream parity lane highlights meaningful behavioral deltas.
+    - When the development UI5 version changes, a pinned upstream parity lane highlights meaningful behavioral deltas.
     - This matters more for a router library that claims drop-in compatibility.
 
 4. **Documentation honesty**
@@ -342,7 +342,7 @@ Upstream router tests may evolve in ways that are not worth porting immediately.
 
 ## Resolved Questions
 
-- **Vendored lane runs only on the shipped UI5 baseline.** The compatibility lane (1.120) runs the library's own QUnit suite, not vendored upstream tests.
+- **Vendored lane runs only on the development UI5 version (1.144.0).** The compatibility lane (1.120) runs the library's own QUnit suite, not vendored upstream tests.
 - **Initial import targets `sap.m.routing.Router` only.** `sap.ui.core.routing.Router` is not in scope.
 - **The sync script supports both `--tag` and `--sha`.** `--sha` alone is for ad-hoc fetching; `--write-manifest` requires `--tag`.
 - **Excluded tests are not tracked in the manifest.** The tier taxonomy in this doc and the local README document exclusion rationale instead.

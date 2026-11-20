@@ -16,7 +16,7 @@ ui5-lib-guard-router/
     |-- lib/                        the core library
     |   |-- ui5.yaml                OpenUI5 1.144.0, specVersion 4.0
     |   |-- src/
-    |   |   |-- manifest.json       library manifest (minUI5Version 1.144.0)
+    |   |   |-- manifest.json       library manifest (minUI5Version 1.120.0)
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation

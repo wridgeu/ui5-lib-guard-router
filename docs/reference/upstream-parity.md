@@ -80,7 +80,7 @@ packages/lib/test/qunit/upstream-parity/
 
 Update the vendored lane when one of these happens:
 
-- the shipped UI5 baseline changes
+- the development UI5 version changes
 - a router compatibility regression is found
 - a major router refactor changes inherited routing behavior
 

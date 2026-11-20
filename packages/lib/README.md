@@ -1457,9 +1457,9 @@ Or set the global log level via URL parameter (per-component filtering is only a
 ## Compatibility
 
 > [!IMPORTANT]
-> **Shipped UI5 baseline: 1.144.0**
+> **Supported UI5 versions: 1.120 and later**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that version. CI also runs the library QUnit suite, the parity tests included, against OpenUI5 `1.120.0`, the oldest version that has `DataType.registerEnum` (used for the `NavigationOutcome` enum). How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+> The package declares `minUI5Version: 1.120.0`, the oldest version that has `DataType.registerEnum` (used for the `NavigationOutcome` enum). CI runs the full suite on OpenUI5 1.144.0, the library QUnit suite with the parity tests on OpenUI5 1.120.0, and the launchpad tests on SAPUI5 1.144.0 and 1.149.0. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
 
 The router uses public and protected API of `sap.m.routing.Router`, with four exceptions. Two are for [nested components](#nested-components): it mirrors the UI5-private flag `_bMatchingProcessStarted`, and it recognizes the Promise resolve function by which a component target waits for the nested router's `routeMatched`. The other two keep the title history right after a redirected hash change: the router clears the UI5-private flag `_bLastHashReplaced`, and after a redirected step back it removes an entry from the array that `getTitleHistory()` returns. All four are verified against OpenUI5 1.144.0 and 1.120.0, and tests on both versions fail if a UI5 upgrade changes them. See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on).
 

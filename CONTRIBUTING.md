@@ -145,9 +145,10 @@ Short maintainer conventions:
 - Use `[skip ci]` only for docs-only or issue-only commits that do not affect shipped code, tests, or build/release configuration.
 - Do not use `[skip ci]` for library code, demo app code, tests, tooling, workflow, or release-related changes.
 - Do not bump versions manually in package manifests or release files; release-please is the source of truth for versioning and release commits.
-- If the shipped UI5 baseline changes, update all baseline touchpoints together: `README.md`, `packages/lib/README.md`, `packages/demo-app/README.md`, `packages/lib/src/manifest.json`, `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml` and `packages/demo-app/ui5-flp.yaml`. The UI5 type packages in the root `package.json` only need to be at least the baseline.
+- The minimum UI5 version (1.120.0) is `minUI5Version` in `packages/lib/src/manifest.json`; `packages/lib/ui5.compat-1.120.yaml` tests it. If it changes, update both, the badge and box in `README.md` and the Compatibility box in `packages/lib/README.md`.
+- If the development UI5 version (1.144.0) changes, update `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, the demo manifests, `packages/demo-app/README.md` and the Compatibility box in `packages/lib/README.md`. The UI5 type packages in the root `package.json` only need to be at least that version.
   Also update the vendored parity lane: `npm run vendor:openui5-router-tests -- --tag <new-version> --write-manifest`, then migrate the versioned port directory.
-- For UI5 baseline or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
+- For UI5 version or release-affecting changes, run the full validation matrix from the repo root: `npm run check`, `npm run test:full`, and `npm run pack:check`.
 
 | File                            | Purpose                                                                                                                                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

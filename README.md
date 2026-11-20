@@ -2,7 +2,7 @@
   <a href="https://www.npmjs.com/package/ui5-lib-guard-router"><img src="https://img.shields.io/npm/v/ui5-lib-guard-router.svg" alt="npm"></a>
   <a href="https://npmx.dev/package/ui5-lib-guard-router"><img src="https://img.shields.io/npm/v/ui5-lib-guard-router?label=npmx.dev&color=0a0a0a" alt="npmx"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://openui5.org/"><img src="https://img.shields.io/badge/OpenUI5-1.144.0-green.svg" alt="UI5"></a>
+  <a href="https://openui5.org/"><img src="https://img.shields.io/badge/OpenUI5-1.120%2B-green.svg" alt="UI5"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-blue.svg" alt="TypeScript"></a>
 </p>
 
@@ -23,9 +23,9 @@ UI5's native router has no way to block or redirect navigation before views are 
 > This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
 
 > [!IMPORTANT]
-> **Shipped UI5 baseline: 1.144.0**
+> **Supported UI5 versions: 1.120 and later**
 >
-> The published package declares `minUI5Version: 1.144.0`. The core router is also tested on OpenUI5 `1.120.0`. See [Compatibility](packages/lib/README.md#compatibility).
+> The package declares `minUI5Version: 1.120.0`. CI runs the full suite on 1.144, the library tests on 1.120 and the launchpad tests on SAPUI5 1.144 and 1.149. See [Compatibility](packages/lib/README.md#compatibility).
 
 ## Quick start
 
