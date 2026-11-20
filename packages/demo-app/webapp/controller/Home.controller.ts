@@ -1,4 +1,4 @@
-import JSONModel from "sap/ui/model/json/JSONModel";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
@@ -24,7 +24,7 @@ export default class HomeController extends BaseController {
 	}
 
 	onToggleLogin(): void {
-		const model = this.getModel("auth", JSONModel);
+		const model = this.getModel("auth") as JSONModel;
 		const isLoggedIn: unknown = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
 		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");

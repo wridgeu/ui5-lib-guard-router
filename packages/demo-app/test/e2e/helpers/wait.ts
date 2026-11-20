@@ -119,7 +119,7 @@ async function getRuntimeSettlement(): Promise<RuntimeSettlementSnapshot> {
 			};
 		},
 		await getAppComponentId(),
-	);
+	) as Promise<RuntimeSettlementSnapshot>;
 }
 
 function formatRuntimeSettlementExpectation(expected: RuntimeSettlementExpectation): string {
@@ -137,10 +137,9 @@ export async function waitForRuntimeSettlement(
 	await browser.waitUntil(
 		async () => {
 			const settlement = await getRuntimeSettlement();
-			const matchesExpected =
-				settlement.status === expected.status &&
-				(expected.route === undefined || settlement.route === expected.route) &&
-				(expected.hash === undefined || settlement.hash === expected.hash);
+			const matchesExpected = Object.entries(expected).every(([key, value]) => {
+				return settlement[key as keyof RuntimeSettlementSnapshot] === value;
+			});
 
 			return matchesExpected && (afterRevision === undefined || settlement.revision > afterRevision);
 		},

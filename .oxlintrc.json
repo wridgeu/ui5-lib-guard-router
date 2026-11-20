@@ -77,6 +77,13 @@
 			}
 		},
 		{
+			"files": ["packages/demo-app/**/*.ts"],
+			"rules": {
+				"typescript/consistent-type-assertions": "off",
+				"typescript/no-unsafe-type-assertion": "off"
+			}
+		},
+		{
 			"files": ["packages/lib/test/qunit/**/*.ts"],
 			"rules": {
 				"test-guardrails/no-timers": "error"

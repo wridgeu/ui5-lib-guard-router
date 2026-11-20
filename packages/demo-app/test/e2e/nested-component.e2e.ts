@@ -1,3 +1,5 @@
+import type List from "sap/m/List";
+import type StandardListItem from "sap/m/StandardListItem";
 import {
 	CONTROLS,
 	REPORTS_APP_ID,
@@ -56,16 +58,10 @@ describe("Nested component with its own guard router", () => {
 			browser.execute(
 				(componentId: string, view: string, list: string) => {
 					const Component = sap.ui.require("sap/ui/core/Component");
-					const List = sap.ui.require("sap/m/List");
-					const StandardListItem = sap.ui.require("sap/m/StandardListItem");
-					const control = Component.getComponentById(componentId).byId(view)?.byId(list);
-					if (!(control instanceof List)) throw new TypeError(`${list} is not a sap.m.List`);
-					return control.getItems().map((item) => {
-						if (!(item instanceof StandardListItem))
-							throw new TypeError(`${item.getId()} is not a StandardListItem`);
-						// The number format separates amount and currency with a no-break space.
-						return `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " ");
-					});
+					const control = Component.getComponentById(componentId).byId(view)?.byId(list) as List;
+					const items = control.getItems() as StandardListItem[];
+					// The number format separates amount and currency with a no-break space.
+					return items.map((item) => `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " "));
 				},
 				await getAppComponentId(REPORTS_APP_ID),
 				viewId,

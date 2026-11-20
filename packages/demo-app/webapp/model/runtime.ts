@@ -75,7 +75,7 @@ export function setRuntimeMessage(model: JSONModel, message: string): void {
 }
 
 export function setSettlementResult(model: JSONModel, result: NavigationResult): void {
-	const lastSettlementRevision = Number(model.getProperty("/lastSettlementRevision")) + 1;
+	const lastSettlementRevision = (model.getProperty("/lastSettlementRevision") as number) + 1;
 	model.setProperty("/lastSettlementStatus", result.status);
 	model.setProperty("/lastSettlementState", SETTLEMENT_STATES[result.status]);
 	model.setProperty("/lastSettlementRoute", result.route);
