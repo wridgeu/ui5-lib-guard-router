@@ -331,7 +331,7 @@ The apps under `test/flp/` have the usual layout of a UI5 app: `webapp/` with `m
 - `site.json` is the CDM site.
 - `ui5appruntime.html` starts the UI5 app runtime of `sap.ushell` in the iframe. A `sap.ushellConfig` meta tag names the app.
 
-`ui5-flp.yaml` serves the folder at `/iframe`; its manifest has the type `component`, so the preview adds no tile for it. In the site the demo app has the intent `guardiframe-display` and a URL template that points to `ui5appruntime.html` and fills in the app ID, the intent parameters, the intent and the inner app route, so a deep link reaches the app in the iframe; the home page is a spaces page with a tile for each app; the peer app is embedded. To drive it by hand: `npm run start:flp`, then open `http://localhost:8080/iframe/flp.html?sap-keep-alive=true#guardiframe-display` (the other app is `#peer-display`). See [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
+`ui5-flp.yaml` serves the folder at `/iframe`; its manifest has the type `component`, so the preview adds no tile for it. In the site the demo app has the intent `guardiframe-display` and a URL template that points to `ui5appruntime.html`. The template fills in the app ID, the intent, its parameters and the inner app route, so a deep link reaches the app in the iframe. The peer app is embedded. The home page is a spaces page with a tile for each app. To drive it by hand: `npm run start:flp`, then open `http://localhost:8080/iframe/flp.html?sap-keep-alive=true#guardiframe-display` (the other app is `#peer-display`). See [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
 
 ## Framework
 

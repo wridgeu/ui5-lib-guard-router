@@ -1015,13 +1015,12 @@ own (`CommonDataModel` adapter, `siteDataUrl`), in which the app has
 The template points to a page that starts `sap/ushell/appRuntime/ui5/AppRuntime` and has an
 element with the ID `content`, where the app runtime places the app. The page reads the app
 from a `meta` element named `sap.ushellConfig.ui5appruntime` (`ui5appruntime/config/appIndex/data`),
-which both versions accept. The template builds the URL of the iframe from the app, not from
-literals: `sap-ui-app-id` from `sap.app/id` (through `renameTo`, because a template variable
+which both versions accept. The template builds the URL of the iframe from the app and the
+launchpad hash: `sap-ui-app-id` from `sap.app/id` (through `renameTo`, because a template variable
 cannot contain `-`), `sap-startup-params` from the intent parameters (`{*|join(&,=)}`), the hash
-from the inbound `target`, and `&/` plus the inner app route of the launchpad hash
-(`{&innerAppRoute:.}`). With a literal hash, a deep link such as `#guardiframe-display&/employees`
-opened the app on its default route. The site has the layout of a spaces launchpad: a page with a
-section of tiles, a catalog and a menu entry, without the `groups` of the classic home page.
+from the inbound `target`, and `&/` plus the inner app route (`{&innerAppRoute:.}`). So a deep link
+such as `#guardiframe-display?greeting=hello&/employees` reaches the app with its parameters and
+route. The site is a spaces site: the menu entry opens a page with a tile for each app.
 
 That setup is in `packages/demo-app/test/flp/iframe/webapp/`: `flp.html` starts the CDM
 bootstrap of `sap.ushell` and adds the site through a `sap.ushellConfig` meta tag, next to

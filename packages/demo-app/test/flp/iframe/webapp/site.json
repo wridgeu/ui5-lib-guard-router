@@ -4,8 +4,7 @@
 		"identification": {
 			"id": "demo.iframe",
 			"title": "Launchpad with the demo app in an iframe"
-		},
-		"payload": {}
+		}
 	},
 	"applications": {
 		"demo.app": {

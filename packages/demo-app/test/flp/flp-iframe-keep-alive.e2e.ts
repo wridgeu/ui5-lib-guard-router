@@ -176,7 +176,7 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 		const url = new URL(await browser.getUrl());
 		url.hash = `${IFRAME_INTENT}?greeting=hello&/employees`;
 		await browser.url(url.href);
-		// Only the hash differs from the current page, which the shell would handle in place.
+		// A new hash alone is a navigation inside the running launchpad; reload to start from the link.
 		await browser.refresh();
 		const frame = $("iframe");
 		await frame.waitForExist();
