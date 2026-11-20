@@ -3,15 +3,39 @@
 	"sap.app": {
 		"id": "demo.peer",
 		"type": "application",
-		"title": "Peer App",
+		"i18n": "i18n/i18n.properties",
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
 		"applicationVersion": {
 			"version": "1.0.0"
 		}
 	},
+	"sap.ui": {
+		"technology": "UI5",
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
 	"sap.ui5": {
+		"rootView": {
+			"viewName": "demo.peer.view.App",
+			"type": "XML",
+			"id": "app"
+		},
 		"dependencies": {
+			"minUI5Version": "1.151.0",
 			"libs": {
 				"sap.m": {}
+			}
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": {
+					"bundleName": "demo.peer.i18n.i18n"
+				}
 			}
 		}
 	}

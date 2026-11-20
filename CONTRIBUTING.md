@@ -34,8 +34,8 @@ npm run test:full     # run the full browser matrix (default + compat + FLP on b
 npm run test:qunit    # unit tests only (includes vendored upstream parity)
 npm run test:qunit:compat:120 # core library QUnit suite on OpenUI5 1.120.0
 npm run test:e2e      # integration tests only
-npm run test:e2e:flp  # FLP preview smoke tests (shell + dirty-state integration)
-npm run test:e2e:flp:149 # the same FLP tests on SAPUI5 1.149.0 (`ui5 serve --framework-version`, no second config)
+npm run test:e2e:flp  # FLP sandbox tests on SAPUI5 1.154.0 (shell + dirty-state integration)
+npm run test:e2e:flp:151 # the same FLP tests on SAPUI5 1.151.0 (`ui5 serve --framework-version`, no second config)
 npm run test:mutation # Stryker mutation testing of packages/lib, one file at a time (slow; reports in reports/mutation/<File>.html)
 ```
 
@@ -131,7 +131,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.149, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.151, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 `npm run release:plan` previews the next release with `release-please release-pr --dry-run`. It uses `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` if set, otherwise `gh auth token`.
 
@@ -146,7 +146,7 @@ Maintainer conventions:
 
 | File                            | Purpose                                                                                                                                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, diagram and tooling checks, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.149, Windows smoke) |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, diagram and tooling checks, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.151, Windows smoke) |
 | `.github/workflows/release.yml` | Release-please + npm publish                                                                                                                                                   |
 | `release-please-config.json`    | Package path, extra version files                                                                                                                                              |
 | `.release-please-manifest.json` | Current version tracker                                                                                                                                                        |

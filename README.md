@@ -25,7 +25,7 @@ UI5's router cannot block or redirect a navigation before views render. Guard lo
 > [!IMPORTANT]
 > **Supported UI5 versions: 1.136 and later**
 >
-> The package declares `minUI5Version: 1.136.0`. CI runs the full suite on 1.144 and the launchpad tests on SAPUI5 1.144 and 1.149. The library tests also pass on 1.120, without support for it. See [Compatibility](packages/lib/README.md#compatibility).
+> The package declares `minUI5Version: 1.136.0`. CI runs the full suite on 1.144 and the launchpad tests on SAPUI5 1.151 and 1.154. The library tests also pass on 1.120, without support for it. See [Compatibility](packages/lib/README.md#compatibility).
 
 ## Quick start
 

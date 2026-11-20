@@ -1,4 +1,4 @@
-sap.ui.define(["sap/ui/core/UIComponent", "sap/m/Page"], (UIComponent, Page) => {
+sap.ui.define(["sap/ui/core/UIComponent"], (UIComponent) => {
 	"use strict";
 
 	/**
@@ -23,10 +23,6 @@ sap.ui.define(["sap/ui/core/UIComponent", "sap/m/Page"], (UIComponent, Page) => 
 				});
 			}
 			router.initialize();
-		},
-
-		createContent() {
-			return new Page({ title: "Parity App" });
 		},
 	});
 });

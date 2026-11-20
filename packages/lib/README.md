@@ -941,6 +941,7 @@ Inside SAP Fiori Launchpad (FLP), the shell has its own data loss protection on 
 
 - **`setDirtyFlag(bDirty)`** (since 1.27.0): while `true`, FLP shows a browser `confirm()` dialog on every hash change, in-app ones included, and the leave-page dialog on refresh or close. An in-app `navTo()` that the shell holds back for the dialog settles as `Blocked`; if the user confirms, the shell sets the hash again and the guards run for it.
 - **`registerDirtyStateProvider(fn)`** (since 1.31.0, `deregisterDirtyStateProvider` since 1.67.0): FLP calls the provider on each navigation with a `NavigationContext` (`isCrossAppNavigation`, `innerAppRoute`), so it can tell cross-app from in-app navigation.
+- Since 1.146, `setDirtyFlag` and the provider functions are on `sap/ushell/navigation/DirtyState`, and the `Container` methods are deprecated.
 
 `getDirtyFlag()` is deprecated since UI5 1.120. The APIs and the shell internals are in [FLP Dirty State Research](../../docs/research/flp-dirty-state.md).
 
@@ -974,7 +975,7 @@ Container.registerDirtyStateProvider(dirtyProvider);
 The leave guard needs no `toRoute` check or FLP detection: the shell handles cross-app navigation in production and in the FLP sandbox. In an app the launchpad keeps alive, deregister the provider while the app is hidden ([Keep-alive apps](#keep-alive-apps)).
 
 > [!TIP]
-> To test a dirty-state provider in the FLP preview, set `enhancedHomePage: true` on the `fiori-tools-preview` middleware (UI5 1.123.0 and later). Its CDM-based bootstrap gives `ShellNavigationHashChanger` and `Navigation` service behavior closer to production FLP.
+> To test a dirty-state provider in the FLP preview, set `useNewSandbox: true` on the `fiori-tools-preview` middleware (SAPUI5 1.151 and later; before that, `enhancedHomePage: true` from 1.123.0). Both start a CDM launchpad, whose `ShellNavigationHashChanger` and `Navigation` service behave like a production FLP.
 
 #### Keep-alive apps
 
@@ -1302,7 +1303,7 @@ The URL parameter `?sap-ui-log-level=DEBUG` sets the level for all components.
 > [!IMPORTANT]
 > **Supported UI5 versions: 1.136 and later**
 >
-> The package declares `minUI5Version: 1.136.0`, the version that manifest version 2 (`_version` 2.0.0) requires. CI runs the full suite on OpenUI5 1.144.0 and the launchpad tests on SAPUI5 1.144.0 and 1.149.0. It also runs the library QUnit suite with the parity tests on OpenUI5 1.120.0, the oldest version with `DataType.registerEnum` (used for the `NavigationOutcome` enum); that lane catches regressions on older versions, but 1.120 to 1.135 are not supported. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+> The package declares `minUI5Version: 1.136.0`, the version that manifest version 2 (`_version` 2.0.0) requires. CI runs the full suite on OpenUI5 1.144.0 and the launchpad tests on SAPUI5 1.151.0 and 1.154.0. It also runs the library QUnit suite with the parity tests on OpenUI5 1.120.0, the oldest version with `DataType.registerEnum` (used for the `NavigationOutcome` enum); that lane catches regressions on older versions, but 1.120 to 1.135 are not supported. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
 
 The router uses public and protected API of `sap.m.routing.Router`, with four exceptions: two UI5 internals for [nested components](#nested-components) (`_bMatchingProcessStarted` and the component target's wait for the nested `routeMatched`), and two for the title history after a redirected hash change (`_bLastHashReplaced` and the array of `getTitleHistory()`). Tests on OpenUI5 1.144.0 and 1.120.0 fail if a UI5 upgrade changes them. Details: [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on).
 

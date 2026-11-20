@@ -4,11 +4,11 @@ A component that deregisters its dirty-state provider while the launchpad keeps 
 
 The launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page. The user is then asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden.
 
-The example needs `"keepAlive": { "supported": true }` in the manifest. Without it, UI5 does not call `onDeactivate()` and `onActivate()`, and the provider stays registered.
+The example needs `"keepAlive": { "supported": true }` in the manifest. Without it, UI5 does not call `onDeactivate()` and `onActivate()`, and the provider stays registered. It uses `sap/ushell/navigation/DirtyState` (SAPUI5 1.146 and later); before 1.146 the same two functions are on `sap/ushell/Container`.
 
 ```typescript
 import UIComponent from "sap/ui/core/UIComponent";
-import Container from "sap/ushell/Container";
+import DirtyState from "sap/ushell/navigation/DirtyState";
 import type JSONModel from "sap/ui/model/json/JSONModel";
 
 type DirtyStateProvider = (context?: { isCrossAppNavigation?: boolean }) => boolean;
@@ -30,11 +30,11 @@ export default class Component extends UIComponent {
 
 	// Hidden: the launchpad would still ask the provider when the user navigates between other apps.
 	override onDeactivate(): void {
-		if (this._dirtyProvider) Container.deregisterDirtyStateProvider(this._dirtyProvider);
+		if (this._dirtyProvider) DirtyState.deregisterDirtyStateProvider(this._dirtyProvider);
 	}
 
 	override onActivate(): void {
-		if (this._dirtyProvider) Container.registerDirtyStateProvider(this._dirtyProvider);
+		if (this._dirtyProvider) DirtyState.registerDirtyStateProvider(this._dirtyProvider);
 	}
 
 	override exit(): void {

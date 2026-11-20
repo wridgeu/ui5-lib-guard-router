@@ -237,17 +237,14 @@ The root component and the nested reporting component each have their own bundle
 
 `npm run start:flp` opens a local FLP sandbox at `/test/flp.html#app-preview`. The page is virtual: the `fiori-tools-preview` middleware generates it.
 
-- **CDM mode.** `enhancedHomePage: true` starts the shell through CDM (`container.init('cdm')`) instead of `sandbox.js`. That brings the `ShellNavigationHashChanger`, the `Navigation` service and the dirty-state handling of a production launchpad. It needs UI5 1.123.0 or later.
-- **SAPUI5.** The sandbox needs `sap.ushell`, which OpenUI5 lacks. `ui5-flp.yaml` uses SAPUI5 (with `sap.ushell` and `sap.tnt`), `ui5.yaml` uses OpenUI5, both at 1.144.0. The root view has no `sap.m.Shell`; in the FLP the launchpad provides it.
-- **Typings.** The demo compiles against `@sapui5/types`, so `flp/ContainerAdapter.ts` uses the `sap/ushell/Container` types. It looks the container up at runtime with `sap.ui.require` instead of importing it, because the standalone app has no `sap.ushell`. The library compiles against `@openui5/types`.
-
-> [!NOTE]
-> `Container.registerDirtyStateProvider` is deprecated since UI5 1.146 in favor of `sap/ushell/navigation/DirtyState`. The demo targets 1.144, where `DirtyState` does not exist yet, so it keeps the Container API. Switch to `DirtyState` once the minimum version is 1.146 or later.
+- **New FLP sandbox.** `useNewSandbox: true` starts the sandbox of `sap.ushell` (`sap/ushell/sandbox`), which the preview configures through a generated `fioriSandboxAppConfig.json`: one tile per app. It is a CDM launchpad with the `ShellNavigationHashChanger`, the `Navigation` service and the dirty-state handling of a production launchpad. The preview uses it from SAPUI5 1.151.
+- **SAPUI5.** The sandbox needs `sap.ushell`, which OpenUI5 lacks. `ui5-flp.yaml` uses SAPUI5 1.154.0 (with `sap.ushell` and `sap.tnt`), `ui5.yaml` uses OpenUI5 1.144.0. The root view has no `sap.m.Shell`; in the FLP the launchpad provides it.
+- **Typings.** The demo compiles against `@sapui5/types`, so `flp/ContainerAdapter.ts` uses the `sap/ushell` types. It looks the modules up at runtime with `sap.ui.require` instead of importing them, because the standalone app has no `sap.ushell`. The library compiles against `@openui5/types`.
 
 **In the FLP:**
 
 - The runtime panel shows "FLP Preview" as launch mode and "sap.ushell.Container available".
-- The dirty-state provider is registered with `sap.ushell.Container.registerDirtyStateProvider`.
+- The dirty-state provider is registered with `sap/ushell/navigation/DirtyState` (SAPUI5 1.146 and later), which `sap/ushell/Container` has loaded in the launchpad.
 - A cross-app navigation shows the launchpad's dirty-state popup. The router's leave guard does not run for it, so the user is asked once.
 - `crossNavigation.inbounds` in `manifest.json` defines the tile's semantic object `guarddemo` and action `display`.
 
@@ -274,10 +271,10 @@ From the monorepo root:
 ```bash
 npm run test:e2e
 npm run test:e2e:flp
-npm run test:e2e:flp:149 # the FLP tests on SAPUI5 1.149.0
+npm run test:e2e:flp:151 # the FLP tests on SAPUI5 1.151.0
 ```
 
-`test:e2e:flp:149` serves the same `ui5-flp.yaml` with `--framework-version 1.149.0`. In 1.149 the launchpad keeps its dirty state in `sap/ushell/navigation/DirtyState` (see [flp-dirty-state.md](../../docs/research/flp-dirty-state.md)), so this lane tests the shell integration against the newer code. Both FLP lanes run every spec file of `test/flp/` with one wdio configuration, `test/wdio-flp.conf.ts`. CI runs both.
+`test:e2e:flp` runs on SAPUI5 1.154.0 from `ui5-flp.yaml`. `test:e2e:flp:151` serves the same file with `--framework-version 1.151.0`, the first version for which the preview starts the new sandbox. Both FLP lanes run every spec file of `test/flp/` with one wdio configuration, `test/wdio-flp.conf.ts`. CI runs both.
 
 Each command starts and stops its own server on its own port.
 
@@ -322,15 +319,23 @@ FLP tests are in `test/flp/`:
 
 The cross-app, clean cross-app and keep-alive specs end on Shell-home, from which the sandbox does not recover, so each is a spec file of its own. The native-parity and iframe specs are isolated for the reasons below. wdio starts a browser session per spec file, so the order does not matter.
 
-`flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds a minimal component (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
+The apps under `test/flp/` have the usual layout of a UI5 app: `webapp/` with `manifest.json`, `Component.js`, `view/App.view.xml` and `i18n/`.
+
+`flp-keep-alive.e2e.ts` needs a second app to navigate to: `test/flp/peer/` holds an app with one page (`demo.peer`), which `ui5-flp.yaml` serves under the intent `peer-display`. Unlike the launchpad home, navigating to it keeps the demo app alive.
 
 `flp-native-parity.e2e.ts` compares the guard router with the native one in the launchpad: `test/flp/parity/native/` and `test/flp/parity/guard/` hold the same component with routing, once with `sap.m.routing.Router` and once with `ui5.guard.router.Router` (intents `paritynative-display` and `parityguard-display`). The spec is isolated as well: each run loads the launchpad with `sap-keep-alive=true`.
 
-`flp-iframe-keep-alive.e2e.ts` needs a launchpad that runs the demo app in an iframe, which the preview cannot declare: it writes every app of its site as a component embedded in the launchpad page. `test/flp/iframe/webapp/` holds a launchpad page with a site of its own (`flp.html`, `config.js`, `init.js`, `site.json`) and the page of the iframe (`ui5appruntime.html`), which starts the UI5 app runtime of `sap.ushell`. `ui5-flp.yaml` serves the folder at `/iframe`; its manifest has the type `component`, so the preview adds no app for it. In the site the demo app has the intent `guardiframe-display` and a URL template that points to `ui5appruntime.html`; the peer app is embedded. To drive it by hand: `npm run start:flp`, then open `http://localhost:8080/iframe/flp.html?sap-keep-alive=true#guardiframe-display` (the other app is `#peer-display`). See [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
+`flp-iframe-keep-alive.e2e.ts` needs a launchpad that runs the demo app in an iframe, which the sandbox cannot declare: it embeds every tile as a component in the launchpad page. `test/flp/iframe/webapp/` holds a CDM launchpad with a site of its own and the page of the iframe:
+
+- `flp.html` starts the CDM bootstrap of `sap.ushell` (`sap/ushell/bootstrap/cdm/cdm-def-loader.js` after the UI5 loader). The bootstrap brings the local adapters and starts the shell. A `sap.ushellConfig` meta tag adds the site.
+- `site.json` is the CDM site.
+- `ui5appruntime.html` starts the UI5 app runtime of `sap.ushell` in the iframe. A `sap.ushellConfig` meta tag names the app.
+
+`ui5-flp.yaml` serves the folder at `/iframe`; its manifest has the type `component`, so the preview adds no tile for it. In the site the demo app has the intent `guardiframe-display` and a URL template that points to `ui5appruntime.html`; the peer app is embedded. To drive it by hand: `npm run start:flp`, then open `http://localhost:8080/iframe/flp.html?sap-keep-alive=true#guardiframe-display` (the other app is `#peer-display`). See [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
 
 ## Framework
 
-- OpenUI5 1.144.0 (standalone) / SAPUI5 1.144.0 (FLP preview)
+- OpenUI5 1.144.0 (standalone) / SAPUI5 1.154.0 (FLP preview, CI also 1.151.0)
 - TypeScript via `ui5-tooling-transpile`
 - `ui5-middleware-livereload` for dev server
 - `fiori-tools-preview` for local FLP sandbox (`@sap/ux-ui5-tooling`)

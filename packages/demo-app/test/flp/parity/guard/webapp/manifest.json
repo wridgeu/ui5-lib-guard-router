@@ -3,16 +3,40 @@
 	"sap.app": {
 		"id": "demo.parity.guard",
 		"type": "application",
-		"title": "Parity App",
+		"i18n": "i18n/i18n.properties",
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
 		"applicationVersion": {
 			"version": "1.0.0"
 		}
 	},
+	"sap.ui": {
+		"technology": "UI5",
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
 	"sap.ui5": {
+		"rootView": {
+			"viewName": "demo.parity.guard.view.App",
+			"type": "XML",
+			"id": "app"
+		},
 		"dependencies": {
+			"minUI5Version": "1.151.0",
 			"libs": {
 				"sap.m": {},
 				"ui5.guard.router": {}
+			}
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": {
+					"bundleName": "demo.parity.guard.i18n.i18n"
+				}
 			}
 		},
 		"routing": {
@@ -20,10 +44,22 @@
 				"routerClass": "ui5.guard.router.Router"
 			},
 			"routes": [
-				{ "name": "home", "pattern": "" },
-				{ "name": "page1", "pattern": "page1" },
-				{ "name": "detail", "pattern": "detail/{id}" },
-				{ "name": "blocked", "pattern": "blocked" }
+				{
+					"name": "home",
+					"pattern": ""
+				},
+				{
+					"name": "page1",
+					"pattern": "page1"
+				},
+				{
+					"name": "detail",
+					"pattern": "detail/{id}"
+				},
+				{
+					"name": "blocked",
+					"pattern": "blocked"
+				}
 			]
 		}
 	}

@@ -5,23 +5,25 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Launchpad with the demo app in an iframe</title>
 		<!--
-			A launchpad whose site (site.json) runs the demo app in an iframe, for
-			flp-iframe-keep-alive.e2e.ts. The preview middleware of the demo (fiori-tools-preview)
-			writes every app of its own site as a component embedded in the launchpad page.
+			A CDM launchpad for flp-iframe-keep-alive.e2e.ts. Its site (site.json) runs the demo app
+			in an iframe through a URL template. The FLP sandbox of the preview cannot do that: it
+			embeds every app as a component. The CDM bootstrap of sap.ushell brings the local
+			adapters and starts the shell; the meta tag only adds the site.
 		-->
-		<script src="config.js"></script>
+		<meta
+			name="sap.ushellConfig.site"
+			content='{ "services": { "CommonDataModel": { "adapter": { "config": { "siteDataUrl": "site.json", "ignoreSiteDataPersonalization": true } } } } }'
+		/>
+		<script src="../resources/ui5loader.js"></script>
 		<script
 			id="sap-ui-bootstrap"
-			src="../resources/sap-ui-core.js"
-			data-sap-ui-libs="sap.m,sap.ushell"
+			src="../resources/ui5loader-autoconfig.js"
 			data-sap-ui-async="true"
-			data-sap-ui-theme="sap_horizon"
-			data-sap-ui-compatVersion="edge"
-			data-sap-ui-language="en"
-			data-sap-ui-frameOptions="allow"
-			data-sap-ui-resourceroots='{ "demo.iframe": "./" }'
-			data-sap-ui-oninit="module:demo/iframe/init"
+			data-sap-ui-compat-version="edge"
 		></script>
+		<script src="../resources/sap/ushell/bootstrap/cdm/cdm-def-loader.js"></script>
 	</head>
-	<body class="sapUiBody" id="content"></body>
+	<body class="sapUiBody">
+		<div id="canvas"></div>
+	</body>
 </html>

@@ -996,7 +996,7 @@ point.
       in-app `navTo()` after an app with unsaved data is shown again, and the user is asked.
       After the first hash change in the app the context is in-app, also for a cross-app
       navigation that the app starts: such a provider answers `false`, and the app is hidden
-      with its unsaved data without a question. The app runtime of 1.144.0 and 1.149.0 reads the
+      with its unsaved data without a question. The app runtime of 1.144.0 to 1.154.0 reads the
       context from its own `ShellNavigationInternal`, not from the target.
 - 1.144.0 only: on `store` the app runtime saves the list of providers and empties it, before it
   calls `deactivate()`; on `restore` it puts the list back, before it calls `activate()`. An app
@@ -1005,9 +1005,10 @@ point.
   the same function, so the answers do not change. 1.149.0 no longer touches the providers on
   `store` and `restore` (read from the source).
 
-The demo's preview middleware (`fiori-tools-preview`) cannot declare an app in an iframe: its
-site generator writes every app as a component embedded in the launchpad page
-(`"sap.ui": { "technology": "UI5" }`). The runs above used a launchpad page with a site of its
+The FLP sandbox of `sap.ushell`, which the demo's preview middleware (`fiori-tools-preview`)
+starts, cannot declare an app in an iframe: it writes every tile as a component embedded in the
+launchpad page (`"sap.ui": { "technology": "UI5" }` in `sap/ushell/sandbox/ConfigurationProvider.js`
+up to 1.154.0). The runs above used a launchpad page with a site of its
 own (`CommonDataModel` adapter, `siteDataUrl`), in which the app has
 `"sap.ui": { "technology": "URL" }` and a URL template (`sap.integration/urlTemplateId`, and
 `urlTemplates` with the capabilities `navigationMode: "embedded"` and `appFrameworkId: "UI5"`).
@@ -1016,9 +1017,10 @@ element with the ID `content`, where the app runtime places the app. The page re
 from a `meta` element named `sap.ushellConfig.ui5appruntime` (`ui5appruntime/config/appIndex/data`),
 which both versions accept.
 
-That setup is in `packages/demo-app/test/flp/iframe/webapp/` (`flp.html`, `config.js`,
-`init.js`, `site.json`, `ui5appruntime.html`); the preview middleware serves the folder at
-`/iframe`. `flp-iframe-keep-alive.e2e.ts` runs the demo app in it on both versions and pins the
+That setup is in `packages/demo-app/test/flp/iframe/webapp/`: `flp.html` starts the CDM
+bootstrap of `sap.ushell` and adds the site through a `sap.ushellConfig` meta tag, next to
+`site.json` and `ui5appruntime.html`. The preview middleware serves the folder at `/iframe`.
+`flp-iframe-keep-alive.e2e.ts` runs the demo app in it on SAPUI5 1.151.0 and 1.154.0 and pins the
 first point: the router is stopped while the app is hidden, the kept component settles
 `Committed` on its default route when it is shown again, with its unsaved data, and its guards
 run once for a navigation after that. A cross-app navigation that starts in the shell hides the
@@ -1357,13 +1359,13 @@ Blue is the library, grey is native UI5 or no action, and light blue is a decisi
   test:e2e:flp                    test:qunit:compat:120
        |                               |
   packages/demo-app/test/flp/    packages/lib/test/qunit/
-  (demo app in the FLP preview,  (same suite, OpenUI5 1.120.0)
-   SAPUI5 with sap.ushell)
+  (demo app in the FLP sandbox,  (same suite, OpenUI5 1.120.0)
+   SAPUI5 1.154.0)
 
-  test:e2e:flp:149
+  test:e2e:flp:151
        |
   packages/demo-app/test/flp/
-  (same specs, SAPUI5 1.149.0 through `ui5 serve --framework-version`)
+  (same specs, SAPUI5 1.151.0 through `ui5 serve --framework-version`)
 
   CI also runs:
   - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)

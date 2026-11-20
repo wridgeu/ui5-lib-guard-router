@@ -139,7 +139,7 @@ jobs:
             - name: Run OpenUI5 1.120 compatibility QUnit suite
               run: npm run test:qunit:compat:120
 
-    flp-sapui5-149:
+    flp-sapui5-151:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -155,13 +155,13 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.ui5
-                  key: ui5-flp-149-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
-                  restore-keys: ui5-flp-149-
+                  key: ui5-flp-151-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
+                  restore-keys: ui5-flp-151-
 
             - run: npm ci
 
-            - name: Run FLP preview tests on SAPUI5 1.149
-              run: npm run test:e2e:flp:149
+            - name: Run FLP preview tests on SAPUI5 1.151
+              run: npm run test:e2e:flp:151
 
     windows-smoke:
         needs: validate
