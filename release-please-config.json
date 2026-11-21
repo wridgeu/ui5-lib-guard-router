@@ -11,6 +11,7 @@
 		{ "type": "ci", "section": "CI", "hidden": true },
 		{ "type": "style", "section": "Style", "hidden": true }
 	],
+	"plugins": ["node-workspace"],
 	"packages": {
 		"packages/lib": {
 			"release-type": "node",
@@ -21,11 +22,6 @@
 					"type": "json",
 					"path": "src/manifest.json",
 					"jsonpath": "$['sap.app'].applicationVersion.version"
-				},
-				{
-					"type": "json",
-					"path": "/package-lock.json",
-					"jsonpath": "$.packages['packages/lib'].version"
 				}
 			]
 		}
