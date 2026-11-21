@@ -7,6 +7,7 @@ import {
 	expectInAppNavigationBlocked,
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
+	navigateCrossAppInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	triggerFlpCrossAppNavigation,
@@ -83,7 +84,7 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 		// The shell hides the app behind another one and does not ask about the unsaved data (the
 		// app runtime does not report the provider of the app to the shell). The app runtime
 		// stops the router.
-		await triggerFlpCrossAppNavigation("peer-display");
+		await navigateCrossAppInFlp("peer-display");
 		await waitForComponent(PEER_APP_ID);
 		await inDemoApp(async () => {
 			await browser.waitUntil(isRouterStopped, { timeoutMsg: "The router of the hidden app was not stopped" });
@@ -92,7 +93,7 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 
 		// Shown again, the kept component starts on its default route: one navigation, and the
 		// leave guard of the route that was displayed does not run for it.
-		await triggerFlpCrossAppNavigation(IFRAME_INTENT);
+		await navigateCrossAppInFlp(IFRAME_INTENT);
 		await inDemoApp(async () => {
 			await waitForRouterRunningInFlp();
 			await waitForHomePageInFlp({ afterRevision: settledBefore });
@@ -121,9 +122,9 @@ describe("FLP keep-alive of an app in an iframe (isolated session)", () => {
 			await loginAndGoToProtectedInFlp();
 			await setDirtyStateInFlp(true);
 		});
-		await triggerFlpCrossAppNavigation("peer-display");
+		await navigateCrossAppInFlp("peer-display");
 		await waitForComponent(PEER_APP_ID);
-		await triggerFlpCrossAppNavigation(IFRAME_INTENT);
+		await navigateCrossAppInFlp(IFRAME_INTENT);
 
 		await inDemoApp(async () => {
 			await waitForRouterRunningInFlp();

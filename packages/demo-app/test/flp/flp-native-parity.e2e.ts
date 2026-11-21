@@ -1,6 +1,6 @@
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
-import { installDialogHandler, triggerFlpCrossAppNavigation } from "./helpers";
+import { installDialogHandler, navigateCrossAppInFlp, triggerFlpCrossAppNavigation } from "./helpers";
 
 const PEER_APP_ID = "demo.peer";
 
@@ -110,10 +110,15 @@ async function runInLaunchpad(app: App, refusedHashChange: () => Promise<void>):
 	const { record, cleanup } = installDialogHandler(false);
 	try {
 		await triggerFlpCrossAppNavigation("peer-display");
-		await browser.waitUntil(() => record.handled, {
-			timeout: 5000,
-			timeoutMsg: "The launchpad did not ask about unsaved data",
-		});
+		const asked = await browser.waitUntil(() => record.handled, { timeout: 5000 }).catch(() => false);
+		if (!asked) {
+			// The URL tells where the launchpad stopped: on the target (the hash was not taken back),
+			// on the app (taken back, no dialog) or elsewhere. It cannot be read under an open dialog.
+			const shown = record.called ? "not read" : await browser.execute(() => window.location.hash);
+			throw new Error(
+				`The launchpad did not ask about unsaved data (dialog opened: ${record.called}, URL: ${shown})`,
+			);
+		}
 	} finally {
 		cleanup();
 	}
@@ -125,11 +130,11 @@ async function runInLaunchpad(app: App, refusedHashChange: () => Promise<void>):
 	await refusedHashChange();
 	snapshots.push(await observe(app, "after what the app refused"));
 
-	await triggerFlpCrossAppNavigation("peer-display");
+	await navigateCrossAppInFlp("peer-display");
 	await waitForComponent(PEER_APP_ID);
 	snapshots.push(await observeWhen(app, "hidden behind another app", (snapshot) => snapshot.stopped));
 
-	await triggerFlpCrossAppNavigation(app.intent);
+	await navigateCrossAppInFlp(app.intent);
 	snapshots.push(await observeWhen(app, "shown again", running));
 
 	await navTo(app, "detail", { id: "3" });
