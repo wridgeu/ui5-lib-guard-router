@@ -53,6 +53,7 @@
 		"verify:openui5-router-vendor": "node ./scripts/verify-openui5-router-vendor.mjs",
 		"release:plan": "node ./scripts/release-plan.mjs",
 		"commitlint": "commitlint --last",
+		"postinstall": "patch-package",
 		"prepare": "husky"
 	},
 	"lint-staged": {
@@ -84,6 +85,7 @@
 		"oxfmt": "^0.79.0",
 		"oxlint": "^1.94.0",
 		"oxlint-tsgolint": "^7.0.2007",
+		"patch-package": "^8.0.1",
 		"release-please": "^17.11.2",
 		"rimraf": "^6.1.4",
 		"typescript": "npm:@typescript/typescript6@^6.0.2",
