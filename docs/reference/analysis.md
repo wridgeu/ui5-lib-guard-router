@@ -72,7 +72,7 @@ A route cannot be kept from displaying based on a condition (permissions, authen
 
 ### 1.5 The Deadlock
 
-UI5's event system is synchronous, and a synchronous-only guard cannot wait for a permission check on the backend. An async solution needs framework changes, and the UI5 team gives the framework modernization priority. At the last update in the issue (October 2024) there was no progress.
+UI5's event system is synchronous, and a synchronous-only guard cannot wait for a permission check on the backend. An async solution needs framework changes, and the UI5 team gives the framework modernization priority. At the last update in the issue (October 2024) there was no progress. In May 2025 the async routing code became the base implementation ([`CPOUI5FRAMEWORK-776`](https://github.com/UI5/openui5/commit/b7fc43c46cee8c5b6371b4a895d1c86d82e431bf)), but that concerns loading targets after the route match: `parse()` is still synchronous, and the UI5 2.0 roadmap ([#4234](https://github.com/UI5/openui5/issues/4234)) mentions no guards.
 
 ### 1.6 Current Workaround
 
@@ -214,6 +214,15 @@ We extend `sap.m.routing.Router` rather than `sap.ui.core.routing.Router` becaus
 ### 2.7 Minimum UI5 Version
 
 The package declares **1.136.0** as its minimum, which manifest version 2 requires, and is developed against **1.144.0**. The code itself needs **1.120**, for `DataType.registerEnum` (used for the `NavigationOutcome` enum); CI runs the library suite on 1.120 to keep it that way. Other APIs used include [`sap.ui.core.Lib`](https://sdk.openui5.org/#/api/sap.ui.core.Lib) for library initialization and `getRouteInfoByHash` from 1.75.
+
+### 2.8 App-Level Alternatives
+
+Approaches that need no router change, and why they do not replace guards:
+
+- **Conditional rendering** (a container that shows the login view until the user is logged in): covers a single logged-in/logged-out gate only. There are no per-route rules, and deep links land on the gate.
+- **Separate components** (protected views in a component loaded after login): isolates the code, but still has no per-route guards, makes deep links harder and adds component overhead in the launchpad.
+- **`navTo(..., bReplace = true)`** on login and logout: keeps the login page out of the history, so back does not return to it. It is worth doing with guards as well, but it does nothing for URLs typed or bookmarked.
+- **Browser events** (as of 2026): `beforeunload` covers leaving the document only, with a generic browser dialog that needs a prior user gesture and is unreliable on mobile. The `navigate` event of the Navigation API cannot block back/forward and cannot ask the user. Both suit full-page exits, not routing between views.
 
 ---
 

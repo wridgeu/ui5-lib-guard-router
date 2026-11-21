@@ -37,6 +37,7 @@ The router option `navToPreflight: "bypass"` skips guards for every `navTo()` ca
 | Hash unchanged                  | `navTo()` commits directly.                                                                                | Nothing is left set for the next navigation.                                                          |
 | Granularity                     | All guards or none. No `skipLeaveGuards` / `skipEnterGuards`.                                              | No use case yet.                                                                                      |
 | Navigation sources              | `navTo()` only. Browser back/forward and URL entry always run guards.                                      | The bypass is for code that has already validated the transition.                                     |
+| Global switch                   | No `suspendGuards()` / `withoutGuards()`.                                                                  | A forgotten resume disables every guard, and an async gap leaves all navigations unguarded meanwhile. |
 
 ## Behavior
 

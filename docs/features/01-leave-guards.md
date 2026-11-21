@@ -57,6 +57,10 @@ The proposal had a separate, smaller `LeaveGuardContext` and a `LeaveGuardResult
 
 There are no global leave guards. The common case is "this view has unsaved changes", which belongs to one route. A manifest entry `guards["*"].leave` is skipped with a warning. Global leave guards can be added later if a use case appears.
 
+### Guard functions, not events or blockers
+
+A `beforeLeave` router event (Ember style) was rejected: UI5 events are synchronous, so async checks would need a side channel to collect promises, and the order of several listeners is unclear. A `createBlocker()` object (React style) was rejected too: more API, blocker state to keep in step with the router, no answer for two blockers on one route, and a race when the user navigates again between "blocked" and `proceed()`.
+
 ### Leave guards run first
 
 Leave guards form the first phase of the pipeline, before global and route enter guards. If the user stays, no enter guard runs. See [Execution order](../../packages/lib/README.md#execution-order).

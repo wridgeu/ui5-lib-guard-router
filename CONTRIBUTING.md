@@ -66,6 +66,8 @@ QUnit tests of the library are below `packages/lib/test/qunit/`. A folder is one
 | The demo app in an iframe of the launchpad                | `packages/demo-app/test/flp/`, on the launchpad page of `test/flp/iframe/webapp/` (served at `/iframe`)             |
 | A lint plugin in `tools/` or a script in `scripts/`       | `<name>.test.mjs` next to it, run by `npm run test:tooling` (`node --test`)                                         |
 
+Very large test files have silently stopped registering their later tests, so compare the test count in the runner output after a big addition.
+
 Rules that keep the layout working:
 
 - **Browser history steps** (`history.back()`, `forward()`, `go()`) belong only in the pages that run alone: `router/history`, `parity/nested`, `parity/guarded`, `parity/entries`, `parity/steps`. Chrome ignores a history step on a page that changed the hash about 200 times within ten seconds, so a history test on a busy page fails. `parity/guarded`, `parity/entries` and `parity/steps` also record what the browser does with its history entries and have to stay below that number, so a new test of that kind may need a page of its own.

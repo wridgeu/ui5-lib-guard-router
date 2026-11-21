@@ -26,7 +26,6 @@ The docs are grouped by who reads them.
 Why the library is the way it is. These documents record decisions; the reference above describes the current state.
 
 - [Feature notes](./features/README.md): one decision record per feature, with its status
-- [Explorations](./explorations/README.md): alternative approaches and extension ideas evaluated during development
 
 ## External facts
 
@@ -35,9 +34,5 @@ What UI5, the Fiori launchpad and browsers do, with sources.
 - [Research](./research/)
     - [FLP dirty state](./research/flp-dirty-state.md)
     - [Native NavContainer navigate event](./research/native-router-navigate-event.md)
-    - [Beforeunload and Navigation API](./research/beforeunload-navigation-api-2026.md)
-    - [Stale closure invalidation patterns](./research/stale-closure-invalidation-patterns.md)
     - [Library loading order](./research/library-loading-order.md)
     - [View caching and controller lifecycle](./research/view-caching-controller-lifecycle.md)
-- [Investigations](./investigations/): problems found in the tooling, as they were when they were found
-    - [QUnit test truncation](./investigations/01-qunit-test-truncation.md)

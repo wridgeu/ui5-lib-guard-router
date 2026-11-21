@@ -1,6 +1,6 @@
 # Feature Notes
 
-Design records for `ui5.guard.router.Router`: shipped features, rejected alternatives and open proposals. Some proposals came from the [explorations](../explorations/README.md) and a study of the TanStack Router source.
+Design records for `ui5.guard.router.Router`: shipped features, rejected alternatives and open proposals.
 
 ## Implemented Capabilities
 

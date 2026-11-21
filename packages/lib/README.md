@@ -931,7 +931,7 @@ export default class HomeController extends BaseController {
 >
 > **Component level**: The router's `destroy()` clears all guards when the component is destroyed, also during FLP navigation.
 >
-> **Controller level**: UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away. Guards registered by a controller therefore stay across in-app navigations.
+> **Controller level**: UI5's routing [caches views indefinitely](../../docs/research/view-caching-controller-lifecycle.md), so `onExit` is called only when the component is destroyed, not on every navigation away. Guards registered by a controller therefore stay across in-app navigations.
 >
 > In FLP apps with `sap-keep-alive`, the component and its guards stay while the app is hidden, see [Keep-alive apps](#keep-alive-apps).
 

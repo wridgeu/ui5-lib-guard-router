@@ -68,15 +68,16 @@ router.setRouteMeta("betaFeature", { ...router.getRouteMeta("betaFeature"), enab
 
 ## Decisions
 
-| Decision                    | Choice                                                                         | Reason                                                                                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Sources                     | Manifest defaults plus runtime values                                          | Manifest values are visible and auditable. Runtime values cover feature flags and user permissions known only after login.                |
-| Manifest location           | `sap.ui5.routing.config.guardRouter.routeMeta`                                 | The proposal used a custom top-level `"ui5.guard.router"` section. Keeping it in the router config co-locates it with the router options. |
-| Merge                       | Shallow; runtime keys win                                                      | Predictable. Nested objects are replaced, not merged.                                                                                     |
-| `mergeRouteMeta()`          | Dropped                                                                        | The spread pattern above does the same with no extra API.                                                                                 |
-| Result                      | Frozen object, cached until `setRouteMeta()` or `addRoute()`                   | Guards cannot mutate shared state, and repeated reads in one navigation cost nothing.                                                     |
-| Unknown route               | `getRouteMeta()` warns and returns an empty object                             | See [Feature 12](./12-lazy-resolution-error-handling.md). `setRouteMeta()` follows the `unknownRouteRegistration` policy.                 |
-| `guardRouter` block and UI5 | The router removes `guardRouter` from the config before `sap.m.routing.Router` | UI5 never sees the non-standard block.                                                                                                    |
+| Decision                    | Choice                                                                         | Reason                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sources                     | Manifest defaults plus runtime values                                          | Manifest values are visible and auditable. Runtime values cover feature flags and user permissions known only after login.                                 |
+| Manifest location           | `sap.ui5.routing.config.guardRouter.routeMeta`                                 | The proposal used a custom top-level `"ui5.guard.router"` section. Keeping it in the router config co-locates it with the router options.                  |
+| Not chosen                  | Runtime-only metadata; route-name conventions (`auth.*`)                       | Runtime-only spreads the requirements across code with no single place to read them. Name conventions overload route names and express only one dimension. |
+| Merge                       | Shallow; runtime keys win                                                      | Predictable. Nested objects are replaced, not merged.                                                                                                      |
+| `mergeRouteMeta()`          | Dropped                                                                        | The spread pattern above does the same with no extra API.                                                                                                  |
+| Result                      | Frozen object, cached until `setRouteMeta()` or `addRoute()`                   | Guards cannot mutate shared state, and repeated reads in one navigation cost nothing.                                                                      |
+| Unknown route               | `getRouteMeta()` warns and returns an empty object                             | See [Feature 12](./12-lazy-resolution-error-handling.md). `setRouteMeta()` follows the `unknownRouteRegistration` policy.                                  |
+| `guardRouter` block and UI5 | The router removes `guardRouter` from the config before `sap.m.routing.Router` | UI5 never sees the non-standard block.                                                                                                                     |
 
 ## Trade-offs
 

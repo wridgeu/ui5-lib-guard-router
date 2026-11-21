@@ -61,10 +61,10 @@ for (const file of [...onDisk, ...ports]) {
 	}
 }
 
-// CHANGELOG.md is generated; investigations record the files as they were when they were written.
+// CHANGELOG.md is generated.
 const docs = execFileSync("git", ["ls-files", "*.md"], { cwd: repoRoot, encoding: "utf8" })
 	.split("\n")
-	.filter((file) => file && !/(^|\/)CHANGELOG\.md$|\/vendor\/|^docs\/investigations\//.test(file));
+	.filter((file) => file && !/(^|\/)CHANGELOG\.md$|\/vendor\//.test(file));
 
 // Rule 4: a file of this repository's packages that a doc names exists. Docs also name files
 // in the packages/ folders of other projects.

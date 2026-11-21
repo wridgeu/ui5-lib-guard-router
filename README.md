@@ -103,7 +103,7 @@ Guards can also be declared in `manifest.json`. The API, manifest configuration,
 
 ```
 CONTRIBUTING.md Development setup, tests, quality checks, releases
-docs/           Docs index plus guides, reference, feature notes, explorations, research
+docs/           Docs index plus guides, reference, feature notes, research
 packages/
   lib/          ui5.guard.router library (Router + types) and its QUnit tests
   demo-app/     Demo app with auth guards, a nested component, FLP preview, and guided scenarios

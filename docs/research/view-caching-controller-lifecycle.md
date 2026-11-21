@@ -228,13 +228,14 @@ The `xx` prefix indicates it is an experimental feature. Both camelCase (`sap-ui
 
 `sap-keep-alive` is a **Fiori Launchpad feature**, not a UI5 core feature. It operates at the Component level, above the routing layer.
 
-| Scenario                                           | Component destroyed? | Views destroyed? | `onExit` fires? |
-| -------------------------------------------------- | -------------------- | ---------------- | --------------- |
-| In-app navigation (route A → route B)              | No                   | No (cached)      | **No**          |
-| Cross-app navigation, no `sap-keep-alive`          | Yes                  | Yes              | **Yes**         |
-| Cross-app navigation, `sap-keep-alive=true`        | No                   | No               | **No**          |
-| Cross-app navigation, `sap-keep-alive=restricted`  | No (with limits)     | No               | **No**          |
-| Navigate to FLP home page (even with `keep-alive`) | Yes                  | Yes              | **Yes**         |
+| Scenario                                               | Component destroyed? | Views destroyed? | `onExit` fires? |
+| ------------------------------------------------------ | -------------------- | ---------------- | --------------- |
+| In-app navigation (route A → route B)                  | No                   | No (cached)      | **No**          |
+| Cross-app navigation, no `sap-keep-alive`              | Yes                  | Yes              | **Yes**         |
+| Cross-app navigation, `sap-keep-alive=true`            | No                   | No               | **No**          |
+| Cross-app navigation, `sap-keep-alive=restricted`      | No (with limits)     | No               | **No**          |
+| Navigate to FLP home page, `sap-keep-alive=true`       | No                   | No               | **No**          |
+| Navigate to FLP home page, `sap-keep-alive=restricted` | Yes                  | Yes              | **Yes**         |
 
 When `sap-keep-alive` is active and the user navigates back to the app, **no `onInit()` fires** (the view was never destroyed and recreated). The state from the previous session is fully preserved: model data, scroll positions, controller instance variables, and registered guards.
 
@@ -259,7 +260,7 @@ The one case where this matters: if a guard captures mutable state in its closur
 
 ### The "view destroyed without onExit" edge case
 
-Exploration 08 mentions: _"If a view is destroyed without `onExit` (edge case), the guard function references a dead controller."_ This is a theoretical concern. In practice, `View.destroy()` always calls `View.exit()`, which always fires `beforeExit`, which triggers `onExit()`. The only scenario where a guard could reference a dead controller is if the guard is registered on a different router instance than the one that owns the view — an application-level bug, not a framework limitation.
+A concern raised during the leave-guard design was that a view destroyed without `onExit` would leave a guard referencing a dead controller. This is theoretical. In practice, `View.destroy()` always calls `View.exit()`, which always fires `beforeExit`, which triggers `onExit()`. The only scenario where a guard could reference a dead controller is if the guard is registered on a different router instance than the one that owns the view — an application-level bug, not a framework limitation.
 
 ## Verification Sources
 
