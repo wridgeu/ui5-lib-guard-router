@@ -36,9 +36,9 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~280 KB compressed (~1.2 MB unpacked) because it ships both pre-built distributables and TypeScript sources. At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
+> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships both pre-built distributables and TypeScript sources. At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
 
-`ui5 serve` picks up the pre-built library through its UI5 build manifest. Other serving options and the TypeScript setup are in the library README, [Install](packages/lib/README.md#install).
+`ui5 serve` picks up the pre-built library through its UI5 build manifest. Other serving setups, building and deploying, and the TypeScript setup are in the library README, [Install](packages/lib/README.md#install).
 
 ### 2. Configure manifest.json
 

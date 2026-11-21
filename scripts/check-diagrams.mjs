@@ -1,4 +1,4 @@
-// Checks every Mermaid block of the docs: it parses, has no backtick, keeps to the diagram style, and the library code it names exists (comments name none).
+// Checks every Mermaid block of the docs: it parses, has no backtick, keeps to the diagram style, its label lines need no wrapping, and the library code it names exists (comments name none).
 // The route maps of the demo README show the routes and manifest guards of the demo manifests.
 // Usage: npm run check:diagrams
 import { execFileSync } from "node:child_process";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import mainManifest from "../packages/demo-app/webapp/manifest.json" with { type: "json" };
 import reportingManifest from "../packages/demo-app/webapp/reporting/manifest.json" with { type: "json" };
+import { isFlowchart, longLabelLines } from "./label-lines.mjs";
 import { routeMapErrors } from "./route-map.mjs";
 import { sourceNames } from "./source-names.mjs";
 
@@ -82,8 +83,7 @@ for (const doc of docs) {
 
 		// Rule 4: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
 		// Only labels are read: a flowchart node `id("label")` is no call.
-		// A front matter (`config:`) may precede the diagram type.
-		const labels = /^\s*flowchart/.test(diagram.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ""))
+		const labels = isFlowchart(diagram)
 			? [...diagram.matchAll(/"([^"\n]*)"/g)].map(([, label]) => label)
 			: [...diagram.matchAll(/^[^:\n]*:(.*)$/gm)].map(([, label]) => label);
 		for (const [, name] of labels.join("\n").matchAll(CODE_NAME)) {
@@ -92,6 +92,11 @@ for (const doc of docs) {
 				errors.push(`${where}: the Mermaid block names ${name}, which ${LIB_SRC} does not have`);
 			}
 		}
+
+		// Rule 5: a label line of a flowchart or state diagram is short enough that Mermaid does not wrap it.
+		for (const line of longLabelLines(diagram)) {
+			errors.push(`${where}: the label line ${line}, break it with <br/>`);
+		}
 	}
 	if (blocks > blocksBefore) docsWithBlocks++;
 }
@@ -99,7 +104,7 @@ for (const doc of docs) {
 if (blocks === 0) errors.push("no Mermaid block found in the docs");
 if (names === 0) errors.push("no call or private name found in a Mermaid block");
 
-// Rule 5: the route maps of the demo README, in this order, match the routing of the demo manifests.
+// Rule 6: the route maps of the demo README, in this order, match the routing of the demo manifests.
 const DEMO_README = "packages/demo-app/README.md";
 const routeMaps = [...read(DEMO_README).matchAll(/^```mermaid\r?\n([\s\S]*?)^```$/gm)].map(([, diagram]) => diagram);
 for (const [
