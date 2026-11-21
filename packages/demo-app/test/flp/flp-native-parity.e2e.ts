@@ -110,15 +110,10 @@ async function runInLaunchpad(app: App, refusedHashChange: () => Promise<void>):
 	const { record, cleanup } = installDialogHandler(false);
 	try {
 		await triggerFlpCrossAppNavigation("peer-display");
-		const asked = await browser.waitUntil(() => record.handled, { timeout: 5000 }).catch(() => false);
-		if (!asked) {
-			// The URL tells where the launchpad stopped: on the target (the hash was not taken back),
-			// on the app (taken back, no dialog) or elsewhere. It cannot be read under an open dialog.
-			const shown = record.called ? "not read" : await browser.execute(() => window.location.hash);
-			throw new Error(
-				`The launchpad did not ask about unsaved data (dialog opened: ${record.called}, URL: ${shown})`,
-			);
-		}
+		await browser.waitUntil(() => record.handled, {
+			timeout: 5000,
+			timeoutMsg: "The launchpad did not ask about unsaved data",
+		});
 	} finally {
 		cleanup();
 	}
