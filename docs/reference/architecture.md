@@ -1332,7 +1332,7 @@ Blue is the library and grey is native UI5 or no action ([diagram style](../../C
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`. `patches/ui5-tooling-transpile+3.14.1.patch` (applied by `patch-package` on install) lets its type declaration generator rewrite relative imports that span several lines; without it they stay relative and the published `.d.ts` files do not type-check. Drop the patch once a release fixes the regex.
-- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn), and `npm run lint` fails on warnings too (`--deny-warnings`); typescript, oxc, unicorn, import plugins, and the repo's own JS plugins in `tools/` (code quality, comment quality, test guardrails). Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
+- **Lint**: `oxlint` with correctness (error) and suspicious/perf (warn); `npm run lint` fails on warnings too (`--deny-warnings`). Plugins: typescript, oxc, unicorn, import, and the repo's own in `tools/` (code quality, comment quality, test guardrails). Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
 - **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Format**: `oxfmt`, checked in CI with `npm run fmt:check`
 - **Hooks**: husky runs lint-staged (oxlint and oxfmt on the staged files) before a commit and commitlint (Conventional Commits) on its message

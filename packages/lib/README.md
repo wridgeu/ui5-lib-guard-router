@@ -317,6 +317,8 @@ The pipeline stays **synchronous while guards return plain values**. From the fi
 
 ## API
 
+The public modules are `ui5/guard/router/Router`, `types`, `NavigationOutcome` and `library`. The other modules under `ui5/guard/router` are internal and may change in any release.
+
 All guard registration and removal methods return `this` for chaining. `navigationSettled()` returns a `Promise<NavigationResult>`.
 
 ### Guard registration
@@ -585,7 +587,7 @@ Guards, route metadata and router options can be declared in the `guardRouter` b
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
-An invalid value is logged as a warning and the default is used. An invalid `logLevel` is logged as an error and ignored: a warning would not show at the default `ERROR` level that the value failed to raise.
+An invalid value is logged as a warning and the default is used. An invalid `logLevel` is ignored and logged as an error, which shows at the default `ERROR` level.
 
 When constructing the router in code rather than from the manifest, the config argument is typed as `GuardRouterConfig` (since 1.7.0): the standard router config plus `guardRouter`, so `new Router(routes, { async: true, guardRouter: { navToPreflight: "bypass" } })` (`import Router from "ui5/guard/router/Router"`) type-checks without casts.
 
@@ -872,7 +874,7 @@ Where each kind of guard fits:
 
 ## Examples
 
-The examples call app code such as `isLoggedIn()` or a `formModel`; only the imports from `ui5/guard/router` are library API. The library's public modules are `Router`, `types`, `NavigationOutcome` and `library`; the other modules under `ui5/guard/router` are internal and may change in any release.
+`router`, `authModel` and `formModel` in the examples stand for the app's router and models.
 
 ### Async guard with AbortSignal
 
