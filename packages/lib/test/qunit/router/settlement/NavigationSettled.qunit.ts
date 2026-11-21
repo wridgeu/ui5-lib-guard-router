@@ -1,3 +1,4 @@
+import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type {
 	GuardContext,
@@ -605,6 +606,24 @@ QUnit.test("fires on blocked navigation", async function (assert) {
 	assert.strictEqual(events.length, 1, "Event fired once for blocked navigation");
 	assert.strictEqual(events[0].status, NavigationOutcome.Blocked, "Status is Blocked");
 	assert.strictEqual(events[0].route, "home", "Route stays home");
+});
+
+QUnit.test("each settlement is logged at debug level", async function (this: SinonTestContext, assert) {
+	router.addRouteGuard("protected", () => false);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const debug = this.stub(Log, "debug");
+
+	router.navTo("protected");
+	await router.navigationSettled();
+
+	assert.deepEqual(
+		debug
+			.getCalls()
+			.map((call) => call.args)
+			.filter(([message]) => message.startsWith("Navigation settled")),
+		[["Navigation settled: blocked", "", "ui5.guard.router.Router"]],
+	);
 });
 
 QUnit.test("fires on redirected navigation", async function (assert) {

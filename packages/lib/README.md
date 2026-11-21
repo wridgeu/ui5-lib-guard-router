@@ -575,12 +575,13 @@ Guards, route metadata and router options can be declared in the `guardRouter` b
 
 ### Router options
 
-| Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                                                              |
-| -------------------------- | ----------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names, see [Unknown routes during registration](#unknown-routes-during-registration)                                                                                                                                                    |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or leave them to `parse()` after the hash has changed (`"off"`), which also supersedes a pending navigation there                                                                                          |
-| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: `initialize()` starts the router at once; a module that is not loaded yet is loaded on the first navigation that needs it (a failed load settles that navigation as `Error`). `"block"`: the router starts once all modules have loaded; a module that fails to load is skipped with a warning |
-| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                    |
+| Option                     | Values                                            | Default   | Description                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"`               | `"warn"`  | Policy for guard and metadata registration against unknown route names, see [Unknown routes during registration](#unknown-routes-during-registration)                                                                                                                                                    |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`                | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or leave them to `parse()` after the hash has changed (`"off"`), which also supersedes a pending navigation there                                                                                          |
+| `guardLoading`             | `"block"` \| `"lazy"`                             | `"lazy"`  | `"lazy"`: `initialize()` starts the router at once; a module that is not loaded yet is loaded on the first navigation that needs it (a failed load settles that navigation as `Error`). `"block"`: the router starts once all modules have loaded; a module that fails to load is skipped with a warning |
+| `inheritance`              | `"none"` \| `"pattern-tree"`                      | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                    |
+| `logLevel`                 | `"error"` \| `"warning"` \| `"info"` \| `"debug"` | none      | Log level of the router's log component, see [Enabling guard logs](#enabling-guard-logs). Not set: `sap/base/Log` is left as it is                                                                                                                                                                       |
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
@@ -1389,9 +1390,15 @@ This does not apply to `navTo()`, which changes the hash only after the guards a
 
 ### Enabling guard logs
 
-The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged. When a manifest guard throws, the error log names it, e.g. `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
+The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged; at debug level each settled navigation logs its outcome (`Navigation settled: blocked`). When a manifest guard throws, the error log names it, e.g. `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
 
-Debug output for the router only:
+Optimized UI5 builds log at `ERROR` by default, which hides the router's warnings. Raise the level for the router only in the manifest (since 1.7.0):
+
+```json
+"guardRouter": { "logLevel": "warning" }
+```
+
+Or in code:
 
 ```typescript
 import Log from "sap/base/Log";
@@ -1399,6 +1406,14 @@ Log.setLevel(Log.Level.DEBUG, "ui5.guard.router.Router");
 ```
 
 The URL parameter `?sap-ui-log-level=DEBUG` sets the level for all components.
+
+How they combine:
+
+1. **URL parameter**: sets the global level, which the router's component uses until a level of its own is set.
+2. **JS API** (`Log.setLevel(level, "ui5.guard.router.Router")`): sets the component's level; the last call wins, also over `logLevel`.
+3. **Manifest `logLevel`**: applied once, when the router is constructed, to the router's component only, and only if it is more verbose than the level in effect then (from 1. or an earlier call of 2.). It never lowers a level, but once set, the component no longer follows later changes of the global level; change it with 2.
+
+The level belongs to the component name, so it applies to the whole page: with several guard routers (e.g. nested components) the most verbose `logLevel` wins, and `destroy()` does not reset it.
 
 ### Common issues
 

@@ -115,7 +115,7 @@ Names were added as a base for later features (disable by name, ordering hints, 
 
 ## 5. Case sensitivity
 
-All config values are case-sensitive, as UI5 handles `viewType`, `transition` and other manifest enums. `normalizeGuardRouterOptions()` warns per option (`guardRouter.<option> has invalid value, using default`) and uses the default.
+All config values are case-sensitive, as UI5 handles `viewType`, `transition` and other manifest enums. `normalizeGuardRouterOptions()` warns per option (`guardRouter.<option> has invalid value, using default`) and uses the default. `logLevel` (1.7.0) has no default: an invalid value is logged as an error and ignored.
 
 ## 6. Execution order
 

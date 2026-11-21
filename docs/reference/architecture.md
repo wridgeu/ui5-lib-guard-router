@@ -685,7 +685,11 @@ the error is swallowed and the decision is a block.
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
-`guardRouter.<key> has invalid value, using default`.
+`guardRouter.<key> has invalid value, using default`. `logLevel` has no default: when set, the
+parser raises the page-wide level of `ui5.guard.router.Router` with `Log.setLevel()` before it
+validates the other options, and only if that is more verbose than `Log.getLevel()` reports. An invalid
+`logLevel` logs the error `guardRouter.logLevel has invalid value, ignoring it`: a warning would
+not show at the default `ERROR` level that the value failed to raise.
 
 Every manifest guard is registered through `_registerManifestGuard()`. With `unknownRouteRegistration: "throw"`, imperative
 calls (`addRouteGuard`, `addLeaveGuard`, `setRouteMeta`) throw for an unknown route. A
@@ -1322,7 +1326,7 @@ Blue is the library and grey is native UI5 or no action ([diagram style](../../C
 ```
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
-- **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
+- **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`. `patches/ui5-tooling-transpile+3.14.1.patch` (applied by `patch-package` on install) lets its type declaration generator rewrite relative imports that span several lines; without it they stay relative and the published `.d.ts` files do not type-check. Drop the patch once a release fixes the regex.
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
 - **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts

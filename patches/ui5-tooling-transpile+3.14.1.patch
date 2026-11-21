@@ -1,0 +1,14 @@
+diff --git a/node_modules/ui5-tooling-transpile/lib/task.js b/node_modules/ui5-tooling-transpile/lib/task.js
+index 7d39908..e4eea6e 100644
+--- a/node_modules/ui5-tooling-transpile/lib/task.js
++++ b/node_modules/ui5-tooling-transpile/lib/task.js
+@@ -237,7 +237,8 @@ module.exports = async function ({ log, workspace /*, dependencies*/, taskUtil,
+ 					let moduleName = /^\/resources\/(.*)\.tsx?$/.exec(resourcePath)?.[1];
+ 					if (moduleName) {
+ 						// rewrite all imports with their fully qualified name
+-						const relativeModulePaths = [...source.matchAll(/import.+("\.{1,2}[^"]+"|'\.{1,2}[^']+')/g)];
++						// [^;]*? instead of .+: an import statement may span several lines
++						const relativeModulePaths = [...source.matchAll(/\bimport\b[^;]*?("\.{1,2}[^"]+"|'\.{1,2}[^']+')/g)];
+ 						relativeModulePaths.forEach((reModPath) => {
+ 							const relativePath = reModPath[1].slice(1, -1);
+ 							source = source.replaceAll(

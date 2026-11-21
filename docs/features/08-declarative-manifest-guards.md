@@ -36,6 +36,7 @@ A TypeScript class must call `super()` before it touches `this`, so the construc
 constructor(routes, config, owner, ...)
   ├── super(routes, config without guardRouter, owner, ...)
   ├── parseGuardRouterConfig(guardRouter, sap.app/id)   (GuardConfig.ts)
+  │   ├── logLevel  -> Log.setLevel() of ui5.guard.router.Router, if more verbose (first)
   │   ├── options   -> _options
   │   ├── routeMeta -> _meta (RouteMetaStore, RouteMeta.ts)
   │   └── guards    -> _pendingGuardDescriptors
