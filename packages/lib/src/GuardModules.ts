@@ -13,6 +13,11 @@ interface NamedGuard {
 	readonly fn: GuardFn;
 }
 
+/** A guard as a module exports it: any function. Its result is checked when it runs. */
+function isGuardFn(value: unknown): value is GuardFn {
+	return typeof value === "function";
+}
+
 /** Log a warning about a guard module entry in the manifest. */
 function guardWarning(modulePath: string, detail: string): void {
 	Log.warning(`guardRouter.guards: "${modulePath}" ${detail}`, undefined, LOG_COMPONENT);
@@ -32,25 +37,36 @@ function positionOf(exportKey: string): number {
  * Detect the export shape of a loaded guard module and extract guard functions.
  *
  * Shapes and the names they get (`moduleName` is the last path segment):
- * - function        → single guard, named `moduleName` (or the export key when one is given)
+ * - function        → single guard, named `moduleName` (or the export key when one is given);
+ *                     an export key that names a function among its own properties picks that one
  * - Array           → ordered guards, named `moduleName#index` (non-functions warned and skipped)
  * - plain object    → guards in key order, named by key (non-functions warned and skipped)
  *
+ * The module is read as the value it returns to the UI5 loader, which has no ES module
+ * interop. The UI5 transpiler (babel-plugin-transform-modules-ui5) returns a default export
+ * as that value, with named exports beside it collapsed onto it as properties, and returns
+ * the exports of a module with only named exports as the object `{ __esModule: true, ... }`.
+ *
  * When `exportKey` is set, only the matching export is returned.
- * When `exportKey` is set on a function export, the key is ignored with a debug log.
+ * When `exportKey` is set on a function export that has no such function, the key is ignored with a debug log.
  */
 export function resolveModuleExports(moduleExport: unknown, modulePath: string, exportKey?: string): NamedGuard[] {
 	const moduleName = moduleNameOf(modulePath);
 
-	if (typeof moduleExport === "function") {
+	if (isGuardFn(moduleExport)) {
 		if (exportKey !== undefined) {
+			// A named export beside the default export, which the transpiler has collapsed onto it.
+			if (Object.hasOwn(moduleExport, exportKey)) {
+				const named: unknown = Reflect.get(moduleExport, exportKey);
+				if (isGuardFn(named)) return [{ name: exportKey, fn: named }];
+			}
 			Log.debug(
 				`guardRouter.guards: "${modulePath}#${exportKey}" is a single function, ignoring export key`,
 				undefined,
 				LOG_COMPONENT,
 			);
 		}
-		return [{ name: exportKey ?? moduleName, fn: moduleExport as GuardFn }];
+		return [{ name: exportKey ?? moduleName, fn: moduleExport }];
 	}
 
 	if (Array.isArray(moduleExport)) {
@@ -65,28 +81,29 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 				guardWarning(modulePath, `#${exportKey} - index out of range, skipping`);
 				return [];
 			}
-			const entry = moduleExport[index] as unknown;
-			if (typeof entry !== "function") {
+			const entry: unknown = moduleExport[index];
+			if (!isGuardFn(entry)) {
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [{ name: `${moduleName}#${exportKey}`, fn: entry as GuardFn }];
+			return [{ name: `${moduleName}#${exportKey}`, fn: entry }];
 		}
 
 		const results: NamedGuard[] = [];
 		for (let i = 0; i < moduleExport.length; i++) {
-			const entry = moduleExport[i] as unknown;
-			if (typeof entry !== "function") {
+			const entry: unknown = moduleExport[i];
+			if (!isGuardFn(entry)) {
 				guardWarning(modulePath, `[${i}] is not a function, skipping`);
 				continue;
 			}
-			results.push({ name: `${moduleName}#${i}`, fn: entry as GuardFn });
+			results.push({ name: `${moduleName}#${i}`, fn: entry });
 		}
 		return results;
 	}
 
 	if (isRecord(moduleExport)) {
-		const entries = Object.entries(moduleExport);
+		// The transpiler's object of a module with only named exports has `__esModule` as an enumerable first key.
+		const entries = Object.entries(moduleExport).filter(([key]) => key !== "__esModule");
 		if (entries.length === 0) {
 			guardWarning(modulePath, "exported an empty object, skipping");
 			return [];
@@ -94,29 +111,28 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 
 		if (exportKey !== undefined) {
 			// A key wins over a position. A position that is not a number or out of range finds no entry.
-			const entry: [string, unknown] | undefined =
-				moduleExport[exportKey] === undefined
-					? entries[positionOf(exportKey)]
-					: [exportKey, moduleExport[exportKey]];
+			const entry: [string, unknown] | undefined = Object.hasOwn(moduleExport, exportKey)
+				? [exportKey, moduleExport[exportKey]]
+				: entries[positionOf(exportKey)];
 			if (entry === undefined) {
 				guardWarning(modulePath, `#${exportKey} - key not found, skipping`);
 				return [];
 			}
 			const [name, value] = entry;
-			if (typeof value !== "function") {
+			if (!isGuardFn(value)) {
 				guardWarning(modulePath, `#${exportKey} is not a function, skipping`);
 				return [];
 			}
-			return [{ name, fn: value as GuardFn }];
+			return [{ name, fn: value }];
 		}
 
 		const results: NamedGuard[] = [];
 		for (const [key, value] of entries) {
-			if (typeof value !== "function") {
+			if (!isGuardFn(value)) {
 				guardWarning(modulePath, `.${key} is not a function, skipping`);
 				continue;
 			}
-			results.push({ name: key, fn: value as GuardFn });
+			results.push({ name: key, fn: value });
 		}
 		return results;
 	}
@@ -175,9 +191,9 @@ function loadGuardModule(modulePath: string, failure: string): Promise<unknown> 
  * only skips that descriptor (with a warning) instead of failing the batch.
  * Results keep declaration order.
  */
-export function loadGuardModules(
-	descriptors: GuardDescriptor[],
-): Promise<{ descriptor: GuardDescriptor; guards: GuardFn[] }[]> {
+export function loadGuardModules<T extends GuardDescriptor>(
+	descriptors: T[],
+): Promise<{ descriptor: T; guards: GuardFn[] }[]> {
 	return Promise.all(
 		descriptors.map(async (descriptor) => {
 			const { modulePath, exportKey } = descriptor;
@@ -208,7 +224,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 	const moduleName = moduleNameOf(modulePath);
 
 	if (exportKey === undefined) {
-		const cached = sap.ui.require(modulePath) as unknown;
+		const cached: unknown = sap.ui.require(modulePath);
 		if (cached !== undefined) return resolveNamedGuards(cached, modulePath);
 	}
 
@@ -222,7 +238,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 		return runGuardsInOrder(guards, context);
 	};
 	const wrapper = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
-		const mod = sap.ui.require(modulePath) as unknown;
+		const mod: unknown = sap.ui.require(modulePath);
 		if (mod !== undefined) return run(mod, context);
 		return loadGuardModule(modulePath, `lazy load of "${modulePath}" failed`).then((loadedModule) =>
 			context.signal.aborted ? false : run(loadedModule, context),

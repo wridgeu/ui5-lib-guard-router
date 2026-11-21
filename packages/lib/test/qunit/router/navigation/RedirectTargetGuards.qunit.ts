@@ -23,9 +23,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guards on redirect targets
-// ============================================================
 QUnit.module("Router - Guards on redirect targets", standardHooks);
 
 QUnit.test("Guard on redirect target is evaluated", async function (assert: Assert) {
@@ -149,7 +146,6 @@ QUnit.test("Superseding navigation during async redirect chain cancels the chain
 	await waitForRoute(router, "home");
 
 	router.navTo("protected");
-	// Supersede before the async guard resolves
 	router.navTo("detail", { id: "1" });
 	await waitForRoute(router, "detail");
 	await flushPromises();
@@ -253,27 +249,29 @@ QUnit.test("Redirect chain works via parse (browser back/forward)", async functi
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Simulate browser navigation (hash change without navTo)
 	HashChanger.getInstance().setHash("protected");
 	await waitForRoute(router, "forbidden");
 	assert.strictEqual(getHash(), "forbidden", "Parse-path redirect chain resolved");
 });
 
-QUnit.test("Redirect to current hash evaluates guards and commits", async function (assert: Assert) {
-	let homeGuardCalled = false;
-	router.addRouteGuard("protected", () => "home");
-	router.addRouteGuard("home", () => {
-		homeGuardCalled = true;
-		return true;
-	});
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"A redirect to the current hash runs the guards of its target and settles as Redirected",
+	async function (assert: Assert) {
+		let homeGuardCalled = false;
+		router.addRouteGuard("protected", () => "home");
+		router.addRouteGuard("home", () => {
+			homeGuardCalled = true;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
-	assert.ok(homeGuardCalled, "Guard on redirect target (current hash) was evaluated");
-});
+		router.navTo("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected settlement");
+		assert.ok(homeGuardCalled, "Guard on redirect target (current hash) was evaluated");
+	},
+);
 
 QUnit.test("A redirect hop that fails after an async guard settles as Error", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => "forbidden");
@@ -362,9 +360,9 @@ QUnit.test(
 		setHash.restore();
 
 		router.addGuard(() => false);
-		router.navTo("detail", { id: "1" });
+		router.navTo("forbidden");
 		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next navigation is guarded");
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next navigation to the target is guarded");
 		assert.strictEqual(getHash(), "", "hash unchanged");
 	},
 );
@@ -385,9 +383,9 @@ QUnit.test(
 		setHash.restore();
 
 		router.addGuard(() => false);
-		HashChanger.getInstance().setHash("detail/1");
+		HashChanger.getInstance().setHash("protected");
 		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next hash change is guarded");
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the next hash change to the target is guarded");
 		assert.strictEqual(getHash(), "", "hash restored");
 	},
 );

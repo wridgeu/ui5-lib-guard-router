@@ -8,11 +8,14 @@
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
+/** @import { ESTree, Plugin, Rule } from "@oxlint/plugins" */
+
 /**
  * Reports `browser.pause()` calls that introduce flaky, time-based waits.
  *
  * Scope: all test files (configured via oxlintrc overrides).
  */
+/** @type {Rule} */
 const noBrowserPause = {
 	meta: {
 		type: "problem",
@@ -46,10 +49,13 @@ const noBrowserPause = {
  * Returns the inner call expression from an arrow/function callback body,
  * handling both concise (`resolve => fn()`) and block (`resolve => { fn(); }`)
  * forms. Returns `undefined` when the body doesn't match.
+ *
+ * @param {ESTree.FunctionBody | ESTree.Expression | null} body
+ * @returns {ESTree.CallExpression | undefined}
  */
 function extractSingleCallFromBody(body) {
-	if (body.type === "CallExpression") return body;
-	if (body.type === "BlockStatement" && body.body.length === 1) {
+	if (body?.type === "CallExpression") return body;
+	if (body?.type === "BlockStatement" && body.body.length === 1) {
 		const stmt = body.body[0];
 		if (stmt.type === "ExpressionStatement" && stmt.expression.type === "CallExpression") {
 			return stmt.expression;
@@ -61,11 +67,12 @@ function extractSingleCallFromBody(body) {
 /**
  * Reports `await new Promise(resolve => setTimeout(resolve, N))` where N > 0.
  *
- * Intentionally allows `setTimeout(resolve, 0)` since that's a microtask flush
- * pattern, not a hard wait.
+ * Intentionally allows `setTimeout(resolve, 0)` since it yields to the event loop
+ * once (a macrotask), not a timed wait.
  *
- * Scope: e2e test files only (configured via oxlintrc overrides).
+ * Scope: E2E and FLP test files (configured via oxlintrc overrides).
  */
+/** @type {Rule} */
 const noHardWait = {
 	meta: {
 		type: "problem",
@@ -81,11 +88,11 @@ const noHardWait = {
 		return {
 			AwaitExpression(node) {
 				const inner = node.argument;
-				if (inner?.type !== "NewExpression") return;
+				if (inner.type !== "NewExpression") return;
 				if (inner.callee.type !== "Identifier" || inner.callee.name !== "Promise") return;
 
 				const args = inner.arguments;
-				if (args?.length !== 1) return;
+				if (args.length !== 1) return;
 
 				const callback = args[0];
 				if (callback.type !== "ArrowFunctionExpression" && callback.type !== "FunctionExpression") return;
@@ -94,7 +101,7 @@ const noHardWait = {
 				if (!callExpr) return;
 
 				if (callExpr.callee.type !== "Identifier" || callExpr.callee.name !== "setTimeout") return;
-				if (callExpr.arguments?.length < 2) return;
+				if (callExpr.arguments.length < 2) return;
 
 				const delay = callExpr.arguments[1];
 				if (delay.type === "Literal" && typeof delay.value === "number" && delay.value > 0) {
@@ -107,7 +114,12 @@ const noHardWait = {
 
 const TIMER_FUNCTIONS = new Set(["setTimeout", "setInterval"]);
 
-/** The name of the called function: `name()`, `window.name()` or `globalThis.name()`. */
+/**
+ * The name of the called function: `name()`, `window.name()` or `globalThis.name()`.
+ *
+ * @param {ESTree.Expression} callee
+ * @returns {string | undefined}
+ */
 function calledGlobal(callee) {
 	if (callee.type === "Identifier") return callee.name;
 	if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier") return undefined;
@@ -123,6 +135,7 @@ function calledGlobal(callee) {
  *
  * Scope: library QUnit test files (configured via oxlintrc overrides).
  */
+/** @type {Rule} */
 const noTimers = {
 	meta: {
 		type: "problem",
@@ -147,7 +160,7 @@ const noTimers = {
 	},
 };
 
-/** @type {import('eslint').ESLint.Plugin} */
+/** @type {Plugin} */
 export default {
 	meta: { name: "test-guardrails" },
 	rules: {

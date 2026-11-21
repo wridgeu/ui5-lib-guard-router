@@ -35,7 +35,7 @@ export async function settleReportsNavigation(): Promise<ReportsSettlement> {
 			const Component = sap.ui.require("sap/ui/core/Component");
 			const router: GuardRouter = Component.getComponentById(componentId).getRouter();
 			const { status, route, hash } = await router.navigationSettled();
-			return { status: String(status), route, hash };
+			return { status, route, hash };
 		},
 		await getAppComponentId(REPORTS_APP_ID),
 	);

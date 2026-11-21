@@ -3,15 +3,18 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import suite from "../packages/lib/test/qunit/testsuite.qunit.ts";
+import { testTitles } from "./test-titles.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const QUNIT = "packages/lib/test/qunit";
+/** @param {string} file */
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
+/** @param {string} file */
 const posix = (file) => file.split(path.sep).join("/");
+/** @type {string[]} */
 const errors = [];
-
-const { default: suite } = await import(pathToFileURL(path.join(repoRoot, QUNIT, "testsuite.qunit.ts")).href);
 
 // Rule 1: the test files on disk are the files the test suite registers, each on one page.
 // Rule 2: a page is a folder, so a page only lists files of its own folder.
@@ -58,10 +61,10 @@ for (const file of [...onDisk, ...ports]) {
 	}
 }
 
-// CHANGELOG.md is generated; investigations record the files as they were when they were written.
+// CHANGELOG.md is generated.
 const docs = execFileSync("git", ["ls-files", "*.md"], { cwd: repoRoot, encoding: "utf8" })
 	.split("\n")
-	.filter((file) => file && !/(^|\/)CHANGELOG\.md$|\/vendor\/|^docs\/investigations\//.test(file));
+	.filter((file) => file && !/(^|\/)CHANGELOG\.md$|\/vendor\//.test(file));
 
 // Rule 4: a file of this repository's packages that a doc names exists. Docs also name files
 // in the packages/ folders of other projects.
@@ -79,24 +82,33 @@ for (const doc of docs) {
 const E2E = "packages/demo-app/test";
 const e2eFiles = globSync("**/*.e2e.ts", { cwd: path.join(repoRoot, E2E) }).map((file) => `${E2E}/${posix(file)}`);
 const testFiles = [...[...onDisk, ...ports].map((file) => `${QUNIT}/${file}`), ...e2eFiles];
-const titlesOf = (file) =>
-	new Set(
-		[...read(file).matchAll(/\b(?:QUnit\.test|\w+Test|it)\(\s*"((?:\\.|[^"\\])*)"/g)].map(([, title]) =>
-			title.replace(/\\(.)/g, "$1"),
-		),
-	);
+/** @param {string} file */
+const titlesOf = (file) => testTitles(read(file));
 const citation = /`([^`\s]+\.(?:qunit|e2e)\.ts): ([^`]+)`/g;
 // The same for a module: `<test file>`, module "<name>", or: module "<name>" of `<test file>`.
-const moduleCitations = [
-	/`(?<cited>[^`\s]+\.qunit\.ts)`, module "(?<name>[^"]+)"/g,
-	/\bmodule "(?<name>[^"]+)" of `(?<cited>[^`\s]+\.qunit\.ts)`/gi,
-];
+const moduleAfterFile = /`([^`\s]+\.qunit\.ts)`, module "([^"]+)"/g;
+const moduleBeforeFile = /\bmodule "([^"]+)" of `([^`\s]+\.qunit\.ts)`/gi;
+/**
+ * @param {string} doc
+ * @param {string} cited
+ */
 function citedFile(doc, cited) {
 	const files = testFiles.filter(
 		(file) => file === cited || file === `${QUNIT}/${cited}` || path.posix.basename(file) === cited,
 	);
 	if (files.length !== 1) errors.push(`${doc} cites ${cited}, which names ${files.length} test files`);
 	return files.length === 1 ? files[0] : undefined;
+}
+/**
+ * @param {string} doc
+ * @param {string} cited
+ * @param {string} name
+ */
+function checkModuleCitation(doc, cited, name) {
+	const file = citedFile(doc, cited);
+	if (file && `${QUNIT}/${moduleFiles.get(name)}` !== file) {
+		errors.push(`${doc} cites a module that ${file} does not have: "${name}"`);
+	}
 }
 for (const doc of docs) {
 	// A citation in running text may be wrapped.
@@ -107,22 +119,14 @@ for (const doc of docs) {
 			errors.push(`${doc} cites a test that ${file} does not have: "${title}"`);
 		}
 	}
-	for (const pattern of moduleCitations) {
-		for (const { groups } of text.matchAll(pattern)) {
-			const file = citedFile(doc, groups.cited);
-			if (file && `${QUNIT}/${moduleFiles.get(groups.name)}` !== file) {
-				errors.push(`${doc} cites a module that ${file} does not have: "${groups.name}"`);
-			}
-		}
-	}
+	for (const [, cited, name] of text.matchAll(moduleAfterFile)) checkModuleCitation(doc, cited, name);
+	for (const [, name, cited] of text.matchAll(moduleBeforeFile)) checkModuleCitation(doc, cited, name);
 }
-// The parity table of the library README is made of such citations: none found means the
-// format changed and nothing above checked it.
-const readme = read("packages/lib/README.md");
-const parityStart = readme.indexOf("\n## Compatibility with `sap.m.routing.Router`");
-const paritySection = readme.slice(parityStart, readme.indexOf("\n## ", parityStart + 1));
-if (parityStart === -1 || ![...paritySection.matchAll(citation)].length) {
-	errors.push('packages/lib/README.md: no test citation found in "Compatibility with `sap.m.routing.Router`"');
+// The compatibility table is made of such citations: none found means the format changed and
+// nothing above checked it.
+const COMPATIBILITY = "docs/guides/native-router-compatibility.md";
+if (![...read(COMPATIBILITY).matchAll(citation)].length) {
+	errors.push(`${COMPATIBILITY}: no test citation found`);
 }
 
 if (errors.length > 0) {

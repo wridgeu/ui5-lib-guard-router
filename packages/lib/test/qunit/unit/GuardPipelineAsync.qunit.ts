@@ -3,9 +3,6 @@ import GuardPipeline, { isPromiseLike, isPromiseResolver, nameGuard } from "ui5/
 import type { GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
 import { callUnsafe, createGuardContext as createContext, logMessages, type SinonTestContext } from "../testHelpers";
 
-// ============================================================
-// Module: error handling
-// ============================================================
 QUnit.module("GuardPipeline - error handling");
 
 QUnit.test("throwing guards produce error decisions and log errors", function (this: SinonTestContext, assert: Assert) {
@@ -59,11 +56,11 @@ QUnit.test("a named guard's throw is logged with its name", async function (this
 	const sync = new GuardPipeline();
 	sync.addGlobalGuard(() => true);
 	sync.addGlobalGuard(enter);
-	sync.evaluate(createContext());
+	void sync.evaluate(createContext());
 
 	const leaving = new GuardPipeline();
 	leaving.addLeaveGuard("current", leave);
-	leaving.evaluate(createContext({ fromRoute: "current" }));
+	void leaving.evaluate(createContext({ fromRoute: "current" }));
 
 	const async = new GuardPipeline();
 	async.addGlobalGuard(() => Promise.resolve(true));
@@ -156,9 +153,6 @@ QUnit.test("guard returning false produces block, not error", function (assert: 
 	assert.deepEqual(pipeline.evaluate(createContext()), { action: "block" }, "false → block, not error");
 });
 
-// ============================================================
-// Module: async
-// ============================================================
 QUnit.module("GuardPipeline - async");
 
 QUnit.test("async guard decisions", async function (assert: Assert) {
@@ -366,9 +360,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Promise resolve functions
-// ============================================================
 QUnit.module("GuardPipeline - Promise resolve functions");
 
 /** The resolve and reject functions of a native Promise. A UI5 component target subscribes the first one. */

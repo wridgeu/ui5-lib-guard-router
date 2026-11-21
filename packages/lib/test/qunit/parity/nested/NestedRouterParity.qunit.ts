@@ -37,8 +37,8 @@ function parityTest(title: string, scenario: Scenario): void {
 		const control = await record("native");
 
 		assert.deepEqual(
-			[...new Set(guardOwners.allow)].toSorted(),
-			["parity", "parity---child"],
+			new Set(guardOwners.allow),
+			new Set(["parity", "parity---child"]),
 			"the allowing guard ran in the parent's and in the child's router",
 		);
 		assert.deepEqual([...guardOwners.native, ...guardOwners.guard], [], "and only where it is declared");

@@ -23,9 +23,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: navTo preflight
-// ============================================================
 QUnit.module("Router - navTo preflight", standardHooks);
 
 QUnit.test("blocked programmatic navTo does not change the hash", function (assert) {
@@ -159,13 +156,11 @@ QUnit.test("navTo with replace=true works through preflight with guards", async 
 	await waitForRoute(router, "home");
 	guardCallCount = 0;
 
-	// Navigate to protected first (creates history entry)
 	router.navTo("protected");
 	await router.navigationSettled();
 	assert.strictEqual(getHash(), "protected", "Navigated to protected");
 	assert.strictEqual(guardCallCount, 1, "Guard ran for first navigation");
 
-	// Navigate with replace=true (3-arg overload)
 	router.navTo("forbidden", {}, true);
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
@@ -181,7 +176,6 @@ QUnit.test("navTo with replace=true works through preflight (4-arg overload)", a
 	router.navTo("protected");
 	await router.navigationSettled();
 
-	// Navigate with replace=true (4-arg overload)
 	router.navTo("forbidden", {}, {}, true);
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "Navigation committed");
@@ -249,7 +243,6 @@ QUnit.test("navTo to unknown route cancels pending async guard pipeline", async 
 	);
 	router.initialize();
 
-	// Start an async preflight to a guarded route.
 	router.navTo("protected");
 	const settled = router.navigationSettled();
 
@@ -257,7 +250,6 @@ QUnit.test("navTo to unknown route cancels pending async guard pipeline", async 
 	// This must cancel the pending navigation so settlement resolvers drain.
 	router.navTo("nonexistent");
 
-	// Resolve the now-stale guard to prove it is discarded.
 	resolveGuard(true);
 
 	const result = await settled;
@@ -280,18 +272,15 @@ QUnit.test("navTo to unknown route then real route works after cancellation", as
 	});
 	router.initialize();
 
-	// Start async preflight.
 	router.navTo("protected");
 	const firstSettled = router.navigationSettled();
 
-	// Unknown route supersedes.
 	router.navTo("nonexistent");
 	resolveGuard(true);
 
 	const cancelResult = await firstSettled;
 	assert.strictEqual(cancelResult.status, NavigationOutcome.Cancelled, "First navigation cancelled");
 
-	// Subsequent navTo to a real route must work normally.
 	router.navTo("forbidden");
 	const secondResult = await router.navigationSettled();
 	assert.strictEqual(secondResult.status, NavigationOutcome.Committed, "Subsequent navigation commits");
@@ -299,11 +288,11 @@ QUnit.test("navTo to unknown route then real route works after cancellation", as
 });
 
 QUnit.test("async preflight superseded by second navTo cancels first", async function (assert) {
-	let resolveGuard!: (value: boolean) => void;
+	let resolveLatestGuard!: (value: boolean) => void;
 	router.addGuard(
 		() =>
 			new Promise<boolean>((r) => {
-				resolveGuard = r;
+				resolveLatestGuard = r;
 			}),
 	);
 	router.initialize();
@@ -312,7 +301,7 @@ QUnit.test("async preflight superseded by second navTo cancels first", async fun
 	const settled = router.navigationSettled();
 	router.navTo("forbidden"); // supersedes first
 
-	resolveGuard(true); // resolves the second guard (shared variable was overwritten by navTo("forbidden"))
+	resolveLatestGuard(true);
 
 	const result = await settled;
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "First navigation cancelled");
@@ -387,7 +376,6 @@ QUnit.test(
 		// drop this; it should cancel the preflight and take over.
 		HashChanger.getInstance().setHash("protected");
 
-		// Now block the guard.
 		resolveGuard(false);
 		const result = await router.navigationSettled();
 		assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation blocked");
@@ -410,7 +398,6 @@ QUnit.test("setHash during async preflight supersedes the preflight", async func
 	const result = await settledPromise;
 	assert.strictEqual(result.status, NavigationOutcome.Cancelled, "Preflight cancelled by parse");
 
-	// The parse-driven navigation should proceed normally.
 	await waitForRoute(router, "forbidden");
 	assert.strictEqual(getHash(), "forbidden", "parse-driven navigation committed");
 });
@@ -422,7 +409,7 @@ QUnit.test("redirect to nonexistent via setHash restores the hash", async functi
 
 	HashChanger.getInstance().setHash("protected");
 	await router.navigationSettled();
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash was restored after block");
+	assert.strictEqual(getHash(), "", "Hash was restored after block");
 });
 
 QUnit.test("redirect to nonexistent via navTo leaves hash unchanged", async function (assert) {
@@ -508,5 +495,33 @@ QUnit.test(
 		);
 		assert.strictEqual(setHash.callCount, 0, "no history entry added");
 		assert.deepEqual(restores, [0, 0, 0, 0, 0], "no hash restore after any of them: the hash never changed");
+	},
+);
+
+QUnit.test(
+	"navTo() called while an allowed navigation writes its hash is guarded, and the allowed navigation still commits",
+	async function (assert: Assert) {
+		let guardCalls = 0;
+		router.addRouteGuard("detail", () => {
+			guardCalls++;
+			return false;
+		});
+		let navigating = false;
+		// Attached before initialize(), so it runs before the router receives the hash change.
+		router.getHashChanger().attachEvent("hashChanged", () => {
+			if (!navigating) return;
+			navigating = false;
+			router.navTo("detail", { id: "1" });
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		navigating = true;
+		router.navTo("protected");
+		await flushPromises();
+		assert.strictEqual(guardCalls, 1, "the guard of the target ran");
+		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Committed], "blocked, then committed");
+		assert.strictEqual(getHash(), "protected", "the allowed navigation has its hash");
 	},
 );

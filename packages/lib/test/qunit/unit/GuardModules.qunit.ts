@@ -1,11 +1,16 @@
 import Log from "sap/base/Log";
 import { createLazyGuards, resolveModuleExports, runGuardsInOrder } from "ui5/guard/router/GuardModules";
 import type { GuardFn } from "ui5/guard/router/types";
-import { createGuardContext, logMessages, type SinonTestContext } from "../testHelpers";
+import { createGuardContext, loadModule, logMessages, type SinonTestContext } from "../testHelpers";
 
 const PATH = "app/guards/auth";
 const a: GuardFn = () => true;
 const b: GuardFn = () => true;
+
+/** A transpiled module whose default export is a guard and that has a named export beside it. */
+interface DefaultWithNamedExport extends GuardFn {
+	named: GuardFn;
+}
 
 function warned(detail: string): string[] {
 	return [`guardRouter.guards: "${PATH}" ${detail}`];
@@ -20,6 +25,29 @@ QUnit.test("function export", function (this: SinonTestContext, assert) {
 	assert.deepEqual(resolveModuleExports(a, PATH, "x"), [{ name: "x", fn: a }], "the export key only names it");
 	assert.deepEqual(logMessages(debug), [`guardRouter.guards: "${PATH}#x" is a single function, ignoring export key`]);
 });
+
+QUnit.test(
+	"a named export beside the default export of a transpiled module is picked by key",
+	async function (this: SinonTestContext, assert) {
+		const debug = this.stub(Log, "debug");
+		const path = "ui5/guard/router/qunit/fixtures/guards/defaultWithNamedExportGuard";
+		const mod = await loadModule<DefaultWithNamedExport>(path);
+
+		assert.deepEqual(resolveModuleExports(mod, path), [{ name: "defaultWithNamedExportGuard", fn: mod }]);
+		assert.deepEqual(resolveModuleExports(mod, path, "named"), [{ name: "named", fn: mod.named }]);
+		assert.strictEqual(debug.callCount, 0, "the export key is not ignored");
+		assert.deepEqual(
+			resolveModuleExports(mod, path, "length"),
+			[{ name: "length", fn: mod }],
+			"a property that is no function is no guard",
+		);
+		assert.deepEqual(
+			resolveModuleExports(mod, path, "call"),
+			[{ name: "call", fn: mod }],
+			"a function the module inherits is no named export",
+		);
+	},
+);
 
 QUnit.test("array export", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
@@ -71,7 +99,7 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 		"a key wins over an index",
 	);
 	assert.strictEqual(warning.callCount, 0);
-	for (const key of ["2", "-1", "missing", "1faGuard", "1.5", " 1"]) {
+	for (const key of ["2", "-1", "missing", "1faGuard", "1.5", " 1", "toString", "constructor"]) {
 		warning.resetHistory();
 		assert.deepEqual(resolveModuleExports(mod, PATH, key), [], `#${key}`);
 		assert.deepEqual(logMessages(warning), warned(`#${key} - key not found, skipping`));
@@ -80,6 +108,28 @@ QUnit.test("object export picked by key or index", function (this: SinonTestCont
 	assert.deepEqual(resolveModuleExports({ first: a, bad: 1 }, PATH, "bad"), []);
 	assert.deepEqual(logMessages(warning), warned("#bad is not a function, skipping"));
 });
+
+QUnit.test(
+	"named exports of a transpiled module are picked by key or index",
+	async function (this: SinonTestContext, assert) {
+		const warning = this.stub(Log, "warning");
+		const path = "ui5/guard/router/qunit/fixtures/guards/namedExportGuard";
+		const mod = await loadModule<{ namedFirst: GuardFn; namedSecond: GuardFn }>(path);
+		assert.strictEqual(
+			Reflect.get(mod, "__esModule"),
+			true,
+			"the module object holds the marker of the transpiler",
+		);
+
+		const first = { name: "namedFirst", fn: mod.namedFirst };
+		const second = { name: "namedSecond", fn: mod.namedSecond };
+		assert.deepEqual(resolveModuleExports(mod, path), [first, second], "the marker is no guard");
+		assert.deepEqual(resolveModuleExports(mod, path, "0"), [first], "nor does it take a position");
+		assert.deepEqual(resolveModuleExports(mod, path, "1"), [second]);
+		assert.deepEqual(resolveModuleExports(mod, path, "namedSecond"), [second]);
+		assert.strictEqual(warning.callCount, 0);
+	},
+);
 
 QUnit.test("empty and unsupported exports", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");

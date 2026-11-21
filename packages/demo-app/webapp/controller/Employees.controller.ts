@@ -1,4 +1,4 @@
-import type Text from "sap/m/Text";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import BaseController from "./BaseController";
 
 /**
@@ -20,19 +20,19 @@ export default class EmployeesController extends BaseController {
 
 	private _showMeta(): void {
 		const meta = this.getRouter().getRouteMeta("employees");
-		(this.byId("employeesMeta") as Text).setText(JSON.stringify(meta));
+		(this.getModel("runtime") as JSONModel).setProperty("/employeesMeta", JSON.stringify(meta));
 	}
 
-	/** Navigate to the Employee detail view for a demo employee. */
 	onNavToEmployee(): void {
 		this.getRouter().navTo("employee", { id: "42" });
 	}
 
-	/** Update the employees route metadata at runtime and refresh the display. */
 	onUpdateMeta(): void {
-		const router = this.getRouter();
-		router.setRouteMeta("employees", { section: "hr", requiresAuth: true, updatedAt: new Date().toISOString() });
-		const meta = router.getRouteMeta("employees");
-		(this.byId("employeesMeta") as Text).setText(JSON.stringify(meta));
+		this.getRouter().setRouteMeta("employees", {
+			section: "hr",
+			requiresAuth: true,
+			updatedAt: new Date().toISOString(),
+		});
+		this._showMeta();
 	}
 }

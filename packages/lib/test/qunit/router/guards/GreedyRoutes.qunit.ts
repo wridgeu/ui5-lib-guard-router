@@ -1,13 +1,10 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import { flushPromises, GuardRouterClass, initHashChanger, waitForRoute } from "../../testHelpers";
+import { flushPromises, GuardRouterClass, initHashChanger, waitForRoute, getHash } from "../../testHelpers";
 
 let router: GuardRouter;
 
-// ============================================================
-// Module: Greedy routes
-// ============================================================
 const GREEDY_ROUTES = [
 	{ name: "home", pattern: "" },
 	{ name: "detail", pattern: "detail/{id}" },
@@ -88,7 +85,7 @@ QUnit.test(
 		);
 		await flushPromises();
 
-		assert.strictEqual(HashChanger.getInstance().getHash(), "", "the hash is unchanged");
+		assert.strictEqual(getHash(), "", "the hash is unchanged");
 		assert.deepEqual(matched, [], "no route matched");
 
 		router.navTo("other");

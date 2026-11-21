@@ -14,8 +14,8 @@ const LOG_COMPONENT = "demo.app.guards";
  * With `inheritance: "pattern-tree"` enabled, child routes inherit
  * metadata from ancestor routes automatically.
  *
- * Note: Uses Log.info() which may be filtered in browser console by default.
- * Set console log level to "Info" or use sap-ui-log-level=INFO URL parameter.
+ * Log.info() entries are recorded only at UI5 log level INFO: add sap-ui-log-level=INFO to the URL,
+ * or call Log.setLevel(Log.Level.INFO, "demo.app.guards").
  */
 export default function navigationLogger(context: GuardContext): GuardResult {
 	const from = context.fromRoute || "(initial)";

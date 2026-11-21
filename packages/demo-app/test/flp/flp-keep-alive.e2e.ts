@@ -1,9 +1,10 @@
-import type UshellContainer from "sap/ushell/Container";
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
+import { getDirtyState } from "../shared/models";
 import {
 	installDialogHandler,
 	loginAndGoToProtectedInFlp,
+	navigateCrossAppInFlp,
 	resetFlpDemo,
 	setDirtyStateInFlp,
 	waitForRouterRunningInFlp,
@@ -12,37 +13,17 @@ import {
 const PEER_APP_ID = "demo.peer";
 
 /**
- * Navigate to another app through the FLP Navigation service, confirm the unsaved-data prompt
- * if the launchpad shows one, and wait for the URL to show the target. Returns whether the
- * launchpad asked.
+ * Navigate to another app, confirm the unsaved-data prompt if the launchpad shows one, and
+ * wait until the launchpad has loaded the app. Returns whether the launchpad asked.
  */
 async function navigateCrossApp(shellHash: string): Promise<boolean> {
 	const { record, cleanup } = installDialogHandler(true);
 	try {
-		await browser.execute(async (target: string) => {
-			const Container: typeof UshellContainer = sap.ui.require("sap/ushell/Container");
-			const navigation = await Container.getServiceAsync("Navigation");
-			// Not awaited: a confirm() blocks the page until the dialog is handled.
-			void navigation.navigate({ target: { shellHash: target } });
-		}, shellHash);
-		await browser.waitUntil(async () => (await browser.execute(() => window.location.hash)).includes(shellHash), {
-			timeout: 10000,
-			timeoutMsg: `FLP did not navigate to "${shellHash}"`,
-		});
+		await navigateCrossAppInFlp(shellHash);
 		return record.called;
 	} finally {
 		cleanup();
 	}
-}
-
-async function isFormDirty(): Promise<unknown> {
-	return browser.execute(
-		(componentId: string) => {
-			const Component = sap.ui.require("sap/ui/core/Component");
-			return Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
-		},
-		await getAppComponentId(),
-	);
 }
 
 /**
@@ -68,13 +49,13 @@ describe("FLP keep-alive (isolated session)", () => {
 		expect(await navigateCrossApp("peer-display")).toBe(true);
 		await waitForComponent(PEER_APP_ID);
 		expect(await getAppComponentId()).toBe(componentId);
-		expect(await isFormDirty()).toBe(true);
+		expect(await getDirtyState()).toBe(true);
 
 		// The demo app is hidden with unsaved data. Coming back to it loses nothing.
 		expect(await navigateCrossApp("app-preview")).toBe(false);
 		await waitForRouterRunningInFlp();
 		expect(await getAppComponentId()).toBe(componentId);
-		expect(await isFormDirty()).toBe(true);
+		expect(await getDirtyState()).toBe(true);
 
 		// It is shown again, so leaving it asks again.
 		expect(await navigateCrossApp("peer-display")).toBe(true);

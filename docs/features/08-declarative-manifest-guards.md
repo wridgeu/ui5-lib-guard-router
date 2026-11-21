@@ -1,497 +1,171 @@
 # Declarative Manifest-Based Guard Configuration
 
-**Date**: 2026-03-21 (updated 2026-03-22)
 **Status**: Implemented
 **Closes**: #41, #31
 **Supersedes**: PR #46 (`feat/router-options-manifest-config`)
 
 ## Overview
 
-Combine two related features into one cohesive manifest-first configuration system for the guard router:
+One manifest-first configuration for the guard router, under `sap.ui5.routing.config.guardRouter`:
 
-1. **Router options** (from PR #46): `unknownRouteRegistration` and `navToPreflight`, plus the per-call `skipGuards` option of `navTo()`
-2. **Declarative guard registration** (issue #41): declaring guard module paths in the manifest
+1. **Router options** (from PR #46): `unknownRouteRegistration` and `navToPreflight`, plus the per-call `skipGuards` option of `navTo()`.
+2. **Declarative guards** (issue #41): guard module paths in the manifest.
 
-Both features live under `sap.ui5.routing.config.guardRouter` in `manifest.json` and are implemented fresh against the state machine architecture (merged to main via `refactor/state-machine-v2`).
+Multi-guard modules, cherry-picks, guard names and the `"lazy"` loading strategy came in a second step: [08b](./08b-multi-guard-modules-and-pattern5-loading.md).
 
-## Manifest Schema
+## Configuration
 
-```json
-{
-	"sap.ui5": {
-		"routing": {
-			"config": {
-				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteRegistration": "warn",
-					"navToPreflight": "guard",
-					"guardLoading": "lazy",
-					"guards": {
-						"*": ["guards.authGuard"],
-						"admin": {
-							"enter": ["guards.adminGuard"],
-							"leave": ["guards.unsavedChangesGuard"]
-						},
-						"editor": {
-							"leave": ["guards.dirtyFormGuard"]
-						},
-						"settings": ["guards.settingsGuard"]
-					}
-				}
-			}
-		}
-	}
-}
-```
+The schema, the options with their values and defaults, the `guards` block, module paths and the guard module format are documented once, in the library README: [Manifest Configuration](../../packages/lib/README.md#manifest-configuration) and [Guard module format](../../packages/lib/README.md#guard-module-format). The decisions behind them:
 
-### Router Options
+- Everything lives in `sap.ui5.routing.config.guardRouter`, next to `routerClass`, so router options and guards are configured in one place. An invalid option value is warned about and replaced by its default instead of failing the app.
+- There are no global leave guards (see [01](./01-leave-guards.md#per-route-only)); `leave` under `"*"` is warned about and skipped.
+- Module paths resolve relative to the component namespace, and a `"module:"` prefix opts out, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()`.
+- The export shape is detected when the router resolves the module: at `initialize()` for cached or `"block"`-loaded modules, otherwise when a lazy wrapper first loads it.
 
-| Option                     | Values                              | Default   | Description                                                                                                                                                                     |
-| -------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Behavior when registering guards for unknown route names. With `"throw"`, a manifest guard on an unknown route is skipped and an error is logged; `initialize()` does not throw |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How programmatic `navTo()` interacts with the guard pipeline                                                                                                                    |
-| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest-declared guard modules are loaded at initialization                                                                                                                |
-| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | Whether manifest guards and route metadata also apply to routes whose pattern extends the declared route's pattern                                                              |
+## Guard context `bag`
 
-The `guardRouter` block also holds the `guards` and `routeMeta` maps, which are not options.
+Manifest guards are standalone functions without a closure over component state, so they need `context.bag` ([README](../../packages/lib/README.md#guard-context-bag)) to pass data between them. It is created per navigation attempt, shared by all guards of that attempt including every redirect hop, and never read or written by the router.
 
-### Guards Block
+`bag` is a required field (1.5.0). Guard functions are unaffected; code that builds a `GuardContext` literal (usually tests) must add `bag: new Map()`. This was shipped as a minor version.
 
-| Key           | Format                                     | Equivalent API                                   |
-| ------------- | ------------------------------------------ | ------------------------------------------------ |
-| `"*"`         | `string[]`                                 | `addGuard()` for each module                     |
-| `"routeName"` | `string[]` (shorthand)                     | `addRouteGuard()` for each module (enter guards) |
-| `"routeName"` | `{ "enter": string[], "leave": string[] }` | `addRouteGuard()` / `addLeaveGuard()`            |
+## Constructor and `initialize()`
 
-- The `"*"` key only supports the `string[]` format (global leave guards do not exist in the API). Using the object form `{ "enter": [...] }` for `"*"` logs an info message and is treated as the array form; a `leave` array under `"*"` logs a warning and is skipped.
-- Route keys match the route names UI5 registers: the `name` of each entry in a `routes` array; for routes given as an object map, the entry's `name` if set, else its key.
-- Module paths use **dot notation** and resolve **relative to the component namespace** (`sap.app.id`).
-    - Example: In app `demo.app`, `"guards.authGuard"` resolves to `demo/app/guards/authGuard` for `sap.ui.require`.
-    - `"authGuard"` (no folder) resolves to `demo/app/authGuard` — the component root.
-    - The component namespace is read from the router's owner component (the `oOwner` constructor argument) via `owner.getManifestEntry("sap.app")?.id`. If unavailable (e.g. standalone tests without a component), no namespace is prepended and the dot path is only converted to slashes.
-    - Paths prefixed with `"module:"` bypass namespace resolution, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()` convention. Example: `"module:some.other.lib.guard"` resolves to `some/other/lib/guard` directly.
-- Each module's default export must be one of three shapes: a single function, an array of functions, or a plain object with function values (see [Guard Module Format](#guard-module-format)).
-- A module entry may include a `#` cherry-pick suffix to select a single export: `"guards.security#checkAuth"` (see [Cherry-Pick Syntax](#cherry-pick-syntax)).
-- Array order defines execution order within a route.
-- Manifest guards are registered in `initialize()` (see [Execution Order](#execution-order)).
-
-### Guard Module Format
-
-A guard module's default export must be one of three shapes. The shape is detected when the router resolves the module's exports: at `initialize()` for cached or `"block"`-loaded modules, otherwise when the lazy wrapper first loads the module.
-
-**Shape 1: Function** — single guard; name derived from the last segment of the module path.
-
-```typescript
-// guards/authGuard.ts → guard name: "authGuard"
-import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-
-export default function authGuard(context: GuardContext): GuardResult {
-	// Standalone function — no closure over component state.
-	// For inter-guard data, use context.bag; for component state (models),
-	// use context.ownerComponent (since 1.7.0).
-	const user = context.bag.get("user");
-	return user ? true : "login";
-}
-```
-
-**Shape 2: Array** — ordered guards; names derived as `"moduleName#0"`, `"moduleName#1"`, etc. Array index = execution order.
-
-```typescript
-// guards/checks.ts → guard names: "checks#0", "checks#1"
-export default [
-	function (context: GuardContext): GuardResult {
-		return checkA();
-	},
-	function (context: GuardContext): GuardResult {
-		return checkB();
-	},
-];
-```
-
-**Shape 3: Plain Object** — named guards; object key = guard name; key insertion order = execution order (guaranteed by ES2015+).
-
-```typescript
-// guards/security.ts → guard names: "checkAuth", "checkRole", "checkPermission"
-export default {
-	checkAuth(context: GuardContext): GuardResult {
-		/* ... */
-	},
-	checkRole(context: GuardContext): GuardResult {
-		/* ... */
-	},
-	checkPermission(context: GuardContext): GuardResult {
-		/* ... */
-	},
-};
-```
-
-Non-function entries within arrays or objects are warned and skipped individually. Empty arrays (`[]`) and empty objects (`{}`) pass shape detection but produce zero guards and log a warning.
-
-Detection logic:
+A TypeScript class must call `super()` before it touches `this`, so the constructor strips `guardRouter` from the config inline:
 
 ```
-typeof export === "function"    → Shape 1
-Array.isArray(export)           → Shape 2
-plain object (Object or null prototype) → Shape 3
-anything else                   → warning, module skipped
-```
-
-### Cherry-Pick Syntax
-
-Append `#exportKey` to a module path to select a single export instead of registering all exports from the module.
-
-| Syntax                        | Behavior                                                                                             |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `"guards.security"`           | Register **all** exports from module (key/array order)                                               |
-| `"guards.security#checkAuth"` | Register only the named export (object key)                                                          |
-| `"guards.checks#1"`           | Register only the export at index 1 (array index, or position in object key order)                   |
-| `"guards.auth#anything"`      | For single-function modules, `#` is ignored — the function is the only export. Logs a debug message. |
-
-The `module:` prefix and `#` cherry-pick compose naturally: `"module:some.other.lib.guards#checkAuth"` resolves to module path `some/other/lib/guards` with export key `checkAuth`. Parsing splits on `#` first, then namespace resolution handles the `module:` prefix on the base path.
-
-If the specified key does not exist or is not a function, a warning is logged and the guard is skipped.
-
-### Module Caching
-
-`sap.ui.require` caches modules globally. Once a guard module is loaded (by either loading strategy), subsequent calls to `sap.ui.require("module/path")` return the cached export synchronously. There is no re-loading overhead for repeated guard evaluations.
-
-## Guard Context `bag`
-
-A shared mutable `Map<string, unknown>` on `GuardContext` for inter-guard data passing:
-
-- Created fresh per navigation attempt.
-- Shared across all guards of that navigation (leave → global enter → route enter), including the guards of every redirect hop.
-- The router never reads from or writes to it — it is purely a carrier.
-- Scoped to a single navigation attempt; garbage collected when the pipeline finishes.
-
-**Breaking change note**: `bag` is added as a required field on `GuardContext`. Existing guard functions that receive `GuardContext` are unaffected (they simply don't read `bag`). However, any application or test code that constructs a `GuardContext` literal will need to include `bag: new Map()`. This is a minor semver breaking change to the public type.
-
-```typescript
-// Guard A stores data
-context.bag.set("user", await fetchUser(context.signal));
-
-// Guard B reads data (runs after Guard A in array order)
-const user = context.bag.get("user");
-```
-
-## Constructor and Initialization Flow
-
-In TypeScript native classes, `super()` must be called before accessing `this`. The constructor handles this by preparing the cleaned config inline:
-
-```
-Constructor(routes, config, owner, ...)
-  ├── Destructure guardRouter from config inline
-  ├── Call super(routes, cleanedConfig, owner, ...) with guardRouter removed
-  ├── parseGuardRouterConfig(guardRouter, sap.app/id) in GuardConfig.ts:
-  │   ├── options (unknownRouteRegistration, navToPreflight, guardLoading, inheritance)
-  │   │   → store as _options
-  │   ├── routeMeta → RouteMetaStore (_meta, RouteMeta.ts)
-  │   └── guards block → store as _pendingGuardDescriptors
-  └── If guardLoading === "lazy":
-        Fire preload hint: sap.ui.require(uniqueModulePaths) — no success callback;
-        a failed load is reported when the guard runs
+constructor(routes, config, owner, ...)
+  ├── super(routes, config without guardRouter, owner, ...)
+  ├── parseGuardRouterConfig(guardRouter, sap.app/id)   (GuardConfig.ts)
+  │   ├── options   -> _options
+  │   ├── routeMeta -> _meta (RouteMetaStore, RouteMeta.ts)
+  │   └── guards    -> _pendingGuardDescriptors
+  └── guardLoading "lazy": preload hint sap.ui.require(uniqueModulePaths)
 
 initialize()
-  ├── If guardLoading === "block" and pending guards exist:
-  │     Load all guard modules via sap.ui.require (GuardModules.loadGuardModules)
-  │     → Register resolved functions through _registerManifestGuard
-  │       (addGuard / addRouteGuard / leave guard registration)
-  │     → Then call super.initialize()
-  │     (destroy() and stop() while loading: see module-loading reference)
-  ├── If guardLoading === "lazy" (default) and pending guards exist:
-  │     Create guards per descriptor (GuardModules.createLazyGuards),
-  │     register them through _registerManifestGuard
-  │     Bare-path descriptors: probe sap.ui.require(path)
-  │     → Cache hit: register each guard of the module individually
-  │     → Cache miss: register one wrapper that loads the module on first
-  │       navigation and runs all of its guards in order (sync once loaded)
-  │     Cherry-picked descriptors: register one lazy wrapper each
-  │     → Each wrapper tries sync sap.ui.require(path) first (cache hit)
-  │     → On cache miss, loads async via sap.ui.require([path], cb)
-  │     Call super.initialize() — always synchronous in this mode
-  └── If no guards declared:
-        Call super.initialize() directly
+  ├── no manifest guards: start the router
+  ├── inheritance "pattern-tree": expand descriptors to descendant routes
+  ├── "lazy" (default): register the guards from createLazyGuards() (GuardModules.ts),
+  │   then start synchronously
+  └── "block": load all modules (loadGuardModules()), register their guards,
+      then start
 ```
 
-The `initialize()` override delays the first `parse()` call (triggered by the HashChanger listener) until guards are loaded (`"block"`) or registers lazy wrappers (`"lazy"`). In `"lazy"` mode `initialize()` is always synchronous — the preload hint fired in the constructor makes cache hits the common case. This is safe because `initialize()` is the entry point for hash listening. How `destroy()`, `stop()` and `navTo()` behave while block-mode modules load is described in the library README, [Lifecycle](../../packages/lib/README.md#lifecycle), and implemented as described in [Module Loading and Destroy Safety](../reference/module-loading-and-destroy-safety.md#stop-and-initialize-while-modules-load).
+Every manifest guard goes through `_registerManifestGuard()`. Manifest guards are registered in `initialize()`, so they exist before the first navigation. Guards that a controller of a routed view adds in `onInit` run after them, because `initialize()` displays the target views. Guards added before `initialize()`, for example in a root view created synchronously, run before them; see [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards).
 
-## navTo() with Preflight Modes
+How `destroy()`, `stop()` and `navTo()` behave while `"block"` modules load: library README, [Lifecycle](../../packages/lib/README.md#lifecycle), and [Module Loading and Destroy Safety](../reference/module-loading-and-destroy-safety.md#stop-and-initialize-while-modules-load).
 
-Two-level override system:
+The new private state is `_options` (normalized options, all fields set) and `_pendingGuardDescriptors` (cleared by `initialize()`).
 
-1. **Global** (`navToPreflight` in manifest/constructor) — default for all programmatic `navTo()` calls
-2. **Per-call** (`{ skipGuards: true }` in `navTo()` options) — one-way escape hatch for a single call
-
-### navTo Overload Signatures
-
-```typescript
-// Standard UI5 overloads (unchanged)
-navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
-navTo(routeName: string, parameters?: object, componentTargetInfo?: Record<string, ComponentTargetParameters>, bReplace?: boolean): this;
-
-// Extended overloads with GuardNavToOptions
-navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
-navTo(routeName: string, parameters?: object, componentTargetInfo?: Record<string, ComponentTargetParameters>, bReplace?: boolean, options?: GuardNavToOptions): this;
-```
-
-`GuardNavToOptions` is always the last argument. When using the short form (without `componentTargetInfo`), pass `options` in the 4th position:
-
-```typescript
-router.navTo("home", {}, true, { skipGuards: true });
-```
-
-### Preflight Decision Flow
-
-```
-navTo(routeName, parameters?, componentTargetInfoOrReplace?, replaceOrOptions?, options?)
-  ├── Parse overloads → normalize arguments + extract GuardNavToOptions
-  ├── Committing/redirect phase? → bypass to super.navTo() (existing)
-  │
-  ├── skipGuards === true OR navToPreflight === "bypass"?
-  │     Set phase → committing (origin: "preflight")
-  │     Call super.navTo() → parse() sees committing phase, commits
-  │     (no hash change → navTo() commits directly; super.navTo() throws →
-  │     phase reset to idle)
-  │     Settlement outcome: NavigationOutcome.Committed
-  │
-  ├── navToPreflight === "off"?
-  │     Call super.navTo() directly (no phase change)
-  │     → parse() runs guards as fallback (deferred path)
-  │     Note: inherits all limitations of the parse() fallback —
-  │     hash changes before guards run, blocked navigations must
-  │     restore the hash, and navigationSettled() may resolve late
-  │     for async guards.
-  │
-  └── navToPreflight === "guard" (default)?
-        Existing preflight flow: evaluate guards → apply decision
-```
-
-### Unknown Route Guard Registration
-
-`_warnIfRouteUnknown()` becomes `_handleUnknownRouteRegistration()`:
-
-- `"ignore"` — register silently
-- `"warn"` — log warning, still register (default)
-- `"throw"` — throw synchronously, do not register (all-or-nothing for config objects)
-
-A manifest guard on an unknown route has no caller that could catch the throw. Under `"throw"`, `_registerManifestGuard` logs `guardRouter.guards: failed to register "<modulePath>"` and skips that guard; the other guards are registered and the router still starts. This holds in `"block"` and `"lazy"` mode, and for guards that `addRoute()` registers through inheritance.
-
-## New and Modified Types
-
-```typescript
-// --- New types ---
-
-type UnknownRouteRegistrationPolicy = "ignore" | "warn" | "throw";
-type NavToPreflightMode = "guard" | "bypass" | "off";
-type GuardLoading = "block" | "lazy";
-
-interface GuardRouterOptions {
-	unknownRouteRegistration?: UnknownRouteRegistrationPolicy;
-	navToPreflight?: NavToPreflightMode;
-	guardLoading?: GuardLoading;
-	inheritance?: Inheritance; // added in v1.6.0
-	guards?: ManifestGuardConfig;
-	routeMeta?: Record<string, Record<string, unknown>>; // added in v1.6.0
-}
-
-interface GuardNavToOptions {
-	skipGuards?: boolean;
-}
-
-type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardConfig>;
-
-interface ManifestRouteGuardConfig {
-	enter?: string[];
-	leave?: string[];
-}
-
-// --- Modified types ---
-
-interface GuardContext {
-	toRoute: string;
-	toHash: string;
-	toArguments: RouteInfo["arguments"];
-	fromRoute: string;
-	fromHash: string;
-	signal: AbortSignal;
-	bag: Map<string, unknown>; // added in v1.5.0
-	toMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
-	fromMeta: Readonly<Record<string, unknown>>; // added in v1.6.0
-	ownerComponent?: UIComponent; // added in v1.7.0
-}
-
-// --- GuardRouter interface navTo overloads ---
-
-interface GuardRouter extends MobileRouter {
-	navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
-	navTo(
-		routeName: string,
-		parameters?: object,
-		componentTargetInfo?: Record<string, ComponentTargetParameters>,
-		bReplace?: boolean,
-	): this;
-	navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
-	navTo(
-		routeName: string,
-		parameters?: object,
-		componentTargetInfo?: Record<string, ComponentTargetParameters>,
-		bReplace?: boolean,
-		options?: GuardNavToOptions,
-	): this;
-	// ... existing guard methods unchanged ...
-}
-```
-
-## Private Fields Added to Router
-
-| Field                      | Type                         | Lifetime  | Purpose                                                                        |
-| -------------------------- | ---------------------------- | --------- | ------------------------------------------------------------------------------ |
-| `_options`                 | `ResolvedGuardRouterOptions` | Permanent | Normalized router options (all fields required)                                |
-| `_pendingGuardDescriptors` | `GuardDescriptor[]`          | Transient | Parsed manifest guard declarations; consumed and cleared during `initialize()` |
-
-No `_guardsBypassedHash` field is needed. Both `"bypass"` mode and `skipGuards: true` use the existing committing/preflight phase, which produces `NavigationOutcome.Committed` — the guards were not involved, but the navigation committed normally.
-
-## Execution Order
-
-The phase order and the position of manifest guards relative to imperative ones are documented in the library README, [Execution order](../../packages/lib/README.md#execution-order) and [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards). Manifest guards are registered in `initialize()` so that they exist before `super.initialize()` triggers the first navigation; imperative guards added in a controller's `onInit` therefore run after them, because the root view is created by `super.initialize()`.
-
-## Guard Loading Strategies
+## Guard loading
 
 ### `"block"`
 
-Router delays `super.initialize()` until all manifest guard modules are resolved via `sap.ui.require`. The first navigation only fires after all guards are in place. Adds startup latency proportional to module loading time, but guarantees no unguarded navigation for manifest-declared guards.
+`initialize()` loads all manifest modules first and starts the router when they are registered. The first navigation waits for that, so no navigation runs without its manifest guards. Startup latency grows with module load time. A module that fails to load is warned about and its guards are skipped.
 
 ### `"lazy"` (default)
 
-The default strategy. Router fires a **preload hint** in the constructor for all guard module paths, then calls `super.initialize()` synchronously — there is no async gap during initialization. Guards are registered as lazy wrapper functions that resolve their module on first invocation.
+The constructor fires a preload hint for all module paths. `initialize()` registers lazy wrappers and starts synchronously, without an async gap. [08b](./08b-multi-guard-modules-and-pattern5-loading.md#1-pattern-5-preload--lazy) has the design.
 
-**Pattern 5 — Preload + Lazy wrappers:**
+- **No guard is skipped**, not even on the first navigation.
+- **First navigation:** a module cached by the preload runs synchronously. On a miss the guard returns a Promise while its module loads, and the rest of that navigation is async.
+- **Later navigations** are synchronous: cherry-pick wrappers read the module cache, and a bare-path wrapper keeps the guards it loaded.
+- **A bare-path module that missed the cache** runs all its guards in order on the first navigation, stops at the first one that does not allow, and stops if the navigation is superseded.
+- **Failures:** a module that fails to load warns and settles the navigation as `Error`. A guard that throws during that first load also settles as `Error`, like any throwing guard.
+- **Unvisited routes** cost nothing beyond the preload hint.
+
+Keep guard modules small: a cache miss makes the first navigation that needs the guard wait for its module.
+
+## `navTo()` and preflight modes
+
+Two levels:
+
+1. **Global:** `navToPreflight`, the default for every programmatic `navTo()`.
+2. **Per call:** `{ skipGuards: true }`, a one-way escape hatch for one call.
 
 ```typescript
-// Constructor: fire-and-forget preload (cache warming)
-const uniquePaths = [...new Set(descriptors.map((d) => d.modulePath))];
-// Purely a hint: a failed load is reported when the guard runs.
-sap.ui.require(uniquePaths, undefined, () => {});
+// Standard UI5 overloads
+navTo(routeName: string, parameters?: object, bReplace?: boolean): this;
+navTo(routeName: string, parameters?: object, componentTargetInfo?: Record<string, ComponentTargetParameters>, bReplace?: boolean): this;
 
-// initialize(): synchronous, always
-this._registerLazyGuards(descriptors);
-return super.initialize();
+// With GuardNavToOptions, always the last argument
+navTo(routeName: string, parameters?: object, bReplace?: boolean, options?: GuardNavToOptions): this;
+navTo(routeName: string, parameters?: object, componentTargetInfo?: Record<string, ComponentTargetParameters>, bReplace?: boolean, options?: GuardNavToOptions): this;
+
+router.navTo("home", {}, true, { skipGuards: true });
 ```
 
-The preload is a cache-warming optimization. Because guard modules are small and the preload fires early in the constructor, they are almost certainly cached by the time the first navigation occurs. On a cache hit the lazy wrapper resolves synchronously; on a miss it loads its module asynchronously.
+```
+navTo(...)
+  ├── normalize the overloads, extract GuardNavToOptions
+  ├── committing/redirect phase? -> super.navTo() (the final step of a redirect chain)
+  ├── skipGuards or navToPreflight "bypass":
+  │     phase committing (origin "preflight"), super.navTo(), parse() commits.
+  │     Without a hash change navTo() commits directly. Settles Committed.
+  ├── navToPreflight "off":
+  │     super.navTo() without a phase change; parse() runs the guards.
+  └── navToPreflight "guard" (default): evaluate the guards, apply the decision
+```
 
-Bare-path multi-guard entries (no `#` suffix) need shape detection to know how many guards to register. On a cache hit at `initialize()` they are expanded into individual guards. On a cache miss, one wrapper takes their place: it loads the module on first navigation and runs all of its guards in order, so none of them is skipped on that navigation. Cherry-picked entries use individual lazy wrappers and require no expansion.
+`"bypass"` and `skipGuards` reuse the committing phase, so no extra state (such as a `_guardsBypassedHash` field) is needed. They settle as `Committed`: the guards were not involved, but the navigation committed normally.
 
-Key properties:
+`"off"` has all limits of the `parse()` fallback: the hash changes before the guards run, a blocked navigation must restore the hash, and `navigationSettled()` can resolve late with async guards. It does not suit apps that await `navigationSettled()` after `navTo()` with async guards. With `guardLoading: "lazy"` the first evaluation may also wait for a module.
 
-- **No guards are skipped** — every guard is always evaluated, even on the first navigation.
-- **`initialize()` is always synchronous** — no async gap, no destroy race during init.
-- **First navigation** to a guarded route resolves from the preload cache (synchronous) in the common case. On a cache miss the guard returns a Promise while its module loads, so that navigation is async from this guard on, including all later guards.
-- **All subsequent navigations** resolve synchronously: cherry-picked wrappers read the `sap.ui.require` cache, and a bare-path wrapper keeps the guards it loaded.
-- **A guard that throws** during the async first load fails the navigation (`error`), like any other throwing guard.
-- **True lazy loading** — if a route is never visited its guard modules produce no additional overhead beyond the preload hint.
+## Unknown route registration
 
-## Testing Scope
+`_warnIfRouteUnknown()` became `_handleUnknownRouteRegistration()`:
 
-### Router options (adapted from PR #46 to state machine)
+- `"ignore"`: registers silently.
+- `"warn"` (default): logs a warning, registers.
+- `"throw"`: throws synchronously and registers nothing. A `RouteGuardConfig` object is all or nothing.
 
-- Constructor reads `guardRouter` from config, strips before parent
-- Manifest-driven instantiation via UIComponent
-- Malformed/invalid config warns and falls back to defaults
-- `unknownRouteRegistration`: all three policies
-- `unknownRouteRegistration: "throw"` on a manifest guard: logged and skipped in `"lazy"` and `"block"` mode, other manifest guards still apply
-- `navToPreflight`: all three modes with correct settlement outcomes
-- `skipGuards` per-call override in both navTo overload positions
-- `"off"` mode defers to parse fallback, including async guard behavior
+A manifest guard has no caller that could catch the throw. Under `"throw"`, `_registerManifestGuard()` logs `guardRouter.guards: failed to register "<modulePath>"` and skips that guard; the other guards register and the router starts. This holds in both loading modes and for guards that `addRoute()` registers through inheritance.
 
-### Declarative guard registration (issue #41)
+## Types
 
-- Guards block parsed from manifest and registered via existing API
-- `"*"` registers global guards, route names register enter/leave
-- `"*"` with object form logs at info level and treats `enter` as global guards; a `leave` key under `"*"` warns and is skipped
-- Shorthand array form equivalent to `{ "enter": [...] }`
-- Module paths resolved relative to component namespace (dot-to-slash)
-- Component namespace obtained from owner's `sap.app.id`; without an owner, relative paths are used as-is (no namespace prefix)
-- `guardLoading: "block"` delays initialize until modules load
-- `guardLoading: "lazy"` (default) registers lazy wrappers with preload hint; first navigation resolves from cache (sync) or loads async on miss; subsequent navigations sync from cache
-- Default `guardLoading` is `"lazy"` — no explicit config needed
-- An invalid module path warns; in `"block"` mode its guards are skipped, in `"lazy"` mode the navigation that needs it settles as `Error`
-- Manifest guards execute before imperative guards registered after `initialize()`
-- Multiple guards per route execute in array order
+`GuardRouterOptions`, `GuardNavToOptions`, `ManifestGuardConfig` and `GuardContext` are in `packages/lib/src/types.ts`; the `GuardRouter` interface declares the four `navTo` overloads above.
 
-### Multi-guard modules
+## Execution order
 
-- Module exports array → all functions registered in index order, named `"moduleName#0"`, `"moduleName#1"`
-- Module exports plain object → all functions registered in key insertion order, named by key
-- Module exports function → single guard registered, named by module path's last segment
-- Non-function entries in array/object → warned and skipped individually
-- Empty array or object export → warning logged, no guards registered
+The phase order and where manifest guards run relative to imperative ones: library README, [Execution order](../../packages/lib/README.md#execution-order) and [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards).
 
-### Cherry-pick syntax
+## Named guard logging
 
-- `"guards.security#checkAuth"` → only the `checkAuth` export registered
-- `"guards.checks#1"` → only the export at index 1 registered
-- `"guards.auth#anything"` on a single-function module → `#` ignored, debug warning logged
-- Invalid cherry-pick key (nonexistent or non-function) → warning, guard skipped
-- `"module:lib.guards#key"` → `module:` prefix and `#` compose correctly
-- `"*"` key with cherry-pick: `"*": ["guards.logging#verbose"]` → valid
-
-### Pattern 5 loading
-
-- Preload hint fires in constructor for all guard module paths in lazy mode; block mode starts loading in `initialize()` (both asserted through the resource timing of a fixture module that nothing else loads)
-- `initialize()` is always synchronous in lazy mode
-- Guard available sync on first navigation when preload has completed (cache hit)
-- Guard loads async on first navigation when preload has not completed (cache miss)
-- Bare-path multi-guard modules expanded at `initialize()` time from cache; cherry-picked entries use lazy wrappers
-- Bare-path multi-guard module that misses the cache runs all of its guards in order on the first navigation, stops at the first block, and stops when the navigation is superseded
-- Module that fails to load warns and settles the navigation as `error`
-- Guard that throws during the async first load settles the navigation as `error`
-- Bare-path module loaded on a cache miss runs synchronously on later navigations
-
-### Named guard logging
-
-Manifest guards are named after their module, and the name appears when the guard throws:
+Manifest guards are named after their module. The name appears when the guard throws:
 `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
 
-- Function export: the module's last path segment (`guards.auth` → `auth`); with `#key`, the key
-- Array export: `moduleName#index` (`checks#0`, `checks#1`), also when cherry-picked
-- Object export: the key (`checkAuth`); cherry-picked by index, the key at that index
-- A lazy wrapper whose module missed the cache is named after the module (or `module#key`) until it loads, then after the guard it resolved to. A bare-path module with several guards keeps the module name, because one wrapper runs them all.
+- Function export: the last path segment (`guards.auth` -> `auth`); with `#key`, the key.
+- Array export: `moduleName#index` (`checks#0`), also when cherry-picked.
+- Object export: the key (`checkAuth`); cherry-picked by index, the key at that index.
+- A lazy wrapper whose module missed the cache carries the module name (or `module#key`) until it loads, then the name of the guard it resolved to. A bare-path module with several guards keeps the module name, because one wrapper runs them all.
 
-Guards registered with `addGuard()` and the other imperative methods have no name; their logs show phase and index only.
+Guards added with `addGuard()` and the other imperative methods have no name; their logs show the phase and index only.
 
-### Edge cases
+## Tests
 
-- Same module used from multiple routes: loaded once, guards registered per-route independently
-- Duplicate references (`"guards.security"` and `"guards.security#checkAuth"` in same route): each occurrence registers independently — `checkAuth` runs twice
-- Execution order with multi-guard modules: bare path inserts all guards at the module's position in manifest array; cherry-picks respect their individual positions
+Under `packages/lib/test/qunit/router/`:
 
-### Guard context bag
+- `lifecycle/Options.qunit.ts`: the constructor options and their defaults, the three `unknownRouteRegistration` policies, the three `navToPreflight` modes with their settlements, `skipGuards` in both overload positions.
+- `manifest/Instantiation.qunit.ts`: manifest-driven instantiation through a `UIComponent`.
+- `manifest/InvalidConfig.qunit.ts`: invalid `guards` blocks, entries and exports warn and are skipped.
+- `manifest/DeclarativeGuards.qunit.ts`: registration from the guards block, `"*"`, the `module:` prefix, both loading modes, guard names in logs, the shared `bag`, manifest guards before imperative ones.
+- `manifest/GuardOrder.qunit.ts`: order, shapes and lifecycle; the preload in the constructor and the block load in `initialize()` (asserted through the resource timing of a fixture module nothing else loads); the `"throw"` policy on manifest guards.
+- `manifest/MultiGuardModules.qunit.ts`, `manifest/CherryPick.qunit.ts`: see [08b](./08b-multi-guard-modules-and-pattern5-loading.md#tests).
+- `navigation/NavToPreflight.qunit.ts`: the preflight itself.
 
-- Fresh `Map` per navigation attempt
-- Shared across leave → enter guards and across redirect hops of the same navigation
-- Not carried across navigations
+## Risks
 
-### Test fixtures needed
+| Risk                                                     | Mitigation                                                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Module guards cannot close over component state          | `context.ownerComponent` (1.7.0) for component state, `context.bag` for data between guards          |
+| Guard order is implicit (array order)                    | Documented and tested                                                                                |
+| Module paths are strings without compile-time validation | Runtime warnings on invalid paths; a UI5 linter rule could follow                                    |
+| Manifest and imperative guards coexist                   | Defined order: registration order within each phase ([Execution order](#execution-order))            |
+| `"lazy"` can make the first navigation async             | The preload makes a cache hit the common case; keep modules small                                    |
+| `"off"` inherits the `parse()` fallback limits           | Documented as unsuitable for apps that await `navigationSettled()` after `navTo()` with async guards |
+| `bag` is a required field on `GuardContext`              | Guard functions are unaffected; only code that builds `GuardContext` literals changes                |
 
-- Stub guard modules (default-exporting `GuardFn` / `LeaveGuardFn`)
-- Test Component with manifest declaring guards
-- Guard modules not pre-loaded (for lazy wrapper tests verifying async-then-sync behavior)
+## Out of scope
 
-## Risks and Mitigations
-
-| Risk                                                          | Mitigation                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guard modules with closures can't access component state      | Document: manifest guards are standalone; use `context.ownerComponent` (since 1.7.0) for component state and `context.bag` for inter-guard data                                                                                                    |
-| Guard ordering is implicit (array order)                      | Document clearly; test array-order execution                                                                                                                                                                                                       |
-| Module paths are strings with no compile-time validation      | Graceful runtime warnings on invalid paths; future: UI5 linter rule                                                                                                                                                                                |
-| Manifest + imperative guards coexist                          | Well-defined order: registration order within each phase (see [Execution Order](#execution-order))                                                                                                                                                 |
-| `guardLoading: "lazy"` may make first navigation async        | Preload hint in constructor makes cache hit the common case. On a cache miss the first navigation that needs the guard waits for its module. Document that guard modules should be kept small for best results.                                    |
-| `navToPreflight: "off"` inherits parse() fallback limitations | Document that `"off"` is unsuitable for apps relying on `navigationSettled()` after `navTo()` with async guards. Combining `"off"` with `guardLoading: "lazy"` compounds the latency since the first guard evaluation also loads the module async. |
-| `bag` on `GuardContext` is a breaking type change             | Minor semver bump; existing guard functions are unaffected, only code constructing `GuardContext` literals needs updating                                                                                                                          |
-
-## Out of Scope
-
-- Build-time manifest validation of guard module paths (future linter rule)
-- Component metadata-based guard registration (alternative to manifest; separate feature)
-- Guard hot module replacement (works naturally via `sap.ui.require` reference semantics)
+- Build-time validation of guard module paths (a future linter rule)
+- Guard registration through component metadata instead of the manifest
+- Guard hot module replacement (it would follow from `sap.ui.require` reference semantics)

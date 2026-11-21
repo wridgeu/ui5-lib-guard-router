@@ -8,7 +8,14 @@ import type {
 } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$BypassedEvent } from "sap/ui/core/routing/Router";
-import { flushPromises, recordSettlements, waitForRoute, routerHooks } from "../../testHelpers";
+import {
+	flushPromises,
+	recordSettlements,
+	type SinonTestContext,
+	waitForRoute,
+	routerHooks,
+	getHash,
+} from "../../testHelpers";
 
 let router: GuardRouter;
 
@@ -19,9 +26,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: navigationSettled()
-// ============================================================
 QUnit.module("Router - navigationSettled()", standardHooks);
 
 QUnit.test(
@@ -48,6 +52,33 @@ QUnit.test("Resolves immediately with 'committed' when nothing pending", async f
 
 	assert.deepEqual(result, { status: NavigationOutcome.Committed, route: "home", hash: "" });
 });
+
+QUnit.test(
+	"attachNavigationSettled and attachRouteMatched pass data and listener, with and without data",
+	async function (assert: Assert) {
+		const data = { id: "data" };
+		const listener = { id: "listener" };
+		const calls: string[] = [];
+		function record(this: unknown, event: { getId(): string }, eventData?: unknown): void {
+			calls.push(`${event.getId()} ${this === listener} ${eventData === data}`);
+		}
+		router.attachNavigationSettled(data, record, listener);
+		router.attachNavigationSettled(record, listener);
+		router.attachRouteMatched(data, record, listener);
+		router.attachRouteMatched(record, listener);
+
+		router.initialize();
+		await waitForRoute(router, "home");
+		await flushPromises();
+
+		assert.deepEqual(calls.toSorted(), [
+			"navigationSettled true false",
+			"navigationSettled true true",
+			"routeMatched true false",
+			"routeMatched true true",
+		]);
+	},
+);
 
 QUnit.test("Resolves with 'committed' when sync guard allows", async function (assert: Assert) {
 	router.addRouteGuard("protected", () => true);
@@ -129,11 +160,9 @@ QUnit.test("Resolves with 'cancelled' when navigation is superseded", async func
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Start slow navigation
 	router.navTo("protected");
 	const settledPromise = router.navigationSettled();
 
-	// Supersede with immediate navigation
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
@@ -222,9 +251,9 @@ QUnit.test("Unmatched hash settles as 'bypassed' and still fires UI5 bypassed ev
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	const bypassedEventPromise = new Promise<string>((resolve) => {
+	const bypassedEventPromise = new Promise<string | undefined>((resolve) => {
 		const onBypassed = (event: Router$BypassedEvent) => {
-			resolve(event.getParameter("hash") as string);
+			resolve(event.getParameter("hash"));
 		};
 		router.attachBypassed(onBypassed);
 	});
@@ -243,12 +272,10 @@ QUnit.test("Successive navigations each produce independent results", async func
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// First: blocked
 	router.navTo("protected");
 	const result1 = await router.navigationSettled();
 	assert.strictEqual(result1.status, NavigationOutcome.Blocked, "First navigation blocked");
 
-	// Second: committed (different route, no guard)
 	router.navTo("forbidden");
 	const result2 = await router.navigationSettled();
 	assert.strictEqual(result2.status, NavigationOutcome.Committed, "Second navigation committed");
@@ -260,15 +287,12 @@ QUnit.test("Idle replay returns the most recent settlement, not a stale one", as
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// First: blocked
 	router.navTo("protected");
 	await router.navigationSettled();
 
-	// Second: committed (overrides _lastSettlement)
 	router.navTo("forbidden");
 	await router.navigationSettled();
 
-	// Idle replay should return the latest (committed), not the earlier (blocked)
 	const replay = await router.navigationSettled();
 	assert.strictEqual(replay.status, NavigationOutcome.Committed, "Replay returns latest settlement");
 	assert.strictEqual(replay.route, "forbidden", "Replay route is from latest navigation");
@@ -345,7 +369,6 @@ QUnit.test("Idle call after Blocked replays Blocked status", async function (ass
 	const first = await router.navigationSettled();
 	assert.strictEqual(first.status, NavigationOutcome.Blocked, "First call returns Blocked");
 
-	// Router is idle; second call should replay the last settlement
 	const second = await router.navigationSettled();
 	assert.strictEqual(second.status, NavigationOutcome.Blocked, "Idle replay returns Blocked");
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
@@ -358,19 +381,16 @@ QUnit.test("Idle call after Cancelled replays Cancelled status", async function 
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Start slow navigation
 	router.navTo("protected");
 	const settledPromise = router.navigationSettled();
 
 	// Navigate back to current hash. Cancels without starting a new pipeline.
-	// With navTo preflight, the hash never changed, so use navTo("home") for
-	// same-hash dedup cancellation.
+	// navTo() leaves the hash unchanged while its guards run, so a navTo() to the current route cancels the pending one.
 	router.navTo("home");
 
 	const first = await settledPromise;
 	assert.strictEqual(first.status, NavigationOutcome.Cancelled, "Pending nav was cancelled");
 
-	// Router is now idle -- second call should replay the last settlement
 	const second = await router.navigationSettled();
 	assert.strictEqual(second.status, NavigationOutcome.Cancelled, "Idle replay returns Cancelled");
 	assert.strictEqual(second.route, "home", "Replayed route is correct");
@@ -415,11 +435,7 @@ QUnit.test("Async redirect to nonexistent route settles as blocked", async funct
 	const result = await router.navigationSettled();
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Failed async redirect settles as blocked");
 	assert.strictEqual(result.route, "home", "Route reflects where the router stayed");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"",
-		"Browser hash unchanged (preflight blocked before hash update)",
-	);
+	assert.strictEqual(getHash(), "", "Browser hash unchanged (preflight blocked before hash update)");
 });
 
 QUnit.test("GuardRedirect object to nonexistent route settles as blocked", async function (assert: Assert) {
@@ -451,10 +467,52 @@ QUnit.test("Blocked navigation does not fire patternMatched on target route", as
 	assert.notOk(matched, "patternMatched never fired on the blocked target route");
 });
 
-// ============================================================
-// Module: Restore and settlement invariants
-// ============================================================
+QUnit.test(
+	"Resolves at once with the last settlement while an allowed navigation writes its hash",
+	async function (assert: Assert) {
+		let whileCommitting: Promise<NavigationResult> | undefined;
+		let navigating = false;
+		// Attached before initialize(), so it runs before the router receives the hash change.
+		router.getHashChanger().attachEvent("hashChanged", () => {
+			if (navigating) whileCommitting = router.navigationSettled();
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		navigating = true;
+		router.navTo("protected");
+		navigating = false;
+		assert.deepEqual(
+			await whileCommitting,
+			{ status: NavigationOutcome.Committed, route: "home", hash: "" },
+			"the navigation was guarded already, so nothing was pending",
+		);
+	},
+);
+
 QUnit.module("Router - Restore and settlement invariants", standardHooks);
+
+QUnit.test(
+	"a blocked hash change that is reported without the hash before it is undone to the empty hash",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.addRouteGuard("protected", () => false);
+		router.initialize();
+		await waitForRoute(router, "home");
+		// UI5 reports the first hash change of a page without oldHash.
+		const fireEvent = this.stub(HashChanger.getInstance(), "fireEvent").callsFake(function (
+			this: HashChanger,
+			...args
+		) {
+			if (args[0] === "hashChanged") Reflect.deleteProperty(args[1] ?? {}, "oldHash");
+			return fireEvent.wrappedMethod.apply(this, args);
+		});
+
+		HashChanger.getInstance().setHash("protected");
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the hash change is blocked");
+		assert.strictEqual(getHash(), "", "and undone to the empty hash");
+	},
+);
 
 QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async function (assert: Assert) {
 	let matched = false;
@@ -477,12 +535,12 @@ QUnit.test("Blocked setHash restores hash and suppresses patternMatched", async 
 	assert.strictEqual(result.status, NavigationOutcome.Blocked, "Navigation settled as blocked");
 	assert.strictEqual(result.route, "home", "Current route stayed on home");
 	assert.strictEqual(result.hash, "", "Settlement hash stayed on the previous hash");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Browser hash was restored to the previous value");
+	assert.strictEqual(getHash(), "", "Browser hash was restored to the previous value");
 	assert.notOk(matched, "Suppressed restore parse did not fire patternMatched on the blocked target");
 });
 
 QUnit.test(
-	"Async navTo started from a Blocked settlement handler survives the hash restore",
+	"Async navTo started from a Blocked settlement handler is not undone by the hash restore",
 	async function (assert: Assert) {
 		router.addRouteGuard("protected", () => false);
 		router.addRouteGuard("forbidden", () => Promise.resolve(true));
@@ -492,7 +550,7 @@ QUnit.test(
 		router.attachNavigationSettled(function handler(event: Router$NavigationSettledEvent) {
 			if (event.getParameter("status") !== NavigationOutcome.Blocked) return;
 			router.detachNavigationSettled(handler);
-			// Runs before the router restores the hash of the blocked navigation.
+			// The router has restored the hash of the blocked navigation by now.
 			router.navTo("forbidden");
 		});
 
@@ -505,22 +563,19 @@ QUnit.test(
 			"the restore did not cancel the handler's navigation",
 		);
 		assert.strictEqual(result.route, "forbidden");
-		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden");
+		assert.strictEqual(getHash(), "forbidden");
 	},
 );
 
-// ============================================================
-// Module: navigationSettled event
-// ============================================================
 QUnit.module("Router - navigationSettled event", standardHooks);
 
 QUnit.test("fires on committed navigation", async function (assert) {
 	const events: { status: string; route: string; hash: string }[] = [];
 	router.attachNavigationSettled((event) => {
 		events.push({
-			status: event.getParameter("status") as string,
-			route: event.getParameter("route") as string,
-			hash: event.getParameter("hash") as string,
+			status: event.getParameter("status"),
+			route: event.getParameter("route"),
+			hash: event.getParameter("hash"),
 		});
 	});
 	router.initialize();
@@ -539,8 +594,8 @@ QUnit.test("fires on blocked navigation", async function (assert) {
 	const events: { status: string; route: string }[] = [];
 	router.attachNavigationSettled((event) => {
 		events.push({
-			status: event.getParameter("status") as string,
-			route: event.getParameter("route") as string,
+			status: event.getParameter("status"),
+			route: event.getParameter("route"),
 		});
 	});
 
@@ -588,9 +643,9 @@ QUnit.test("fires on bypassed navigation", async function (assert) {
 	const events: { status: string; route: string; hash: string }[] = [];
 	router.attachNavigationSettled((event) => {
 		events.push({
-			status: event.getParameter("status") as string,
-			route: event.getParameter("route") as string,
-			hash: event.getParameter("hash") as string,
+			status: event.getParameter("status"),
+			route: event.getParameter("route"),
+			hash: event.getParameter("hash"),
 		});
 	});
 
@@ -606,7 +661,7 @@ QUnit.test("detachNavigationSettled stops delivery", async function (assert) {
 	const events: string[] = [];
 	const oListener = {};
 	const handler = (event: Router$NavigationSettledEvent) => {
-		events.push(event.getParameter("status") as string);
+		events.push(event.getParameter("status"));
 	};
 
 	router.attachNavigationSettled(handler, oListener);
@@ -621,9 +676,6 @@ QUnit.test("detachNavigationSettled stops delivery", async function (assert) {
 	assert.strictEqual(events.length, 1, "Handler no longer receives events after detach");
 });
 
-// ============================================================
-// Module: detachNavigationSettled oListener optional
-// ============================================================
 QUnit.module("Router - detachNavigationSettled oListener optional", standardHooks);
 
 QUnit.test(
@@ -632,7 +684,7 @@ QUnit.test(
 		const events: string[] = [];
 
 		const handler = (event: Router$NavigationSettledEvent) => {
-			events.push(event.getParameter("status") as string);
+			events.push(event.getParameter("status"));
 		};
 
 		router.attachNavigationSettled(handler);
@@ -640,8 +692,7 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		assert.strictEqual(events.length, 1, "Handler received initial settlement");
 
-		// Detach without oListener. This should compile and work at runtime
-		(router as GuardRouter).detachNavigationSettled(handler);
+		router.detachNavigationSettled(handler);
 
 		router.navTo("forbidden");
 		await router.navigationSettled();

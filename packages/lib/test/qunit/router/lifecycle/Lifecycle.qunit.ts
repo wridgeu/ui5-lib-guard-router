@@ -1,4 +1,5 @@
 import HashChanger from "sap/ui/core/routing/HashChanger";
+import RouterHashChanger from "sap/ui/core/routing/RouterHashChanger";
 import type { GuardRouter, NavigationResult } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
@@ -10,7 +11,7 @@ import {
 	changeHashSilently,
 	flushPromises,
 	getHash,
-	GuardRouterClass,
+	createRouterUnsafe,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
@@ -18,6 +19,7 @@ import {
 	captureErrorsAsync,
 	recordHashChanges,
 } from "../../testHelpers";
+import { isRecord } from "ui5/guard/router/GuardConfig";
 
 let router: GuardRouter;
 
@@ -28,9 +30,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Router lifecycle
-// ============================================================
 QUnit.module("Router - Lifecycle", standardHooks);
 
 QUnit.test("Guards still work after stop and re-initialize", async function (assert: Assert) {
@@ -38,16 +37,13 @@ QUnit.test("Guards still work after stop and re-initialize", async function (ass
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Guard blocks before stop
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks before stop");
 
-	// Stop and re-initialize
 	router.stop();
 	assert.notOk(router.isInitialized(), "Router stopped");
 	router.initialize();
 	assert.ok(router.isInitialized(), "Router re-initialized");
 
-	// Guard should still block after restart
 	await assertBlocked(
 		assert,
 		router,
@@ -147,11 +143,13 @@ QUnit.test("Re-initialize after stop fires routeMatched like native router", asy
 
 QUnit.test("the hash changer UI5 passes to the router of a nested component is used", async function (assert: Assert) {
 	// createSubHashChanger() is protected in UI5: a component target calls it for its component.
-	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child") as object;
+	const subHashChanger = callUnsafe(router.getHashChanger(), "createSubHashChanger", "child");
+	if (!(subHashChanger instanceof RouterHashChanger))
+		throw new TypeError("createSubHashChanger() returned no RouterHashChanger");
 	router.destroy();
 	try {
 		// UIComponent passes it as fifth argument when the component is loaded as a routing target.
-		router = Reflect.construct(GuardRouterClass, [
+		router = createRouterUnsafe(
 			[
 				{ name: "home", pattern: "" },
 				{ name: "protected", pattern: "protected" },
@@ -160,7 +158,7 @@ QUnit.test("the hash changer UI5 passes to the router of a nested component is u
 			undefined,
 			undefined,
 			subHashChanger,
-		]);
+		);
 		assert.ok(router.getHashChanger() === subHashChanger, "the router uses the hash changer it was given");
 
 		router.initialize();
@@ -486,9 +484,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Destroy during redirect
-// ============================================================
 QUnit.module("Router - Destroy during redirect", standardHooks);
 
 QUnit.test(
@@ -520,30 +515,27 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: navigationSettled after destroy
-// ============================================================
 QUnit.module("Router - navigationSettled after destroy", standardHooks);
 
-QUnit.test("navigationSettled called after destroy resolves immediately", async function (assert: Assert) {
-	router.addRouteGuard("protected", () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
+QUnit.test(
+	"navigationSettled() after destroy() reports the route and hash the router was on",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => true);
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	await router.navigationSettled();
-	router.destroy();
+		router.navTo("protected");
+		await router.navigationSettled();
+		router.destroy();
 
-	const result = await router.navigationSettled();
-	assert.strictEqual(result.status, NavigationOutcome.Committed, "Returns default Committed status");
-	assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
-	assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
-});
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Committed, "Returns default Committed status");
+		assert.strictEqual(result.route, "protected", "Route reflects last committed navigation");
+		assert.strictEqual(result.hash, "protected", "Hash reflects last committed navigation");
+	},
+);
 
-// ============================================================
-// Module: The global hash changer is replaced while the router runs
-// ============================================================
-QUnit.module("Router - Replaced hash changer", standardHooks);
+QUnit.module("Router - Global hash changer replaced while the router runs", standardHooks);
 
 /**
  * Replace the global hash changer, as the Fiori launchpad does when its shell starts. The new one
@@ -557,8 +549,11 @@ function replaceHashChanger(): HashChanger {
 	return replacement;
 }
 
-const hashChangedListeners = (hashChanger: HashChanger): number =>
-	(Reflect.get(hashChanger, "mEventRegistry") as { hashChanged?: unknown[] }).hashChanged?.length ?? 0;
+function hashChangedListeners(hashChanger: HashChanger): number {
+	const registry: unknown = Reflect.get(hashChanger, "mEventRegistry");
+	const listeners = isRecord(registry) ? registry.hashChanged : undefined;
+	return Array.isArray(listeners) ? listeners.length : 0;
+}
 
 QUnit.test(
 	"a hash change is blocked and undone after HashChanger.replaceHashChanger() has replaced the hash changer the router started with",
@@ -604,6 +599,26 @@ QUnit.test(
 		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "stop() has detached the router");
 		router.initialize();
 		assert.strictEqual(hashChangedListeners(replacement), listeners, "initialize() attaches it again");
+		router.destroy();
+		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "destroy() has detached it");
+	},
+);
+
+QUnit.test(
+	"the router stays attached once to the hash changer that has replaced the one it started with after a hash change",
+	async function (assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		const replacement = replaceHashChanger();
+		const listeners = hashChangedListeners(replacement);
+
+		replacement.setHash("protected");
+		await waitForRoute(router, "protected");
+		assert.strictEqual(
+			hashChangedListeners(replacement),
+			listeners,
+			"the router has moved its listener, not added one",
+		);
 		router.destroy();
 		assert.strictEqual(hashChangedListeners(replacement), listeners - 1, "destroy() has detached it");
 	},

@@ -1,4 +1,3 @@
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
@@ -10,6 +9,7 @@ import {
 	setRouteMetaUnsafe,
 	waitForRoute,
 	routerHooks,
+	createdRouterHooks,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -21,9 +21,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guard context meta bag
-// ============================================================
 QUnit.module("Router - Guard context meta bag", {
 	beforeEach: function () {
 		initHashChanger();
@@ -146,18 +143,10 @@ QUnit.test("bag is shared across multiple redirect hops", async function (assert
 	assert.strictEqual(finalBag!.get("hop2"), true, "data from second hop survives to third");
 });
 
-// ============================================================
-// Module: Router - Route metadata
-// ============================================================
-QUnit.module("Router - Route metadata", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Route metadata",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test("getRouteMeta returns manifest-defined metadata", function (assert: Assert) {
 	router = createRouterWithOptions({
@@ -223,6 +212,8 @@ QUnit.test("setRouteMeta for unknown route follows unknownRouteRegistration poli
 		/setRouteMeta/,
 		"throws for unknown route with throw policy",
 	);
+	router.addRoute({ name: "nonexistent", pattern: "nonexistent" });
+	assert.deepEqual(router.getRouteMeta("nonexistent"), {}, "the call that threw stored nothing");
 });
 
 QUnit.test("setRouteMeta overrides manifest metadata", function (assert: Assert) {
@@ -491,19 +482,10 @@ QUnit.test('setRouteMeta("") is not subject to the unknown-route policy', functi
 	assert.deepEqual(router.getRouteMeta(""), { landing: true }, "metadata for the root state is stored");
 });
 
-// ============================================================
-// Module: Multi-hop redirect metadata
-// ============================================================
-
-QUnit.module("Router - Multi-hop redirect metadata", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Multi-hop redirect metadata",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test("toMeta and fromMeta are correct across a multi-hop redirect chain", async function (assert: Assert) {
 	router = createRouterWithOptions({

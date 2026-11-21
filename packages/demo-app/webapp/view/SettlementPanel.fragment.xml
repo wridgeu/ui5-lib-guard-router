@@ -5,7 +5,7 @@
 		<ObjectStatus
 			id="settlementStatus"
 			title="{i18n>settlementLabel}"
-			text="{= ${runtime>/lastSettlementStatus} || ${i18n>settlementNotSettled}}"
+			text="{ parts: ['runtime>/lastSettlementStatus', 'i18n>settlementNotSettled'], formatter: '.formatSettlementStatus' }"
 			state="{runtime>/lastSettlementState}"
 			class="sapUiTinyMarginBottom" />
 		<ObjectStatus

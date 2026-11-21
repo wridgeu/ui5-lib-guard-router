@@ -9,8 +9,6 @@
  * - Replaced original upstream test bootstrap with local adapter harness
  * - Scoped execution to native-parity mode (no guards registered)
  */
-// sinon is provided as a UMD global by the UI5 test starter -- do not import it
-// (importing resolves a different instance that breaks stub/spy assertions; see commit 66d036d)
 import NavContainer from "sap/m/NavContainer";
 import Page from "sap/m/Page";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
@@ -34,19 +32,19 @@ type ForwardNavigationResult = {
 };
 
 // Views#_getView is private in UI5: the upstream test stubs it in the same way.
+declare module "sap/ui/core/routing/Views" {
+	export default interface Views {
+		_getView(options: { viewName?: string; name?: string }): unknown;
+	}
+}
+
 function stubViewsForSinglePage(targetPage: Page) {
-	const prototype = Views.prototype as unknown as { _getView: (...args: unknown[]) => unknown };
-	return sinon.stub(prototype, "_getView").callsFake(() => targetPage);
+	return sinon.stub(Views.prototype, "_getView").callsFake(() => targetPage);
 }
 
 function stubViewsByName(viewMap: Record<string, Page>) {
-	const prototype = Views.prototype as unknown as {
-		_getView: (options: { viewName?: string; name?: string }) => unknown;
-	};
-
-	return sinon.stub(prototype, "_getView").callsFake((options: unknown) => {
-		const candidateOptions = options as { viewName?: string; name?: string };
-		const candidate = String(candidateOptions.viewName ?? candidateOptions.name ?? "").toLowerCase();
+	return sinon.stub(Views.prototype, "_getView").callsFake((options) => {
+		const candidate = (options.viewName ?? options.name ?? "").toLowerCase();
 		for (const [name, page] of Object.entries(viewMap)) {
 			if (candidate.endsWith(name.toLowerCase()) || candidate.includes(`.${name.toLowerCase()}`)) {
 				return page;

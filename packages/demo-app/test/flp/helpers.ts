@@ -9,22 +9,12 @@ import {
 	press,
 	waitForComponent,
 } from "../shared/controls";
-import { getRuntimeSettlementRevision, setDirtyState } from "../shared/models";
-
-type PageWaitOptions = {
-	timeout?: number;
-	afterRevision?: number;
-};
-
-type AppHashWaitOptions = {
-	timeout?: number;
-	afterRevision?: number;
-};
+import { getRuntimeSettlementRevision, setDirtyState, type SettlementWaitOptions } from "../shared/models";
 
 export async function waitForPageInFlp(
 	page: ControlRef,
 	expectedTitle: string,
-	options: PageWaitOptions = {},
+	options: SettlementWaitOptions = {},
 ): Promise<void> {
 	const { timeout = 30000, afterRevision } = options;
 	const name = `${page.viewId}/${page.id}`;
@@ -36,20 +26,20 @@ export async function waitForPageInFlp(
 		});
 	}
 
-	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle).catch(() => false), {
+	// The lookup fails until the FLP has mounted the component. waitUntil retries a failed poll and reports its error if it times out on one.
+	await browser.waitUntil(() => isPageDisplayed(page, expectedTitle), {
 		timeout,
 		timeoutMsg: `Page "${name}" did not show title "${expectedTitle}"`,
 	});
 }
 
 async function launchFlpApp(): Promise<void> {
-	// The CDM-based FLP preview (enhancedHomePage) takes a while to bootstrap.
 	await waitForComponent(
 		undefined,
 		" If this follows a cross-app navigation, move the test to a separate spec file so it gets its own browser session.",
 	);
 
-	// We're in the app context: clear dirty state to unblock leave guards, then navigate home
+	// A dirty form would make the leave guard block the navigation to Home.
 	await setDirtyState(false);
 	await navigateToRouteInFlp("home");
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home");
@@ -92,13 +82,8 @@ export async function setDirtyStateInFlp(isDirty: boolean): Promise<void> {
 	await expectControlText(CONTROLS.protected.dirtyStatus, isDirty ? "Form has unsaved changes" : "Form is clean");
 }
 
-// ---------------------------------------------------------------------------
-// Dialog helpers: WDIO v9 native dialog API (browser.on('dialog'))
-//
-// WDIO v9 auto-dismisses native dialogs (confirm/alert/prompt) unless a
-// listener is registered. The dialog API intercepts at the WebDriver BiDi
-// protocol level, before the browser auto-resolves the dialog.
-// ---------------------------------------------------------------------------
+// WDIO v9 dismisses native dialogs (confirm/alert/prompt) over WebDriver BiDi unless a
+// "dialog" listener is registered; the listener then has to accept or dismiss them.
 
 type DialogRecord = {
 	called: boolean;
@@ -117,18 +102,14 @@ type DialogRecord = {
 export function installDialogHandler(accept: boolean): { record: DialogRecord; cleanup: () => void } {
 	const record: DialogRecord = { called: false, handled: false, message: "", type: "" };
 
-	const handler = async (dialog: WebdriverIO.Dialog): Promise<void> => {
+	const handler = (dialog: WebdriverIO.Dialog): void => {
 		record.called = true;
 		record.message = dialog.message();
 		record.type = dialog.type();
 
-		if (accept) {
-			await dialog.accept();
-		} else {
-			await dialog.dismiss();
-		}
-
-		record.handled = true;
+		void (accept ? dialog.accept() : dialog.dismiss()).then(() => {
+			record.handled = true;
+		});
 	};
 
 	browser.on("dialog", handler);
@@ -158,6 +139,34 @@ export async function triggerFlpCrossAppNavigation(shellHash = "Shell-home"): Pr
 }
 
 /**
+ * Navigate to another app through the FLP Navigation service and wait until the launchpad has
+ * loaded it (`appLoaded` of the AppLifeCycle service). The URL does not tell: to ask about
+ * unsaved data, the launchpad takes back the target hash that the navigation has written, opens
+ * the confirm dialog and writes the hash again, so the URL shows the target before the dialog.
+ * Does not install a dialog handler; the page script waits through a dialog that a handler answers.
+ */
+export async function navigateCrossAppInFlp(shellHash = "Shell-home"): Promise<void> {
+	await browser.execute(async (target: string) => {
+		const Container: typeof UshellContainer | undefined = sap.ui.require("sap/ushell/Container");
+		if (!Container) {
+			throw new Error("FLP container is not available");
+		}
+		const navigation = await Container.getServiceAsync("Navigation");
+		const appLifeCycle = await Container.getServiceAsync("AppLifeCycle");
+		await new Promise<void>((resolve) => {
+			const listener = {};
+			const onAppLoaded = (): void => {
+				appLifeCycle.detachAppLoaded(onAppLoaded, listener);
+				resolve();
+			};
+			appLifeCycle.attachAppLoaded({}, onAppLoaded, listener);
+			void navigation.navigate({ target: { shellHash: target } });
+		});
+	}, shellHash);
+	expect(await browser.execute(() => window.location.hash)).toContain(shellHash);
+}
+
+/**
  * Trigger cross-app navigation and assert that the FLP dirty-state provider
  * fires a confirm dialog. The dialog is dismissed (user cancels), so the
  * app stays on the current page.
@@ -166,7 +175,7 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 	const { record, cleanup } = installDialogHandler(false);
 	const appHashBefore = await browser.execute(() => {
 		const HashChanger = sap.ui.require("sap/ui/core/routing/HashChanger");
-		return String(HashChanger.getInstance().getHash());
+		return HashChanger.getInstance().getHash();
 	});
 
 	try {
@@ -184,11 +193,11 @@ export async function triggerFlpCrossAppNavigationAndExpectDirtyPrompt(): Promis
 	}
 }
 
-export async function waitForProtectedPageInFlp(options?: PageWaitOptions): Promise<void> {
+export async function waitForProtectedPageInFlp(options?: SettlementWaitOptions): Promise<void> {
 	await waitForPageInFlp(CONTROLS.protected.protectedPage, "Protected Page", options);
 }
 
-export async function waitForHomePageInFlp(options?: PageWaitOptions): Promise<void> {
+export async function waitForHomePageInFlp(options?: SettlementWaitOptions): Promise<void> {
 	await waitForPageInFlp(CONTROLS.home.homePage, "Home", options);
 }
 
@@ -209,9 +218,7 @@ export async function waitForRouterRunningInFlp(): Promise<void> {
 	);
 }
 
-/**
- * Navigate to a route programmatically via the demo app's router.
- */
+/** navTo(route) through the demo app's router, replacing the current history entry. */
 export async function navigateToRouteInFlp(routeName: string): Promise<void> {
 	await browser.execute(
 		(componentId: string, route: string) => {
@@ -236,7 +243,7 @@ export async function navigateToRouteInFlp(routeName: string): Promise<void> {
  * The ShellNavigationHashChanger overrides this method to split shell hash
  * from app hash automatically.
  */
-export async function expectAppHashToBe(expected: string, options: AppHashWaitOptions = {}): Promise<void> {
+export async function expectAppHashToBe(expected: string, options: SettlementWaitOptions = {}): Promise<void> {
 	const { timeout = 5000, afterRevision } = options;
 
 	await browser.waitUntil(

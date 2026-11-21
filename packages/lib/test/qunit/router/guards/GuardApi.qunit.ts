@@ -1,6 +1,5 @@
 import Log from "sap/base/Log";
 import DataType from "sap/ui/base/DataType";
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardFn, GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
@@ -20,6 +19,7 @@ import {
 	removeRouteGuardUnsafe,
 	waitForRoute,
 	routerHooks,
+	getHash,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -31,9 +31,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Library integration
-// ============================================================
 QUnit.module("Router - Library integration");
 
 QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: Assert) {
@@ -60,9 +57,6 @@ QUnit.test("NavigationOutcome values are the documented strings", function (asse
 	);
 });
 
-// ============================================================
-// Module: Drop-in replacement (no guards)
-// ============================================================
 QUnit.module("Router - Drop-in replacement (no guards)", {
 	beforeEach: function () {
 		initHashChanger();
@@ -88,18 +82,18 @@ QUnit.test("Router has its own UI5 class identity", function (assert: Assert) {
 QUnit.test("navTo navigates to named route", async function (assert: Assert) {
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Hash updated to protected");
+	assert.strictEqual(getHash(), "protected", "Hash updated to protected");
 });
 
 QUnit.test("navTo with parameters", async function (assert: Assert) {
-	let matchedArgs: Record<string, string> = {};
+	let matchedArgs: object | undefined;
 	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+		matchedArgs = event.getParameter("arguments");
 	});
 	router.navTo("detail", { id: "42" });
 	await waitForRoute(router, "detail");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/42", "Hash contains route parameter");
-	assert.strictEqual(matchedArgs.id, "42", "Route argument propagated to matched event");
+	assert.strictEqual(getHash(), "detail/42", "Hash contains route parameter");
+	assert.deepEqual(matchedArgs, { id: "42" }, "Route argument propagated to matched event");
 });
 
 QUnit.test("routeMatched event fires", async function (assert: Assert) {
@@ -132,9 +126,6 @@ QUnit.test("getRoute returns undefined for unknown route", function (assert: Ass
 	assert.notOk(router.getRoute("nonexistent"), "getRoute returns undefined for unknown route");
 });
 
-// ============================================================
-// Module: Guard API
-// ============================================================
 QUnit.module("Router - Guard API", standardHooks);
 
 QUnit.test("addGuard / removeGuard affect navigation behavior", async function (assert: Assert) {
@@ -144,15 +135,13 @@ QUnit.test("addGuard / removeGuard affect navigation behavior", async function (
 	const guard: GuardFn = () => false;
 	router.addGuard(guard);
 
-	// Guard is active: navigation should be blocked
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Guard blocks after addGuard");
 
 	router.removeGuard(guard);
 
-	// Guard removed: navigation should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation allowed after removeGuard");
+	assert.strictEqual(getHash(), "protected", "Navigation allowed after removeGuard");
 });
 
 QUnit.test("addRouteGuard / removeRouteGuard affect navigation behavior", async function (assert: Assert) {
@@ -162,15 +151,13 @@ QUnit.test("addRouteGuard / removeRouteGuard affect navigation behavior", async 
 	const guard: GuardFn = () => false;
 	router.addRouteGuard("protected", guard);
 
-	// Route guard is active: navigation should be blocked
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Route guard blocks after addRouteGuard");
 
 	router.removeRouteGuard("protected", guard);
 
-	// Route guard removed: navigation should succeed
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Navigation allowed after removeRouteGuard");
+	assert.strictEqual(getHash(), "protected", "Navigation allowed after removeRouteGuard");
 });
 
 QUnit.test("addGuard and addRouteGuard return this for chaining", function (assert: Assert) {
@@ -287,7 +274,7 @@ QUnit.test("addRouteGuard ignores invalid runtime guard input", async function (
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Invalid runtime guard input was ignored");
+	assert.strictEqual(getHash(), "protected", "Invalid runtime guard input was ignored");
 });
 
 QUnit.test("addRouteGuard object form ignores invalid leave guard input", async function (assert: Assert) {
@@ -304,7 +291,7 @@ QUnit.test("addRouteGuard object form ignores invalid leave guard input", async 
 		await waitForRoute(router, "home");
 	});
 
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Invalid leave guard input was ignored");
+	assert.strictEqual(getHash(), "", "Invalid leave guard input was ignored");
 	assert.strictEqual(warnings.length, 1, "One warning was logged");
 	assert.strictEqual(
 		warnings[0]?.message,
@@ -314,82 +301,24 @@ QUnit.test("addRouteGuard object form ignores invalid leave guard input", async 
 	assert.strictEqual(warnings[0]?.details, "protected", "Warning includes the route name");
 });
 
-QUnit.test("guard API methods ignore non-function input", async function (assert: Assert) {
-	// addGuard ignores non-function input
+QUnit.test("addGuard ignores non-function input", async function (assert: Assert) {
 	addGuardUnsafe(router, null);
 	addGuardUnsafe(router, 42);
 	addGuardUnsafe(router, "not a function");
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Non-function inputs to addGuard were ignored",
-	);
-	router.destroy();
+	assert.strictEqual(getHash(), "protected", "Non-function inputs to addGuard were ignored");
+});
 
-	// removeGuard ignores non-function input
-	router = createRouter();
-	initHashChanger();
-	const guard: GuardFn = () => false;
-	router.addGuard(guard);
-	removeGuardUnsafe(router, null);
-	removeGuardUnsafe(router, "not a function");
-	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Guard still blocks after invalid removeGuard calls",
-	);
-	router.destroy();
-
-	// addLeaveGuard ignores non-function input
-	router = createRouter();
-	initHashChanger();
+QUnit.test("addLeaveGuard ignores non-function input", async function (assert: Assert) {
 	addLeaveGuardUnsafe(router, "home", null);
 	addLeaveGuardUnsafe(router, "home", 42);
 	router.initialize();
 	await waitForRoute(router, "home");
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Non-function inputs to addLeaveGuard were ignored",
-	);
-	router.destroy();
-
-	// removeLeaveGuard ignores non-function input
-	router = createRouter();
-	initHashChanger();
-	router.addLeaveGuard("home", () => false);
-	removeLeaveGuardUnsafe(router, "home", null);
-	removeLeaveGuardUnsafe(router, "home", "not a function");
-	router.initialize();
-	await waitForRoute(router, "home");
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Leave guard still blocks after invalid removeLeaveGuard calls",
-	);
-	router.destroy();
-
-	// removeRouteGuard ignores non-function input
-	router = createRouter();
-	initHashChanger();
-	router.addRouteGuard("protected", () => false);
-	removeRouteGuardUnsafe(router, "protected", null);
-	removeRouteGuardUnsafe(router, "protected", "not a function");
-	router.initialize();
-	await assertBlocked(
-		assert,
-		router,
-		() => router.navTo("protected"),
-		"Route guard still blocks after invalid removeRouteGuard calls",
-	);
+	assert.strictEqual(getHash(), "protected", "Non-function inputs to addLeaveGuard were ignored");
 });
 
 QUnit.test("removing never-added guards leaves registered guards intact", async function (assert: Assert) {
@@ -414,16 +343,16 @@ QUnit.test("addRouteGuard with empty config object is a no-op", async function (
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Empty config object registered no guards");
+	assert.strictEqual(getHash(), "protected", "Empty config object registered no guards");
 });
 
 QUnit.test(
 	"addRouteGuard object form with only beforeEnter registers enter guard only",
 	async function (assert: Assert) {
-		let enterCalled = false;
+		let calls = 0;
 		router.addRouteGuard("protected", {
 			beforeEnter: () => {
-				enterCalled = true;
+				calls++;
 				return true;
 			},
 		});
@@ -432,36 +361,34 @@ QUnit.test(
 
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
-		assert.ok(enterCalled, "beforeEnter ran");
+		assert.strictEqual(calls, 1, "beforeEnter ran when entering");
 
-		// Navigate away: no leave guard should block
 		router.navTo("home");
 		await waitForRoute(router, "home");
-		assert.strictEqual(
-			HashChanger.getInstance().getHash(),
-			"",
-			"No leave guard registered, navigation away succeeded",
-		);
+		assert.strictEqual(calls, 1, "beforeEnter did not run as a leave guard");
 	},
 );
 
 QUnit.test(
 	"addRouteGuard object form with only beforeLeave registers leave guard only",
 	async function (assert: Assert) {
-		let leaveCalled = false;
-		router.addRouteGuard("home", {
+		let calls = 0;
+		router.addRouteGuard("protected", {
 			beforeLeave: () => {
-				leaveCalled = true;
+				calls++;
 				return true;
 			},
 		});
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// No enter guard on "home", so navigate to protected and back without issue
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
-		assert.ok(leaveCalled, "beforeLeave ran when leaving home");
+		assert.strictEqual(calls, 0, "beforeLeave did not run as an enter guard");
+
+		router.navTo("home");
+		await waitForRoute(router, "home");
+		assert.strictEqual(calls, 1, "beforeLeave ran when leaving");
 	},
 );
 

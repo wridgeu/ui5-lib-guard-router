@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository keeps these complementary compatibility layers for the core router:
+Compatibility layers for the core router:
 
 - `packages/lib/test/qunit/parity/native/` (`NativeCompat.qunit.ts`, `NativeCompatTraces.qunit.ts`) - fast local differential tests authored in this repo
 - `packages/lib/test/qunit/parity/nested/NestedRouterParity.qunit.ts` - local differential tests for a component displayed as a routing target (see [Nested component targets](#nested-component-targets))
@@ -16,10 +16,9 @@ The vendored lane exists to answer a specific question:
 
 > When no guards are registered, does `ui5.guard.router.Router` still behave like the native `sap.m.routing.Router` for inherited routing behavior?
 
-It is a conformance-style test layer, not a replacement for the library's own feature tests.
-
-The library README sums up the result per behavior and cites the test for each row:
-[Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter).
+The library README sums up the result per behavior,
+[Compatibility with sap.m.routing.Router](../../packages/lib/README.md#compatibility-with-sapmroutingrouter),
+and [Native router compatibility](../guides/native-router-compatibility.md) cites the test for each row.
 This page describes how the comparison works. The QUnit layers run on both QUnit lanes, OpenUI5
 1.144.0 (`npm run test:qunit`) and 1.120.0 (`npm run test:qunit:compat:120`).
 
@@ -43,54 +42,9 @@ It does not verify the library's extended behavior:
 
 Those remain covered by the local QUnit, E2E, and FLP suites.
 
-## Layout
+## Vendored lane
 
-```text
-packages/lib/test/qunit/upstream-parity/
-  README.md
-  Current.qunit.ts
-  vendor-manifest.json
-  adapters/
-  ports/
-  vendor/
-```
-
-- `vendor/openui5/<tag>/raw/` keeps exact upstream snapshots
-- `ports/openui5/<tag>/` contains local executable ports/wrappers
-- `Current.qunit.ts` imports the ports for the active tag
-- `adapters/` contains shared local harness helpers
-- `vendor-manifest.json` records provenance and raw-to-port mapping
-- `vendor-manifest.json` also pins raw snapshot checksums so CI can detect local drift in vendored files
-- the custom verifier validates manifest structure as well as repo-state consistency
-
-## Vendoring Rules
-
-- Raw vendored files stay byte-for-byte identical to upstream.
-- Local changes belong in `ports/` and `adapters/`, not in `vendor/`.
-- Every executable port references its upstream source path, tag, and commit SHA.
-- CI never fetches upstream tests dynamically; vendoring happens through maintainer scripts only.
-
-## Scripts
-
-- `npm run test:qunit` - run all QUnit suites including the vendored parity lane
-- `npm run vendor:openui5-router-tests -- --tag <version> --write-manifest` - fetch pinned upstream router test files into the raw vendor tree and refresh manifest provenance
-- `npm run verify:openui5-router-vendor` - validate the manifest structure and verify raw/port mapping
-
-## Maintenance
-
-Update the vendored lane when one of these happens:
-
-- the shipped UI5 baseline changes
-- a router compatibility regression is found
-- a major router refactor changes inherited routing behavior
-
-Recommended process:
-
-1. fetch a new raw snapshot with the vendoring script
-2. review the upstream diff
-3. update or add local executable ports only where valuable
-4. for a version bump, migrate the versioned port paths before writing the new manifest version
-5. run `npm run verify:openui5-router-vendor` and `npm run test:qunit` (the parity suite is part of the QUnit lane)
+The vendored lane runs the `Router.qunit.js` entry point of OpenUI5's async `sap.m.routing.Router` QUnit suite, pinned to one upstream tag, and ports two of its cases through a local harness: forward navigation on a `NavContainer` and back navigation by view level. Further cases are ported when they are worth the maintenance. Its layout, the vendoring rules, the scripts and the version bump procedure are in the [folder README](../../packages/lib/test/qunit/upstream-parity/README.md). Update the lane when the development UI5 version changes, when a router compatibility regression is found, or when a refactor changes inherited routing behavior.
 
 ## Nested component targets
 
@@ -181,12 +135,12 @@ the two `native` runs is a change in the test setup, not in the router.
 Each row is a native behavior that the router has to reproduce explicitly. The named tests fail
 without it.
 
-| Native behavior                                                                                                                                                                       | How the router reproduces it                                                                                           | Test                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| The router config holds `targetParent`, the ID of the component's root view, which `UIComponent` adds to the config object after it has constructed the router                        | UI5 gets a view of the caller's config object that hides `guardRouter` (`withoutGuardRouter()`), not a copy            | every scenario of `NestedRouterParity.qunit.ts`                                                |
-| `navTo()` to the route that is shown sets the hashes of nested components (`componentTargetInfo`), or resets them: `navTo("shell")` on `shell&/child/detail/1` leads to `shell`       | `navTo()` to the committed hash calls `super.navTo()` without running guards                                           | "navTo to the route that is already shown", "the parent navigates to a route of the child ..." |
-| After `Targets#display()` without a route, `navTo()` to the route shown before displays that route again: UI5 resets the hash of the router's hash changer and reports the hash again | `parse()` lets the route match again when it receives the committed hash                                               | "a target displayed without a route"                                                           |
-| With `componentTargetInfo`, the parent's route matches only once UI5 has loaded the nested components and written the combined hash                                                   | The navigation commits and settles at once; the route matches when `parse()` receives the hash (`_commitAfterNavTo()`) | "the parent navigates to a route of the child with componentTargetInfo"                        |
+| Native behavior                                                                                                                                                                       | How the router reproduces it                                                                                            | Test                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The router config holds `targetParent`, the ID of the component's root view, which `UIComponent` adds to the config object after it has constructed the router                        | UI5 gets a view of the caller's config object that hides `guardRouter` (`withoutGuardRouter()`), not a copy             | every scenario of `NestedRouterParity.qunit.ts`                                                |
+| `navTo()` to the route that is shown sets the hashes of nested components (`componentTargetInfo`), or resets them: `navTo("shell")` on `shell&/child/detail/1` leads to `shell`       | `navTo()` to the committed hash calls `super.navTo()` without running guards                                            | "navTo to the route that is already shown", "the parent navigates to a route of the child ..." |
+| After `Targets#display()` without a route, `navTo()` to the route shown before displays that route again: UI5 resets the hash of the router's hash changer and reports the hash again | `parse()` lets the route match again when it receives the committed hash                                                | "a target displayed without a route"                                                           |
+| With `componentTargetInfo`, the parent's route matches only once UI5 has loaded the nested components and written the combined hash                                                   | The navigation commits and settles when `parse()` receives the hash, and the route matches then (`_commitAfterNavTo()`) | "the parent navigates to a route of the child with componentTargetInfo"                        |
 
 ### Guard decisions and their native equivalents
 
@@ -205,7 +159,7 @@ entries, and both stop growing there.
 Each suite has a page of its own, and the tests are split over three pages, because Chrome
 ignores history steps and hash changes once a page has changed its history entries about 200
 times within ten seconds. UI5 does not notice an ignored hash change, the record of the browser
-does. The pages of the first two suites make about 140 and 90 changes, the third has two tests.
+does. The pages of the first two suites make about 140 and 90 changes, the third has three tests.
 
 | Guarded navigation                                                                                      | Native equivalent                                             |
 | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -222,23 +176,28 @@ does. The pages of the first two suites make about 140 and 90 changes, the third
 For a redirected step through the browser history (`RedirectedStepParity.qunit.ts`) the native
 router displays the page of the step before the target replaces it, and the guard router does
 not: its guards decide before any target is displayed, so the page that a guard turned away
-is never shown, not even for a moment. That is the purpose of a guard. The comparison therefore starts with the first step after the redirect: steps back and
+is never shown. The comparison therefore starts with the first step after the redirect: steps back and
 forward over the replaced entry and its neighbors, with the hash, the routing events, the
 history entries, the pages and the title history after each. Two things stay different on
 purpose and are not compared: right after the redirect, the `NavContainer` of the native run
 has the page of the step as its previous page, and after a redirected step forward it keeps
 that page on its page stack (`sap/m/routing/TargetHandler.js`, `_applyNavigationResult()`).
 
-In these tests the page that is left, the route of the step and the target each have a title
-of their own. UI5 reports a title only when the title or its target differs from the one
+In the first two tests of the third suite the page that is left, the route of the step and the
+target each have a title of their own; the third test pins a target whose title repeats the one
+of the page it leaves. UI5 reports a title only when the title or its target differs from the one
 reported last (`Targets#fireTitleChanged`), so with titles that repeat, the native title history
 depends on a title that the guard router never gets: the one of the route it keeps from
 matching. How the router aligns the title history is described in
 [the title history after a redirected hash change](./architecture.md#_blasthashreplaced-and-gettitlehistory-the-title-history-after-a-redirected-hash-change).
 `History.qunit.ts` pins that the step has its entry replaced with the target.
 
-Two more equivalents are compared on a router without a component, in
-`NativeCompatTraces.qunit.ts`: leave guards run for the routes that the native router matched
+`NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
+redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
+route that is shown with no navigation at all, and greedy routes, which match and fire their
+events as with the native router. A `parse()` of the current hash matches the route again, as
+it does natively; only a redirect to the route that is shown skips the match. Two more
+equivalents are compared there: leave guards run for the routes that the native router matched
 for the hash before a navigation, and enter guards for the routes that it matches after it,
 greedy routes included; and after `stop()` and `initialize(true)`, the leave guard runs for the
 route that the native router fires `switched` for on the next navigation.
@@ -258,12 +217,6 @@ runs must be equal.
 What a guard decides in the launchpad beyond that (leave guards and the launchpad's own
 question, redirects, nested components) has no native counterpart in the sandbox and is pinned
 by the other specs in `packages/demo-app/test/flp/`.
-
-`NativeCompatTraces.qunit.ts` compares a router without nested components the same way: a
-redirected `navTo()` with a native `navTo()` to the target, a `navTo()` redirected to the
-route that is shown with no navigation at all, and greedy routes, which match and fire their
-events as with the native router. A `parse()` of the current hash matches the route again, as
-it does natively; only a redirect to the route that is shown skips the match.
 
 ## Routers that share a hash changer
 
@@ -305,7 +258,7 @@ Why there is no public alternative:
   another component and subscribes the bare resolve function. `navTo()` and `fireTitleChanged()`
   hand `_bLastHashReplaced` and the title array to each other (source locations below). The
   router depends on these members because it changes when a route matches, and these members are
-  how UI5's own classes learn about that. No other private member is read or written.
+  how UI5's own classes learn about that.
 - **Nothing public or protected can do the same.** `fireTitleChanged()` is private, and overriding
   it would couple to more of UI5 than the two members do. `navTo()` with or without `bReplace`
   cannot express "replace an entry that never got a title" (a new entry or a step forward). Nor
@@ -328,6 +281,7 @@ Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:c
 - `GuardedEntryParity.qunit.ts: a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target`
 - `RedirectedStepParity.qunit.ts: a redirected browser back leaves the history, the titles and the pages of a native browser back followed by a native navTo() to the target that replaces the entry`
 - `RedirectedStepParity.qunit.ts: a redirected browser forward leaves the history, the titles and the pages of a native browser forward followed by a native navTo() to the target that replaces the entry`
+- `RedirectedStepParity.qunit.ts`, the test of a redirect back to a page with the title of the page it leaves
 
 What fails when UI5 or the browser changes:
 
@@ -382,8 +336,7 @@ Procedure:
    `packages/lib/src/Router.ts`, and `isPromiseResolver()` in `packages/lib/src/GuardPipeline.ts`,
    to what UI5 does now. If UI5 offers a way to release the wait, use it and remove the
    recognition by shape.
-6. Update the versions and line references in the evidence table below and the versions in the
-   architecture section.
+6. Update the versions and line references in the [UI5 source locations](#ui5-source-locations) table above.
 7. Run both QUnit lanes.
 
 ### Fiori launchpad (sap.ushell)
@@ -425,16 +378,9 @@ SAPUI5 sources; the `sap/ui/core` rows are from OpenUI5.
 | Iframe app shown: `activate()`, `initialize()` or `initialize(true)`                           | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 339-348            | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 363-372                                 |
 | Iframe runtime swaps the dirty-state providers per app                                         | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 290, 331           | not present                                                                                  |
 | Iframe: the shell sends `appLifeCycle.store` and `appLifeCycle.restore`                        | `appIntegration/contracts/StatefulContainerV2Handler.js` lines 101, 111 | `appIntegration/contracts/StatefulContainerV2Handler.js` lines 142, 161                      |
-| Iframe, hide: `deactivate()`, or `stop()`                                                      | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 295, 301           | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 323, 329                                |
-| Iframe, show: `activate()`, or `initialize()` / `initialize(true)`                             | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 339, 346, 348      | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 363, 370, 372                           |
 | Iframe: `store` without a running app answers `isInvalidIframe`                                | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 277                 | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 307                                      |
 | Iframe: the app runtime places the app in the element `content` and then records it as running | `appRuntime/ui5/AppRuntime.js` lines 1128, 1136                         | `appRuntime/ui5/AppRuntime/AppRuntimeInternal.js` line 1056                                  |
 | Iframe: every hash write asks for unsaved data first                                           | `appRuntime/ui5/AppRuntime.js` lines 751, 760                           | `appRuntime/ui5/AppRuntime/AppRuntimeInternal.js` lines 658, 667                             |
 | Iframe: `window.confirm()` of the app runtime                                                  | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 627                 | `appRuntime/ui5/services/AppLifeCycleAgent.js` line 670                                      |
-| Iframe: providers are saved and put back around hide and show                                  | `appRuntime/ui5/services/AppLifeCycleAgent.js` lines 290, 331           | not done any more                                                                            |
 | Iframe: a registered provider is not reported to the shell                                     | `appRuntime/ui5/services/Container.js` lines 94-99                      | `appIntegration/PostMessageHandler/AppInfoHandler.js` lines 176-191 (the message is ignored) |
 | A URL app without a URL template opens in a new window                                         | `navigationMode.js` line 354                                            | `navigationMode.js` line 353                                                                 |
-
-## Current Scope
-
-The vendored lane holds the `Router.qunit.js` entry point of the OpenUI5 async `sap.m.routing.Router` QUnit suite and ports two of its cases through the local harness: forward navigation on a `NavContainer` and back navigation by view level. Further cases are ported when they are worth the maintenance.

@@ -1,7 +1,7 @@
+import type Event from "sap/ui/base/Event";
 import type Component from "sap/ui/core/Component";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type HashChangerBase from "sap/ui/core/routing/HashChangerBase";
-import type { HashChangerBase$HashChangedEvent } from "sap/ui/core/routing/HashChangerBase";
 import UIComponent from "sap/ui/core/UIComponent";
 import Log from "sap/base/Log";
 import jQuery from "sap/ui/thirdparty/jquery";
@@ -13,9 +13,6 @@ export interface CapturedLogEntry {
 	message: string;
 	details?: string;
 }
-
-/** @deprecated Use {@link CapturedLogEntry} instead. */
-export type CapturedWarning = CapturedLogEntry;
 
 export const GuardRouterClass = Router;
 
@@ -33,7 +30,9 @@ export interface SinonTestContext {
  * test files under test-resources/, so a relative import would get a second instance.
  */
 export function loadModule<T>(path: string): Promise<T> {
-	return new Promise((resolve, reject) => sap.ui.require([path], (mod: T) => resolve(mod), reject));
+	return new Promise((resolve, reject) => {
+		sap.ui.require([path], (mod: T) => resolve(mod), reject);
+	});
 }
 
 /** A guard context for tests of the pipeline and of guard modules, which need no router. */
@@ -88,9 +87,25 @@ export function routerHooks(
 	};
 }
 
+/**
+ * QUnit module hooks for tests that create their router themselves: the hash is reset before
+ * each test, the router that `current` returns is destroyed after it.
+ */
+export function createdRouterHooks(current: () => GuardRouter): { beforeEach: () => void; afterEach: () => void } {
+	return {
+		beforeEach: initHashChanger,
+		afterEach: () => {
+			current().destroy();
+			HashChanger.getInstance().setHash("");
+		},
+	};
+}
+
 /** Construct a router as an untyped JS caller would, to test runtime validation of invalid config. */
-export function createRouterUnsafe(routes: object[], config: unknown): GuardRouter {
-	return Reflect.construct(GuardRouterClass, [routes, config]);
+export function createRouterUnsafe(routes: object[], config: unknown, ...rest: unknown[]): GuardRouter {
+	const router: unknown = Reflect.construct(GuardRouterClass, [routes, config, ...rest]);
+	if (!(router instanceof GuardRouterClass)) throw new TypeError("Reflect.construct did not return a router");
+	return router;
 }
 
 /** {@link createRouterWithOptions} for invalid `guardRouter` values. */
@@ -109,7 +124,7 @@ export function getComponentRouter(component: Component): GuardRouter {
 
 /** Call `target[methodName]` as an untyped JS caller would, to test runtime validation of invalid arguments. */
 export function callUnsafe(target: object, methodName: string, ...args: unknown[]): unknown {
-	const method = Reflect.get(target, methodName);
+	const method: unknown = Reflect.get(target, methodName);
 	if (typeof method !== "function") {
 		throw new Error(`Method "${methodName}" is not available`);
 	}
@@ -144,14 +159,10 @@ export function setRouteMetaUnsafe(router: GuardRouter, routeName: string, meta:
 	callUnsafe(router, "setRouteMeta", routeName, meta);
 }
 
-/**
- * Initialize HashChanger for tests (idempotent).
- */
+/** Initialize the global HashChanger (UI5's init() is idempotent) and reset the hash. */
 export function initHashChanger(): void {
 	const hashChanger = HashChanger.getInstance();
-	if (!hashChanger.hasListeners("hashChanged")) {
-		hashChanger.init();
-	}
+	hashChanger.init();
 	hashChanger.setHash("");
 }
 
@@ -199,11 +210,7 @@ export function waitForRoute(router: GuardRouter, routeName: string): Promise<vo
 	});
 }
 
-/**
- * Assert that navigation is blocked by the guard pipeline.
- *
- * Calls `navigationSettled()` and verifies the outcome is `Blocked`.
- */
+/** Run `navigate` and assert that it settles as Blocked. */
 export async function assertBlocked(
 	assert: Assert,
 	router: GuardRouter,
@@ -223,9 +230,8 @@ export async function assertBlocked(
 export function recordHashChanges(): { hashes: string[]; stop: () => void } {
 	const hashChanger = HashChanger.getInstance();
 	const hashes: string[] = [];
-	const listener = (event: HashChangerBase$HashChangedEvent): void => {
-		// The UI5 types declare the hash as an object.
-		hashes.push(String(event.getParameter("newHash")));
+	const listener = (event: Event<{ newHash: string }>): void => {
+		hashes.push(event.getParameter("newHash"));
 	};
 	hashChanger.attachEvent("hashChanged", listener);
 	return { hashes, stop: () => hashChanger.detachEvent("hashChanged", listener) };
@@ -241,11 +247,11 @@ export async function captureHashWrites(
 ): Promise<string[]> {
 	const writes: string[] = [];
 	const setHash = sinon.stub(hashChanger, "setHash").callsFake(function (this: HashChangerBase, ...args) {
-		writes.push(`set:${String(args[0])}`);
+		writes.push(`set:${args[0]}`);
 		return setHash.wrappedMethod.apply(this, args);
 	});
 	const replaceHash = sinon.stub(hashChanger, "replaceHash").callsFake(function (this: HashChangerBase, ...args) {
-		writes.push(`replace:${String(args[0])}`);
+		writes.push(`replace:${args[0]}`);
 		return replaceHash.wrappedMethod.apply(this, args);
 	});
 	try {
@@ -304,7 +310,6 @@ export function isMatching(router: GuardRouter): unknown {
 	return Reflect.get(router, "_bMatchingProcessStarted");
 }
 
-/** Return the current hash from the HashChanger. */
 export function getHash(): string {
 	return HashChanger.getInstance().getHash();
 }
@@ -313,62 +318,55 @@ export function getHash(): string {
  * A captured log call. UI5 passes objects such as the router itself as details; keeping them
  * would hand a cyclic value to a failing assertion, which wdio cannot transfer out of the browser.
  */
-function toLogEntry(message: string, details: unknown): CapturedLogEntry {
+function toLogEntry(message: string, details: string | Error | undefined): CapturedLogEntry {
 	return { message, details: details === undefined ? undefined : String(details) };
 }
 
 /** Messages a stubbed `Log` method received; a message logged under another component says so. */
 export function logMessages(stub: sinon.SinonStub): string[] {
 	return stub.getCalls().map((call) => {
-		const [message, , component] = call.args as [string, unknown, string];
-		return component === "ui5.guard.router.Router" ? message : `${message} (component: ${component})`;
+		const args: unknown[] = call.args;
+		const [message, , component] = args;
+		return component === "ui5.guard.router.Router"
+			? String(message)
+			: `${String(message)} (component: ${String(component)})`;
 	});
 }
 
-/**
- * Capture `Log.warning` calls during `fn` using a Sinon stub.
- * The stub is restored automatically via `finally` to prevent leaks.
- */
-export function captureWarnings(fn: () => void): CapturedWarning[] {
+/** Capture `Log.warning` calls during `fn`. */
+export function captureWarnings(fn: () => void): CapturedLogEntry[] {
 	const stub = sinon.stub(Log, "warning");
 	try {
 		fn();
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /**
  * Async variant of {@link captureWarnings} for tests that `await` inside
  * the capture window.
  */
-export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedWarning[]> {
+export async function captureWarningsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
 	const stub = sinon.stub(Log, "warning");
 	try {
 		await fn();
 	} finally {
 		stub.restore();
 	}
-	return stub.getCalls().map((call) => toLogEntry(call.args[0] as string, call.args[1]));
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
-/**
- * Capture `Log.error` calls during `fn`, restoring the original in a
- * `finally` block so the stub never leaks to subsequent tests.
- */
+/** {@link captureWarnings} for `Log.error` calls. */
 export function captureErrors(fn: () => void): CapturedLogEntry[] {
-	const errors: CapturedLogEntry[] = [];
-	const original = Log.error;
-	Log.error = (message: string, details?: unknown) => {
-		errors.push(toLogEntry(message, details));
-	};
+	const stub = sinon.stub(Log, "error");
 	try {
 		fn();
 	} finally {
-		Log.error = original;
+		stub.restore();
 	}
-	return errors;
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /**
@@ -376,17 +374,13 @@ export function captureErrors(fn: () => void): CapturedLogEntry[] {
  * the capture window.
  */
 export async function captureErrorsAsync(fn: () => Promise<void>): Promise<CapturedLogEntry[]> {
-	const errors: CapturedLogEntry[] = [];
-	const original = Log.error;
-	Log.error = (message: string, details?: unknown) => {
-		errors.push(toLogEntry(message, details));
-	};
+	const stub = sinon.stub(Log, "error");
 	try {
 		await fn();
 	} finally {
-		Log.error = original;
+		stub.restore();
 	}
-	return errors;
+	return stub.getCalls().map((call) => toLogEntry(call.args[0], call.args[1]));
 }
 
 /** Routes forming a URL tree: `employees` → `employees/{id}` → `employees/{id}/resume`. */

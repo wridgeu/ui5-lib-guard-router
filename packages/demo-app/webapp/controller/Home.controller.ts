@@ -1,4 +1,4 @@
-import JSONModel from "sap/ui/model/json/JSONModel";
+import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
@@ -15,21 +15,17 @@ import { createHomeLeaveLogger } from "../guards";
  * @namespace demo.app.controller
  */
 export default class HomeController extends BaseController {
-	/** Reference to the leave guard for cleanup in onExit. */
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	override onInit(): void {
-		// Register a standalone leave guard via addLeaveGuard().
-		// The guard is registered when the controller initializes and
-		// removed when it is destroyed (see onExit below).
 		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
 
 	onToggleLogin(): void {
-		const model = this.getModel<JSONModel>("auth");
-		const isLoggedIn = model.getProperty("/isLoggedIn");
+		const model = this.getModel("auth") as JSONModel;
+		const isLoggedIn: unknown = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
 		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
 	}
@@ -98,8 +94,7 @@ export default class HomeController extends BaseController {
 	 * - Memory leaks from orphaned guard references.
 	 * - Guards executing after their controller is gone.
 	 *
-	 * Note: with XMLView caching (viewId), onExit may not fire until the
-	 * view is actually destroyed. Keep this in mind for your cleanup strategy.
+	 * The router caches its target views, so this runs when the component is destroyed.
 	 */
 	override onExit(): void {
 		if (this._leaveGuard) {

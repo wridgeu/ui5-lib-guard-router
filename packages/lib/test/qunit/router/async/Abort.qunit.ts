@@ -10,9 +10,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: AbortSignal on GuardContext
-// ============================================================
 QUnit.module("Router - AbortSignal on GuardContext", standardHooks);
 
 QUnit.test("Guard context includes an AbortSignal", async function (assert: Assert) {
@@ -47,9 +44,7 @@ QUnit.test("Signal is aborted when a newer navigation supersedes", async functio
 		return true;
 	});
 
-	// First navigation (slow)
 	router.navTo("protected");
-	// Second navigation supersedes first
 	router.navTo("detail", { id: "1" });
 
 	await router.navigationSettled();
@@ -87,21 +82,15 @@ QUnit.test("Signal is aborted when navigating back to current route", async func
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Navigate to protected (triggers slow route guard)
 	router.navTo("protected");
 	assert.ok(capturedSignal, "Signal was captured");
 
 	// Navigate back to current route while guard is pending.
-	// With navTo preflight, the hash never changed to "protected", so
-	// HashChanger.setHash("") would be a no-op. Use navTo("home") to
-	// exercise the same-hash dedup.
+	// navTo() leaves the hash unchanged while its guards run, so a navTo() to the current route cancels the pending one.
 	router.navTo("home");
 	assert.ok(capturedSignal!.aborted, "Signal was aborted when returning to current route");
 });
 
-// ============================================================
-// Module: Abort controller cleanup (leak prevention)
-// ============================================================
 QUnit.module("Router - Abort controller cleanup", standardHooks);
 
 QUnit.test(
@@ -120,13 +109,11 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		callCount = 0;
 
-		// First navigation commits successfully
 		router.navTo("protected");
 		await waitForRoute(router, "protected");
 		assert.ok(firstSignal, "Signal was captured from first navigation");
 		assert.notOk(firstSignal!.aborted, "Signal was not aborted after successful commit");
 
-		// Second navigation should NOT retroactively abort the first signal
 		router.navTo("forbidden");
 		await waitForRoute(router, "forbidden");
 		assert.notOk(firstSignal!.aborted, "First signal stays clean after second navigation commits");
@@ -149,13 +136,11 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		callCount = 0;
 
-		// First navigation is blocked
 		router.navTo("protected");
 		await router.navigationSettled();
 		assert.ok(blockedSignal, "Signal was captured from blocked navigation");
 		assert.notOk(blockedSignal!.aborted, "Blocked signal is not aborted (guard ran to completion)");
 
-		// Navigate to an unguarded route; the stale controller must not leak
 		router.navTo("forbidden");
 		await waitForRoute(router, "forbidden");
 		assert.notOk(blockedSignal!.aborted, "Blocked signal stays clean after unguarded navigation");
@@ -173,22 +158,17 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Navigation triggers redirect
 		router.navTo("forbidden");
 		await waitForRoute(router, "protected");
 		assert.ok(redirectedSignal, "Signal was captured from redirected navigation");
 		assert.notOk(redirectedSignal!.aborted, "Signal was not aborted after redirect");
 
-		// Subsequent navigation must not retroactively abort the old signal
 		router.navTo("detail", { id: "1" });
 		await waitForRoute(router, "detail");
 		assert.notOk(redirectedSignal!.aborted, "Redirected signal stays clean after subsequent navigation");
 	},
 );
 
-// ============================================================
-// Module: Guard error after signal abort
-// ============================================================
 QUnit.module("Router - Guard error after signal abort", standardHooks);
 
 QUnit.test(
@@ -206,9 +186,7 @@ QUnit.test(
 		await waitForRoute(router, "home");
 
 		const unhandled = await captureUnhandledRejections(async () => {
-			// Start navigation (guard stays pending)
 			router.navTo("protected");
-			// Supersede: aborts the signal, guard rejects
 			router.navTo("forbidden");
 			await waitForRoute(router, "forbidden");
 		});
@@ -236,9 +214,7 @@ QUnit.test(
 		await waitForRoute(router, "home");
 
 		const unhandled = await captureUnhandledRejections(async () => {
-			// Navigate to protected (leave guard on home stays pending)
 			router.navTo("protected");
-			// Supersede: aborts the signal, leave guard rejects
 			router.navTo("forbidden");
 			await router.navigationSettled();
 		});

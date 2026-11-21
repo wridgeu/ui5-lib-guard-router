@@ -3,7 +3,7 @@
  */
 
 /** Matches a standalone optional (`:param:`) or rest (`:param*:`) segment. */
-const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*\*?:$/;
+const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*:$/;
 
 /**
  * Strips inline query and optional-query suffixes from a segment.
@@ -18,10 +18,8 @@ const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*\*?:$/;
  * so these suffixes are stripped.
  */
 function stripInlineQuery(seg: string): string {
-	// Strip mandatory query `{?...}` suffix
 	const mqIdx = seg.indexOf("{?");
 	if (mqIdx !== -1) return seg.slice(0, mqIdx);
-	// Strip optional query `:?...:` suffix
 	const oqIdx = seg.indexOf(":?");
 	if (oqIdx !== -1) return seg.slice(0, oqIdx);
 	return seg;
@@ -57,7 +55,6 @@ export function isPatternAncestor(ancestorPattern: string, candidatePattern: str
 	return ancestorSegments.every((seg, i) => {
 		const candidateSeg = candidateSegments[i];
 		if (seg === candidateSeg) return true;
-		// Treat any two mandatory parameter segments as equivalent
 		return seg.startsWith("{") && candidateSeg.startsWith("{");
 	});
 }
@@ -77,7 +74,7 @@ function depthOf(route: string, patternByName: ReadonlyMap<string, string>): num
  * Entries ordered by the pattern depth of their own route, declaration order within one depth.
  * Expanding them in this order puts an ancestor's entries before a descendant's on every route.
  */
-function byRouteDepth<T extends { readonly route: string }>(
+export function byRouteDepth<T extends { readonly route: string }>(
 	entries: T[],
 	patternByName: ReadonlyMap<string, string>,
 ): T[] {
@@ -115,7 +112,8 @@ export function expandToDescendants<T extends { readonly route: string }>(entrie
 /**
  * Entries a newly added route inherits (`inheritance: "pattern-tree"`): copies of its
  * ancestors' entries for the new route, and copies of its own entries for its existing
- * descendants. `routes` must include the new route. Ordered like {@link expandToDescendants}.
+ * descendants. `routes` must include the new route. Ordered like {@link expandToDescendants};
+ * where the entries go among those a route has already is up to the caller.
  */
 export function expandForNewRoute<T extends { readonly route: string }>(
 	entries: T[],

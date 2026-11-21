@@ -6,9 +6,6 @@ coverage/
 *.d.ts
 *.d.ts.map
 
-# Package-level license copy
-packages/lib/LICENSE
-!packages/lib/LICENSE
 
 # Build output in src directories
 packages/lib/src/**/*.js

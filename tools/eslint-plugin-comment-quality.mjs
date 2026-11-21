@@ -1,22 +1,23 @@
 /**
- * Custom oxlint JS plugin that detects low-quality AI-generated comments.
+ * Custom oxlint JS plugin that flags comments which restate the next statement, narrate a
+ * declaration, divide sections, stand in for missing code, or hedge.
  *
- * Rules use AST correlation (comparing comment text against adjacent code
- * identifiers) rather than broad regex, keeping false-positive rates low.
+ * no-obvious-comment compares a comment with the identifiers of the next statement; the other
+ * rules match narrow phrase patterns.
  * All rules are warn-only (no auto-fix) so the developer decides whether
  * to rewrite the comment or remove it.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
-// Shared helpers
+/** @import { Comment, ESTree, Plugin, Rule } from "@oxlint/plugins" */
 
 /**
  * Directives and keeper patterns that must never be flagged, regardless
  * of what the rest of the comment text looks like.
  */
 const KEEPER_RE =
-	/(?:^|\s)(?:TODO|FIXME|HACK|BUG|NOTE|SAFETY|PERF|IMPORTANT|XXX|LICENSE|COPYRIGHT|eslint-disable|eslint-enable|@ts-ignore|@ts-expect-error|@ts-nocheck|@ts-check|@type|@param|@returns?|@throws|@see|@example|@deprecated|@override|@internal|@public|@private|@protected|@readonly|@satisfies|istanbul\s+ignore|c8\s+ignore|vitest)/i;
+	/(?:^|\s)(?:TODO|FIXME|HACK|BUG|NOTE|SAFETY|PERF|IMPORTANT|XXX|LICENSE|COPYRIGHT|eslint-disable|eslint-enable|@ts-ignore|@ts-expect-error|@ts-nocheck|@ts-check|@type|@typedef|@param|@returns?|@throws|@see|@example|@deprecated|@override|@internal|@public|@private|@protected|@readonly|@satisfies|istanbul\s+ignore|c8\s+ignore|vitest)\b/i;
 
 /**
  * Words that signal a comment is explaining *why*, not *what*.
@@ -27,47 +28,22 @@ const EXPLAINS_WHY_RE =
 
 /**
  * Returns the trimmed text of a comment node, collapsing whitespace.
+ *
+ * @param {Comment} node
+ * @returns {string}
  */
 function commentText(node) {
 	return node.value
-		.replace(/^\s*\*\s?/gm, " ")
+		.replace(/^[ \t]*\*[ \t]?/gm, " ")
 		.replace(/\s+/g, " ")
 		.trim();
 }
 
 /**
- * Collects all Identifier names reachable from a node (shallow, max 1 level
- * of nesting). Used to extract the "vocabulary" of a code statement.
- */
-function collectIdentifiers(node) {
-	const ids = new Set();
-	if (!node) return ids;
-
-	function walk(n, depth) {
-		if (!n || depth > 3) return;
-		if (n.type === "Identifier") {
-			ids.add(n.name.toLowerCase());
-			return;
-		}
-		for (const key of Object.keys(n)) {
-			if (key === "parent" || key === "type") continue;
-			const child = n[key];
-			if (Array.isArray(child)) {
-				for (const item of child) {
-					if (item && typeof item.type === "string") walk(item, depth + 1);
-				}
-			} else if (child && typeof child.type === "string") {
-				walk(child, depth + 1);
-			}
-		}
-	}
-
-	walk(node, 0);
-	return ids;
-}
-
-/**
- * Splits a comment into lowercase "words" (strips non-alpha).
+ * Splits a comment into lowercase words of three or more letters.
+ *
+ * @param {string} text
+ * @returns {string[]}
  */
 function commentWords(text) {
 	return text
@@ -108,17 +84,16 @@ const FILLER_WORDS = new Set([
 	"below",
 ]);
 
-// Rules
-
 /**
  * Flags single-line comments that just restate the adjacent code using
  * the same identifiers. Uses AST correlation: extracts identifier names
  * from the next statement and checks if the comment only contains those
  * names plus filler words.
  *
- * Skips JSDoc (block comments starting with `*`), multi-sentence
- * comments, and comments containing "why" explanations.
+ * Skips block comments, comments over 80 characters or of several sentences, and comments
+ * that explain why.
  */
+/** @type {Rule} */
 const noObviousComment = {
 	meta: {
 		type: "suggestion",
@@ -131,34 +106,21 @@ const noObviousComment = {
 		schema: [],
 	},
 	create(context) {
+		// Every statement-bearing body, so that a comment is matched to its
+		// enclosing scope, not just to the top-level Program.body.
+		/** @type {(ESTree.Program | ESTree.BlockStatement)[]} */
+		const bodies = [];
+
 		return {
-			Program(programNode) {
+			Program(node) {
+				bodies.push(node);
+			},
+			BlockStatement(node) {
+				bodies.push(node);
+			},
+			"Program:exit"() {
 				const comments = context.sourceCode.getAllComments();
 				if (!comments.length) return;
-
-				// Collect every statement-bearing body array from the AST so
-				// we can match each comment to its enclosing scope, not just
-				// the top-level Program.body.
-				const bodies = [];
-
-				function collectBodies(node) {
-					if (node.type === "Program" || node.type === "BlockStatement") {
-						bodies.push({ body: node.body, start: node.start, end: node.end });
-					}
-					for (const key of Object.keys(node)) {
-						if (key === "parent" || key === "type") continue;
-						const child = node[key];
-						if (Array.isArray(child)) {
-							for (const item of child) {
-								if (item && typeof item.type === "string") collectBodies(item);
-							}
-						} else if (child && typeof child.type === "string") {
-							collectBodies(child);
-						}
-					}
-				}
-
-				collectBodies(programNode);
 
 				for (const comment of comments) {
 					if (comment.type !== "Line") continue;
@@ -185,7 +147,12 @@ const noObviousComment = {
 					const nextNode = nearestBody.find((n) => n.start > comment.end);
 					if (!nextNode) continue;
 
-					const codeIds = collectIdentifiers(nextNode);
+					// The vocabulary of the statement: the names of its identifiers.
+					const codeIds = new Set(
+						context.sourceCode
+							.getTokens(nextNode, { filter: (token) => token.type === "Identifier" })
+							.map((token) => token.value.toLowerCase()),
+					);
 					if (codeIds.size === 0) continue;
 
 					const words = commentWords(text);
@@ -215,6 +182,7 @@ const noObviousComment = {
 const NARRATOR_RE =
 	/^\s*this\s+(?:function|method|class|component|hook|module|handler|helper|utility|service|controller|provider|manager|resolver|wrapper|plugin|factory)\s+(?:is\s+(?:responsible\s+for|used\s+(?:to|for))|(?:will|should|can)\s+(?:handle|create|process|manage|return|generate|provide)|handles|creates|initializes|processes|manages|controls|provides|returns|generates|validates|renders|transforms|computes)/i;
 
+/** @type {Rule} */
 const noNarratorComment = {
 	meta: {
 		type: "suggestion",
@@ -247,8 +215,9 @@ const noNarratorComment = {
  * Flags decorative section-divider comments made of repeated symbols
  * or labelled banners like `// --- Helpers ---`.
  */
-const SECTION_DIVIDER_RE = /^\s*[-=*#~_/\\]{3,}\s*(?:\w[\w\s]*\s*[-=*#~_/\\]*)?$/;
+const SECTION_DIVIDER_RE = /^[-=*#~_/\\]{3,}(?:\s*[^\W_]+(?:_+[^\W_]+)*(?:\s+[^\W_]+(?:_+[^\W_]+)*)*\s*[-=*#~_/\\]*)?$/;
 
+/** @type {Rule} */
 const noSectionDivider = {
 	meta: {
 		type: "suggestion",
@@ -283,6 +252,7 @@ const noSectionDivider = {
 const PLACEHOLDER_RE =
 	/(?:\.{3}\s*(?:rest|more|other|remaining|additional)|omitted\s+for\s+brevity|replace\s+(?:this|the\s+above)\s+with|your\s+(?:actual|real)\s+(?:implementation|code|logic)|add\s+(?:your|the\s+rest)\s+(?:implementation|code|logic)|implement\s+(?:this|here)|not\s+yet\s+implemented)/i;
 
+/** @type {Rule} */
 const noPlaceholderComment = {
 	meta: {
 		type: "problem",
@@ -310,13 +280,14 @@ const noPlaceholderComment = {
 };
 
 /**
- * Flags hedging language that signals low-confidence AI generation.
+ * Flags hedging phrases.
  * Only matches unambiguously uncertain phrases; "should work" is excluded
  * since it commonly means "is expected to work" in test comments.
  */
 const HEDGING_RE =
 	/(?:hopefully|probably\s+(?:fine|works?|correct|ok|okay)|not\s+sure\s+(?:if|why|whether|about)|i\s+think\s+this|good\s+enough\s+for\s+now|fix\s+(?:this\s+)?later|quick\s+(?:hack|fix|workaround)|temporary\s+(?:fix|hack|workaround|solution))/i;
 
+/** @type {Rule} */
 const noHedgingComment = {
 	meta: {
 		type: "suggestion",
@@ -333,7 +304,6 @@ const noHedgingComment = {
 		return {
 			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
-					// Skip line comments that are keeper directives
 					if (KEEPER_RE.test(comment.value)) continue;
 					// Skip JSDoc / block comments (they often cite examples)
 					if (comment.type === "Block") continue;
@@ -347,7 +317,7 @@ const noHedgingComment = {
 	},
 };
 
-/** @type {import('eslint').ESLint.Plugin} */
+/** @type {Plugin} */
 export default {
 	meta: { name: "comment-quality" },
 	rules: {

@@ -17,9 +17,6 @@ import {
 	waitForRoute,
 } from "../../testHelpers";
 
-// ============================================================
-// Module: Manifest-driven router instantiation
-// ============================================================
 QUnit.module("Router - Manifest-driven instantiation");
 
 QUnit.test("UIComponent creates router with manifest-provided guardRouter options", async function (assert: Assert) {

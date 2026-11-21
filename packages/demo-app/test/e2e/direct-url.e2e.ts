@@ -14,7 +14,7 @@ describe("Direct URL navigation with guards", () => {
 
 		await setBrowserHash("#/protected");
 
-		await expectKeptOnHome("Redirected", settlementRevision);
+		await expectKeptOnHome("redirected", settlementRevision);
 	});
 
 	it("should redirect to Home when accessing #/forbidden directly", async () => {
@@ -22,7 +22,7 @@ describe("Direct URL navigation with guards", () => {
 
 		await setBrowserHash("#/forbidden");
 
-		await expectKeptOnHome("Redirected", settlementRevision);
+		await expectKeptOnHome("redirected", settlementRevision);
 	});
 
 	it("should stay on Home and report Blocked when accessing #/blocked directly", async () => {
@@ -30,7 +30,7 @@ describe("Direct URL navigation with guards", () => {
 
 		await setBrowserHash("#/blocked");
 
-		await expectKeptOnHome("Blocked", settlementRevision);
+		await expectKeptOnHome("blocked", settlementRevision);
 	});
 
 	it("should load Protected page when accessing #/protected directly while logged in", async () => {
@@ -41,7 +41,7 @@ describe("Direct URL navigation with guards", () => {
 
 		await waitForPage(CONTROLS.protected.protectedPage, "Protected Page", { afterRevision: settlementRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "protected", hash: "protected" },
+			{ status: "committed", route: "protected", hash: "protected" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("#/protected");
@@ -58,12 +58,11 @@ describe("Direct URL navigation with guards", () => {
 		await expectControlText(CONTROLS.notFound.settlementRouteText, "(no match)");
 		await expectControlText(CONTROLS.notFound.settlementHashText, "this/does/not/exist");
 
-		// Verify the app recovers by navigating back to a known route
 		const recoveryRevision = await getRuntimeSettlementRevision();
 		await setBrowserHash("#/");
 		await waitForPage(CONTROLS.home.homePage, "Home", { afterRevision: recoveryRevision });
 		await waitForRuntimeSettlement(
-			{ status: "Committed", route: "home", hash: "" },
+			{ status: "committed", route: "home", hash: "" },
 			{ afterRevision: recoveryRevision },
 		);
 	});
@@ -71,7 +70,6 @@ describe("Direct URL navigation with guards", () => {
 	it("should handle rapid hash changes in the address bar", async () => {
 		const settlementRevision = await getRuntimeSettlementRevision();
 
-		// Rapidly change the hash multiple times
 		await setBrowserHash("#/protected");
 		await setBrowserHash("#/forbidden");
 		await setBrowserHash("#/protected");
@@ -80,7 +78,7 @@ describe("Direct URL navigation with guards", () => {
 		// guard pipeline of the last hash, so the settlement read below is the final one.
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await waitForRuntimeSettlement(
-			{ status: "Redirected", route: "home", hash: "" },
+			{ status: "redirected", route: "home", hash: "" },
 			{ afterRevision: settlementRevision },
 		);
 		await expectHashToBe("", "Hash should not stay on a guarded route");

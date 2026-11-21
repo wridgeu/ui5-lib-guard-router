@@ -6,13 +6,17 @@
 ui5-lib-guard-router/
 |-- package.json                    npm workspaces root
 |-- tsconfig.base.json              shared TypeScript config (strict mode)
+|-- tsconfig.json                   lists every project, so that editors and oxlint find the tsconfig of a file
+|-- tsconfig.node.json              Node code checked with checkJs: scripts/, tools/, stryker.config.mjs, the wdio configs and testsuite of the library
 |-- .oxlintrc.json                  linter config
+|-- scripts/                        check-*, vendoring, pack smoke, with *.test.mjs beside them
+|-- tools/                          the oxlint JS plugins (two with a *.test.mjs), and the wdio Chrome profile
 |
 |-- packages/
     |-- lib/                        the core library
     |   |-- ui5.yaml                OpenUI5 1.144.0, specVersion 4.0
     |   |-- src/
-    |   |   |-- manifest.json       library manifest (minUI5Version 1.144.0)
+    |   |   |-- manifest.json       library manifest (minUI5Version 1.136.0)
     |   |   |-- library.ts          Lib.init() entry point
     |   |   |-- Router.ts           extended Router (core implementation)
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
@@ -30,13 +34,14 @@ ui5-lib-guard-router/
     |-- demo-app/                   demo application
         |-- ui5.yaml                serves lib + app with transpile (OpenUI5)
         |-- ui5-flp.yaml            FLP preview config (SAPUI5, sap.ushell)
+        |-- ui5-test.yaml, ui5-flp-test.yaml  the same without livereload, for the test servers
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
         |   |-- controller/         App, Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
         |   |-- view/               XML views + SettlementPanel fragment
         |   |-- i18n/               text bundle of the root component
-        |   |-- guards.ts           guard factories (runtime and reference-only)
+        |   |-- guards.ts           guard factories that Component.ts and Home.controller.ts register
         |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, retiredPageGuard, dirtyFormGuard, navigationLogger)
         |   |-- demo/               RuntimeCoordinator, ScenarioRunner
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
@@ -47,16 +52,16 @@ ui5-lib-guard-router/
             |-- e2e/                wdi5 e2e tests (standalone)
             |-- flp/                wdi5 FLP preview tests
             |-- shared/             control references (view ID + control ID), model and nested-component helpers for both suites
+            |-- browser-modules.ts  types of the UI5 modules read in browser.execute()
             |-- wdio.conf.ts        standalone e2e config
             |-- wdio-flp.conf.ts    FLP preview e2e config
 ```
 
 ## High-Level Overview
 
-The library provides a drop-in replacement for `sap.m.routing.Router` that adds async
-navigation guards. Guards intercept every navigation path (programmatic `navTo`, browser
-back/forward, direct URL changes) and can allow, block, or redirect before any route
-matching, target loading, or event firing occurs.
+The router replaces `sap.m.routing.Router` and adds navigation guards. They run for every
+navigation path (programmatic `navTo`, browser back/forward, direct URL changes) and allow,
+block or redirect before any route matches, target loads or event fires.
 
 ```
 +----------------------------------------------------------------------+
@@ -97,7 +102,7 @@ matching, target loading, or event firing occurs.
 |   +------------------------------------------------------------------+ |
 |   | _pipeline: GuardPipeline                                         | |
 |   |                                                                  | |
-|   | evaluate(context)  — leave → global enter → route enter          | |
+|   | evaluate(context): leave → global enter → route enter            | |
 |   | addGlobalGuard / removeGlobalGuard                               | |
 |   | addEnterGuard / removeEnterGuard                                 | |
 |   | addLeaveGuard / removeLeaveGuard                                 | |
@@ -168,17 +173,13 @@ GuardRouter (public interface)      Router (ES6 class)
 
 Only strict `true` allows navigation. A non-empty string or a `GuardRedirect` object
 redirects; every other value (numbers, other objects, `null`, `undefined`, the empty string)
-blocks with a warning. This prevents accidental allow from coercion.
+blocks with a warning, so no value allows by coercion.
 
 `NavigationOutcome` is registered as a UI5 enum in `library.ts` via `DataType.registerEnum`.
-The manifest dependency chain guarantees `library.ts` executes before `Router.ts` is loaded,
-so `Router.ts` does not need to import `library.ts`. See [Library Loading Order Research](../research/library-loading-order.md)
-for the full analysis of the Component bootstrap sequence.
+The manifest dependency chain loads `library.ts` before `Router.ts`, so `Router.ts` does not
+import it ([Library Loading Order Research](../research/library-loading-order.md)).
 
-The Router is an ES6 class that extends `sap.m.routing.Router` and implements the
-`GuardRouter` interface. Application code casts `getRouter()` to `GuardRouter` for
-type-safe access to the guard management methods. Internal state and methods live
-directly on the class as typed fields; no separate internal interface is needed.
+Application code casts `getRouter()` to `GuardRouter` to reach the guard methods.
 
 ## parse() Override - Fallback for Browser-Initiated Navigation
 
@@ -188,49 +189,73 @@ the hash. With the default `navToPreflight: "guard"`, programmatic `navTo()` cal
 guards in the preflight path (see below); the hash change they cause re-enters `parse()` in
 the committing phase, which commits without running the guards again.
 
+`parse()` checks the hash in this order, and the first case that applies ends the call:
+
 ```mermaid
 flowchart TD
-    start(["parse(newHash)"]) --> destroyed{"router destroyed?"}
-    destroyed -- "yes" --> warn(["super.parse()<br/>base router warns"])
-    destroyed -- "no" --> outdated{"report out of date?<br/>(_reportOutdated)"}
-    outdated -- "yes" --> ret(["return"])
-    outdated -- "no" --> suppress{"hash equals<br/>_suppressedHash?"}
-    suppress -- "yes" --> ret
-    suppress -- "no" --> back{"undo started and root hash<br/>equals undo.fullHash?"}
-    back -- "yes" --> adopt["adopt the hash without guards<br/>_finishRestore(newHash)"] --> ret
-    back -- "no" --> redir{committing phase?}
-    redir -- "yes" --> bypass(["_commitNavigation()"])
-    redir -- "no" --> samehash{same as _currentHash?}
-    samehash -- "yes" --> moved{"a pending navigation<br/>had moved the URL?"}
-    moved -- "yes" --> canceldup["_cancelPendingNavigation()"] --> ret
-    moved -- "no" --> match(["super.parse()<br/>the route matches again"])
-    samehash -- "no" --> setup["resolve route<br/>_cancelPendingNavigation()<br/>_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
+    start(["parse(newHash)"]) --> destroyed["router destroyed:<br/>super.parse(), the base router warns"]
+    destroyed -- "otherwise" --> outdated["report out of date (_reportOutdated):<br/>return"]
+    outdated -- "otherwise" --> suppress["hash equals _suppressedHash:<br/>return"]
+    suppress -- "otherwise" --> back["undo started and root hash equals undo.fullHash:<br/>adopt the hash without guards, _finishRestore(newHash)"]
+    back -- "otherwise" --> redir["✓ committing or awaitingHash phase for newHash:<br/>_commitNavigation()"]
+    redir -- "otherwise" --> moved["same as _currentHash, a pending navigation had moved the URL:<br/>evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"]
+    moved -- "otherwise" --> again["same as _currentHash:<br/>super.parse(), the route matches again"]
+    again -- "otherwise" --> guards(["the guards run"])
 
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    class destroyed,outdated,suppress,again native
+    class start,back,moved,guards added
+    class redir commit
+```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+
+Every other hash runs the guards:
+
+```mermaid
+flowchart TD
+    cancelprev["resolve route<br/>_cancelPendingNavigation()"] --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
+    handlermoved -- "yes" --> ret(["return"])
+    handlermoved -- "no" --> setup["_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
     setup --> evaluate["_pipeline.evaluate(context)"]
     evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
-    stale -- "current" --> apply{"_applyDecision()"}
     stale -- "stale" --> discard(["discard result"])
+    stale -- "current" --> apply{"_applyDecision()"}
+    apply -- "allow" --> commit(["✓ _commitNavigation()"])
+    apply -- "redirect" --> redirect(["↪ _startRedirectChain()"])
+    apply -- "block" --> block(["✕ _blockNavigation()<br/>undoes the hash change"])
+    apply -- "error" --> errornav(["⚠ _errorNavigation()<br/>undoes the hash change"])
+    commit ~~~ block
+    redirect ~~~ errornav
 
-    apply -- "allow" --> commit(["_commitNavigation()"])
-    apply -- "block" --> block(["_blockNavigation()<br/>undoes the hash change"])
-    apply -- "redirect" --> redirect(["_startRedirectChain()"])
-    apply -- "error" --> errornav(["_errorNavigation()<br/>undoes the hash change"])
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0072B2,color:#1f2328
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
+    class ret,discard native
+    class cancelprev,setup,evaluate added
+    class handlermoved,stale,apply decision
+    class commit commit
+    class redirect redirect
+    class block block
+    class errornav error
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 **Sync vs Async:** Guards run synchronously until one returns a Promise. The pipeline then
 awaits that Promise and calls the remaining guards of the same phase one at a time with
 `await`, checking the abort signal before each. Later phases run inside the same Promise
 chain after another abort-signal check, so they are async as well; they do not add an
 `await` per guard unless one of their guards returns a Promise. `evaluate()` returns a
-Promise, so the navigation as a whole is async. Async-ness is per navigation: the next
-navigation starts synchronously again.
-When the decision arrives, `parse()`, `navTo()` and redirect hops discard it if
-`_parseGeneration` changed. Everything that ends an evaluating phase from outside the attempt
-goes through `_cancelPendingNavigation()`, which bumps the counter, and every attempt takes a
-generation of its own in `_startAttempt()`. The sync path checks the generation too
-(`_applyPreflightDecision()`, `_applyDecision()`, `_applyRedirectDecision()`): a guard that
-calls `navTo()` itself supersedes the navigation it guards, and whatever it returns afterwards
-is dropped. The navigation it started is the one that settles.
+Promise, so the navigation as a whole is async. The next navigation starts synchronously
+again. A decision that arrives after a newer navigation started is discarded
+([Async Concurrency Control](#async-concurrency-control)).
 
 The checks before the phase check end a call without starting a navigation: a report that is
 out of date ([Routers that share a hash changer](#routers-that-share-a-hash-changer)), the hash
@@ -239,7 +264,12 @@ that `_restoreHash()` is writing, and the hash change that puts the URL back aft
 
 The same-hash branch handles the committed hash reaching `parse()` again. If a pending
 navigation had moved the URL away (`NavigationAttempt.restoreHash`), the user went back while
-its guards were pending, and the branch cancels it. Otherwise the route matches again through
+it was pending, and no route matches again: the route of the committed hash was never left. The
+branch cancels a navigation whose guards are pending. One that waits for UI5 to write its hash
+(`awaitingHash`) goes on, and only its undo is dropped: the hash change that it describes is
+undone already, and kept, it would be taken back once more with the next hash change that does
+not commit (two steps through the browser history instead of one, which leaves the app;
+`awaiting-hash.e2e.ts`). Otherwise the route matches again through
 `super.parse()`, without guards, as it does natively: UI5 reports the hash of a navigation with
 component targets once it has written it, reports the hash again after it reset the hash
 changer for a target displayed without a route, or application code called `parse()` directly.
@@ -254,18 +284,16 @@ A lazily loaded guard module that is not in the module cache yet returns a Promi
 loads, so it makes its navigation async from that guard on. Once loaded, its guards run
 synchronously again, unless they return Promises themselves.
 
-**Critical design decisions:**
+**Design decisions:**
 
-1. **`parse()` is intentionally NOT async.** UI5 calls it from the `hashChanged` event
-   handler without awaiting. If it returned a Promise, routing would be deferred to a
-   microtask, and test tools like wdi5's `waitForUI5` would see an idle event loop before
-   navigation completes. When all guards are synchronous (the common case), the entire
-   guard-check + route-activation happens in the same tick.
+1. **`parse()` is not async.** UI5 calls it from the `hashChanged` event handler without
+   awaiting. A Promise would defer routing to a microtask, and wdi5's `waitForUI5` would see
+   an idle event loop before the navigation completes. With synchronous guards, the guard
+   check and the route match happen in the same tick.
 
-2. **`replaceHash` fires `hashChanged` synchronously.** The `_suppressedHash` mechanism
-   depends on this: `_restoreHash()` stores the hash to suppress, calls `replaceHash`,
-   and the resulting synchronous `parse()` sees the stored hash and returns immediately,
-   so a restore is never taken for a navigation. A restore to the committed hash would also
+2. **`replaceHash` fires `hashChanged` synchronously.** `_restoreHash()` stores the hash in
+   `_suppressedHash` and calls `replaceHash`; the synchronous `parse()` that follows sees the
+   stored hash and returns, so a restore is never taken for a navigation. A restore to the committed hash would also
    stop at the same-hash check. The suppression is needed when nothing has committed yet
    (`_currentHash` is `null`) and the blocked target is the empty hash itself: a `navTo()` to
    the empty-pattern route supersedes the pending first hash change and is blocked. Restoring
@@ -275,19 +303,19 @@ synchronously again, unless they return Promises themselves.
    effect. A QUnit test covers this ("a blocked navTo() to the empty hash that superseded the
    first hash change does not evaluate that hash again").
 
-3. **Redirect targets are evaluated by the guard pipeline with loop detection.**
-   When a guard redirects from route A to route B, the router evaluates route B's
-   guards (skipping leave guards via `skipLeaveGuards`) before committing. If route B
-   also redirects, the chain continues recursively. A visited-set tracks hashes
-   already evaluated in the current chain: revisiting a hash triggers loop detection
-   and blocks the navigation. A `MAX_REDIRECT_DEPTH` cap of 10 hops guards against
-   unbounded chains with unique hashes. Both safeguards log an error and settle the
-   navigation as `Blocked`.
+3. **Redirect targets run their guards, with loop detection.** When a guard redirects from
+   route A to route B, the router evaluates B's guards before committing, without leave
+   guards (`skipLeaveGuards`): leave guards run only on the first hop. If B redirects too,
+   the chain continues. A visited set of the hashes of the chain blocks a hash that comes
+   again, and `MAX_REDIRECT_DEPTH` (10 hops) blocks a chain of unique hashes. Both log an
+   error and settle the navigation as `Blocked`.
 
 ## Two-Entry-Point Model: navTo() Preflight + parse() Fallback
 
-The router intercepts navigation through two complementary entry points that feed the
-same shared guard pipeline (`_pipeline.evaluate()`).
+The router intercepts navigation through two entry points that feed the same guard pipeline
+(`_pipeline.evaluate()`). `parse()` stays authoritative: browser back/forward, the address
+bar and direct hash changes never pass `navTo()` and arrive through `hashChanged` →
+`parse()`.
 
 ```
 Programmatic navigation:
@@ -301,7 +329,7 @@ Programmatic navigation:
 
 Browser-initiated navigation (back/forward, URL bar, direct hash change):
   parse(newHash)
-    → committing phase? → _commitNavigation() (transitions to idle)
+    → committing or awaitingHash phase for newHash? → _commitNavigation() (transitions to idle)
     → otherwise → _pipeline.evaluate(context)
         → allow  → _commitNavigation()
         → block  → _blockNavigation() → _undoHashChange()
@@ -314,21 +342,24 @@ Browser-initiated navigation (back/forward, URL bar, direct hash change):
 When `navTo()` runs guards and they allow navigation, the router enters the
 committing/preflight phase (which records the approved route) before calling
 `super.navTo()`. The parent router triggers a hash change, which re-enters through
-`parse()`. On entry, `parse()` sees the committing phase and calls `_commitNavigation()`
-with the incoming hash, which transitions to idle and commits without re-running guards.
+`parse()`. On entry, `parse()` finds the committing phase for the incoming hash and calls
+`_commitNavigation()`. A different hash is guarded as a navigation of its own.
 This avoids double evaluation while keeping `parse()` as the authoritative commit path.
 
 If `parse()` is not called inside `super.navTo()`, `_commitAfterNavTo()` commits the
-navigation and settles it. There are two cases:
+navigation and settles it, or reports that the caller must block it. There are three cases:
 
 - The hash changer already shows the target hash, so no hash change comes. The router calls
   `super.parse()` itself and the route matches.
 - UI5 writes the hash later. That is the case with `componentTargetInfo`: UI5 first loads
-  the nested components, collects their hashes and then writes one combined hash. The router
-  commits and settles at once but does not call `super.parse()`. The route matches when
-  `parse()` receives that hash, which is the committed hash by then (same-hash branch), as it
-  does natively. Matched earlier, the route would display the nested component, and fire its
-  own `routeMatched`, before UI5 has set the hash of that component.
+  the nested components, collects their hashes and then writes one combined hash. The
+  navigation waits in the `awaitingHash` phase. It commits and settles when `parse()` receives
+  that hash, and the route matches then, as it does natively. Committed earlier, the router
+  would be on a route that UI5 does not display if the hash is never written: UI5 writes none
+  when a nested component fails to load, and none on a router that is not async. Such a
+  navigation stays pending until the next navigation, `stop()` or `destroy()` settles it as
+  `Cancelled`. A navigation that supersedes the pending one does the same; the hash that UI5
+  then still writes is a hash change like any other, guarded in `parse()`.
 - Neither: the hash changer refused the hash change. The Fiori launchpad does that while it
   asks the user about unsaved data and the user cancels. Nothing changed, so the navigation
   settles as `Blocked`.
@@ -344,8 +375,9 @@ again and the route matches again in the same-hash branch of `parse()`. The call
 `skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
 guards. Both go through `_navigateAllowed()`. If `super.navTo()` throws there, the phase is
 reset to idle, so the next hash change runs its guards instead of being committed as
-already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` in the idle
-phase and `parse()` evaluates the guards.
+already approved. With `navToPreflight: "off"`, `navTo()` calls `super.navTo()` without
+touching the phase and `parse()` evaluates the guards: a pending navigation is superseded
+there, by the hash change, so that a block undoes both hash changes.
 
 The preflight needs a router that listens to hash changes. While `isInitialized()` is false,
 `navTo()` only calls `super.navTo()` (behavior: library README, [Lifecycle](../../packages/lib/README.md#lifecycle)):
@@ -509,15 +541,23 @@ A hash change that is no step and is blocked by a synchronous guard:
 
 ```mermaid
 sequenceDiagram
-    participant Root as Root hash changer
-    participant Router as Guard router
-    Root->>Router: _onHashReported("b"), then parse("b")
-    Router->>Router: guards block, _describeUndo() records first "b"
-    Router->>Router: _undoHashChange(): fullHash unknown, restoring with awaitsReport
-    Root->>Router: _onRootHashChanged(newHash "b", oldHash "a")
-    Router->>Root: replaceHash("a")
-    Root->>Router: parse("a"): undo started, root hash is fullHash
-    Router->>Router: adopt "a" without guards, settle Blocked
+    box rgba(110, 119, 129, 0.2) UI5
+        participant Root as Root hash changer
+    end
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(213, 94, 0, 0.15)
+        Root->>Router: _onHashReported("b"),<br/>then parse("b")
+        Router->>Router: _describeUndo():<br/>first "b"
+        Router->>Router: guards block
+        Router->>Router: _undoHashChange():<br/>fullHash unknown
+        Note over Router: restoring,<br/>with awaitsReport
+        Root->>Router: _onRootHashChanged():<br/>newHash "b", oldHash "a"
+        Router->>Root: replaceHash("a")
+        Root->>Router: parse("a")
+        Note over Router: root hash is fullHash:<br/>adopts "a" without<br/>guards, settles Blocked
+    end
 ```
 
 ### Routers that share a hash changer
@@ -545,30 +585,26 @@ hash that puts the URL back, as the URL shows them.
 
 ```mermaid
 sequenceDiagram
-    participant HC as Shared hash changer
-    participant A as Router A (informed first)
-    participant B as Router B
+    box rgba(110, 119, 129, 0.2) UI5
+        participant HC as Shared hash changer
+    end
+    box rgba(0, 114, 178, 0.15) This library
+        participant A as Router A<br/>(informed first)
+        participant B as Router B
+    end
     HC->>A: "page1"
-    A->>HC: guard redirects: navTo("detail/1", replace)
+    A->>HC: guard redirects:<br/>replaces with "detail/1"
     HC->>A: "detail/1", commits
     HC->>B: "detail/1", commits
     HC->>B: "page1" (stale report)
-    B->>B: hash changer shows "detail/1", reported before: dropped
+    Note over B: hash changer shows<br/>"detail/1", reported<br/>before: dropped
 ```
-
-### Why parse() remains authoritative
-
-`navTo()` only covers programmatic navigation. Browser back/forward, URL bar entry,
-and direct hash changes bypass `navTo()` entirely; they arrive through `hashChanged`
-→ `parse()`. The `parse()` override remains the authoritative fallback that catches
-all navigation paths the `navTo()` preflight cannot reach.
 
 ## Guard Execution Pipeline
 
 Guards run in three phases, in the order given in the library README,
-[Execution order](../../packages/lib/README.md#execution-order). Evaluation stays synchronous until a guard returns a
-Promise, then switches to async for the rest of the navigation, including all later
-phases.
+[Execution order](../../packages/lib/README.md#execution-order). The sync and async paths are
+described [above](#parse-override---fallback-for-browser-initiated-navigation).
 
 Greedy routes: `Router._evaluateGuards()` passes `alsoLeaving` (greedy routes other than
 `fromRoute` that match `fromHash`) and `alsoEntering` (greedy routes other than `toRoute`
@@ -581,91 +617,56 @@ route. All of them get the one context of the navigation. On a redirect hop
 
 ```mermaid
 flowchart TD
-    start(["evaluate(context)"]) --> lcheck{"leave guards for fromRoute<br/>and alsoLeaving?<br/>(skipped on redirect hops)"}
+    start(["evaluate(context)"]) --> p1["Phase 1: leave guards of fromRoute<br/>and alsoLeaving, none on a redirect hop<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p1 -- "all true,<br/>not aborted" --> p2["Phase 2: global guards<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p2 -- "all true,<br/>not aborted" --> p3["Phase 3: route guards of toRoute<br/>and alsoEntering<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p3 -- "all true" --> allow(["✓ allow"])
 
-    subgraph phase1 ["Phase 1: leave guards"]
-        lrun["_runLeaveGuards()"]
-        lfin["_continueGuardsAsync()"]
-    end
+    p1 -- "non-true<br/>or aborted" --> block(["✕ block"])
+    p2 -- "first non-true<br/>or aborted" --> result(["↪ block, or redirect<br/>to the route returned"])
+    p3 -- "first non-true<br/>or aborted" --> result
 
-    subgraph phase2 ["Phase 2: global guards"]
-        gsync["_runGuards(globalGuards)"]
-        gfin["_continueGuardsAsync()"]
-    end
+    allow ~~~ throws["a guard throws<br/>in any phase"]
+    throws --> error(["⚠ error<br/>(block if aborted)"])
 
-    subgraph phase3 ["Phase 3: route guards"]
-        rcheck{"guards for toRoute<br/>and alsoEntering?"}
-        rsync["_runGuards(routeGuards)"]
-        rfin["_continueGuardsAsync()"]
-    end
-
-    lcheck -- "present" --> lrun
-    lcheck -- "none" --> gsync
-    lrun -- "sync, all true" --> gsync
-    lrun -- "Promise" --> lfin
-    lfin -- "all true, not aborted" --> gsync
-
-    gsync -- "sync, all true" --> rcheck
-    gsync -- "Promise" --> gfin
-    gfin -- "all true, not aborted" --> rcheck
-
-    rcheck -- "none" --> allow(["allow"])
-    rcheck -- "present" --> rsync
-    rsync -- "sync, all true" --> allow
-    rsync -- "Promise" --> rfin
-    rfin -- "all true" --> allow
-
-    lrun -- "non-true" --> block(["block"])
-    lfin -- "non-true or aborted" --> block
-    gsync -- "first non-true" --> result(["block or redirect"])
-    gfin -- "first non-true or aborted" --> result
-    rsync -- "first non-true" --> result
-    rfin -- "first non-true or aborted" --> result
-
-    phase1 -- "throws" --> error(["error<br/>(block if aborted)"])
-    phase2 -- "throws" --> error
-    phase3 -- "throws" --> error
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
+    class throws native
+    class start,p1,p2,p3 added
+    class allow commit
+    class result redirect
+    class block block
+    class error error
 ```
 
-Short-circuit: the first non-`true` result stops evaluation. Remaining guards are skipped.
-A guard that throws or rejects ends evaluation in any phase; see error handling below.
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
-Error handling: if a guard throws or its Promise rejects, the error is logged and
-re-thrown to `evaluate()`, which returns `{ action: "error", error }`. The Router
-settles the navigation as `NavigationOutcome.Error` with the thrown value on
-`result.error`. If the abort signal is already aborted, the error is swallowed and
-navigation is blocked instead (the navigation was cancelled, the error is expected).
+The first non-`true` result stops evaluation, and the remaining guards are skipped.
 
-## Guard Result Handling
-
-After guards complete, the result is applied inline:
-
-| Result                      | Action                                                             |
-| --------------------------- | ------------------------------------------------------------------ |
-| `true`                      | `_commitNavigation()` → update state, call parent `parse()`        |
-| `false`                     | `_blockNavigation()` → undo the hash change (if the URL was moved) |
-| `string` or `GuardRedirect` | `_startRedirectChain()` → `_redirect()` → `navTo()` (see above)    |
-
-Redirects evaluate the full guard pipeline on the target route before committing.
-Redirect chain hops pass `skipLeaveGuards: true` to `GuardPipeline.evaluate()` so
-that leave guards run only on the first hop (the initial navigation), not on each
-redirect target. Loop detection (visited-set + depth cap of 10 hops) prevents
-infinite chains.
+If a guard throws or its Promise rejects, the error is logged and `evaluate()` returns
+`{ action: "error", error }`. The router settles the navigation as `Error` with the thrown
+value on `result.error`. If the abort signal is already aborted, the navigation was cancelled:
+the error is swallowed and the decision is a block.
 
 ## Manifest Guards and Route Metadata
 
 `Router.ts` keeps the navigation logic and hands the rest to helper modules:
 
-| Step                         | Router code                                               | Helper                                                                                                 |
-| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Read the `guardRouter` block | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
-| Lazy-mode preload hint       | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
-| Pattern-tree expansion       | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
-| `guardLoading: "block"`      | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
-| `guardLoading: "lazy"`       | `initialize()` / `addRoute()` → `_registerLazyGuards()`   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
-| Export shapes and names      | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
-| Guard names in log messages  | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
-| Route metadata               | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
+| Step                                               | Router code                                               | Helper                                                                                                 |
+| -------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read the `guardRouter` block                       | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
+| Lazy-mode preload hint                             | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
+| Pattern-tree expansion                             | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
+| `guardLoading: "block"`                            | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
+| `guardLoading: "lazy"`                             | `initialize()` → `_registerLazyGuards()`                  | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
+| `addRoute()` with `pattern-tree`, any loading mode | `addRoute()` → `_registerManifestGuard(..., before)`      | `createLazyGuards()` (`GuardModules.ts`)                                                               |
+| Export shapes and names                            | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
+| Guard names in log messages                        | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
+| Route metadata                                     | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
@@ -691,29 +692,31 @@ sequenceDiagram
     participant Nav1 as Nav 1: parse("a")
     participant Router as Router State
     participant Nav2 as Nav 2: parse("b")
-
-    Nav1->>Router: _startAttempt(): gen = 1
+    Nav1->>Router: _startAttempt():<br/>gen = 1
     Nav1->>Nav1: await guard...
-    Nav2->>Router: _cancelPendingNavigation(): gen = 2
-    Router-->>Nav1: abort signal, settle Cancelled
-    Nav2->>Router: _startAttempt(): gen = 3
+    Nav2->>Router: _cancelPendingNavigation():<br/>gen = 2
+    Router-->>Nav1: abort signal,<br/>settles Cancelled
+    Nav2->>Router: _startAttempt():<br/>gen = 3
     Nav2->>Nav2: await guard...
-    Nav1->>Router: check: gen(1) != current(3)
+    Nav1->>Router: check:<br/>gen 1 != current 3
     Note over Nav1: DISCARD (stale)
-    Nav2->>Router: check: gen(3) == current(3)
+    Nav2->>Router: check:<br/>gen 3 == current 3
     Note over Nav2: APPLY result
 ```
 
 Every `parse()` or `navTo()` that enters the guard pipeline first calls
 `_cancelPendingNavigation()`, which bumps the generation and aborts the pending
 navigation's `AbortSignal`, and then `_startAttempt()`, which gives the new attempt a
-generation of its own. Inside the pipeline, the aborted signal stops the remaining
-guards between awaits. The generation is checked once, when the async decision settles:
-if a newer navigation started in the meantime, the stale result is discarded with a
-debug log. This ensures only the latest navigation wins.
+generation of its own. Everything else that ends an evaluating phase from outside the
+attempt (`stop()`, `destroy()`, the same-hash branch of `parse()` when the URL comes back to
+the committed hash) also goes through `_cancelPendingNavigation()`. Inside the pipeline, the
+aborted signal stops the remaining guards between awaits. When the decision arrives,
+`parse()`, `navTo()` and redirect hops discard it with a debug log if the generation changed.
 
-The generation is also bumped on same-hash dedup, invalidating any pending async guard
-that was running when the user navigated back to the original hash.
+The sync path checks the generation too (`_applyPreflightDecision()`, `_applyDecision()`,
+`_applyRedirectDecision()`): a guard that calls `navTo()` itself supersedes the navigation it
+guards, and whatever it returns afterwards is dropped. The navigation it started is the one
+that settles.
 
 The own generation matters when a `navigationSettled` handler navigates on the `Cancelled`
 settlement. The handler runs inside `_cancelPendingNavigation()`, before the superseding
@@ -724,46 +727,56 @@ again, which would navigate again.
 
 ## Settlement Signal
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The
-result carries a `NavigationOutcome` enum value indicating how the navigation resolved.
+`navigationSettled()` returns a Promise that resolves with a `NavigationResult` when the
+pending navigation settles.
 
 ```mermaid
 flowchart TD
-    call(["navigationSettled()"]) --> pending{phase is evaluating<br/>or restoring?}
+    call(["navigationSettled()"]) --> pending{"phase is evaluating,<br/>awaitingHash or restoring?"}
     pending -- "no (idle or committing)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
     pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
+    push -. "flushed by" .-> actions
 
-    subgraph "Terminal actions"
-        commit["_commitNavigation()"] -- "flush" --> fcommit["Committed, Bypassed, or Redirected"]
-        block["_blockNavigation()"] -- "flush" --> fblock["Blocked"]
-        cancel["_cancelPendingNavigation()"] -- "flush (if pending)" --> fcancel["Cancelled"]
-        redirect["_redirect()"] -- "unknown target, loop, or depth cap:<br/>_blockNavigation()" --> fredirect["Blocked"]
-        errornav["_errorNavigation()"] -- "flush" --> ferror["Error"]
-        redirect -- "target without valid hash:<br/>_errorNavigation()" --> ferror
+    subgraph actions ["Terminal actions"]
+        commit["✓ _commitNavigation():<br/>Committed, Bypassed or Redirected"]
+        settle["↪ _settleUncommitted(), redirect to the shown route:<br/>Redirected"]
+        block["✕ _blockNavigation(), also from _redirect()<br/>for an unknown target, a loop or the depth cap:<br/>Blocked"]
+        errornav["⚠ _errorNavigation(), also from _redirect()<br/>for a target without valid hash:<br/>Error"]
+        cancel["_cancelPendingNavigation(), if a navigation is pending:<br/>Cancelled, while restoring its result"]
+        commit ~~~ settle ~~~ block ~~~ errornav ~~~ cancel
     end
 
-    push -.-> commit
-    push -.-> block
-    push -.-> cancel
-    push -.-> redirect
-    push -.-> errornav
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef decision fill:#ddf4ff,stroke:#0072B2,color:#1f2328
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
+    class cancel native
+    class call,immediate,push added
+    class pending decision
+    class commit commit
+    class settle redirect
+    class block block
+    class errornav error
+    style actions fill:none,stroke:#0072B2
 ```
 
-Each terminal action in the guard pipeline (`_commitNavigation`, `_blockNavigation`,
-`_errorNavigation`, `_cancelPendingNavigation`) calls `_flushSettlement()`, which drains all queued resolvers
-with the same `NavigationResult` and fires the `navigationSettled` event via
-`EventProvider.fireEvent()`. `_redirect()` calls `_blockNavigation()` when the redirect target
-route does not exist, because the observable outcome is that the user stays on the current
-route. An allowed redirect ends in `_commitNavigation()`, through `parse()` or directly
-(redirect to the hash the URL already shows, component targets), and settles as
-`Redirected`; a redirect to the committed hash settles as `Redirected` without a commit. This
-ensures:
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
-- Multiple callers of `navigationSettled()` for the same navigation all receive the same result
-- Each terminal action flushes the queued settlement resolvers with one shared `NavigationResult`
-- `_commitNavigation` uses the phase origin (committing/redirect vs. other) and matched-route result to distinguish `Committed`, `Bypassed`, and `Redirected`
-- `_cancelPendingNavigation` only flushes when the router is in the evaluating phase, avoiding
-  spurious settlement signals during initialization or when no navigation is in flight
+Each terminal action (`_commitNavigation`, `_blockNavigation`, `_errorNavigation`,
+`_cancelPendingNavigation`) calls `_flushSettlement()`, which resolves all queued resolvers
+with one `NavigationResult` and fires the `navigationSettled` event. `_redirect()` calls
+`_blockNavigation()` for an unknown target route: the user stays on the current route. An
+allowed redirect ends in `_commitNavigation()`, through `parse()` or directly (redirect to the
+hash the URL already shows, component targets), and settles as `Redirected`; a redirect to the
+committed hash settles as `Redirected` without a commit. Further rules:
+
+- `_commitNavigation` tells `Committed`, `Bypassed` and `Redirected` apart by the phase origin (committing/redirect or other) and the matched route
+- `_cancelPendingNavigation` flushes only when the router is evaluating or awaiting a hash
+  (`Cancelled`), or restoring (the result that phase stored), avoiding spurious settlement
+  signals during initialization or when no navigation is in flight
 - A navigation that did not commit (`Blocked`, `Error`, `Cancelled` with a restore, a
   `Redirected` to the committed hash) goes through `_settleUncommitted()`, which restores the
   hash before it flushes. Handlers run on the final URL, and a hash that a handler sets is not
@@ -784,11 +797,9 @@ ensures:
   `beforeRouteMatched` or `routeMatched` handlers start come after it. If a settlement handler
   itself navigated on and committed, `_currentHash` is no longer the committed hash and
   `super.parse()` is skipped: the route that was left again is not displayed over the newer one
-- `_lastSettlement` caches the most recent result so that `navigationSettled()` called
-  after a synchronous navigation still returns the correct outcome. This handles the
-  common case where sync guards settle within the same tick as `navTo()`, leaving
-  the router in the idle phase before any caller has a chance to register a resolver.
-  The cache is reset on `stop()` and `destroy()`
+- `_lastSettlement` caches the most recent result: synchronous guards settle within the
+  `navTo()` call, before a caller can register a resolver, and `navigationSettled()` called
+  afterwards returns that result. `stop()` and `destroy()` reset it
 
 ## FLP Integration
 
@@ -820,12 +831,14 @@ sees a cross-app hash. In SAPUI5 1.144.0 and 1.149.0 (`sap/ushell/renderer/Shell
   cross-app hash change, before the data-loss check.
 - `_handleDataLoss` asks the dirty flag and the dirty-state providers (in-app changes
   included; a provider tells them apart by `isCrossAppNavigation`). If the app is dirty, it
-  starts to put the previous hash back, restarts the app router with `initialize(true)` while
-  the URL still shows the target, and then shows the browser's `confirm()` dialog. If the user
+  restarts the app router with `initialize(true)` while the URL still shows the target, starts
+  to put the previous hash back, and then shows the browser's `confirm()` dialog. If the user
   confirms, the shell sets the target hash again. If the user cancels, the app stays on its
   route with its router running.
 - The same `initialize(true)` restart runs when a navigation fails and the shell goes back to
   the previous app, and when the target app opens in a new window.
+
+The filter chain step by step, with sources: [FLP dirty state](../research/flp-dirty-state.md).
 
 The hash change that puts the app's hash back reaches the router as no `hashChanged` event.
 After the cancel, UI5 does not report a hash change to the app's own hash `""` either. The router
@@ -835,20 +848,29 @@ therefore takes the hash to undo from the `oldHash` of the next root `hashChange
 ```mermaid
 sequenceDiagram
     actor User
-    participant Shell as Launchpad
-    participant Router as Guard router
-    Note over Router: route "protected", form dirty
-    User->>Shell: cross-app navigation to #Other-display
-    Shell->>Router: stop()
-    Shell->>Shell: _handleDataLoss: dirty, start to put #App-preview&/protected back
-    Shell->>Router: initialize(true): resumes "protected"
-    Shell->>User: confirm()
-    User-->>Shell: Cancel
-    Note over Router: URL shows #App-preview&/protected again, no hashChanged
-    User->>Router: link to #App-preview&/employees: parse("employees")
-    Router->>Router: leave guard blocks
-    Router->>Shell: replaceHash(oldHash of that event)
-    Shell->>Router: parse("protected"): adopted without guards, settles Blocked
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(213, 94, 0, 0.15)
+        Note over Router: route "protected",<br/>form dirty
+        User->>Shell: cross-app<br/>navigation
+        Shell->>Router: stop()
+        Shell->>Router: _handleDataLoss():<br/>initialize(true)
+        Note over Router: resumes "protected"
+        Shell->>Shell: starts to put the<br/>previous hash back
+        Shell->>User: confirm()
+        User-->>Shell: Cancel
+        Note over Shell,Router: URL is back,<br/>no hashChanged
+        User->>Shell: in-app link<br/>to employees
+        Shell->>Router: parse("employees")
+        Router->>Router: leave guard blocks
+        Router->>Shell: replaceHash(oldHash<br/>of that event)
+        Shell->>Router: parse("protected")
+        Note over Router: adopted without guards,<br/>settles Blocked
+    end
 ```
 
 A hash change that the shell takes over never reaches `parse()`. A `navTo()` whose hash write
@@ -864,43 +886,19 @@ application code runs.
 With `sap-keep-alive=true` the shell keeps an app it leaves for another app and hides it.
 With `sap-keep-alive=restricted` it keeps it the same way between apps, but destroys it when
 the user reaches the launchpad home. Before the shell creates a new app component, it stops the
-routers of all kept apps. Embedded apps (`appIntegration/contracts/EmbeddedUI5Handler.js`):
-
-| The component                                                      | Hide                                            | Show                                                                                        |
-| ------------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| supports keep-alive (manifest `sap.ui5/keepAlive/supported: true`) | `deactivate()`: `stop()`, then `onDeactivate()` | `activate()`: `initialize()`, which parses the hash through the guards, then `onActivate()` |
-| does not                                                           | `stop()`                                        | `initialize(true)`, which resumes the route; `initialize()` on the legacy restore flow      |
-
-`Component#deactivate()` and `Component#activate()` are UI5 core (`sap/ui/core/Component.js`);
-`isKeepAliveSupported()` reads the manifest entry. Apps in an iframe are hidden and shown by
-the app runtime the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
-
-```mermaid
-sequenceDiagram
-    participant Shell as Launchpad
-    participant Comp as App component
-    participant Router as Guard router
-    Shell->>Router: stop() on the cross-app hash change
-    alt keep-alive supported
-        Shell->>Comp: deactivate()
-        Comp->>Router: stop()
-        Comp->>Comp: onDeactivate()
-        Note over Shell,Router: app hidden
-        Shell->>Comp: activate()
-        Comp->>Router: initialize(): parses the hash, guards run
-        Comp->>Comp: onActivate()
-    else not supported
-        Shell->>Router: stop()
-        Note over Shell,Router: app hidden
-        Shell->>Router: initialize(true): resumes the route
-    end
-```
+routers of all kept apps. How the router is stopped and started while an app is hidden and
+shown, with a table and both sequence diagrams, is in the library README,
+[Keep-alive apps](../../packages/lib/README.md#keep-alive-apps). The sources behind it:
+`appIntegration/contracts/EmbeddedUI5Handler.js` for embedded apps; `Component#deactivate()`
+and `Component#activate()` are UI5 core (`sap/ui/core/Component.js`); `isKeepAliveSupported()`
+reads the manifest entry. In both cases the shell also calls `stop()` once more on the cross-app
+hash change, before it hides the app. Apps in an iframe are hidden and shown by the app runtime
+the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
 
 The dirty-state providers of a hidden embedded app stay registered: the shell asks them on
-every navigation until the app deregisters them. The application side is in the library README,
-[Keep-alive apps](../../packages/lib/README.md#keep-alive-apps).
+every navigation until the app deregisters them.
 
-Observed in the FLP sandbox (SAPUI5 1.144.0, `?sap-keep-alive=true`, embedded apps; demo
+First observed in the FLP sandbox on SAPUI5 1.144.0 (the spec now runs on 1.154 and 1.151; `?sap-keep-alive=true`, embedded apps; demo
 spec `flp-keep-alive.e2e.ts`):
 
 - A hidden app's router does not react to the other app's hash changes, although both routers
@@ -952,12 +950,16 @@ point.
       `Navigation` service of the app runtime. If its dirty flag is set or a provider answers
       `true`, it shows `window.confirm()` in the iframe. On cancel nothing is written: a `navTo()`
       settles as `Blocked`, as after any hash write that the launchpad takes over. On confirm the
-      navigation goes on and the shell hides the app.
+      navigation goes on: the hash is written, or the shell hides the app.
     - The provider is asked with the navigation context of the iframe. After the app is shown
       again, that context is cross-app until the next hash change in the app, because the app
       runtime has replaced the hash with the intent. A provider that answers only for a
       cross-app navigation (`isCrossAppNavigation !== false`) therefore answers for the first
       in-app `navTo()` after an app with unsaved data is shown again, and the user is asked.
+      After the first hash change in the app the context is in-app, also for a cross-app
+      navigation that the app starts: such a provider answers `false`, and the app is hidden
+      with its unsaved data without a question. The app runtime of 1.144.0 to 1.154.0 reads the
+      context from its own `ShellNavigationInternal`, not from the target.
 - 1.144.0 only: on `store` the app runtime saves the list of providers and empties it, before it
   calls `deactivate()`; on `restore` it puts the list back, before it calls `activate()`. An app
   that deregisters its provider in `onDeactivate()` and registers it in `onActivate()` has it in
@@ -965,15 +967,34 @@ point.
   the same function, so the answers do not change. 1.149.0 no longer touches the providers on
   `store` and `restore` (read from the source).
 
-The demo's preview middleware (`fiori-tools-preview`) cannot declare an app in an iframe: its
-site generator writes every app as a component embedded in the launchpad page
-(`"sap.ui": { "technology": "UI5" }`). The runs above used a launchpad page with a site of its
+The FLP sandbox of `sap.ushell`, which the demo's preview middleware (`fiori-tools-preview`)
+starts, cannot declare an app in an iframe: it writes every tile as a component embedded in the
+launchpad page (`"sap.ui": { "technology": "UI5" }` in `sap/ushell/sandbox/ConfigurationProvider.js`
+up to 1.154.0). The runs above used a launchpad page with a site of its
 own (`CommonDataModel` adapter, `siteDataUrl`), in which the app has
 `"sap.ui": { "technology": "URL" }` and a URL template (`sap.integration/urlTemplateId`, and
 `urlTemplates` with the capabilities `navigationMode: "embedded"` and `appFrameworkId: "UI5"`).
 The template points to a page that starts `sap/ushell/appRuntime/ui5/AppRuntime` and has an
-element with the ID `content`, where the app runtime places the app. The FLP specs of the demo
-do not cover the iframe. Two setups that look similar do not work:
+element with the ID `content`, where the app runtime places the app. The page reads the app
+from a `meta` element named `sap.ushellConfig.ui5appruntime` (`ui5appruntime/config/appIndex/data`),
+which both versions accept. The template builds the URL of the iframe from the app and the
+launchpad hash: `sap-ui-app-id` from `sap.app/id` (through `renameTo`, because a template variable
+cannot contain `-`), `sap-startup-params` from the intent parameters (`{*|join(&,=)}`), the hash
+from the inbound `target`, and `&/` plus the inner app route (`{&innerAppRoute:.}`). So a deep link
+such as `#guardiframe-display?greeting=hello&/employees` reaches the app with its parameters and
+route. The site is a spaces site: the menu entry opens a page with a tile for each app.
+
+That setup is in `packages/demo-app/test/flp/iframe/webapp/`: `flp.html` starts the CDM
+bootstrap of `sap.ushell` and adds the site through a `sap.ushellConfig` meta tag, next to
+`site.json` and `ui5appruntime.html`. The preview middleware serves the folder at `/iframe`.
+`flp-iframe-keep-alive.e2e.ts` runs the demo app in it on SAPUI5 1.151.0 and 1.154.0 and pins the
+first point: the router is stopped while the app is hidden, the kept component settles
+`Committed` on its default route when it is shown again, with its unsaved data, and its guards
+run once for a navigation after that. A cross-app navigation that starts in the shell hides the
+app without a question. It also pins what the app runtime asks with the context of the iframe:
+the first `navTo()` after the app is shown again asks (cancel settles `Blocked`, confirm
+commits), and a cross-app navigation that the app starts after that does not. The provider list
+of 1.144.0 is not pinned by a test. Two setups that look similar do not work:
 
 - Without the element `content` the component is created and routes, but the app runtime never
   records it as its running app. It answers `store` with `sap.ushell.appRuntime.isInvalidIframe`,
@@ -1197,14 +1218,15 @@ and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#pri
 | `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                                                    |
 | `_settlementResolvers`     | `((r: NavigationResult) => void)[]`    | Pending `navigationSettled()` callbacks                                                                                                                                    |
 | `_lastSettlement`          | `NavigationResult \| null`             | Most recent settlement result (for post-hoc queries)                                                                                                                       |
+| `_manifestGuards`          | `{ descriptor, fn }[]`                 | The manifest guards registered for a route, by which `addRoute()` puts inherited guards in front of the guards of deeper routes                                            |
 | `_pendingGuardDescriptors` | `GuardDescriptor[]`                    | Parsed manifest guard descriptors, registered and cleared by `initialize()`                                                                                                |
-| `_sourceDescriptors`       | `GuardDescriptor[]`                    | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                                      |
+| `_sourceDescriptors`       | `ManifestGuardDescriptor[]`            | Original manifest descriptors (for inheritance expansion on addRoute)                                                                                                      |
 | `_destroyed`               | `boolean`                              | Set by `destroy()`; stops block-mode loading from registering guards and calling `super.initialize()`; makes a second `destroy()` a no-op                                  |
 | `_nativeMatching`          | `boolean`                              | The value UI5 wrote to `_bMatchingProcessStarted` (see [UI5 Internals the Router Relies On](#ui5-internals-the-router-relies-on))                                          |
 | `_matchWaiters`            | `(() => void)[]`                       | Promise resolve functions that wait for a `routeMatched`, resolved when a navigation ends without a route match                                                            |
 | `_blockLoad`               | `{ start, ignoreInitialHash } \| null` | Set while block-mode modules load; `start` is cleared by `stop()` and set by `initialize()`, which also stores its `bIgnoreInitialHash` argument                           |
 | `_meta`                    | `RouteMetaStore`                       | Manifest and runtime route metadata, resolved and cached (see `RouteMeta.ts`)                                                                                              |
-| `_routeNames`              | `string[]`                             | Route names as UI5 registers them (`name`, else the key of an object map), for inheritance lookups                                                                         |
+| `_routeNames`              | `string[]`                             | Route names as `addRoute()` receives them, also from the UI5 constructor, for inheritance lookups                                                                          |
 | `_greedyRouteNames`        | `string[]`                             | Names of the routes with `greedy: true`, in definition order, whose guards run in addition to the first match                                                              |
 | `_ownerComponent`          | `UIComponent \| undefined`             | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                                                             |
 
@@ -1212,30 +1234,57 @@ Two variables live at module scope, because they describe the browser and are sh
 all routers: `lastStep` (the last step through the history, from the Navigation API) and
 `undoneHref` (the URL a router is taking a step back from).
 
-`RouterPhase` is a discriminated union with four variants:
+`RouterPhase` is a discriminated union with five variants:
 
-| Phase        | Shape                                                                                         | Description                                                                                                                                                                                                                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idle`       | `{ kind: "idle" }`                                                                            | No navigation in progress                                                                                                                                                                                                                                                                |
-| `evaluating` | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                        | Guards are running; attempt carries hash, route, AbortController, generation, `restoreHash`; `postponed` is set while the navigation waits for async guards                                                                                                                              |
-| `committing` | `{ kind: "committing", route: string, origin: "preflight" \| "redirect" \| "parse" }`         | Navigation is being committed; `origin` distinguishes the entry path                                                                                                                                                                                                                     |
-| `restoring`  | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }` | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route with `componentTargetInfo`) |
+| Phase          | Shape                                                                                                                                                                  | Description                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idle`         | `{ kind: "idle" }`                                                                                                                                                     | No navigation in progress                                                                                                                                                                                                                                                                                                                     |
+| `evaluating`   | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                                                                                                 | Guards are running; attempt carries hash, AbortController, generation, `restoreHash`, `direction`; `postponed` is set while the navigation waits for async guards                                                                                                                                                                             |
+| `committing`   | `{ kind: "committing", route: string, hash: string, origin: "preflight" \| "redirect" \| "parse", direction?: Direction, restoreHash: boolean, writtenOver?: string }` | Navigation is being committed: `parse()` commits it when it receives `hash`, and guards any other hash as a navigation of its own; `origin` distinguishes the entry path; `direction` (how the browser got to the history entry) drives `_alignTitleHistory()`; `restoreHash` and `writtenOver` say how to undo the hash that `navTo()` wrote |
+| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                    | An allowed `navTo()` or redirect with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                     |
+| `restoring`    | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }`                                                                          | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route with `componentTargetInfo`)                                                      |
 
 How a navigation moves through the phases, with the `NavigationOutcome` it settles with:
+
+A navigation that commits:
 
 ```mermaid
 stateDiagram-v2
     [*] --> idle
     idle --> evaluating: parse() of a new hash, navTo()
+    idle --> committing: navTo() that skips the guards
     evaluating --> evaluating: redirect hop
-    evaluating --> committing: navTo() or redirect allowed, hash write pending
-    evaluating --> idle: hash change allowed → Committed or Bypassed
-    committing --> idle: parse() receives the hash → Committed, Bypassed or Redirected
-    evaluating --> idle: Blocked, Error, Redirected to the shown route, URL already right
-    evaluating --> restoring: Blocked, Error, Redirected to the shown route, URL must come back
-    restoring --> idle: URL is back → settles with its result
-    evaluating --> idle: superseded, stop() or destroy() → Cancelled
+    evaluating --> committing: allowed
+    committing --> awaitingHash: component targets, UI5 writes the hash later
+    awaitingHash --> committing: parse() receives the hash
+    committing --> idle: hash is there → Committed, Bypassed or Redirected
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    class idle native
+    class evaluating,committing,awaitingHash added
 ```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+
+A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
+
+```mermaid
+stateDiagram-v2
+    evaluating --> idle: URL right
+    evaluating --> restoring: URL to restore
+    restoring --> idle: URL is back
+    evaluating --> idle: Cancelled
+    awaitingHash --> idle: Cancelled
+    committing --> idle: refused
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    class idle native
+    class evaluating,committing,awaitingHash,restoring added
+```
+
+Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 ## Monorepo Tooling
 
@@ -1254,8 +1303,8 @@ stateDiagram-v2
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins
-- **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages
+- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
+- **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
 
 ## Test Architecture
@@ -1277,17 +1326,13 @@ stateDiagram-v2
   test:e2e:flp                    test:qunit:compat:120
        |                               |
   packages/demo-app/test/flp/    packages/lib/test/qunit/
-  (demo app in the FLP preview,  (same suite, OpenUI5 1.120.0)
-   SAPUI5 with sap.ushell)
+  (demo app in the FLP sandbox,  (same suite, OpenUI5 1.120.0)
+   SAPUI5 1.154.0)
 
-  test:e2e:flp:149
+  test:e2e:flp:151
        |
   packages/demo-app/test/flp/
-  (same specs, SAPUI5 1.149.0 through `ui5 serve --framework-version`)
-
-  CI also runs:
-  - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)
-  - windows-smoke: QUnit smoke on windows-latest
+  (same specs, SAPUI5 1.151.0 through `ui5 serve --framework-version`)
 
   Local only:
   - test:mutation: Stryker mutates packages/lib/src one file at a time
@@ -1326,51 +1371,14 @@ are added to them. For the parity folders see [upstream-parity.md](./upstream-pa
 
 E2E tests run against the demo app served by `ui5 serve`, exercising real browser navigation,
 hash changes, and the full UI5 component lifecycle. FLP preview tests run the demo app under
-`ui5 serve --config ui5-flp.yaml` (SAPUI5) and verify the ushell integration, the dirty-state
+`ui5 serve --config ui5-flp-test.yaml` (SAPUI5) and verify the ushell integration, the dirty-state
 provider, leave guard coexistence and the nested component inside the shell. The spec files are
 listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 
 ## Demo App Integration
 
-The demo app shows the minimal integration pattern:
-
-1. **manifest.json** - set `routerClass` to `"ui5.guard.router.Router"` and add
-   `"ui5.guard.router": {}` to library dependencies
-2. **Component.ts** - cast `getRouter()` to `GuardRouter`, register guards, call
-   `initialize()`
-
-```
-  manifest.json                        Component.ts
-  +--------------------------------+     +----------------------------------+
-  | routing.config.routerClass     |---->| router = getRouter() as          |
-  | = "ui5.guard.router.Router"    |     |            GuardRouter           |
-  |                                |     |                                  |
-  | guardRouter:                   |     | router.addRouteGuard("admin",    |
-  |   inheritance: "pattern-tree"  |     |   adminGuard)                    |
-  |   guards:                      |     |                                  |
-  |     "*": [navigationLogger]    |     | router.addRouteGuard("protected",|
-  |     blocked: [blockedGuard]    |     |   createAsyncPermissionGuard(    |
-  |     forbidden: [forbiddenGuard]|     |     authModel))                  |
-  |     team: [retiredPageGuard]   |     |                                  |
-  |     protected: {leave: [...]}  |     | router.initialize()              |
-  |   routeMeta: employees,        |     +----------------------------------+
-  |              employee          |
-  |                                |
-  | routes:                        |
-  |   home      -> ""              |
-  |   protected -> "protected"     |
-  |   blocked   -> "blocked"       |
-  |   forbidden -> "forbidden"     |
-  |   admin     -> "admin"         |
-  |   employees -> "employees"     |
-  |   staff     -> "employees"     |
-  |   team      -> "team"          |
-  |   employee  -> "employees/{id}"|
-  |   reports   -> "reports"       |
-  |     (Component target:         |
-  |      demo.app.reporting)       |
-  +--------------------------------+
-```
-
-The `IAsyncContentCreation` interface on the Component eliminates the need for
-`async: true` in the manifest routing config.
+The demo app integrates the router as the library README, [Setup](../../packages/lib/README.md#setup),
+describes: `routerClass` and the library dependency in `manifest.json`, guards registered in
+`Component.ts` before `initialize()`. Its routes and the guards on them are drawn in the
+[demo README](../../packages/demo-app/README.md#routes). The component implements
+`IAsyncContentCreation`, so the routing config needs no `async: true`.

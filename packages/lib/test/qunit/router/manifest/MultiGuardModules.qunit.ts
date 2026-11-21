@@ -1,4 +1,3 @@
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
 import {
@@ -10,16 +9,15 @@ import {
 	GuardRouterClass,
 	loadModule,
 	waitForRoute,
+	createdRouterHooks,
+	getHash,
 } from "../../testHelpers";
-import { FIXTURES, createLazyRouter, loadProbe, manifestHooks } from "./manifestHelpers";
+import { FIXTURES, createLazyRouter, loadProbe } from "./manifestHelpers";
 
 let router: GuardRouter;
 
-const hooks = manifestHooks(() => router);
+const hooks = createdRouterHooks(() => router);
 
-// ============================================================
-// Module: Multi-guard module exports (block loading)
-// ============================================================
 QUnit.module("Router - Multi-guard module exports (block loading)", hooks);
 
 QUnit.test("object module: bare path registers all guards in key order", async function (assert: Assert) {
@@ -35,7 +33,7 @@ QUnit.test("object module: bare path registers all guards in key order", async f
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard"],
+					protected: [`${FIXTURES}/objectGuard`],
 				},
 			},
 		},
@@ -64,7 +62,7 @@ QUnit.test("array module: bare path registers all guards in index order", async 
 				guardLoading: "block",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard"],
+					protected: [`${FIXTURES}/arrayGuard`],
 				},
 			},
 		},
@@ -93,7 +91,7 @@ QUnit.test("empty object module warns and registers no guards", async function (
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyObjectGuard"],
+						protected: [`${FIXTURES}/emptyObjectGuard`],
 					},
 				},
 			},
@@ -126,7 +124,7 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/mixedObjectGuard"],
+						protected: [`${FIXTURES}/mixedObjectGuard`],
 					},
 				},
 			},
@@ -154,9 +152,6 @@ QUnit.test("mixed object module: non-function values warned and skipped", async 
 	);
 });
 
-// ============================================================
-// Module: Multi-guard module exports (lazy loading)
-// ============================================================
 QUnit.module("Router - Multi-guard module exports (lazy loading)", hooks);
 
 QUnit.test("lazy mode: object module bare path registers all guards", async function (assert: Assert) {
@@ -172,7 +167,7 @@ QUnit.test("lazy mode: object module bare path registers all guards", async func
 				guardLoading: "lazy",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard"],
+					protected: [`${FIXTURES}/objectGuard`],
 				},
 			},
 		},
@@ -200,7 +195,7 @@ QUnit.test("lazy mode: cherry-pick from object module", async function (assert: 
 				guardLoading: "lazy",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkAuth"],
+					protected: [`${FIXTURES}/objectGuard#checkAuth`],
 				},
 			},
 		},
@@ -232,7 +227,7 @@ QUnit.test("lazy mode: array module bare path registers all guards", async funct
 				guardLoading: "lazy",
 				unknownRouteRegistration: "ignore",
 				guards: {
-					protected: ["ui5/guard/router/qunit/fixtures/guards/arrayGuard"],
+					protected: [`${FIXTURES}/arrayGuard`],
 				},
 			},
 		},
@@ -279,7 +274,7 @@ QUnit.test("lazy mode: uncached module runs all of its guards in order", async f
 	assert.deepEqual(await visit([]), { status: NavigationOutcome.Committed, calls: both }, "first navigation");
 	probe.calls.length = 0;
 	router.navTo("protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "later navigation commits within navTo");
+	assert.strictEqual(getHash(), "protected", "later navigation commits within navTo");
 	assert.deepEqual(probe.calls, both, "later navigation runs all guards");
 	router.navTo("home");
 	await router.navigationSettled();
@@ -357,7 +352,7 @@ QUnit.test("lazy mode: a guard that throws on first load fails the navigation", 
 		router.navTo("protected");
 		const result = await router.navigationSettled();
 		assert.strictEqual(result.status, NavigationOutcome.Error, "navigation fails");
-		assert.strictEqual((result.error as Error).message, "guard failed", "with the thrown error");
+		assert.strictEqual(String(result.error), "Error: guard failed", "with the thrown error");
 	});
 	assert.deepEqual(
 		errors.map((entry) => entry.message),
@@ -443,7 +438,7 @@ QUnit.test("lazy mode: cached module registers its guards at initialize", async 
 	await waitForRoute(router, "home");
 
 	router.navTo("protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "committed within navTo");
+	assert.strictEqual(getHash(), "protected", "committed within navTo");
 	assert.deepEqual(
 		probe.calls,
 		["cachedFirst", "cachedSecond", "imperative"],
@@ -459,10 +454,10 @@ QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (a
 	await waitForRoute(router, "home");
 
 	router.navTo("protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "picked export blocked within navTo");
+	assert.strictEqual(getHash(), "", "picked export blocked within navTo");
 	const warnings = captureWarnings(() => {
 		router.navTo("forbidden");
-		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "missing export: committed within navTo");
+		assert.strictEqual(getHash(), "forbidden", "missing export: committed within navTo");
 		router.navTo("home");
 		router.navTo("forbidden");
 	});
@@ -473,9 +468,6 @@ QUnit.test("lazy mode: cached cherry-pick runs synchronously", async function (a
 	);
 });
 
-// ============================================================
-// Module: Multi-guard edge cases
-// ============================================================
 QUnit.module("Router - Multi-guard edge cases", hooks);
 
 QUnit.test("empty array module warns and registers no guards", async function (assert: Assert) {
@@ -491,7 +483,7 @@ QUnit.test("empty array module warns and registers no guards", async function (a
 					guardLoading: "block",
 					unknownRouteRegistration: "ignore",
 					guards: {
-						protected: ["ui5/guard/router/qunit/fixtures/guards/emptyArrayGuard"],
+						protected: [`${FIXTURES}/emptyArrayGuard`],
 					},
 				},
 			},
@@ -527,7 +519,7 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 				unknownRouteRegistration: "ignore",
 				guards: {
 					home: {
-						leave: ["ui5/guard/router/qunit/fixtures/guards/objectGuard#checkRole"],
+						leave: [`${FIXTURES}/objectGuard#checkRole`],
 					},
 				},
 			},
@@ -537,7 +529,6 @@ QUnit.test("leave guard from multi-guard object module", async function (assert:
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Try to leave "home". checkRole returns false, should block
 	router.navTo("protected");
 	const result = await router.navigationSettled();
 

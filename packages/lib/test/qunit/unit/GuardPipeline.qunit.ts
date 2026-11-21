@@ -4,9 +4,6 @@ import GuardPipeline, { isPromiseLike } from "ui5/guard/router/GuardPipeline";
 import type { GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
 import { callUnsafe, createGuardContext as createContext, logMessages, type SinonTestContext } from "../testHelpers";
 
-// ============================================================
-// Module: evaluate
-// ============================================================
 QUnit.module("GuardPipeline - evaluate");
 
 QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
@@ -19,9 +16,6 @@ QUnit.test("empty pipeline allows navigation", function (assert: Assert) {
 	assert.deepEqual(pipeline.evaluate(createContext()), { action: "allow" }, "Initial navigation (empty fromRoute)");
 });
 
-// ============================================================
-// Module: guard management
-// ============================================================
 QUnit.module("GuardPipeline - guard management");
 
 QUnit.test("clear removes all guards", function (assert: Assert) {
@@ -92,9 +86,6 @@ QUnit.test("removing a never-added guard is a no-op", function (assert: Assert) 
 	assert.deepEqual(calls, ["leave", "global", "enter"], "Every registered guard is still registered");
 });
 
-// ============================================================
-// Module: guard decisions
-// ============================================================
 QUnit.module("GuardPipeline - guard decisions");
 
 QUnit.test("global guard returning false blocks", function (assert: Assert) {
@@ -135,7 +126,7 @@ QUnit.test("first non-true global guard short-circuits", function (assert: Asser
 		return true;
 	});
 
-	pipeline.evaluate(createContext());
+	void pipeline.evaluate(createContext());
 	assert.deepEqual(calls, [1, 2], "Third guard never called");
 });
 
@@ -161,9 +152,6 @@ QUnit.test("route enter guard returning GuardRedirect object redirects", functio
 	assert.deepEqual(result, { action: "redirect", target: redirect });
 });
 
-// ============================================================
-// Module: execution order
-// ============================================================
 QUnit.module("GuardPipeline - execution order");
 
 QUnit.test("global guards run before route guards and can short-circuit", function (assert: Assert) {
@@ -178,10 +166,9 @@ QUnit.test("global guards run before route guards and can short-circuit", functi
 		return true;
 	});
 
-	pipeline.evaluate(createContext());
+	void pipeline.evaluate(createContext());
 	assert.deepEqual(order, ["global", "route"], "Global runs first");
 
-	// Reset and test short-circuit
 	const pipeline2 = new GuardPipeline();
 	const called: string[] = [];
 	pipeline2.addGlobalGuard(() => {
@@ -193,7 +180,7 @@ QUnit.test("global guards run before route guards and can short-circuit", functi
 		return true;
 	});
 
-	pipeline2.evaluate(createContext());
+	void pipeline2.evaluate(createContext());
 	assert.deepEqual(called, ["global"], "Route guard skipped when global blocks");
 });
 
@@ -213,13 +200,32 @@ QUnit.test("leave guard allows, full pipeline runs in order", function (assert: 
 		return true;
 	});
 
-	pipeline.evaluate(createContext({ fromRoute: "current" }));
+	void pipeline.evaluate(createContext({ fromRoute: "current" }));
 	assert.deepEqual(order, ["leave", "global", "route"]);
 });
 
-// ============================================================
-// Module: leave guards
-// ============================================================
+for (const [kind, add, context] of [
+	["enter", "addEnterGuard", createContext({ toRoute: "route" })],
+	["leave", "addLeaveGuard", createContext({ fromRoute: "route" })],
+] as const) {
+	QUnit.test(`${kind} guard registered before another guard of the route runs in front of it`, function (assert) {
+		const pipeline = new GuardPipeline();
+		const order: string[] = [];
+		const record = (name: string) => (): boolean => {
+			order.push(name);
+			return true;
+		};
+		const second = record("second");
+		pipeline[add]("route", record("first"));
+		pipeline[add]("route", second);
+		pipeline[add]("route", record("inserted"), second);
+		pipeline[add]("route", record("appended"), record("unregistered"));
+
+		void pipeline.evaluate(context);
+		assert.deepEqual(order, ["first", "inserted", "second", "appended"]);
+	});
+}
+
 QUnit.module("GuardPipeline - leave guards");
 
 QUnit.test("leave guard blocks and skips enter guards", function (assert: Assert) {
@@ -262,7 +268,6 @@ QUnit.test("multiple leave guards run in order and short-circuit on first false"
 	assert.deepEqual(result, { action: "allow" }, "All leave guards pass");
 	assert.deepEqual(order, [1, 2], "Ran in registration order");
 
-	// Short-circuit: second guard blocks
 	const pipeline2 = new GuardPipeline();
 	const called: number[] = [];
 	pipeline2.addLeaveGuard("current", () => {
@@ -283,9 +288,6 @@ QUnit.test("multiple leave guards run in order and short-circuit on first false"
 	assert.deepEqual(called, [1, 2], "Third leave guard never called");
 });
 
-// ============================================================
-// Module: validation
-// ============================================================
 QUnit.module("GuardPipeline - validation");
 
 QUnit.test("isPromiseLike accepts function thenables and rejects non-thenables", function (assert: Assert) {
@@ -298,6 +300,7 @@ QUnit.test("isPromiseLike accepts function thenables and rejects non-thenables",
 		"plain function is not",
 	);
 	assert.strictEqual(isPromiseLike(null), false, "null is not");
+	assert.strictEqual(isPromiseLike(JSON.parse('{ "then": true }')), false, "data with a then field is not");
 });
 
 QUnit.test("invalid return values treated as block", function (this: SinonTestContext, assert: Assert) {
@@ -348,9 +351,6 @@ QUnit.test("invalid return values treated as block", function (this: SinonTestCo
 	);
 });
 
-// ============================================================
-// Module: snapshot copy
-// ============================================================
 QUnit.module("GuardPipeline - snapshot copy");
 
 QUnit.test("guard can remove itself during iteration", function (assert: Assert) {
@@ -393,9 +393,6 @@ QUnit.test("leave guard can remove itself during iteration", function (assert: A
 	assert.strictEqual(secondGuardCalls, 1, "The leave guard after the self-removing one still ran");
 });
 
-// ============================================================
-// Module: skipLeaveGuards option
-// ============================================================
 QUnit.module("GuardPipeline - skipLeaveGuards option");
 
 QUnit.test("skipLeaveGuards skips leave guards even when fromRoute is set", function (assert: Assert) {
@@ -427,9 +424,6 @@ QUnit.test("skipLeaveGuards defaults to running leave guards", function (assert:
 	assert.deepEqual(r2, { action: "block" }, "Leave guard blocks when options omitted");
 });
 
-// ============================================================
-// Module: greedy routes
-// ============================================================
 QUnit.module("GuardPipeline - greedy routes");
 
 QUnit.test(
@@ -488,12 +482,14 @@ QUnit.test(
 QUnit.test(
 	"no enter guard starts on a navigation that was aborted after its async leave guard allowed",
 	async function (assert: Assert) {
-		// The abort comes a number of microtasks after the leave guard has settled.
+		// The abort comes a number of microtasks after the leave guard has settled. The sweep covers
+		// every microtask until the enter guard starts: the first abort blocks, the last finds it started.
+		const started: boolean[] = [];
 		for (let microtasks = 0; microtasks < 6; microtasks++) {
 			const pipeline = new GuardPipeline();
 			const controller = new AbortController();
 			const allowed = Promise.withResolvers<boolean>();
-			let startedAborted = false;
+			let startedAborted: boolean | undefined;
 			pipeline.addLeaveGuard("current", () => allowed.promise);
 			pipeline.addEnterGuard("target", (context) => {
 				startedAborted = context.signal.aborted;
@@ -507,8 +503,11 @@ QUnit.test(
 			allowed.resolve(true);
 			await Promise.all([decision, abort]);
 
-			assert.notOk(startedAborted, `abort ${microtasks} microtasks after the leave guard`);
+			assert.notStrictEqual(startedAborted, true, `abort ${microtasks} microtasks after the leave guard`);
+			started.push(startedAborted !== undefined);
 		}
+		assert.strictEqual(started[0], false, "an abort right after the leave guard blocks before the enter guard");
+		assert.strictEqual(started.at(-1), true, "the last abort comes after the enter guard has started");
 	},
 );
 
@@ -601,8 +600,8 @@ QUnit.test(
 			throw new Error("leave failed");
 		});
 
-		pipeline.evaluate(createContext(), { alsoEntering: ["audit"] });
-		pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["auditLeft"] });
+		void pipeline.evaluate(createContext(), { alsoEntering: ["audit"] });
+		void pipeline.evaluate(createContext({ fromRoute: "current" }), { alsoLeaving: ["auditLeft"] });
 
 		assert.deepEqual(logMessages(error), [
 			'Enter guard [0] on route "audit" threw, navigation failed',

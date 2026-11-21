@@ -10,7 +10,7 @@
 		<content>
 			<Panel headerText="{i18n>employeeMetaPanelTitle}">
 				<VBox class="sapUiSmallMargin">
-					<Text id="employeeMeta" text="{i18n>employeeMetaPlaceholder}" />
+					<Text id="employeeMeta" text="{= ${runtime>/employeeMeta} || ${i18n>employeeMetaPlaceholder}}" />
 				</VBox>
 			</Panel>
 		</content>

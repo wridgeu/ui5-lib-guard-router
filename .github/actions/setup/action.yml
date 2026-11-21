@@ -1,0 +1,25 @@
+name: Setup
+description: Node 26 with the npm cache, the UI5 framework cache and the dependencies installed.
+
+inputs:
+    ui5-cache:
+        description: Prefix of the UI5 framework cache key, one per set of UI5 versions a job loads.
+        required: true
+
+runs:
+    using: composite
+    steps:
+        - uses: actions/setup-node@v4
+          with:
+              node-version: 26
+              cache: npm
+
+        - name: Cache UI5 framework resources
+          uses: actions/cache@v4
+          with:
+              path: ~/.ui5
+              key: ${{ inputs.ui5-cache }}-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
+              restore-keys: ${{ inputs.ui5-cache }}-
+
+        - run: npm ci
+          shell: bash

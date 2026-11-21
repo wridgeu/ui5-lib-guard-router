@@ -8,11 +8,11 @@ import {
 	flushPromises,
 	getHash,
 	type GuardRouterClass,
-	initHashChanger,
 	loadModule,
 	recordSettlements,
 	type SinonTestContext,
 	waitForRoute,
+	routerHooks,
 } from "../../testHelpers";
 
 /**
@@ -22,16 +22,15 @@ import {
 
 let router: GuardRouter;
 
-QUnit.module("Router - Browser history", {
-	beforeEach: function () {
-		initHashChanger();
-		router = createRouter();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Browser history",
+	routerHooks(
+		(created) => {
+			router = created;
+		},
+		() => router,
+	),
+);
 
 /** The next settlement of the router: a history step reaches the router in a later task. */
 function nextSettlement(): Promise<NavigationResult> {

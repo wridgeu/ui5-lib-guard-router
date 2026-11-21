@@ -41,8 +41,9 @@ function nativeName(line: string): string {
 /** `<who> <event> <route name, hash or title> <parameters as JSON>` */
 function describeEvent(who: string, event: RoutingEvent): string {
 	const parameters = event.getParameters();
-	const subject = parameters.name ?? parameters.hash ?? parameters.title ?? "";
-	return nativeName(`${who} ${event.getId()} ${String(subject)} ${JSON.stringify(plain(parameters))}`);
+	const subject =
+		[parameters.name, parameters.hash, parameters.title].find((value) => typeof value === "string") ?? "";
+	return nativeName(`${who} ${event.getId()} ${subject} ${JSON.stringify(plain(parameters))}`);
 }
 
 /**

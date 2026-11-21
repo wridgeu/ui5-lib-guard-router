@@ -4,30 +4,32 @@
 
 ## Problem
 
-The library's guard model runs guards inside the `parse()` override, which intercepts all navigation paths. For browser-initiated navigation (back/forward, URL bar), this is the only viable interception point. But for programmatic `navTo()` calls, `parse()` runs _after_ UI5 has already pushed a history entry via `HashChanger.setHash()`. When a guard blocks or redirects, `replaceHash()` repairs the current entry but cannot undo the push. The result: guarded programmatic navigations leave duplicate or polluted browser history entries.
+Guards run in the `parse()` override, which sees every hash change. For browser navigation (back/forward, URL bar) it is the only interception point. For `navTo()`, though, `parse()` runs _after_ UI5 has pushed a history entry via `HashChanger.setHash()`. When a guard blocks or redirects, `replaceHash()` repairs the current entry but cannot undo the push. Guarded programmatic navigations left duplicate or polluted history entries.
 
 ## Solution
 
-Override `navTo()` to run the same shared guard pipeline (`_pipeline.evaluate()`, originally `_evaluateGuards()`) _before_ calling `super.navTo()`. This gives two entry points into one pipeline:
+`navTo()` runs the same guard pipeline (`_evaluateGuards()`, which calls `_pipeline.evaluate()`) _before_ calling `super.navTo()`. One pipeline has two entry points:
 
-- **`navTo()` preflight**: guards run before the hash changes. Blocked navigations never push a history entry. Redirected navigations go directly to the final target.
-- **`parse()` fallback**: guards run after the hash changes (browser back/forward, URL bar, direct `HashChanger.setHash()`). The router undoes a refused hash change, see [Browser history](../../packages/lib/README.md#browser-history).
+- **`navTo()` preflight**: guards run before the hash changes. A blocked navigation never pushes a history entry. A redirected navigation goes straight to the final target.
+- **`parse()` fallback**: guards run after the hash changes (back/forward, URL bar, direct `HashChanger.setHash()`). The router undoes a refused hash change, see [Browser history](../../packages/lib/README.md#browser-history).
 
-The committing/preflight phase tells `parse()` to skip guard re-evaluation for navigations already approved by the preflight.
+After an allowed preflight, the router enters the committing phase (origin `"preflight"`), so `parse()` commits without running the guards again.
 
-## Key Design Decisions
+The `navToPreflight` router option selects the behavior: `"guard"` (default) as above, `"bypass"` skips guards for `navTo()`, `"off"` leaves guarding to `parse()` after the hash change.
 
-| Decision                  | Choice                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------- |
-| Preflight flag            | Committing/preflight phase: lightweight, matches `_suppressedHash` pattern                      |
-| Redirect during preflight | Bypass preflight via committing/redirect phase, matching existing redirect-bypass-guards design |
-| Async navTo timing        | Hash deferred until guard resolves, no premature hash change                                    |
-| Same-hash redirect        | Still goes through `_redirect()` / `navTo()` so `componentTargetInfo` is preserved              |
-| Guard execution count     | Exactly once per navigation via the committing/preflight phase handshake                        |
-| Generation counter        | Shared `_parseGeneration` for both paths                                                        |
+## Decisions
 
-## Non-Goals
+| Decision                  | Choice                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Preflight flag            | Committing phase with origin `"preflight"`: lightweight, like `_suppressedHash`                                                                                                            |
+| Redirect during preflight | Each hop is guarded in `_redirect()` ([Feature 11](./11-guards-on-redirect-targets.md)); the final `navTo()` runs in the committing phase with origin `"redirect"` and skips the preflight |
+| Async navTo timing        | The hash changes only after the guards resolve                                                                                                                                             |
+| Same-hash redirect        | Still goes through `_redirect()` / `navTo()`, so `componentTargetInfo` is preserved                                                                                                        |
+| Guard execution count     | Once per navigation, through the committing-phase handshake                                                                                                                                |
+| Generation counter        | `_parseGeneration`, shared by both entry points                                                                                                                                            |
 
-- No changes to the public guard API (`addGuard`, `addRouteGuard`, `addLeaveGuard`)
+## Non-goals
+
+- No change to the public guard API (`addGuard`, `addRouteGuard`, `addLeaveGuard`)
 - No global `HashChanger` replacement or history monkey-patching
-- No separate guard semantics for programmatic vs browser-driven navigation
+- No separate guard semantics for programmatic and browser navigation

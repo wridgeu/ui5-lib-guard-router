@@ -1,3 +1,4 @@
+import type List from "sap/m/List";
 import type StandardListItem from "sap/m/StandardListItem";
 import {
 	CONTROLS,
@@ -9,7 +10,8 @@ import {
 } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
 import { expectHashToBe, waitForPage } from "./helpers/wait";
-import { fireEvent, getHistoryLength, setBrowserHash } from "./helpers/browser";
+import { fireEvent, reloadPage, setBrowserHash } from "./helpers/browser";
+import { getHistoryLength } from "../shared/history";
 import { startAtHome } from "./helpers/scenarios";
 
 const OVERVIEW_HASH = "#/reports";
@@ -56,10 +58,8 @@ describe("Nested component with its own guard router", () => {
 			browser.execute(
 				(componentId: string, view: string, list: string) => {
 					const Component = sap.ui.require("sap/ui/core/Component");
-					const items: StandardListItem[] = Component.getComponentById(componentId)
-						.byId(view)
-						.byId(list)
-						.getItems();
+					const control = Component.getComponentById(componentId).byId(view)?.byId(list) as List;
+					const items = control.getItems() as StandardListItem[];
 					// The number format separates amount and currency with a no-break space.
 					return items.map((item) => `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " "));
 				},
@@ -180,7 +180,6 @@ describe("Nested component with its own guard router", () => {
 		expect(settlement.route).toBe("overview");
 	});
 
-	// Last test of the block: the reload drops the wdi5 bridge, so it only uses browser.execute helpers.
 	it("should guard the first display of the nested component on a fresh page load", async () => {
 		await setConfidentialUnlocked(true);
 		await press(CONTROLS.reportsOverview.navConfidentialBtn);
@@ -188,7 +187,7 @@ describe("Nested component with its own guard router", () => {
 		await expectHashToBe(CONFIDENTIAL_HASH);
 
 		// The reload creates both components anew: the report is locked again.
-		await browser.refresh();
+		await reloadPage();
 
 		await waitForComponent(REPORTS_APP_ID);
 		await expectHashToBe(OVERVIEW_HASH, { timeout: 10000 });
@@ -199,16 +198,16 @@ describe("Nested component with its own guard router", () => {
 	});
 });
 
-// The reload above dropped the wdi5 bridge: these tests only use browser.execute helpers.
 describe("Nested component: nav button without a previous history entry", () => {
 	it("should replace the entry with the overview when the app was entered on a report", async () => {
 		// The entry before the deep link is Home: a step back in the history would not end on the overview.
 		await setBrowserHash("");
 		await waitForPage(CONTROLS.home.homePage, "Home");
 		await setBrowserHash(SALES_HASH);
+		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
 
-		await browser.refresh();
+		await reloadPage();
 		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
 		const historyLength = await getHistoryLength();
@@ -225,9 +224,10 @@ describe("Nested component: nav button without a previous history entry", () => 
 		await setBrowserHash("#/employees");
 		await waitForPage(CONTROLS.employees.employeesPage, "Employees");
 		await setBrowserHash(OVERVIEW_HASH);
+		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 
-		await browser.refresh();
+		await reloadPage();
 		await waitForComponent(REPORTS_APP_ID);
 		await waitForPage(CONTROLS.reportsOverview.overviewPage, "Reports");
 		const historyLength = await getHistoryLength();

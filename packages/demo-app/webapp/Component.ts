@@ -1,6 +1,6 @@
 import UIComponent from "sap/ui/core/UIComponent";
 import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, GuardRouter } from "ui5/guard/router/types";
+import type { GuardRouter } from "ui5/guard/router/types";
 import RuntimeCoordinator from "./demo/RuntimeCoordinator";
 import { adminGuard, createAsyncPermissionGuard } from "./guards";
 import { createRuntimeModel } from "./model/runtime";
@@ -17,7 +17,7 @@ import { createRuntimeModel } from "./model/runtime";
  * **Programmatic** (registered here in `init()`):
  * - `admin` redirect guard -- demonstrates `addRouteGuard()` with a sync function
  * - `protected` enter guard -- demonstrates `addRouteGuard()` with an async
- *   permission check that closes over the auth model (not possible declaratively)
+ *   permission check that closes over the auth model
  *
  * **Controller-level** (Home.controller.ts):
  * - Home leave logger -- demonstrates dynamic registration/removal via
@@ -33,11 +33,11 @@ export default class Component extends UIComponent {
 
 	// No initializers: they would run after the UIComponent constructor, which calls init().
 	private _runtimeCoordinator?: RuntimeCoordinator;
-	private _permissionGuard?: GuardFn;
 
 	override init(): void {
 		super.init();
 
+		// The manifest sets routerClass to ui5.guard.router.Router.
 		const router = this.getRouter() as GuardRouter;
 		const runtimeModel = createRuntimeModel();
 		const formModel = new JSONModel({ isDirty: false });
@@ -48,13 +48,13 @@ export default class Component extends UIComponent {
 		// The permission guard closes over the auth model. Manifest guards reach the
 		// component through context.ownerComponent instead.
 		router.addRouteGuard("admin", adminGuard);
-		this._permissionGuard = createAsyncPermissionGuard(this.getModel("auth") as JSONModel);
-		router.addRouteGuard("protected", this._permissionGuard);
+		router.addRouteGuard("protected", createAsyncPermissionGuard(this.getModel("auth") as JSONModel));
 
 		this._runtimeCoordinator = new RuntimeCoordinator(runtimeModel, formModel);
 
-		router.initialize();
+		// Listen before initialize(): with all guard modules loaded, the first navigation settles inside it.
 		this._runtimeCoordinator.start(router);
+		router.initialize();
 	}
 
 	/**
@@ -73,6 +73,5 @@ export default class Component extends UIComponent {
 	override exit(): void {
 		this._runtimeCoordinator?.destroy();
 		this._runtimeCoordinator = undefined;
-		this._permissionGuard = undefined;
 	}
 }

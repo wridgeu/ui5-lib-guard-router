@@ -10,18 +10,15 @@ type RuntimeState = {
 	hasUshellContainer: boolean;
 	flpDirtyProviderActive: boolean;
 	lastAction: string;
-	lastSettlementStatus: string;
+	lastSettlementStatus: NavigationOutcome | "";
 	lastSettlementState: ValueState;
 	lastSettlementRoute: string;
 	lastSettlementHash: string;
 	lastSettlementHashTechnical: string;
 	lastSettlementRevision: number;
+	employeesMeta: string;
+	employeeMeta: string;
 };
-
-// The outcome is a technical value, shown capitalized.
-function formatSettlementStatus(status: NavigationOutcome): string {
-	return `${status.charAt(0).toUpperCase()}${status.slice(1)}`;
-}
 
 // Typed by outcome: a new outcome without a state does not compile.
 const SETTLEMENT_STATES: Record<NavigationOutcome, ValueState> = {
@@ -33,11 +30,17 @@ const SETTLEMENT_STATES: Record<NavigationOutcome, ValueState> = {
 	error: ValueState.Error,
 };
 
-function formatSettlementHashTechnical(hash: string): string {
-	return JSON.stringify(hash);
-}
+/** The i18n key of the text for each outcome, typed like {@link SETTLEMENT_STATES}. */
+export const SETTLEMENT_TEXT_KEYS: Record<NavigationOutcome, string> = {
+	committed: "settlementStatusCommitted",
+	redirected: "settlementStatusRedirected",
+	bypassed: "settlementStatusBypassed",
+	cancelled: "settlementStatusCancelled",
+	blocked: "settlementStatusBlocked",
+	error: "settlementStatusError",
+};
 
-/** The model holds values only. The views take the texts for empty values from the i18n bundle. */
+/** The model holds values only. The views take the texts, also those of the settlement status, from the i18n bundle. */
 export function createRuntimeModel(): JSONModel {
 	const state: RuntimeState = {
 		currentHash: getCurrentHash(),
@@ -47,20 +50,21 @@ export function createRuntimeModel(): JSONModel {
 		lastSettlementStatus: "",
 		lastSettlementState: ValueState.None,
 		lastSettlementRoute: "",
-		lastSettlementHash: getCurrentHash(),
-		lastSettlementHashTechnical: formatSettlementHashTechnical(getCurrentHash()),
+		lastSettlementHash: "",
+		lastSettlementHashTechnical: "",
 		lastSettlementRevision: 0,
+		employeesMeta: "",
+		employeeMeta: "",
 	};
 	return new JSONModel(state);
 }
 
 export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boolean): void {
-	const ushellAvailable = hasUshellContainer();
 	model.setData(
 		{
 			currentHash: getCurrentHash(),
-			hasUshellContainer: ushellAvailable,
-			flpDirtyProviderActive: ushellAvailable && flpDirtyProviderActive,
+			hasUshellContainer: hasUshellContainer(),
+			flpDirtyProviderActive,
 		},
 		true,
 	);
@@ -71,11 +75,11 @@ export function setRuntimeMessage(model: JSONModel, message: string): void {
 }
 
 export function setSettlementResult(model: JSONModel, result: NavigationResult): void {
-	const lastSettlementRevision = Number(model.getProperty("/lastSettlementRevision") ?? 0) + 1;
-	model.setProperty("/lastSettlementStatus", formatSettlementStatus(result.status));
+	const lastSettlementRevision = (model.getProperty("/lastSettlementRevision") as number) + 1;
+	model.setProperty("/lastSettlementStatus", result.status);
 	model.setProperty("/lastSettlementState", SETTLEMENT_STATES[result.status]);
 	model.setProperty("/lastSettlementRoute", result.route);
 	model.setProperty("/lastSettlementHash", result.hash);
-	model.setProperty("/lastSettlementHashTechnical", formatSettlementHashTechnical(result.hash));
+	model.setProperty("/lastSettlementHashTechnical", JSON.stringify(result.hash));
 	model.setProperty("/lastSettlementRevision", lastSettlementRevision);
 }

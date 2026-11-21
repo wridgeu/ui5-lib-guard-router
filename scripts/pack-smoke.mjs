@@ -1,20 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import rootPackage from "../package.json" with { type: "json" };
+import { npmArgs } from "./npm-command.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const libDir = path.join(repoRoot, "packages", "lib");
 
-function npmArgs() {
-	if (!process.env.npm_execpath) {
-		throw new Error("npm_execpath is not set. Run this script via npm.");
-	}
-
-	return [process.execPath, [process.env.npm_execpath]];
-}
-
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string }} options
+ */
 function run(command, args, options = {}) {
 	execFileSync(command, args, {
 		cwd: repoRoot,
@@ -24,6 +23,11 @@ function run(command, args, options = {}) {
 	});
 }
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string }} options
+ */
 function runAndCapture(command, args, options = {}) {
 	return execFileSync(command, args, {
 		cwd: repoRoot,
@@ -35,7 +39,6 @@ function runAndCapture(command, args, options = {}) {
 }
 
 async function main() {
-	const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
 	const tempDir = await mkdtemp(path.join(os.tmpdir(), "ui5-guard-pack-"));
 	let tarballPath = "";
 	const [npmCommand, npmBaseArgs] = npmArgs();
@@ -44,7 +47,7 @@ async function main() {
 		await stat(path.join(libDir, "dist", "index.d.ts"));
 
 		const tarballName = runAndCapture(npmCommand, [...npmBaseArgs, "pack", "--silent"], { cwd: libDir });
-		tarballPath = path.join(libDir, tarballName.split(/\r?\n/u).at(-1));
+		tarballPath = path.join(libDir, tarballName.slice(tarballName.lastIndexOf("\n") + 1));
 
 		await writeFile(
 			path.join(tempDir, "package.json"),
@@ -59,10 +62,8 @@ async function main() {
 						module: "ES2022",
 						moduleResolution: "Bundler",
 						strict: true,
-						// Required: @openui5/types references JQuery and QUnit
-						// globals that are not installed in a minimal consumer project.
-						skipLibCheck: true,
-						types: ["@openui5/types", "ui5-lib-guard-router"],
+						// @openui5/types uses the jQuery and QUnit globals without referencing their types.
+						types: ["@openui5/types", "jquery", "qunit", "ui5-lib-guard-router"],
 					},
 					include: ["consumer.ts"],
 				},

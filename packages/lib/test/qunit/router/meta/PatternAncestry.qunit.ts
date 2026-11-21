@@ -1,26 +1,15 @@
-import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import { GuardRouterClass, initHashChanger, waitForRoute } from "../../testHelpers";
+import { GuardRouterClass, waitForRoute, createdRouterHooks } from "../../testHelpers";
 
 let router: GuardRouter;
 
-// ============================================================
-// Module: Pattern ancestry: UI5 pattern syntax edge cases
-// ============================================================
-
-QUnit.module("Router - Pattern ancestry edge cases", {
-	beforeEach: function () {
-		initHashChanger();
-	},
-	afterEach: function () {
-		router.destroy();
-		HashChanger.getInstance().setHash("");
-	},
-});
+QUnit.module(
+	"Router - Pattern ancestry edge cases",
+	createdRouterHooks(() => router),
+);
 
 QUnit.test("metadata inherits when parent and child use different parameter names", function (assert: Assert) {
-	// Arrange: parent uses {empId}, child uses {id}. Should still be recognized as ancestor
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -41,7 +30,6 @@ QUnit.test("metadata inherits when parent and child use different parameter name
 });
 
 QUnit.test("optional parameter segments do not break ancestry detection", function (assert: Assert) {
-	// Arrange: parent has an optional segment, child extends the mandatory path
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -63,7 +51,6 @@ QUnit.test("optional parameter segments do not break ancestry detection", functi
 });
 
 QUnit.test("inline query parameter suffix does not affect ancestry", function (assert: Assert) {
-	// Arrange: parent pattern has {?query} attached directly (canonical UI5 form)
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -85,7 +72,6 @@ QUnit.test("inline query parameter suffix does not affect ancestry", function (a
 });
 
 QUnit.test("inline optional query suffix does not affect ancestry", function (assert: Assert) {
-	// Arrange: parent pattern has :?query: attached directly
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -111,7 +97,6 @@ QUnit.test("inline optional query suffix does not affect ancestry", function (as
 });
 
 QUnit.test("rest parameter segments do not affect ancestry", function (assert: Assert) {
-	// Arrange: parent has a catch-all rest segment
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -133,7 +118,6 @@ QUnit.test("rest parameter segments do not affect ancestry", function (assert: A
 });
 
 QUnit.test("sibling routes do not inherit from each other", function (assert: Assert) {
-	// Arrange: two routes at the same depth under the same parent
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -155,7 +139,6 @@ QUnit.test("sibling routes do not inherit from each other", function (assert: As
 });
 
 QUnit.test("guard inheritance works with mixed parameter names", async function (assert: Assert) {
-	// Arrange: parent guard on `orders/{orderId}`, child is `orders/{id}/items`
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
@@ -209,25 +192,33 @@ QUnit.test("mandatory param combined with inline query does not break ancestry",
 });
 
 QUnit.test("optional parameter in mid-path position does not block inheritance", function (assert: Assert) {
-	// :mode: at the start is stripped, so the mandatory prefix is "app"
+	// :mode: between two mandatory segments is left out: the mandatory path is "app/settings".
 	router = new GuardRouterClass(
 		[
 			{ name: "home", pattern: "" },
-			{ name: "app", pattern: "app/:mode:" },
-			{ name: "appSettings", pattern: "app/{section}" },
-			{ name: "appSettingsDetail", pattern: "app/{section}/detail" },
+			{ name: "app", pattern: "app" },
+			{ name: "appSettings", pattern: "app/:mode:/settings" },
+			{ name: "appSetting", pattern: "app/:mode:/settings/{id}" },
 		],
 		{
 			async: true,
 			guardRouter: {
 				inheritance: "pattern-tree",
-				routeMeta: { app: { layout: "shell" } },
+				routeMeta: { app: { layout: "shell" }, appSettings: { area: "settings" } },
 			},
 		},
 	);
 
-	const detailMeta = router.getRouteMeta("appSettingsDetail");
-	assert.strictEqual(detailMeta.layout, "shell", "grandchild inherits through ancestor with trailing optional param");
+	assert.deepEqual(
+		router.getRouteMeta("appSettings"),
+		{ layout: "shell", area: "settings" },
+		"a route with a mid-path optional param inherits from its ancestor",
+	);
+	assert.deepEqual(
+		router.getRouteMeta("appSetting"),
+		{ layout: "shell", area: "settings" },
+		"and is the ancestor of the route below it",
+	);
 });
 
 QUnit.test("all-optional pattern is not treated as ancestor of other routes", function (assert: Assert) {

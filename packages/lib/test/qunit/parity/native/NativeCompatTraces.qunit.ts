@@ -8,12 +8,9 @@ import type { GuardRouter } from "ui5/guard/router/types";
 import { firstDifference, recordHashes, recordLogs, recordRouter, settle } from "../parityRecorder";
 import { flushPromises, getComponentRouter, getHash, GuardRouterClass, initHashChanger } from "../../testHelpers";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+import { isRecord } from "ui5/guard/router/GuardConfig";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
-
-// ============================================================
-// Module: Recorded behavior parity
-// ============================================================
 
 /** Routes with every kind of pattern segment: mandatory, optional, query and rest. */
 const TRACE_ROUTES = [
@@ -57,7 +54,7 @@ async function traceRouterWith(
 			trace.push(`step ${index}`);
 			step(router, trace);
 			await settle(trace);
-			trace.push(`hash "${HashChanger.getInstance().getHash()}"`);
+			trace.push(`hash "${getHash()}"`);
 		}
 		return trace;
 	} finally {
@@ -446,9 +443,6 @@ QUnit.test("a hash that several routes could match resolves to the same route", 
 	}
 });
 
-// ============================================================
-// Module: Two routers on one hash changer
-// ============================================================
 QUnit.module("NativeCompat - Two routers on one hash changer");
 
 const SHARED_FIXTURE = "ui5.guard.router.qunit.fixtures.manifest";
@@ -471,8 +465,10 @@ async function withSharedHashChanger<T extends MobileRouter>(
 	act: (routers: SharedRouters<T>) => Promise<void>,
 ): Promise<string[]> {
 	const response = await fetch(sap.ui.require.toUrl("ui5/guard/router/qunit/fixtures/manifest/manifest.json"));
-	const manifest = await response.json();
-	manifest["sap.ui5"].routing = {
+	const manifest: unknown = await response.json();
+	const ui5 = isRecord(manifest) ? manifest["sap.ui5"] : undefined;
+	if (!isRecord(manifest) || !isRecord(ui5)) throw new TypeError("the fixture manifest has no sap.ui5 section");
+	ui5.routing = {
 		config: { routerClass, async: true },
 		routes: [
 			{ name: "home", pattern: "" },

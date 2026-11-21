@@ -1,4 +1,3 @@
-import type Event from "sap/ui/base/Event";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 
 function normalizeHash(hash: string): string {
@@ -21,17 +20,4 @@ export function runHashSequence(hashes: string[], stepDelayMs = 25): void {
 			setHash(hash);
 		}, index * stepDelayMs);
 	});
-}
-
-export function attachHashChanged(onChange: () => void): () => void {
-	const hashChanger = HashChanger.getInstance();
-	const handler = (_event: Event): void => {
-		onChange();
-	};
-
-	hashChanger.attachEvent("hashChanged", handler);
-
-	return (): void => {
-		hashChanger.detachEvent("hashChanged", handler);
-	};
 }

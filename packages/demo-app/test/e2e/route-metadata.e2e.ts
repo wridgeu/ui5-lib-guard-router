@@ -1,4 +1,4 @@
-import { CONTROLS, type ControlRef, getControl, press } from "../shared/controls";
+import { CONTROLS, type ControlRef, getAppComponentId, getControl, press } from "../shared/controls";
 import { expectHashToBe, waitForPage } from "./helpers/wait";
 import { fireEvent } from "./helpers/browser";
 import { startAtHome } from "./helpers/scenarios";
@@ -9,7 +9,7 @@ const EMPLOYEE_META = { ...EMPLOYEES_META, detail: true };
 /** The views display `router.getRouteMeta(route)` as JSON. The placeholder text of a view that never displayed it fails the parse. */
 async function readDisplayedMeta(ref: ControlRef): Promise<Record<string, unknown>> {
 	const control = await getControl(ref);
-	return JSON.parse(await control.getProperty("text"));
+	return JSON.parse((await control.getProperty("text")) as string) as Record<string, unknown>;
 }
 
 async function openEmployees(): Promise<void> {
@@ -55,8 +55,6 @@ describe("Route metadata and inheritance", () => {
 		await navBackToEmployees();
 	});
 
-	// Last test of the file: setRouteMeta() stays in effect until the page is reloaded.
-	// The exact comparisons above fail if this test ever runs before them.
 	it("should reflect runtime metadata updates in inheritance", async () => {
 		// Resolve the inherited metadata once before the update, so that the update
 		// has to replace an already computed result.
@@ -65,16 +63,28 @@ describe("Route metadata and inheritance", () => {
 		expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual(EMPLOYEE_META);
 		await navBackToEmployees();
 
-		await press(CONTROLS.employees.updateMeta);
-		expect(await readDisplayedMeta(CONTROLS.employees.employeesMeta)).toEqual({
-			...EMPLOYEES_META,
-			updatedAt: expect.any(String),
-		});
+		try {
+			await press(CONTROLS.employees.updateMeta);
+			expect(await readDisplayedMeta(CONTROLS.employees.employeesMeta)).toEqual({
+				...EMPLOYEES_META,
+				updatedAt: expect.any(String),
+			});
 
-		await openEmployee();
-		expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual({
-			...EMPLOYEE_META,
-			updatedAt: expect.any(String),
-		});
+			await openEmployee();
+			expect(await readDisplayedMeta(CONTROLS.employee.employeeMeta)).toEqual({
+				...EMPLOYEE_META,
+				updatedAt: expect.any(String),
+			});
+		} finally {
+			// The page is not reloaded between tests: put the manifest metadata back.
+			await browser.execute(
+				(id: string, meta: Record<string, unknown>) => {
+					const Component = sap.ui.require("sap/ui/core/Component");
+					Component.getComponentById(id).getRouter().setRouteMeta("employees", meta);
+				},
+				await getAppComponentId(),
+				EMPLOYEES_META,
+			);
+		}
 	});
 });

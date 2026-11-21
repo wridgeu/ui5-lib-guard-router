@@ -17,7 +17,8 @@ import {
 	settle,
 	until,
 } from "./parityRecorder";
-import { GuardRouterClass, initHashChanger, loadModule } from "../testHelpers";
+import { GuardRouterClass, initHashChanger, loadModule, getHash } from "../testHelpers";
+import { isRecord } from "ui5/guard/router/GuardConfig";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -48,13 +49,6 @@ export const FLAVORS = {
 	allow: { routerClass: "ui5.guard.router.Router", child: "childAllow", guards: true },
 };
 export type Flavor = keyof typeof FLAVORS;
-
-export interface ParentManifest {
-	"sap.ui5": {
-		componentUsages: { child: { name: string } };
-		routing: { config: Record<string, unknown> };
-	};
-}
 
 export interface Probe {
 	created: ((component: UIComponent) => void) | undefined;
@@ -90,12 +84,19 @@ export interface Scenario {
 }
 
 /** The parent manifest of the fixture with the router class and the child of `flavor`. */
-export async function loadParentManifest(flavor: Flavor): Promise<ParentManifest> {
+export async function loadParentManifest(flavor: Flavor): Promise<Record<string, unknown>> {
 	const { routerClass, child, guards } = FLAVORS[flavor];
 	const response = await fetch(sap.ui.require.toUrl(`${FIXTURE_PATH}/manifest.json`));
-	const manifest: ParentManifest = await response.json();
-	manifest["sap.ui5"].componentUsages.child.name = `${FIXTURE}.${child}`;
-	const config = manifest["sap.ui5"].routing.config;
+	const manifest: unknown = await response.json();
+	const ui5 = isRecord(manifest) ? manifest["sap.ui5"] : undefined;
+	const usages = isRecord(ui5) ? ui5.componentUsages : undefined;
+	const usage = isRecord(usages) ? usages.child : undefined;
+	const routing = isRecord(ui5) ? ui5.routing : undefined;
+	const config = isRecord(routing) ? routing.config : undefined;
+	if (!isRecord(manifest) || !isRecord(usage) || !isRecord(config)) {
+		throw new TypeError(`${FIXTURE_PATH}/manifest.json has no child usage or routing config`);
+	}
+	usage.name = `${FIXTURE}.${child}`;
 	config.routerClass = routerClass;
 	if (guards) {
 		config.guardRouter = { guards: { "*": [ALLOW_GUARD] } };
@@ -149,15 +150,13 @@ export async function run(
 	const snapshot = (label: string): void => {
 		const [parent, child] = components;
 		const state = {
-			hash: HashChanger.getInstance().getHash(),
+			hash: getHash(),
 			parent: { pages: navState(parent), router: routerState(parent) },
 			child: { pages: navState(child), router: routerState(child) },
 		};
 		trace.push(`state after ${label} ${JSON.stringify(state)}`);
 	};
 
-	// The first router to initialize would otherwise initialize the HashChanger and report its hash.
-	HashChanger.getInstance().init();
 	initHashChanger();
 	HashChanger.getInstance().setHash(scenario.startHash);
 	const stopHashes = recordHashes(trace);

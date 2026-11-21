@@ -213,9 +213,12 @@ export type Inheritance = "none" | "pattern-tree";
  * @since 1.5.0
  */
 export interface ManifestRouteGuardConfig {
-	/** Enter guard module paths (dot notation, relative to component namespace). */
+	/**
+	 * Enter guard module paths: in dot notation relative to the component namespace, or absolute
+	 * with a `module:` prefix. An optional `#export` suffix picks one export of the module.
+	 */
 	enter?: string[];
-	/** Leave guard module paths (dot notation, relative to component namespace). */
+	/** Leave guard module paths, in the same forms as `enter`. */
 	leave?: string[];
 }
 
@@ -310,8 +313,9 @@ export interface NavigationResult {
 	route: string;
 	/**
 	 * Hash associated with the settled state.
-	 * For blocked, error, or cancelled navigations this is usually the hash the router stayed on;
-	 * for committed, bypassed, and redirected navigations it is the hash from the winning path.
+	 * For blocked, error, or cancelled navigations it is the hash the router stayed on (`""` before
+	 * the first commit); for committed, bypassed, and redirected navigations it is the hash from the
+	 * winning path.
 	 */
 	hash: string;
 	/**
@@ -325,11 +329,8 @@ export interface NavigationResult {
 
 /**
  * Event object passed to `attachNavigationSettled` handlers.
- * Parameters are identical to {@link NavigationResult}.
- *
- * The source type uses {@link GuardRouter} (the public interface) rather
- * than the concrete Router class to avoid a circular import between
- * `types.ts` and `Router.ts`.
+ * Parameters are identical to {@link NavigationResult}. The event source is typed as the
+ * public {@link GuardRouter} interface.
  *
  * @since 1.3.0
  */
@@ -458,7 +459,8 @@ export interface GuardRouter extends MobileRouter {
 	 * If no navigation is pending, this resolves immediately with the most
 	 * recent settlement result. Before any navigation has settled, it falls back
 	 * to a synthetic `Committed` result derived from the router's current route/hash state.
-	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles.
+	 * After `stop()`, that idle fallback reports empty route/hash values until a new navigation settles,
+	 * or `initialize(true)` resumes the route.
 	 *
 	 * @returns Promise that resolves with a {@link NavigationResult} once the pipeline settles.
 	 * @since 1.2.0

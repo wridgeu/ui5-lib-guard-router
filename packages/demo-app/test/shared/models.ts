@@ -5,6 +5,12 @@ import { getAppComponentId } from "./controls";
  * through the component, without UI interaction.
  */
 
+/** Options of a wait for a page or a hash. With `afterRevision`, only a settlement recorded after that revision counts. */
+export type SettlementWaitOptions = {
+	timeout?: number;
+	afterRevision?: number;
+};
+
 /** Number of navigations the demo app's router has settled. A navigation started after reading it settles with a higher number. */
 export async function getRuntimeSettlementRevision(): Promise<number> {
 	return browser.execute(
@@ -26,6 +32,18 @@ export async function setDirtyState(isDirty: boolean): Promise<void> {
 			Component.getComponentById(componentId).getModel("form").setProperty("/isDirty", dirty);
 		},
 		isDirty,
+		await getAppComponentId(),
+	);
+}
+
+/** The dirty state in the `form` model, which the leave guard of "protected" reads. */
+export async function getDirtyState(): Promise<unknown> {
+	return browser.execute(
+		(componentId: string) => {
+			const Component = sap.ui.require("sap/ui/core/Component");
+			const isDirty: unknown = Component.getComponentById(componentId).getModel("form").getProperty("/isDirty");
+			return isDirty;
+		},
 		await getAppComponentId(),
 	);
 }

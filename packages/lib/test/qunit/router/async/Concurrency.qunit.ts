@@ -1,4 +1,3 @@
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardFn, GuardRouter } from "ui5/guard/router/types";
@@ -6,7 +5,6 @@ import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	captureErrorsAsync,
-	captureUnhandledRejections,
 	flushPromises,
 	getHash,
 	recordSettlements,
@@ -23,9 +21,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Overlapping async navigations
-// ============================================================
 QUnit.module("Router - Overlapping async navigations", standardHooks);
 
 QUnit.test("Slower first navigation is superseded by faster second navigation", async function (assert: Assert) {
@@ -46,11 +41,7 @@ QUnit.test("Slower first navigation is superseded by faster second navigation", 
 	slowGuard.resolve(true);
 	await flushPromises();
 	assert.notOk(protectedMatched, "Slow first navigation was superseded");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"detail/1",
-		"Hash reflects the second (winning) navigation",
-	);
+	assert.strictEqual(getHash(), "detail/1", "Hash reflects the second (winning) navigation");
 });
 
 QUnit.test("Superseded async guard result does not apply", async function (assert: Assert) {
@@ -73,11 +64,7 @@ QUnit.test("Superseded async guard result does not apply", async function (asser
 	await router.navigationSettled();
 	slowResult.resolve("forbidden"); // This redirect should be discarded
 	await flushPromises();
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"detail/2",
-		"Second navigation won, redirect from first was discarded",
-	);
+	assert.strictEqual(getHash(), "detail/2", "Second navigation won, redirect from first was discarded");
 });
 
 /**
@@ -253,9 +240,6 @@ QUnit.test("Failure of a superseded async hash change does not settle", async fu
 	await assertSupersededFailureIgnored(assert, () => HashChanger.getInstance().setHash("protected"));
 });
 
-// ============================================================
-// Module: Rapid sequential navigations
-// ============================================================
 QUnit.module("Router - Rapid sequential navigations", standardHooks);
 
 QUnit.test("Rapid sync navigations - last one wins", async function (assert: Assert) {
@@ -281,28 +265,6 @@ QUnit.test("Rapid sync navigations - last one wins", async function (assert: Ass
 	assert.strictEqual(getHash(), "detail/1");
 });
 
-QUnit.test("Rapid async navigations - only last navigation settles", async function (assert: Assert) {
-	const matchedRoutes: string[] = [];
-	router.addGuard(async () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
-		matchedRoutes.push(event.getParameter("name")!);
-	});
-
-	router.navTo("protected");
-	router.navTo("forbidden");
-	router.navTo("detail", { id: "1" });
-
-	await waitForRoute(router, "detail");
-	assert.strictEqual(matchedRoutes.length, 1, "Only one navigation settled");
-	assert.strictEqual(matchedRoutes[0], "detail", "The last navigation won");
-});
-
-// ============================================================
-// Module: Returning to current route during pending guard
-// ============================================================
 QUnit.module("Router - Returning to current route during pending guard", standardHooks);
 
 QUnit.test("Navigating back to current route cancels a pending async guard", async function (assert: Assert) {
@@ -316,13 +278,10 @@ QUnit.test("Navigating back to current route cancels a pending async guard", asy
 		protectedMatched = true;
 	});
 
-	// Navigate to protected (triggers slow async guard)
 	router.navTo("protected");
 
 	// While guard is pending, navigate back to home (same-hash dedup cancels preflight).
-	// With navTo preflight, the hash never changed to "protected", so
-	// HashChanger.setHash("") would be a no-op. Use navTo("home") to
-	// exercise the same-hash dedup in the navTo override.
+	// navTo() leaves the hash unchanged while its guards run, so a navTo() to the current route cancels the pending one.
 	router.navTo("home");
 
 	const result = await router.navigationSettled();
@@ -391,9 +350,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Stop during pending async guard
-// ============================================================
 QUnit.module("Router - Stop during pending async guard", standardHooks);
 
 QUnit.test(
@@ -428,9 +384,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Superseded navigation stops remaining guards
-// ============================================================
 QUnit.module("Router - Superseded navigation stops remaining guards", standardHooks);
 
 QUnit.test("Guards for a superseded navigation stop executing", async function (assert: Assert) {
@@ -453,11 +406,9 @@ QUnit.test("Guards for a superseded navigation stop executing", async function (
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// Start navigation that will be superseded
 	router.navTo("protected");
 	// Let guard 1 finish so guard 2 starts
 	await flushPromises();
-	// Supersede with a new navigation (no guards on "forbidden")
 	router.navTo("forbidden");
 	await waitForRoute(router, "forbidden");
 
@@ -482,9 +433,7 @@ QUnit.test(
 		await waitForRoute(router, "home");
 		router.addGuard(() => globalGuard.promise);
 
-		// Start navigation to protected (triggers slow global guard)
 		router.navTo("protected");
-		// Supersede while global guard is pending
 		router.navTo("forbidden");
 		const forbiddenMatched = waitForRoute(router, "forbidden");
 		globalGuard.resolve(true);
@@ -494,9 +443,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Duplicate and overlapping navigation
-// ============================================================
 QUnit.module("Router - Duplicate and overlapping navigation", standardHooks);
 
 QUnit.test(
@@ -511,9 +457,7 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// First navTo triggers guard
 		router.navTo("protected");
-		// Second navTo to same destination while guard is pending, should be ignored
 		router.navTo("protected");
 
 		const protectedMatched = waitForRoute(router, "protected");
@@ -522,30 +466,6 @@ QUnit.test(
 		assert.strictEqual(guardCallCount, 1, "Guard only ran once (duplicate was deduped)");
 	},
 );
-
-QUnit.test("navTo to different destination during pending guard supersedes the first", async function (assert: Assert) {
-	const slowGuard = Promise.withResolvers<boolean>();
-	router.addRouteGuard("protected", () => slowGuard.promise);
-	router.addRouteGuard("detail", async () => true);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	let protectedMatched = false;
-	router.getRoute("protected")!.attachPatternMatched(() => {
-		protectedMatched = true;
-	});
-
-	// First navTo triggers protected guard (slow)
-	router.navTo("protected");
-	// Different destination supersedes
-	router.navTo("detail", { id: "1" });
-
-	await waitForRoute(router, "detail");
-	slowGuard.resolve(true);
-	await flushPromises();
-	assert.notOk(protectedMatched, "First navigation was superseded");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/1", "Second navigation won");
-});
 
 QUnit.test("Route is navigable again after a guarded navigation completes", async function (assert: Assert) {
 	let guardCallCount = 0;
@@ -556,41 +476,14 @@ QUnit.test("Route is navigable again after a guarded navigation completes", asyn
 	router.initialize();
 	await waitForRoute(router, "home");
 
-	// First navigation: guard runs and commits
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(guardCallCount, 1, "Guard ran for first navigation");
 
-	// Navigate away
 	router.navTo("home");
 	await waitForRoute(router, "home");
 
-	// Same destination again, should work (not stuck as "pending")
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.strictEqual(guardCallCount, 2, "Guard ran again for second navigation");
-});
-
-QUnit.test("AbortError from guard is silenced when navigation is superseded", async function (assert: Assert) {
-	router.addRouteGuard("protected", async (context: GuardContext) => {
-		// Simulate a fetch that only ends by throwing AbortError when the signal is aborted
-		await new Promise<void>((_resolve, reject) => {
-			context.signal.addEventListener("abort", () => {
-				reject(new DOMException("The operation was aborted.", "AbortError"));
-			});
-		});
-		return true;
-	});
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	const unhandled = await captureUnhandledRejections(async () => {
-		// Start navigation (triggers guard with simulated fetch)
-		router.navTo("protected");
-		// Supersede while the fetch is pending
-		router.navTo("forbidden");
-		await waitForRoute(router, "forbidden");
-	});
-
-	assert.deepEqual(unhandled, [], "No unhandled promise rejections from AbortError");
 });

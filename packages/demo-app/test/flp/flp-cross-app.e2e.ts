@@ -27,13 +27,11 @@ describe("FLP cross-app navigation (isolated session)", () => {
 		try {
 			await triggerFlpCrossAppNavigation();
 
-			// Verify the dirty-state provider triggered the confirm dialog.
 			await browser.waitUntil(() => record.called, {
 				timeout: 5000,
 				timeoutMsg: "FLP dirty-state provider did not trigger a confirm dialog",
 			});
 
-			// Cross-app navigation completes to Shell-home after confirmation.
 			await browser.waitUntil(
 				async () => {
 					const hash = await browser.execute(() => window.location.hash);

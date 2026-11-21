@@ -1,37 +1,32 @@
 # Feature: Route Metadata
 
-> **Status**: Implemented (PR #61). `mergeRouteMeta` was dropped. Consumers use `setRouteMeta(name, { ...getRouteMeta(name), ...newMeta })` instead. Metadata inheritance uses lazy resolution with caching (issue #62). See the [feature index](./README.md) for details.
+> **Status**: Implemented (PR #61). Pattern-tree inheritance resolves metadata lazily and caches it (issue #62, [Feature 12](./12-lazy-resolution-error-handling.md)). See the [library README](../../packages/lib/README.md) for the API. `Router.ts` and `RouteMeta.ts` are the source of truth.
 
 ## Problem
 
-Guard conditions are currently defined imperatively in JavaScript. For common patterns like "this route requires authentication" or "this route requires admin role", developers write repetitive guard logic:
+Guard conditions were written imperatively, one guard per route:
 
 ```typescript
-// Current: repetitive per-route guards
-router.addRouteGuard("admin", (ctx) => (isLoggedIn() && hasRole("admin") ? true : "login"));
-router.addRouteGuard("profile", (ctx) => (isLoggedIn() ? true : "login"));
-router.addRouteGuard("settings", (ctx) => (isLoggedIn() ? true : "login"));
-router.addRouteGuard("dashboard", (ctx) => (isLoggedIn() && hasRole("admin") ? true : "login"));
+router.addRouteGuard("admin", () => (isLoggedIn() && hasRole("admin") ? true : "login"));
+router.addRouteGuard("profile", () => (isLoggedIn() ? true : "login"));
+router.addRouteGuard("settings", () => (isLoggedIn() ? true : "login"));
 ```
 
-Most frameworks solve this with **route metadata**, declarative annotations on route definitions that a single guard function reads:
+Most frameworks solve this with **route metadata** (Vue's `meta`, Angular's `data`): declarative annotations on routes that one guard reads.
 
 ```typescript
-// Desired: one guard, metadata-driven
 router.addGuard((ctx) => {
 	if (ctx.toMeta.requiresAuth && !isLoggedIn()) return "login";
-	if (ctx.toMeta.roles && !hasAnyRole(ctx.toMeta.roles)) return "forbidden";
+	if (ctx.toMeta.roles && !hasAnyRole(ctx.toMeta.roles as string[])) return "forbidden";
 	return true;
 });
 ```
 
-## Proposed API: Hybrid (Manifest + Programmatic)
+## API
 
-### Manifest Configuration
+### Manifest
 
-Store default metadata in `manifest.json` under `sap.ui5.routing.config.guardRouter`:
-
-> **Implementation note**: The original proposal placed metadata under a custom `"ui5.guard.router"` top-level section. The shipped version reads from `sap.ui5.routing.config.guardRouter.routeMeta` instead, co-located with other router options.
+Default metadata lives in `sap.ui5.routing.config.guardRouter.routeMeta`, next to the other router options:
 
 ```json
 {
@@ -40,19 +35,9 @@ Store default metadata in `manifest.json` under `sap.ui5.routing.config.guardRou
 			"config": {
 				"guardRouter": {
 					"routeMeta": {
-						"admin": {
-							"requiresAuth": true,
-							"roles": ["admin"]
-						},
-						"profile": {
-							"requiresAuth": true
-						},
-						"settings": {
-							"requiresAuth": true
-						},
-						"home": {
-							"public": true
-						}
+						"admin": { "requiresAuth": true, "roles": ["admin"] },
+						"profile": { "requiresAuth": true },
+						"home": { "public": true }
 					}
 				}
 			}
@@ -61,182 +46,46 @@ Store default metadata in `manifest.json` under `sap.ui5.routing.config.guardRou
 }
 ```
 
-### Programmatic API
+### Runtime
 
 ```typescript
-// Set runtime metadata for a route (replaces earlier runtime metadata; its keys win over manifest defaults)
+// Replaces earlier runtime metadata of the route; its keys win over the manifest's
 router.setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
 
-// Get metadata for a route (merged: manifest defaults + runtime overrides)
+// Manifest metadata with runtime metadata on top, frozen
 router.getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
-
-// mergeRouteMeta was dropped -- use spread instead:
-// router.setRouteMeta(name, { ...router.getRouteMeta(name), ...newMeta });
 ```
 
-### GuardContext Integration
+To add keys instead of replacing, spread the current value:
 
 ```typescript
-interface GuardContext {
-	// ... existing fields ...
-	toMeta: Readonly<Record<string, unknown>>; // Metadata for target route
-	fromMeta: Readonly<Record<string, unknown>>; // Metadata for current route
-}
-```
-
-## Usage Examples
-
-### Auth + Role Guard (One Guard for All)
-
-```typescript
-router.addGuard((context) => {
-	const meta = context.toMeta;
-
-	// Public routes always pass
-	if (meta.public) return true;
-
-	// Auth check
-	if (meta.requiresAuth && !authModel.getProperty("/isLoggedIn")) {
-		return "login";
-	}
-
-	// Role check
-	if (meta.roles && !hasAnyRole(meta.roles as string[])) {
-		return "forbidden";
-	}
-
-	return true;
-});
-```
-
-### Runtime Feature Flags
-
-```typescript
-// Enable a feature at runtime (mergeRouteMeta was dropped; use spread instead)
 router.setRouteMeta("betaFeature", { ...router.getRouteMeta("betaFeature"), enabled: true });
-
-// Guard checks
-router.addGuard((context) => {
-	if (context.toMeta.featureFlag && !context.toMeta.enabled) {
-		return "featureDisabled";
-	}
-	return true;
-});
 ```
 
-### Dynamic Metadata Based on User
+### Guard context
 
-```typescript
-// After login, mark routes based on user's permissions
-userPermissions.forEach((perm) => {
-	router.setRouteMeta(perm.route, { ...router.getRouteMeta(perm.route), authorized: true });
-});
-```
+`GuardContext.toMeta` and `GuardContext.fromMeta` carry the resolved metadata of the target and the current route.
 
-## Implementation Sketch
+## Decisions
 
-### Manifest Reading
-
-```typescript
-// In constructor or initialize
-_initRouteMeta(this: RouterInstance): void {
-    const component = this._oOwner;  // Component that owns the router
-    if (!component) return;
-
-    const manifest = component.getManifest();
-    const extSection = manifest["ui5.guard.router"];
-    if (extSection?.routeMeta) {
-        this._manifestMeta = new Map(Object.entries(extSection.routeMeta));
-    }
-}
-```
-
-### Merged Metadata Resolution
-
-```typescript
-getRouteMeta(this: RouterInstance, routeName: string): Record<string, unknown> {
-    const manifestMeta = this._manifestMeta.get(routeName) || {};
-    const runtimeMeta = this._runtimeMeta.get(routeName) || {};
-    return { ...manifestMeta, ...runtimeMeta };  // Runtime wins
-}
-```
-
-### Context Building
-
-```typescript
-// In parse(), when building GuardContext:
-const context: GuardContext = {
-    toRoute,
-    toHash: newHash,
-    toArguments: routeInfo ? routeInfo.arguments : {},
-    fromRoute: this._currentRoute,
-    fromHash: this._currentHash ?? "",
-    toMeta: this.getRouteMeta(toRoute),
-    fromMeta: this.getRouteMeta(this._currentRoute),
-    transition: this._createNavigationIntent(...)
-};
-```
-
-## Types
-
-> **Implementation note**: The shipped types differ from this original proposal. `mergeRouteMeta` was dropped. `GuardContext` includes `signal`, `bag`, `toMeta`, `fromMeta`, `ownerComponent` but not `transition` (feature 03 was not implemented). `toArguments` is `RouteInfo["arguments"]`, not `Record<string, string>`. The manifest and runtime maps live in `RouteMetaStore` (`RouteMeta.ts`), which also caches resolved metadata.
-
-```typescript
-// RouterInstance additions
-_manifestMeta: Map<string, Readonly<Record<string, unknown>>>;
-_runtimeMeta: Map<string, Readonly<Record<string, unknown>>>;
-setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
-getRouteMeta(routeName: string): Readonly<Record<string, unknown>>;
-
-// Updated GuardContext (shipped form)
-interface GuardContext {
-    toRoute: string;
-    toHash: string;
-    toArguments: RouteInfo["arguments"];
-    fromRoute: string;
-    fromHash: string;
-    signal: AbortSignal;
-    bag: Map<string, unknown>;
-    toMeta: Readonly<Record<string, unknown>>;
-    fromMeta: Readonly<Record<string, unknown>>;
-    ownerComponent?: UIComponent;
-}
-```
-
-## Test Cases
-
-1. `getRouteMeta` returns manifest-defined metadata
-2. `setRouteMeta` overrides manifest metadata
-3. `setRouteMeta` with spread pattern shallow-merges with existing metadata
-4. `getRouteMeta` returns empty object for unknown routes
-5. `context.toMeta` reflects merged metadata in guard
-6. `context.fromMeta` reflects current route metadata
-7. Runtime metadata changes are reflected in subsequent navigations
-8. Manifest metadata loads from `sap.ui5.routing.config.guardRouter.routeMeta`
-9. Guard uses `toMeta.requiresAuth` to block/redirect
+| Decision                    | Choice                                                                         | Reason                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sources                     | Manifest defaults plus runtime values                                          | Manifest values are visible and auditable. Runtime values cover feature flags and user permissions known only after login.                                 |
+| Manifest location           | `sap.ui5.routing.config.guardRouter.routeMeta`                                 | The proposal used a custom top-level `"ui5.guard.router"` section. Keeping it in the router config co-locates it with the router options.                  |
+| Not chosen                  | Runtime-only metadata; route-name conventions (`auth.*`)                       | Runtime-only spreads the requirements across code with no single place to read them. Name conventions overload route names and express only one dimension. |
+| Merge                       | Shallow; runtime keys win                                                      | Predictable. Nested objects are replaced, not merged.                                                                                                      |
+| `mergeRouteMeta()`          | Dropped                                                                        | The spread pattern above does the same with no extra API.                                                                                                  |
+| Result                      | Frozen object, cached until `setRouteMeta()` or `addRoute()`                   | Guards cannot mutate shared state, and repeated reads in one navigation cost nothing.                                                                      |
+| Unknown route               | `getRouteMeta()` warns and returns an empty object                             | See [Feature 12](./12-lazy-resolution-error-handling.md). `setRouteMeta()` follows the `unknownRouteRegistration` policy.                                  |
+| `guardRouter` block and UI5 | The router removes `guardRouter` from the config before `sap.m.routing.Router` | UI5 never sees the non-standard block.                                                                                                                     |
 
 ## Trade-offs
 
-**Pros:**
-
-- Reduces guard boilerplate dramatically
-- Declarative defaults in manifest (visible, auditable)
-- Runtime overrides for dynamic scenarios (feature flags, user permissions)
-- Familiar pattern (Vue's `meta`, Angular's `data`)
-
-**Cons:**
-
-- Two sources of truth (manifest + runtime), which could be confusing
-- The `guardRouter` block in the routing config is non-standard; UI5 tooling won't validate it
-- Shallow merge may not handle nested objects well
-- Metadata is untyped (`Record<string, unknown>`), with no compile-time safety
-
-## Priority
-
-**Lower priority** than Features 01-03. The current API already supports metadata-driven patterns; developers can read manifest data directly in their guards. This feature is a convenience layer that reduces boilerplate but doesn't enable new capabilities.
+- Two sources of truth (manifest and runtime) can confuse.
+- UI5 tooling does not validate the `guardRouter` block.
+- Shallow merge does not combine nested objects.
+- Metadata is `Record<string, unknown>`: no compile-time safety.
 
 ## Compatibility
 
-- Fully backward compatible (additive API and context properties)
-- The router removes `guardRouter` from the routing config before passing it to `sap.m.routing.Router`, so UI5 never sees it
-- Guards that don't read `toMeta`/`fromMeta` are unaffected
+Additive API and context properties. Guards that do not read `toMeta`/`fromMeta` are unaffected.

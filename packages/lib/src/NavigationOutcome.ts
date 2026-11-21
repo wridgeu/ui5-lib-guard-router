@@ -20,7 +20,7 @@ const NavigationOutcome = Object.freeze({
 	Redirected: "redirected",
 	/** Navigation was cancelled before settling (superseded, stopped, or destroyed). @since 1.2.0 */
 	Cancelled: "cancelled",
-	/** A guard threw or rejected; the previous route remains active. @since 1.4.0 */
+	/** A guard threw or rejected, a redirect target had no valid hash, or applying the decision failed; the previous route remains active. @since 1.4.0 */
 	Error: "error",
 });
 

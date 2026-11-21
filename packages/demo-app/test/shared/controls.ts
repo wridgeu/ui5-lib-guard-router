@@ -1,4 +1,6 @@
 import type { wdi5Selector } from "wdio-ui5-service";
+import type NavContainer from "sap/m/NavContainer";
+import type Page from "sap/m/Page";
 import type ComponentRegistry from "sap/ui/core/ComponentRegistry";
 
 /**
@@ -63,6 +65,7 @@ export const CONTROLS = {
 		"protectedPage",
 		"dirtyCheckbox",
 		"dirtyStatus",
+		"clearDirtyAndGoHomeBtn",
 		"protectedFlpDirtyProviderStatus",
 		"protectedCurrentHashText",
 		...SETTLEMENT_PANEL,
@@ -206,9 +209,9 @@ export async function isPageDisplayed(page: ControlRef, expectedTitle: string): 
 		(componentId: string, viewId: string, id: string, title: string) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
 			const view = Component.getComponentById(componentId).byId(viewId);
-			const control = view?.byId(id);
-			const container = view?.getParent();
-			if (container?.getCurrentPage && container.getCurrentPage() !== view) return false;
+			const control = view?.byId(id) as Page | undefined;
+			const container = view?.getParent() as NavContainer | null | undefined;
+			if (container && container.getCurrentPage() !== view) return false;
 			const domRef = control?.getTitle() === title ? control.getDomRef() : null;
 			return domRef ? domRef.checkVisibility({ visibilityProperty: true }) : false;
 		},

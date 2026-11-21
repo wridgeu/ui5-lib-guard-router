@@ -1,4 +1,3 @@
-import sinon from "sinon";
 import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
@@ -25,9 +24,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Sync until a guard returns a Promise
-// ============================================================
 QUnit.module("Router - Sync until a guard returns a Promise", standardHooks);
 
 QUnit.test("an all-sync navTo commits before navTo returns", async function (assert) {
@@ -177,9 +173,6 @@ QUnit.test("an async redirect hop makes the remaining hops async", async functio
 	assert.deepEqual(settled, [NavigationOutcome.Redirected], "one settlement for the whole chain");
 });
 
-// ============================================================
-// Module: Mixed sync/async guard pipelines
-// ============================================================
 QUnit.module("Router - Mixed sync/async guard pipelines", standardHooks);
 
 QUnit.test("Sync global guard allows, async route guard allows", async function (assert: Assert) {
@@ -188,11 +181,7 @@ QUnit.test("Sync global guard allows, async route guard allows", async function 
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Navigation allowed through sync global + async route guard",
-	);
+	assert.strictEqual(getHash(), "protected", "Navigation allowed through sync global + async route guard");
 });
 
 QUnit.test("Sync global guard allows, async route guard blocks", async function (assert: Assert) {
@@ -213,11 +202,7 @@ QUnit.test("Async global guard allows, sync route guard allows", async function 
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"protected",
-		"Navigation allowed through async global + sync route guard",
-	);
+	assert.strictEqual(getHash(), "protected", "Navigation allowed through async global + sync route guard");
 });
 
 QUnit.test("Async global guard allows, sync route guard blocks", async function (assert: Assert) {
@@ -247,20 +232,15 @@ QUnit.test("Async global guard allows, sync route guard redirects", async functi
 	);
 });
 
-// ============================================================
-// Module: Guard context across navigations
-// ============================================================
 QUnit.module("Router - Guard context across navigations", standardHooks);
 
 QUnit.test("Guard context has correct fromRoute and fromHash after prior navigation", async function (assert: Assert) {
 	let capturedContext: GuardContext | null = null;
 	router.initialize();
 
-	// Navigate to detail/42 first (no guards)
 	router.navTo("detail", { id: "42" });
 	await waitForRoute(router, "detail");
 
-	// Now add a guard that captures context
 	router.addGuard((context: GuardContext) => {
 		capturedContext = context;
 		return true;
@@ -289,9 +269,6 @@ QUnit.test("Guard context fromRoute/fromHash are empty on initial navigation", a
 	assert.strictEqual(capturedContext!.fromHash, "", "fromHash is empty on initial nav");
 });
 
-// ============================================================
-// Module: Async guard edge cases
-// ============================================================
 QUnit.module("Router - Async guard edge cases", standardHooks);
 
 QUnit.test("Async route-specific guard throwing error produces Error settlement", async function (assert: Assert) {
@@ -388,9 +365,6 @@ QUnit.test("Async guard returning invalid redirect object treats as block", asyn
 	);
 });
 
-// ============================================================
-// Module: Async leave guard abort check before enter phase
-// ============================================================
 QUnit.module("Router - Async leave guard abort check before enter phase", standardHooks);
 
 QUnit.test(
@@ -401,8 +375,6 @@ QUnit.test(
 		router.initialize();
 		await waitForRoute(router, "home");
 
-		// Async leave guard that resolves after manual trigger.
-		// Track each promise so we can resolve the first (superseded) one.
 		const leaveResolvers: Array<(value: boolean) => void> = [];
 		router.addLeaveGuard(
 			"home",
@@ -417,18 +389,15 @@ QUnit.test(
 			return true;
 		});
 
-		// Start navigating to "protected". Triggers async leave guard (leaveResolvers[0])
 		router.navTo("protected");
 
 		// Supersede: navigate via setHash to trigger the parse() path (browser-initiated
 		// navigation) rather than the navTo preflight path.
 		// This cancels the first navigation's pipeline.
 		HashChanger.getInstance().setHash("forbidden");
-		// Resolve the second leave guard so "forbidden" can commit
 		leaveResolvers[1](true);
 		await waitForRoute(router, "forbidden");
 
-		// Now resolve the FIRST (superseded) leave guard.
 		// The enter guard for "protected" should NOT fire because the signal is aborted.
 		leaveResolvers[0](true);
 		await flushPromises();
@@ -437,9 +406,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Native matching flag
-// ============================================================
 QUnit.module("Router - Native matching flag", standardHooks);
 
 // A canary for UI5 itself: the router mirrors the private member `_bMatchingProcessStarted`, so

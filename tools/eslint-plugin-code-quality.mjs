@@ -1,25 +1,17 @@
 /**
- * Custom oxlint JS plugin that catches AI-generated code anti-patterns.
- *
- * Detects common patterns left behind by AI coding assistants:
- * console-only error handling, redundant boolean returns, and
- * em-dashes in string literals.
- *
- * Type-assertion rules (no-as-any, no-double-type-assertion) have been
- * replaced by native typescript/no-explicit-any, no-unsafe-type-assertion,
- * and no-unnecessary-type-assertion.
+ * Custom oxlint JS plugin: catch blocks that only log, if/else that returns true/false,
+ * and em-dashes in strings and comments.
  *
  * @see https://oxc.rs/docs/guide/usage/linter/writing-js-plugins
  */
 
+/** @import { ESTree, Plugin, Rule } from "@oxlint/plugins" */
+
 /**
- * Detects catch blocks where the only statement is a console call.
- *
- * AI assistants routinely generate `catch (e) { console.error(e); }`
- * as "error handling" which silently swallows the error. The catch
- * should either re-throw, return an error value, or do meaningful
- * recovery.
+ * Detects catch blocks where the only statement is a console call: such a catch swallows
+ * the error. Re-throw, return a failure value, or recover.
  */
+/** @type {Rule} */
 const noConsoleOnlyCatch = {
 	meta: {
 		type: "problem",
@@ -36,7 +28,7 @@ const noConsoleOnlyCatch = {
 		return {
 			CatchClause(node) {
 				const body = node.body;
-				if (!body || body.body.length !== 1) return;
+				if (body.body.length !== 1) return;
 
 				const stmt = body.body[0];
 				if (stmt.type !== "ExpressionStatement") return;
@@ -65,6 +57,7 @@ const noConsoleOnlyCatch = {
  * Same-value branches (true/true or false/false) are dead code:
  * reported without auto-fix so the developer decides what was intended.
  */
+/** @type {Rule} */
 const noRedundantBooleanReturn = {
 	meta: {
 		type: "suggestion",
@@ -97,8 +90,6 @@ const noRedundantBooleanReturn = {
 						messageId: "noRedundantBooleanReturn",
 						fix(fixer) {
 							const condText = context.sourceCode.getText(node.test);
-							// Always wrap in parens so any expression (a === b, typeof x, etc.)
-							// keeps correct precedence after the ! or !! prefix.
 							const replacement = consequent.value ? `return !!(${condText});` : `return !(${condText});`;
 							return fixer.replaceText(node, replacement);
 						},
@@ -112,6 +103,9 @@ const noRedundantBooleanReturn = {
 /**
  * Extracts the return argument from a single-statement block or bare
  * return statement. Returns `undefined` when the shape doesn't match.
+ *
+ * @param {ESTree.Statement} node
+ * @returns {ESTree.Expression | null | undefined}
  */
 function unwrapSingleReturn(node) {
 	if (node.type === "ReturnStatement") return node.argument;
@@ -122,23 +116,23 @@ function unwrapSingleReturn(node) {
 	return undefined;
 }
 
+/**
+ * @param {ESTree.Expression | null | undefined} node
+ * @returns {node is ESTree.BooleanLiteral}
+ */
 function isBooleanLiteral(node) {
 	return node?.type === "Literal" && typeof node.value === "boolean";
 }
 
-// Em-dash character built at runtime so the rule source does not contain it.
-const EM_DASH = String.fromCodePoint(0x2014);
-const EM_DASH_RE = new RegExp(EM_DASH, "g");
+const EM_DASH = /\u2014/;
+const EM_DASH_RE = /\u2014/g;
 
 /**
- * Detects em-dashes (U+2014) in strings and/or comments.
- *
- * Em-dashes are a strong signal of AI-generated text that was pasted
- * without review. Configurable via `checkStrings` and `checkComments`
- * options (both default to true).
+ * Detects em-dashes (U+2014) in strings, template literals and comments.
  *
  * Auto-fix: replaces with `-` in strings, `--` in comments.
  */
+/** @type {Rule} */
 const noEmDash = {
 	meta: {
 		type: "suggestion",
@@ -150,27 +144,12 @@ const noEmDash = {
 			emDashInString: "String contains an em-dash (U+2014). Use a regular dash (-) instead.",
 			emDashInComment: "Comment contains an em-dash (U+2014). Use -- instead.",
 		},
-		schema: [
-			{
-				type: "object",
-				properties: {
-					checkStrings: { type: "boolean" },
-					checkComments: { type: "boolean" },
-				},
-				additionalProperties: false,
-			},
-		],
+		schema: [],
 	},
 	create(context) {
-		const opts = context.options[0] || {};
-		const checkStrings = opts.checkStrings !== false;
-		const checkComments = opts.checkComments !== false;
-
-		const visitors = {};
-
-		if (checkStrings) {
-			visitors.Literal = function (node) {
-				if (typeof node.value === "string" && node.value.includes(EM_DASH)) {
+		return {
+			Literal(node) {
+				if (typeof node.value === "string" && EM_DASH.test(node.value)) {
 					context.report({
 						node,
 						messageId: "emDashInString",
@@ -179,10 +158,10 @@ const noEmDash = {
 						},
 					});
 				}
-			};
-			visitors.TemplateLiteral = function (node) {
+			},
+			TemplateLiteral(node) {
 				for (const quasi of node.quasis) {
-					if (quasi.value.raw.includes(EM_DASH)) {
+					if (EM_DASH.test(quasi.value.raw)) {
 						context.report({
 							node,
 							messageId: "emDashInString",
@@ -196,13 +175,10 @@ const noEmDash = {
 						break;
 					}
 				}
-			};
-		}
-
-		if (checkComments) {
-			visitors.Program = function () {
+			},
+			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
-					if (!comment.value.includes(EM_DASH)) continue;
+					if (!EM_DASH.test(comment.value)) continue;
 					context.report({
 						node: comment,
 						messageId: "emDashInComment",
@@ -217,14 +193,12 @@ const noEmDash = {
 						},
 					});
 				}
-			};
-		}
-
-		return visitors;
+			},
+		};
 	},
 };
 
-/** @type {import('eslint').ESLint.Plugin} */
+/** @type {Plugin} */
 export default {
 	meta: { name: "code-quality" },
 	rules: {

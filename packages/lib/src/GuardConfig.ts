@@ -8,7 +8,7 @@ import { LOG_COMPONENT } from "./GuardPipeline";
 /** Type guard for plain objects. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
+	const proto: unknown = Object.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
 
@@ -73,9 +73,9 @@ function parseGuardEntry(entry: string, componentNamespace: string): { modulePat
  * - `"*"` key with `string[]` -> global enter guards
  * - Route name with `string[]` (shorthand) -> enter guards
  * - Route name with `{ enter: [...], leave: [...] }` -> enter + leave guards
- * - `"*"` with object form -> warn, treat enter as global
+ * - `"*"` with object form -> log info, treat enter as global
  * - `"*"` leave -> warn, skip (global leave guards not supported)
- * - Invalid entries -> warn, skip
+ * - Invalid entries, object values that are not arrays, unknown object keys -> warn, skip
  */
 function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
 	if (!isRecord(guards)) {
@@ -112,16 +112,34 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				);
 			}
 
-			if (key === "*" && value.enter !== undefined) {
-				Log.info('guardRouter.guards["*"]: object form; treating enter as global', undefined, LOG_COMPONENT);
+			for (const name of Object.keys(value)) {
+				if (name === "enter" || name === "leave") continue;
+				Log.warning(
+					`guardRouter.guards["${key}"].${name}: unknown key, expected enter or leave, skipping`,
+					undefined,
+					LOG_COMPONENT,
+				);
 			}
 
-			if (Array.isArray(value.enter)) {
-				pushEntries(value.enter, key, "enter", `["${key}"].enter`);
-			}
-
-			if (key !== "*" && Array.isArray(value.leave)) {
-				pushEntries(value.leave, key, "leave", `["${key}"].leave`);
+			for (const type of ["enter", "leave"] as const) {
+				const entries = value[type];
+				if (entries === undefined || (key === "*" && type === "leave")) continue;
+				if (!Array.isArray(entries)) {
+					Log.warning(
+						`guardRouter.guards["${key}"].${type}: expected string[], skipping`,
+						JSON.stringify(entries),
+						LOG_COMPONENT,
+					);
+					continue;
+				}
+				if (key === "*") {
+					Log.info(
+						'guardRouter.guards["*"]: object form; treating enter as global',
+						undefined,
+						LOG_COMPONENT,
+					);
+				}
+				pushEntries(entries, key, type, `["${key}"].${type}`);
 			}
 		} else {
 			Log.warning(
@@ -183,6 +201,7 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 /** Parse the `routeMeta` block: one frozen plain object per route name. */
 function parseRouteMeta(raw: unknown): Map<string, Readonly<Record<string, unknown>>> {
 	const routeMeta = new Map<string, Readonly<Record<string, unknown>>>();
+	if (raw === undefined) return routeMeta;
 	if (!isRecord(raw)) {
 		Log.warning("guardRouter.routeMeta: expected object, skipping", JSON.stringify(raw), LOG_COMPONENT);
 		return routeMeta;
@@ -217,7 +236,7 @@ export function parseGuardRouterConfig(raw: unknown, componentNamespace: string)
 	if (!isRecord(raw)) return { options, routeMeta: new Map(), guards: [] };
 	return {
 		options,
-		routeMeta: raw.routeMeta === undefined ? new Map() : parseRouteMeta(raw.routeMeta),
+		routeMeta: parseRouteMeta(raw.routeMeta),
 		guards: raw.guards === undefined ? [] : parseGuardDescriptors(raw.guards, componentNamespace),
 	};
 }

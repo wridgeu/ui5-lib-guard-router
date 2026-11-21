@@ -13,7 +13,7 @@ const LOG_COMPONENT = "demo.app.guards";
  * @param context - Navigation context
  */
 export default function dirtyFormGuard(context: GuardContext): boolean {
-	const isDirty = context.ownerComponent?.getModel("form")?.getProperty("/isDirty");
+	const isDirty: unknown = context.ownerComponent?.getModel("form")?.getProperty("/isDirty");
 	if (isDirty === true) {
 		Log.info(`Dirty form guard blocked leaving "${context.fromRoute}"`, "", LOG_COMPONENT);
 		return false;

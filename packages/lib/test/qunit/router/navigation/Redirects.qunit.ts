@@ -22,9 +22,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Redirect to the route that is shown
-// ============================================================
 QUnit.module("Router - Redirect to the route that is shown", standardHooks);
 
 QUnit.test(
@@ -82,9 +79,6 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: GuardRedirect with componentTargetInfo
-// ============================================================
 QUnit.module("Router - GuardRedirect with componentTargetInfo", standardHooks);
 
 QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at target", async function (assert: Assert) {
@@ -96,11 +90,7 @@ QUnit.test("GuardRedirect with componentTargetInfo redirects and arrives at targ
 	router.initialize();
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
-	assert.strictEqual(
-		HashChanger.getInstance().getHash(),
-		"detail/cti-1",
-		"Redirect with componentTargetInfo landed with correct params",
-	);
+	assert.strictEqual(getHash(), "detail/cti-1", "Redirect with componentTargetInfo landed with correct params");
 });
 
 QUnit.test(
@@ -179,9 +169,36 @@ QUnit.test(
 	},
 );
 
-// ============================================================
-// Module: Redirect edge cases
-// ============================================================
+QUnit.test(
+	"a redirect with componentTargetInfo that is superseded before UI5 writes its hash is cancelled",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", (): GuardRedirect => ({
+			route: "detail",
+			parameters: { id: "7" },
+			componentTargetInfo: { nested: { route: "list" } },
+		}));
+		let leftRoute: string | undefined;
+		router.addRouteGuard("forbidden", (context: GuardContext) => {
+			leftRoute = context.fromRoute;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+		const statuses = recordSettlements(router);
+
+		router.navTo("protected");
+		assert.deepEqual(statuses, [], "the redirect waits for its hash");
+		router.navTo("forbidden");
+
+		assert.deepEqual(statuses, [NavigationOutcome.Cancelled, NavigationOutcome.Committed]);
+		assert.strictEqual(leftRoute, "home", "the next navigation leaves the route that is shown");
+		// The deferred hash of the redirect target arrives as a navigation of its own.
+		await flushPromises();
+		await flushPromises();
+		assert.strictEqual(getHash(), "detail/7");
+	},
+);
+
 QUnit.module("Router - Redirect edge cases", standardHooks);
 
 QUnit.test("Global guard redirect short-circuits route-specific guard", async function (assert: Assert) {
@@ -204,19 +221,12 @@ QUnit.test("Global guard redirect short-circuits route-specific guard", async fu
 	assert.notOk(routeGuardCalled, "Route guard was short-circuited by global guard redirect");
 });
 
-// ============================================================
-// Module: Redirect guard bypass regression
-// ============================================================
-QUnit.module("Router - Redirect guard bypass regression", standardHooks);
+QUnit.module("Router - Redirect: navTo from a navigationSettled handler", standardHooks);
 
 QUnit.test("navTo from navigationSettled handler during redirect still runs guards", async function (assert: Assert) {
 	// A guard on "forbidden" redirects to "home".
 	// A navigationSettled handler calls navTo("protected") when it sees the Redirected status.
 	// A global guard blocks "protected" (and lets the redirect itself through).
-	//
-	// Regression guard: _flushSettlement fires the navigationSettled event
-	// synchronously. The phase is set to idle before _flushSettlement, so
-	// navTo() from the handler enters the full guard pipeline.
 	router.addRouteGuard("forbidden", () => "home");
 	router.addGuard((ctx: GuardContext) => ctx.toRoute !== "protected");
 
@@ -227,8 +237,7 @@ QUnit.test("navTo from navigationSettled handler during redirect still runs guar
 	const handler = (evt: Router$NavigationSettledEvent): void => {
 		if (evt.getParameter("status") === NavigationOutcome.Redirected && !nestedNavFired) {
 			nestedNavFired = true;
-			// This fires synchronously during _flushSettlement while _phase is idle.
-			// The guard should still block this navTo, but the bug bypasses it.
+			// Fires synchronously within _flushSettlement: the phase is idle already, so the guards run.
 			router.navTo("protected");
 		}
 	};

@@ -1,10 +1,8 @@
 # Feature Notes
 
-Feature notes for `ui5.guard.router.Router`, including shipped capabilities, historical design records, and future proposals derived from the [explorations](../explorations/README.md) and TanStack Router source code study.
+Design records for `ui5.guard.router.Router`: shipped features, rejected alternatives and open proposals.
 
 ## Implemented Capabilities
-
-The router provides:
 
 - Global enter guards (`addGuard` / `removeGuard`)
 - Per-route enter guards (`addRouteGuard` / `removeRouteGuard`)
@@ -12,7 +10,9 @@ The router provides:
 - Sync-first execution with async fallback
 - Per-call guard bypass (`navTo(..., { skipGuards: true })`)
 - Guard results: allow (`true`), block (`false`), redirect (string / `GuardRedirect`)
-- Concurrent navigation handling via generation counter
+- `navTo()` preflight: guards run before the hash changes
+- Concurrent navigation handling via generation counter and `AbortSignal`
+- Navigation settlement (`navigationSettled()`, `NavigationOutcome`)
 - Browser history kept as the user left it on block/redirect, browser back/forward included ([Browser history](../../packages/lib/README.md#browser-history))
 - Guards of greedy routes (`greedy: true`) run with those of the first match
 - Guard evaluation on redirect targets with loop detection
@@ -38,23 +38,24 @@ One decision record per feature, in the order they were written. Each document s
 | 08  | [Declarative Manifest Guards](./08-declarative-manifest-guards.md)                                              | Feature               | High     | None       | **Implemented**                                                                 |
 | 08b | [Multi-Guard Modules, Cherry-Pick Syntax, Pattern 5 Loading](./08b-multi-guard-modules-and-pattern5-loading.md) | Feature               | High     | 08         | **Implemented**                                                                 |
 | 09  | [Guard Pipeline Extraction](./09-guard-pipeline-extraction.md)                                                  | Refactoring           | Medium   | #38, #39   | **Implemented**                                                                 |
-| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md)                                                     | Refactoring           | Medium   | #09        | **Implemented**                                                                 |
+| 10  | [NavigationOutcome.Error](./10-navigation-outcome-error.md)                                                     | Refactoring           | Medium   | 09         | **Implemented**                                                                 |
 | 11  | [Guards on Redirect Targets](./11-guards-on-redirect-targets.md)                                                | Feature               | High     | #38, #39   | **Implemented**                                                                 |
 | 12  | [Lazy Resolution Error Handling](./12-lazy-resolution-error-handling.md)                                        | Feature               | High     | 04         | **Implemented**                                                                 |
 
 ## Status Notes
 
-- `01` leave guards are implemented and shipped
-- `02` guard bypass is implemented as the `skipGuards` option on `navTo()` (Option A); updating application state so guards pass naturally is still the preferred approach
-- `03` transition object remains an open proposal
-- `04` route metadata is implemented -- `getRouteMeta`/`setRouteMeta`, `toMeta`/`fromMeta` on GuardContext, pattern-tree inheritance with lazy resolution and caching (PR #61, issue #62)
-- `08`/`08b` declarative manifest guards and multi-guard modules are implemented and shipped
-- `06` navTo preflight is implemented and shipped
-- `07` vendored upstream router parity is implemented with raw upstream snapshots, executable ports, and sync/verify scripts; the ports run in the `test:qunit` lane and CI runs the verify script
-- `09` guard pipeline extraction is implemented -- `GuardPipeline` class owns guard storage and evaluation, Router delegates
-- `10` NavigationOutcome.Error is implemented -- guard throws produce `Error` settlements distinct from intentional `Blocked`
-- `12` lazy resolution error handling is implemented for metadata (`getRouteMeta` warns for unknown routes, `setRouteMeta` follows `unknownRouteRegistration`); guard inheritance is expanded eagerly at `initialize()` / `addRoute()` instead of lazily
-- `11` guards on redirect targets is implemented -- redirect chain hops evaluate the full guard pipeline with visited-set + depth-cap loop detection
+- `01` leave guards: shipped.
+- `02` guard bypass: shipped as the `skipGuards` option on `navTo()`. Updating application state so guards pass is still the preferred approach.
+- `03` transition object: open proposal.
+- `04` route metadata: `getRouteMeta`/`setRouteMeta`, `toMeta`/`fromMeta` on `GuardContext`, pattern-tree inheritance with lazy resolution and caching (PR #61, issue #62).
+- `05` async rewrite: rejected; its recommended unified pipeline shipped as `09`.
+- `06` navTo preflight: shipped.
+- `07` vendored upstream router parity: raw upstream snapshots, executable ports, and sync/verify scripts. The ports run in the `test:qunit` lane; CI runs the verify script.
+- `08`/`08b` declarative manifest guards and multi-guard modules: shipped.
+- `09` guard pipeline extraction: `GuardPipeline` owns guard storage and evaluation; the router delegates.
+- `10` NavigationOutcome.Error: a guard that throws settles as `Error`, distinct from an intentional `Blocked`.
+- `11` guards on redirect targets: each redirect hop runs the global and route enter guards of its target (leave guards run on the first hop only), with visited-set and depth-cap loop detection.
+- `12` lazy resolution error handling: `getRouteMeta` warns for unknown routes, `setRouteMeta` follows `unknownRouteRegistration`. Guard inheritance is expanded eagerly at `initialize()` / `addRoute()`, not lazily.
 
 ## Framework Comparison Summary
 

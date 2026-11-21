@@ -1,7 +1,6 @@
-import type UshellContainer from "sap/ushell/Container";
 import Service from "wdio-ui5-service";
 import { getAppComponentId, waitForComponent } from "../shared/controls";
-import { installDialogHandler, triggerFlpCrossAppNavigation } from "./helpers";
+import { installDialogHandler, navigateCrossAppInFlp, triggerFlpCrossAppNavigation } from "./helpers";
 
 const PEER_APP_ID = "demo.peer";
 
@@ -75,8 +74,7 @@ async function navTo(app: App, route: string, parameters: Record<string, string>
 
 async function setDirtyFlag(dirty: boolean): Promise<void> {
 	await browser.execute((flag: boolean) => {
-		const Container: typeof UshellContainer = sap.ui.require("sap/ushell/Container");
-		Container.setDirtyFlag(flag);
+		sap.ui.require("sap/ushell/Container").setDirtyFlag(flag);
 	}, dirty);
 }
 
@@ -127,11 +125,11 @@ async function runInLaunchpad(app: App, refusedHashChange: () => Promise<void>):
 	await refusedHashChange();
 	snapshots.push(await observe(app, "after what the app refused"));
 
-	await triggerFlpCrossAppNavigation("peer-display");
+	await navigateCrossAppInFlp("peer-display");
 	await waitForComponent(PEER_APP_ID);
 	snapshots.push(await observeWhen(app, "hidden behind another app", (snapshot) => snapshot.stopped));
 
-	await triggerFlpCrossAppNavigation(app.intent);
+	await navigateCrossAppInFlp(app.intent);
 	snapshots.push(await observeWhen(app, "shown again", running));
 
 	await navTo(app, "detail", { id: "3" });

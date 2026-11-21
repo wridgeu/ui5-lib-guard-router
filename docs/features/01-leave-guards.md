@@ -1,78 +1,34 @@
 # Feature: Leave Guards
 
-> **Status**: Implemented. This document records the leave-guard design history and proposal context for the shipped feature.
-> See the [library README](../../packages/lib/README.md) for the shipped API and usage examples.
->
-> **Proposal-to-implementation differences:**
->
-> - Leave guards use the shared `GuardContext` (including `signal: AbortSignal`) rather than a separate `LeaveGuardContext`
-> - There is no separate `LeaveGuardResult` type; `LeaveGuardFn` returns `boolean | PromiseLike<boolean>` directly
-> - Public methods return `GuardRouter` (the proposed `RouterInstance` name was not shipped)
-> - `addRouteGuard` also accepts an object form `{ beforeEnter?, beforeLeave? }` for convenience
-> - The helper is named `isPromiseLike` (not `isThenable` as sketched below)
-> - Open question #2 was resolved: leave guards receive the full `GuardContext`
->
-> Some code samples below are preserved as historical proposal sketches rather than the final API. Refer to `Router.ts` and `types.ts` for the source of truth.
+> **Status**: Implemented. See the [library README](../../packages/lib/README.md) for the API and usage examples. `Router.ts`, `GuardPipeline.ts` and `types.ts` are the source of truth.
 
 ## Problem
 
-The router currently only supports **enter guards**, functions that run before navigating **to** a route. There is no mechanism to prevent navigation **away from** a route, which is the standard approach for "unsaved changes?" dialogs in every major SPA framework (Vue's `beforeRouteLeave`, Angular's `canDeactivate`, React/TanStack's `useBlocker`).
+Enter guards run before navigating **to** a route. Nothing stopped a navigation **away from** a route, which is how every major SPA framework asks "discard unsaved changes?" (Vue's `beforeRouteLeave`, Angular's `canDeactivate`, React/TanStack's `useBlocker`).
 
-Without leave guards, developers must either:
+Without leave guards, apps had three poor options:
 
-- Use a global guard that checks form state for every navigation (fragile, tightly coupled)
-- Rely on browser `beforeunload` (only covers page close, not in-app navigation)
-- Manually track dirty state in a model and check it everywhere
+- A global guard that checks form state on every navigation (fragile, tightly coupled)
+- The browser's `beforeunload` (covers closing the page, not in-app navigation)
+- Tracking dirty state in a model and checking it everywhere
 
-## Shipped API Snapshot
+## API
 
 ```typescript
 import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 
-// `LeaveGuardFn` receives the shared `GuardContext`
-// and returns `boolean | PromiseLike<boolean>`.
-
+// LeaveGuardFn = (context: GuardContext) => boolean | PromiseLike<boolean>
 router.addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
 router.removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+
+// Object form: register enter and leave guards for one route in one call
+router.addRouteGuard(routeName, { beforeEnter?: GuardFn, beforeLeave?: LeaveGuardFn });
 ```
 
-## Original Proposal
-
-The snippets in the following sections are the pre-implementation design notes. They intentionally keep the original names and shapes for historical context.
+## Usage
 
 ```typescript
-// Register a leave guard for a specific route
-router.addLeaveGuard(routeName: string, guard: LeaveGuardFn): RouterInstance;
-
-// Remove a previously registered leave guard
-router.removeLeaveGuard(routeName: string, guard: LeaveGuardFn): RouterInstance;
-```
-
-### Leave Guard Function
-
-```typescript
-type LeaveGuardResult = boolean; // true = allow, false = block (no redirects)
-
-type LeaveGuardFn = (context: LeaveGuardContext) => LeaveGuardResult | Promise<LeaveGuardResult>;
-
-interface LeaveGuardContext {
-	fromRoute: string;
-	fromHash: string;
-	toRoute: string;
-	toHash: string;
-	toArguments: Record<string, string>;
-}
-```
-
-### Design Decision: No Redirects from Leave Guards
-
-Leave guards can only return `true` (allow) or `false` (block). They cannot redirect. This matches Vue Router and Angular's convention: leave guards answer the question "can I leave?" not "where should I go instead?". Redirecting from a leave guard creates confusing UX and complex edge cases.
-
-## Usage Example
-
-```typescript
-// In Component.ts or a guard registration module
-const dirtyFormGuard: LeaveGuardFn = async (context) => {
+const dirtyFormGuard: LeaveGuardFn = (context) => {
 	const model = component.getModel("form") as JSONModel;
 	if (!model.getProperty("/isDirty")) return true;
 
@@ -84,115 +40,39 @@ const dirtyFormGuard: LeaveGuardFn = async (context) => {
 };
 
 router.addLeaveGuard("editOrder", dirtyFormGuard);
-
-// Clean up when no longer needed
 router.removeLeaveGuard("editOrder", dirtyFormGuard);
 ```
 
-## Execution Order
+## Decisions
 
-Leave guards form the first phase of the pipeline, before the global and route-specific enter guards. The order is documented in the library README, [Execution order](../../packages/lib/README.md#execution-order).
+### No redirects from leave guards
 
-## Implementation Sketch
+A leave guard returns `true` (allow) or `false` (block). It cannot redirect. This matches Vue Router and Angular: a leave guard answers "can I leave?", not "where should I go instead?". A redirect from a leave guard makes confusing UX and complex edge cases. A non-boolean result logs a warning and blocks.
 
-### State Addition
+### Shared `GuardContext`
 
-```typescript
-// In constructor
-this._leaveGuards = new Map<string, LeaveGuardFn[]>();
-```
+The proposal had a separate, smaller `LeaveGuardContext` and a `LeaveGuardResult` type. Both were dropped. Leave guards receive the same `GuardContext` as enter guards, including `signal`, `bag` and `toMeta`/`fromMeta`. The restricted type existed to keep a `transition` object ([Feature 03](./03-transition-object.md)) away from leave guards; that object was never shipped, so the restriction protected nothing.
 
-### parse() Modification
+### Per-route only
 
-```typescript
-parse(this: RouterInstance, newHash: string): void {
-    // ... existing suppress/redirect/dedup checks ...
+There are no global leave guards. The common case is "this view has unsaved changes", which belongs to one route. A manifest entry `guards["*"].leave` is skipped with a warning. Global leave guards can be added later if a use case appears.
 
-    const routeInfo = this.getRouteInfoByHash(newHash);
-    const toRoute = routeInfo ? routeInfo.name : "";
-    const generation = ++this._parseGeneration;
+### Guard functions, not events or blockers
 
-    // Check if any guards apply (leave OR enter)
-    const hasLeaveGuards = this._currentRoute && this._leaveGuards.has(this._currentRoute);
-    const hasEnterGuards = this._globalGuards.length > 0
-        || (toRoute && this._enterGuards.has(toRoute));
+A `beforeLeave` router event (Ember style) was rejected: UI5 events are synchronous, so async checks would need a side channel to collect promises, and the order of several listeners is unclear. A `createBlocker()` object (React style) was rejected too: more API, blocker state to keep in step with the router, no answer for two blockers on one route, and a race when the user navigates again between "blocked" and `proceed()`.
 
-    if (!hasLeaveGuards && !hasEnterGuards) {
-        this._commitNavigation(newHash, toRoute);
-        return;
-    }
+### Leave guards run first
 
-    const context = { /* ... build context ... */ };
+Leave guards form the first phase of the pipeline, before global and route enter guards. If the user stays, no enter guard runs. See [Execution order](../../packages/lib/README.md#execution-order).
 
-    // Run leave guards first, then enter guards
-    const leaveResult = hasLeaveGuards
-        ? this._runLeaveGuards(context)
-        : true;
+## Behavior
 
-    if (isThenable(leaveResult)) {
-        leaveResult.then((r) => {
-            if (generation !== this._parseGeneration) return;
-            if (r !== true) { this._blockNavigation(); return; }
-            // Continue with enter guards...
-            runEnterGuards(); // local helper that calls _runEnterGuards and applies result
-        });
-    } else {
-        if (leaveResult !== true) { this._blockNavigation(); return; }
-        runEnterGuards(); // local helper that calls _runEnterGuards and applies result
-    }
-}
-```
-
-### Historical Note: LeaveGuardContext vs GuardContext
-
-The `LeaveGuardContext` is intentionally a separate type from `GuardContext`. Leave guards don't receive a `transition` object (Feature 03) because they shouldn't redirect. They answer a binary question: "can I leave?"
-
-## Historical Type Sketch
-
-```typescript
-// In types.ts
-export type LeaveGuardResult = boolean;
-export type LeaveGuardFn = (context: LeaveGuardContext) => LeaveGuardResult | Promise<LeaveGuardResult>;
-
-export interface LeaveGuardContext {
-    fromRoute: string;
-    fromHash: string;
-    toRoute: string;
-    toHash: string;
-    toArguments: Record<string, string>;
-}
-
-// RouterInstance additions
-_leaveGuards: Map<string, LeaveGuardFn[]>;
-addLeaveGuard(routeName: string, guard: LeaveGuardFn): RouterInstance;
-removeLeaveGuard(routeName: string, guard: LeaveGuardFn): RouterInstance;
-_runLeaveGuards(context: LeaveGuardContext): LeaveGuardResult | Promise<LeaveGuardResult>;
-```
-
-## Test Cases
-
-1. Leave guard returning `true` allows navigation
-2. Leave guard returning `false` blocks navigation and restores hash
-3. Async leave guard with MessageBox-style Promise
-4. Leave guard only runs when leaving its registered route
-5. Leave guard does not run on initial navigation (no `fromRoute`)
-6. Leave guard does not run during redirects (committing/redirect phase)
-7. Multiple leave guards: first `false` short-circuits
-8. Leave guards run before enter guards (execution order)
-9. Leave guard + enter guard: leave allows, enter blocks
-10. Leave guard + enter guard: leave blocks (enter never runs)
-11. `removeLeaveGuard` prevents guard from running
-12. `destroy()` clears leave guards
-13. Async leave guard with generation counter (superseded navigation)
+- A leave guard runs only when its route is left. It does not run on the initial navigation (no `fromRoute`).
+- It does not run on the hops of a redirect chain: the route was already left once.
+- The first guard that does not return `true` stops the rest.
+- A newer navigation aborts `context.signal` and discards the result of a pending async leave guard.
+- `destroy()` clears all leave guards.
 
 ## Compatibility
 
-- Fully backward compatible (additive API)
-- No changes to existing guard behavior
-- Leave guards are independent of enter guards and can be adopted incrementally
-- Pairs naturally with Feature 02 (Guard Bypass) for "Save & Navigate" patterns
-
-## Open Questions
-
-1. Should there be **global** leave guards (run on every route departure)? The initial design only supports per-route leave guards, matching the most common use case. Global leave guards could be added later if needed.
-2. Should leave guards receive the full `GuardContext` (with `transition` from Feature 03) or a restricted `LeaveGuardContext`? The restricted type is safer but less flexible.
+The API is additive. Leave guards are independent of enter guards and can be adopted one route at a time. They pair with `navTo(..., { skipGuards: true })` ([Feature 02](./02-guard-bypass.md)) for "save and navigate".

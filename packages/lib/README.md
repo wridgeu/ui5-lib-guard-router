@@ -2,24 +2,17 @@
 
 Drop-in replacement for `sap.m.routing.Router` that intercepts navigation **before** route matching, target loading, or view creation, preventing flashes of unauthorized content and polluted browser history.
 
-> Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5.
->
-> **Related resources**:
->
-> - [Stack Overflow: Preventing router from navigating](https://stackoverflow.com/questions/29165700/preventing-router-from-navigating/29167292#29167292) (native NavContainer `navigate` event, sync-only, fires after route match)
-> - [Research: Native NavContainer navigate event](../../docs/research/native-router-navigate-event.md) (detailed comparison with this library)
+> Born from [UI5/openui5#3411](https://github.com/UI5/openui5/issues/3411), an open request for native navigation guard support in UI5. The native alternative, the `NavContainer` `navigate` event, is sync-only and fires after the route match ([comparison](../../docs/research/native-router-navigate-event.md)).
 
 > [!WARNING]
-> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. If you choose to consume it, you do so at your own risk. Make sure to pin your version and review changes before upgrading.
+> This library is **experimental**. It is not battle-tested in production environments, and the API may change without notice. Pin your version and review changes before upgrading.
 
 > [!CAUTION]
-> Navigation guards are a UX layer, not a security boundary. They can prevent unauthorized content flashes and steer client-side navigation, but they do **not** replace server-side authorization, backend validation, or service-level access control.
+> Navigation guards are a UX layer, not a security boundary. They do **not** replace server-side authorization, backend validation, or service-level access control.
 
 ## Why
 
-UI5's router has no way to block or redirect navigation before views render. The usual workaround, scattering guard logic across `attachPatternMatched` callbacks, causes flashes of unauthorized content, polluted browser history, and scattered guard logic across controllers.
-
-This library solves all three by intercepting at the router level, before any route matching begins.
+UI5's router cannot block or redirect a navigation before views render. The usual workaround, guard logic in each controller's `attachPatternMatched` callback, flashes unauthorized content, pollutes the browser history and spreads the checks across controllers. This library runs the guards at the router level, before route matching. [Migrating from attachPatternMatched guards](../../docs/guides/migration-from-pattern-matched.md) shows the switch.
 
 ## Install
 
@@ -28,11 +21,11 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~190 KB compressed (~810 KB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~29 KB).
+> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
 
 ### TypeScript
 
-Add the library to `compilerOptions.types` so TypeScript can resolve the type declarations. If your app does not already depend on UI5 typings, install them too (`@sapui5/types` works as well):
+If your app does not already depend on UI5 typings, install them (`@sapui5/types` works as well):
 
 ```bash
 npm install -D @openui5/types
@@ -48,7 +41,7 @@ Add both packages to `compilerOptions.types`:
 }
 ```
 
-Then import types from the UI5 module path as needed:
+Import types from the UI5 module path:
 
 ```typescript
 // Core: router interface and guard function signatures
@@ -67,22 +60,13 @@ import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 
 ### Serving the library
 
-The npm package ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`). There are three ways to serve the library in your app:
-
 #### Option A: Pre-built (recommended)
 
-The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it automatically and serves the pre-built JavaScript from `dist/` with no extra configuration:
-
-```bash
-npm install ui5-lib-guard-router
-# That's it. `ui5 serve` picks up the build manifest.
-```
-
-No transpile tooling, no middleware, no additional `ui5.yaml` changes.
+The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it and `ui5 serve` serves the pre-built JavaScript from `dist/`. No `ui5.yaml` change is needed.
 
 #### Option B: Transpile from source
 
-If you prefer to serve from TypeScript sources (e.g. for debugging with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
+To serve from the TypeScript sources (for example to debug with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
 
 ```bash
 npm install -D ui5-tooling-transpile
@@ -98,11 +82,9 @@ server:
               transpileDependencies: true
 ```
 
-This transpiles the library's `.ts` sources on the fly during `ui5 serve`.
-
 #### Option C: Static serving (workaround)
 
-If neither option works for your setup, you can mount the pre-built resources manually using [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar community middleware) and point it at the `dist/resources` folder in `node_modules`:
+If neither option fits your setup, mount the pre-built resources with [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar middleware) pointed at `dist/resources` in `node_modules`:
 
 ```bash
 npm install -D ui5-middleware-servestatic
@@ -114,6 +96,7 @@ server:
     customMiddleware:
         - name: ui5-middleware-servestatic
           afterMiddleware: compression
+          mountPath: /resources
           configuration:
               rootPath: node_modules/ui5-lib-guard-router/dist/resources
 ```
@@ -177,18 +160,114 @@ export default class Component extends UIComponent {
 
 ## How it works
 
-The library extends [`sap.m.routing.Router`](https://sdk.openui5.org/#/api/sap.m.routing.Router) and intercepts navigation through two entry points:
+The native chain of `sap.m.routing.Router` stays as it is; the library puts its guards in front of it.
 
-- **`navTo()` preflight**: For programmatic navigation (`router.navTo()`), guards run _before_ any hash change occurs. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
-- **`parse()` fallback**: For browser-initiated navigation (back/forward buttons, URL bar entry, direct hash changes), guards run inside the `parse()` override after the browser has already changed the hash. If a guard blocks, the router undoes the hash change. A redirect replaces the history entry of the hash change with the target.
+```mermaid
+---
+config:
+  flowchart:
+    minNodeWidth: 60
+---
+flowchart TD
+    bar["Address bar, back, forward:<br/>the browser changes the hash"]
+    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
+    appCode["Application code<br/>calls navTo()"]
+    hash["Hash changer"]
 
-[Browser history](#browser-history) describes what each case leaves in the history.
+    subgraph added ["ui5.guard.router.Router (this library)"]
+        preflight["Preflight of navTo():<br/>before the hash changes"]
+        parse["Override of parse():<br/>after the hash changed"]
+        subgraph pipeline ["Guard pipeline"]
+            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
+            leave["1. Leave guards of the current route"]
+            global["2. Global enter guards"]
+            enter["3. Enter guards of the target route"]
+            leave --> global --> enter
+        end
+        commit("✓ All guards allow:<br/>commit")
+        redirect("↪ A guard names a route:<br/>redirect")
+        block("✕ A guard returns false:<br/>block")
+        error("⚠ A guard throws:<br/>error")
+        settled(["Event navigationSettled:<br/>Committed, Bypassed, Redirected,<br/>Blocked or Error"])
+    end
 
-Both entry points feed the same guard pipeline. There is no separate configuration. The same guard functions registered via `addGuard()`, `addRouteGuard()`, and `addLeaveGuard()` protect all navigation paths.
+    subgraph native ["sap.m.routing.Router (native): parse()"]
+        match["Route match"] --> target["Target"] --> view["View"]
+        nested["Nested component<br/>(target of type Component)"]
+    end
 
-Because it extends the mobile router directly, `sap.m.routing.Router` behavior (Targets, route events, `navTo`, back navigation) is unchanged where no guard intervenes, see [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+    bar --> hash
+    shell -.-> hash
+    hash --> parse
+    appCode --> preflight
+    preflight --> leave
+    parse --> leave
+    sources -.-> leave
 
-The guard pipeline stays **synchronous when all guards return plain values** and only becomes async when a guard returns a Promise. From that guard on, the rest of that navigation runs async; the next navigation starts synchronous again. A generation counter discards stale async results when navigations overlap, and an `AbortSignal` is passed to each guard so async work (like `fetch`) can be cancelled early.
+    enter --> commit
+    enter --> redirect
+    enter --> block
+    enter --> error
+    commit ~~~ block
+    redirect ~~~ error
+    redirect -- "enter guards<br/>of the target" --> global
+
+    commit --> match
+    target -.-> nested
+    commit --> settled
+    block --> settled
+    error --> settled
+
+    classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
+    classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
+    classDef optional fill:#afb8c1,stroke:#6e7781,stroke-dasharray:5 4,color:#1f2328
+    classDef commit fill:#009E73,stroke:#006b4e,stroke-width:3px,color:#000000
+    classDef redirect fill:#F0E442,stroke:#8a7f00,stroke-width:3px,color:#000000
+    classDef block fill:#D55E00,stroke:#8f3f00,stroke-width:3px,color:#000000
+    classDef error fill:#5c1a44,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 3,color:#ffffff
+    class bar,appCode,hash,match,target,view native
+    class preflight,parse,sources,leave,global,enter,settled added
+    class shell,nested optional
+    class commit commit
+    class redirect redirect
+    class block block
+    class error error
+    style added fill:none,stroke:#0072B2,stroke-width:2px
+    style pipeline fill:none,stroke:#0072B2
+    style native fill:none,stroke:#6e7781,stroke-width:2px
+
+    subgraph parts ["Parts"]
+        direction LR
+        lNative["native UI5"] ~~~ lAdded["library"] ~~~ lOptional["optional"]
+    end
+    subgraph outcomes ["Outcomes"]
+        direction LR
+        lCommit("✓ commit") ~~~ lRedirect("↪ redirect") ~~~ lBlock("✕ block") ~~~ lError("⚠ error")
+    end
+    native ~~~ parts ~~~ outcomes
+    class lNative native
+    class lAdded added
+    class lOptional optional
+    class lCommit commit
+    class lRedirect redirect
+    class lBlock block
+    class lError error
+    style parts fill:none,stroke:none
+    style outcomes fill:none,stroke:none
+```
+
+A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
+
+A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`.
+
+The two entry points run the same guards:
+
+- **`navTo()` preflight**: guards run before the hash changes. A blocked `navTo()` writes no hash; a redirected one writes only its final target.
+- **`parse()` fallback**: for back/forward, URL bar entries and direct hash changes, guards run after the browser has changed the hash. The router undoes a blocked hash change and replaces the entry of a redirected one with the target, see [Browser history](#browser-history).
+
+Where no guard intervenes, `sap.m.routing.Router` behavior (targets, route events, `navTo`, back navigation) is unchanged, see [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+
+The pipeline stays **synchronous while guards return plain values**. From the first guard that returns a Promise, the rest of that navigation runs async; the next navigation starts synchronous again. Results of a superseded navigation are discarded, and each guard gets an `AbortSignal` to cancel async work such as `fetch`. The diagrams of each step are in the [architecture reference](../../docs/reference/architecture.md#two-entry-point-model-navto-preflight--parse-fallback).
 
 ## API
 
@@ -221,7 +300,7 @@ All guard registration and removal methods return `this` for chaining. `navigati
 
 ### Unknown routes during registration
 
-With the default `unknownRouteRegistration: "warn"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` warn when the route name is unknown at registration time, but they still register. This is intentional so applications can attach guards before dynamic `addRoute()` calls or before route definitions are finalized. `"ignore"` registers without a warning. `"throw"` makes these calls throw and registers nothing. A manifest guard on an unknown route cannot throw to a caller: with `"throw"` it is skipped and logged as `guardRouter.guards: failed to register "<module path>"`, and the router still starts.
+With the default `unknownRouteRegistration: "warn"`, `addRouteGuard()`, `addLeaveGuard()` and `setRouteMeta()` warn when the route name is unknown at registration time, but still register, so guards can be attached before a dynamic `addRoute()`. `"ignore"` registers without a warning. `"throw"` makes these calls throw and registers nothing. A manifest guard on an unknown route cannot throw to a caller: with `"throw"` it is skipped and logged as `guardRouter.guards: failed to register "<module path>"`, and the router still starts.
 
 ### GuardContext
 
@@ -242,7 +321,7 @@ Every guard receives a `GuardContext` object:
 
 ### Return values (`GuardResult`)
 
-Enter guards return `GuardResult`, covering four behaviors:
+Enter guards return a `GuardResult`:
 
 ```
 GuardResult = boolean | string | GuardRedirect
@@ -257,11 +336,11 @@ GuardResult = boolean | string | GuardRedirect
 
 `toArguments` holds the route's parameters as UI5's `Route#getURL()` expects them back. A query parameter of the pattern (`products{?query}` or `products:?query:`) arrives under the key `"?query"` as an object, `{ "?query": { tab: "notes" } }`; an optional parameter that the hash leaves out is `undefined`. Pass the same shape in `GuardRedirect.parameters`.
 
-`GuardRedirect` is the object form of a redirect. Use it when you need to pass route parameters (`parameters`) or nested component targets (`componentTargetInfo`). For simple redirects without parameters, the string shorthand (`return "home"`) is equivalent and shorter.
+Without parameters or component targets, the string form (`return "home"`) is equivalent to `GuardRedirect`.
 
-Any other value (`null`, `undefined`, `0`, etc.) is treated as a block. Only strict `true` allows navigation; there is no truthy coercion.
+Any other value (`null`, `undefined`, `0`, etc.) blocks. Only strict `true` allows navigation; there is no truthy coercion.
 
-On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself stays blocked. If you need a specific denied-first-load destination such as `login`, return a redirect instead of `false`.
+On first load, blocking a non-empty hash restores `""` and continues with the app's default route. Blocking the default route itself leaves the app without a view. For a specific destination such as `login`, return a redirect instead of `false`.
 
 A `navTo()` issued while a browser-initiated navigation is still waiting for an async guard supersedes that navigation. If the `navTo()` is then blocked, fails, or targets the current route, the router also restores the previous hash, so the URL does not stay on a hash that never committed.
 
@@ -272,7 +351,7 @@ A `navTo()` issued while a browser-initiated navigation is still waiting for an 
 | `true`                            | Allow leaving the current route |
 | `false` (or any non-`true` value) | Block                           |
 
-Leave guards answer "can I leave?" and cannot redirect. For redirection logic, use enter guards on the target route.
+Leave guards cannot redirect. Redirect from an enter guard of the target route.
 
 ### Lifecycle
 
@@ -291,7 +370,7 @@ The Fiori launchpad stops the app router when the user leaves the app and calls 
 
 ### Navigation settlement
 
-`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The returned `NavigationResult` contains the outcome as a `NavigationOutcome` enum value, the route name, and the hash determined by the guard pipeline.
+`navigationSettled()` returns a Promise that resolves when the guard pipeline finishes. The `NavigationResult` holds the outcome (`status`, a `NavigationOutcome` value), the `route` and the `hash`.
 
 ```typescript
 import type { NavigationResult } from "ui5/guard/router/types";
@@ -311,9 +390,9 @@ const result: NavigationResult = await router.navigationSettled();
 
 A guard redirect to a route that does not exist settles as `Blocked` because no route change commits; the router logs the target name to help diagnose it. A redirect whose target hash cannot be built (a mandatory route parameter is missing) is a guard failure: the navigation settles as `Error` with the error in `result.error`, whether the guard is sync or async and whether the navigation came from `navTo()` or from a hash change. `navTo()` does not throw for it, and a hash change is restored. The router logs the target name.
 
-An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash preserved in `hash`. Idle `navigationSettled()` calls replay that `Bypassed` result until another navigation settles, matching the existing replay behavior for the other outcomes.
+An accepted unmatched hash settles as `Bypassed` with `route === ""` and the attempted hash in `hash`.
 
-If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent settlement result. That makes it safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router, this defaults to `Committed` with the instance's current route/hash state. After `stop()`, those fields are reset, so idle calls resolve with empty strings until the next navigation settles. Multiple callers waiting on the same pending navigation all receive the same result.
+If no navigation is in flight, `navigationSettled()` resolves immediately with the most recent result, so it is safe to call right after `navTo()`, even when guards settle synchronously. On a fresh router this is `Committed` with the current route and hash. After `stop()`, route and hash are empty strings until the next navigation settles or `initialize(true)` resumes the route. All callers waiting on the same navigation receive the same result.
 
 **App code: busy indicator during async guards**
 
@@ -362,7 +441,7 @@ assert.strictEqual(result.route, "home", "User stays on home");
 
 **Event-based: observe every navigation outcome**
 
-`attachNavigationSettled` fires synchronously after every guard pipeline settlement. Unlike the one-shot `navigationSettled()` Promise, the event fires for every navigation without re-registration:
+The `navigationSettled` event fires synchronously after every settlement:
 
 ```typescript
 router.attachNavigationSettled((event) => {
@@ -373,16 +452,16 @@ router.attachNavigationSettled((event) => {
 });
 ```
 
-A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL has already been restored when the event fires (for a blocked back or forward step, the event waits for that, see [Browser history](#browser-history)), so a handler sees the hash of the route the user is on, and a navigation or hash change it starts is not undone by the restore. (On first load, a blocked non-empty hash settles before the router falls back to the default route.) Two things follow from navigating inside the event:
+A handler may call `navTo()`: the router is idle when the event fires, also for `Cancelled`, so the call runs its guards like any other. For `Blocked`, `Error` and `Cancelled` the URL is already restored when the event fires (a blocked back or forward step waits for that, see [Browser history](#browser-history)), so the restore does not undo what a handler starts. On first load, a blocked non-empty hash settles before the router falls back to the default route. Navigating inside the handler has two effects:
 
-- A navigation that is left again while it commits (the handler navigates on synchronously for a `Committed` or `Redirected` settlement) is not displayed and fires no `routeMatched`; only the handler's target is.
-- When a navigation is `Cancelled` because another one supersedes it, the event fires before the superseding navigation starts. That navigation continues after the handler returns and supersedes what the handler started: a navigation that already committed is navigated away from, one whose guards are still pending is dropped without a settlement of its own. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
+- A `Committed` or `Redirected` navigation that the handler leaves synchronously is not displayed and fires no `routeMatched`; only the handler's target is.
+- For a navigation `Cancelled` by a newer one, the event fires before the newer navigation starts. The newer navigation then supersedes what the handler started: a committed one is navigated away from, a pending one is dropped without a settlement. Only a superseding hash change gives way: it is dropped when the handler's navigation has committed and moved the URL.
 
-Use `detachNavigationSettled(fnFunction, oListener)` to remove the listener. The same function and listener references must match those passed to `attachNavigationSettled`. The event uses UI5's native `EventProvider` mechanism, so the standard `attachEvent` / `detachEvent` pattern also works. A handler that throws does not stop the navigation: the router logs `A navigationSettled handler threw` and completes it.
+`detachNavigationSettled(fnFunction, oListener)` removes the listener; pass the same function and listener as to `attachNavigationSettled`. The standard `attachEvent` / `detachEvent` also work. A handler that throws does not stop the navigation: the router logs `A navigationSettled handler threw` and completes it.
 
 ### Error handling
 
-When a guard throws or its Promise rejects, the navigation settles as `Error` with `result.error` containing the thrown value. The previous route stays active. `Error` indicates an unexpected failure, as opposed to `Blocked` which signals intentional denial.
+When a guard throws or its Promise rejects, the navigation settles as `Error` with the thrown value in `result.error`, and the previous route stays active. `Blocked` is an intended denial, `Error` an unexpected failure.
 
 A guard that calls `navTo()` itself supersedes the navigation it is guarding: that navigation settles as `Cancelled`, and what the guard returns afterwards (`true`, `false` or a redirect) is ignored, for sync and async guards alike. The navigation the guard started decides where the router ends up. To send the user elsewhere from a guard, return a redirect instead.
 
@@ -393,11 +472,10 @@ An error thrown while an allowed navigation is carried out, for example by a `be
 1. **Leave guards** for the current route (registration order)
 2. **Global enter guards** (registration order)
 3. **Route-specific enter guards** for the target (registration order)
-4. Pipeline **short-circuits** at the first non-`true` result
 
-Each phase short-circuits on the first non-`true` result. If a leave guard blocks, no enter guards run. If a global guard redirects, route-specific guards are skipped.
+The pipeline stops at the first non-`true` result: if a leave guard blocks, no enter guard runs; if a global guard redirects, the route-specific guards are skipped.
 
-Leave guards run whenever the hash changes, also when only the parameters of the same route change (`employees/1` to `employees/2`): `fromRoute` and `toRoute` are then equal. A leave guard that should only protect leaving the route compares them.
+Leave guards run on every hash change, also when only the parameters of the same route change (`employees/1` to `employees/2`); `fromRoute` and `toRoute` are then equal. A leave guard that should only protect leaving the route compares them.
 
 **Greedy routes.** UI5 matches a route with `greedy: true` even when an earlier route has matched the hash. The guards of such a route run as well:
 
@@ -410,7 +488,7 @@ Every guard of a navigation gets the same context: `toRoute`, `toArguments` and 
 
 ## Manifest Configuration
 
-Guards can be declared directly in `manifest.json` using the `guardRouter` block inside `sap.ui5.routing.config`. This eliminates boilerplate in `Component.ts` for common guard patterns.
+Guards, route metadata and router options can be declared in the `guardRouter` block inside `sap.ui5.routing.config` of `manifest.json`.
 
 ```json
 {
@@ -446,7 +524,7 @@ Guards can be declared directly in `manifest.json` using the `guardRouter` block
 | Option                     | Values                              | Default   | Description                                                                                                                                                                                                                                                                                              |
 | -------------------------- | ----------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Policy for guard and metadata registration against unknown route names, see [Unknown routes during registration](#unknown-routes-during-registration)                                                                                                                                                    |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or the preflight is disabled entirely (`"off"`)                                                                                                                                                            |
+| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | Whether `navTo()` calls run through the guard pipeline (`"guard"`), skip guards (`"bypass"`), or leave them to `parse()` after the hash has changed (`"off"`), which also supersedes a pending navigation there                                                                                          |
 | `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | `"lazy"`: `initialize()` starts the router at once; a module that is not loaded yet is loaded on the first navigation that needs it (a failed load settles that navigation as `Error`). `"block"`: the router starts once all modules have loaded; a module that fails to load is skipped with a warning |
 | `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | `"none"`: guards and metadata apply only to their declared route. `"pattern-tree"`: guards propagate to all routes whose URL pattern extends the declared route's pattern; metadata propagates via shallow merge (child values override ancestor values on conflict).                                    |
 
@@ -456,7 +534,7 @@ When constructing the router in code rather than from the manifest, the config a
 
 ### Declarative guards
 
-The `guards` map wires guard modules to routes without writing code in `Component.ts`.
+The `guards` map wires guard modules to routes.
 
 **Global guards** run on every navigation and are declared under the `"*"` key:
 
@@ -474,7 +552,7 @@ The `guards` map wires guard modules to routes without writing code in `Componen
 }
 ```
 
-The full object form with `enter` and `leave` keys registers both enter and leave guards:
+The object form registers enter and leave guards:
 
 ```json
 "guards": {
@@ -485,9 +563,11 @@ The full object form with `enter` and `leave` keys registers both enter and leav
 }
 ```
 
+Keys other than `enter` and `leave`, and an `enter` or `leave` value that is not an array, are logged as warnings and skipped. Under `"*"` only `enter` applies; `leave` is skipped with a warning, because there are no global leave guards.
+
 **Module paths** use dot notation and are resolved relative to `sap.app.id`. Given `sap.app.id = "com.example.app"`, the path `"guards.authGuard"` resolves to `"com/example/app/guards/authGuard"`.
 
-To use an absolute module path, prefix it with `"module:"`. Dot notation is used for consistency with relative paths; slash notation (`module:com/shared/guards/authGuard`) is also accepted:
+For an absolute module path, prefix it with `"module:"`. Slash notation (`module:com/shared/guards/authGuard`) is accepted as well:
 
 ```json
 "*": ["module:com.shared.guards.authGuard"]
@@ -526,9 +606,7 @@ export default function authGuard(context: GuardContext): GuardResult {
 }
 ```
 
-The router loads `guards.authGuard` relative to `sap.app.id`. For `sap.app.id = "com.example.app"`, this resolves to `com/example/app/guards/authGuard`.
-
-Manifest guards have no closure over the component. To read component-scoped state such as models, use `context.ownerComponent` instead of module-level singletons or `ComponentRegistry` lookups, so each component instance sees its own state:
+Manifest guards have no closure over the component. Read component state such as models through `context.ownerComponent`, not module-level singletons or `ComponentRegistry` lookups, so each component instance sees its own state:
 
 ```typescript
 export default function dirtyFormGuard(context: GuardContext): boolean {
@@ -538,7 +616,7 @@ export default function dirtyFormGuard(context: GuardContext): boolean {
 
 ### Guard module format
 
-Each entry in the guard array is a module whose default export is one of three shapes:
+Each entry in a guard array is a module. The router uses the value the module returns to UI5's loader, for a transpiled ES module its default export. That value has one of three shapes:
 
 **Shape 1: Function (single guard)**
 
@@ -583,14 +661,14 @@ export default {
 };
 ```
 
-Detection: function produces a single guard, `Array` produces ordered guards, and a plain object produces named guards in key order. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
+A plain object produces named guards in key order. A module with only named exports (`export function checkAuth`) counts as such an object, with its exports in the order they are written. Named exports next to a default export become properties of the default export, because the UI5 transpiler (`babel-plugin-transform-modules-ui5`) collapses them onto it: next to a default function only `#name` reaches them (see [Cherry-pick syntax](#cherry-pick-syntax)), next to a default object they are further entries of it. Non-function entries in arrays and objects are warned and skipped. Empty arrays and objects are warned and produce no guards.
 
 > [!NOTE]
-> When a module path appears in a `"leave"` array, the exported function acts as a `LeaveGuardFn` and must return `boolean`. Returning a string or `GuardRedirect` from a leave guard is not an error, but any non-`true` value is treated as a block. Redirects from leave guards are not supported. Use enter guards for redirection.
+> A module in a `"leave"` array is a `LeaveGuardFn` and returns `boolean`. A string or `GuardRedirect` from a leave guard is not an error, but like any non-`true` value it blocks.
 
 ### Cherry-pick syntax
 
-When a module exports multiple guards, you can register a subset using `#` to select by name or index:
+`#` selects one guard of a module by name or index:
 
 ```json
 {
@@ -612,18 +690,22 @@ When a module exports multiple guards, you can register a subset using `#` to se
 
 Only a plain non-negative integer (`#0`, `#12`) selects by index. Every other key is a name: `#2faGuard` selects the export named `2faGuard` and is skipped with a warning if the module has none.
 
-When `#` is used on a single-function module, the export key is ignored with a debug message and the function is still registered.
+When `#` is used on a single-function module, the key selects a function among the module's own properties, which is what a named export next to the default function becomes. Without such a property the export key is ignored with a debug message and the function is still registered.
 
 ### Guard context `bag`
 
-Guards can share data through `context.bag`, a `Map<string, unknown>` that is created fresh for each navigation and shared across all guards in that navigation, including across redirect chain hops:
+`context.bag` is a `Map<string, unknown>` created for each navigation and shared by all its guards, across redirect hops too. Use it to fetch data such as the current user once per navigation:
 
 ```typescript
+// guards/firstGuard.ts
 export default function firstGuard(context: GuardContext): GuardResult {
 	context.bag.set("userId", getCurrentUserId());
 	return true;
 }
+```
 
+```typescript
+// guards/secondGuard.ts
 export default function secondGuard(context: GuardContext): GuardResult {
 	const userId = context.bag.get("userId") as string | undefined;
 	if (!userId) return "login";
@@ -631,13 +713,11 @@ export default function secondGuard(context: GuardContext): GuardResult {
 }
 ```
 
-The bag is typed as `Map<string, unknown>`, so consumers cast on `.get()`. This matches how UI5 handles untyped model data (`getProperty()` returns `any`) and avoids generic complexity that can't flow through UI5's class system.
-
-This is useful for avoiding repeated work (such as fetching the current user) when multiple guards need the same data in a single navigation.
+Values are `unknown`, so cast on `.get()`.
 
 ### Route metadata
 
-Per-route metadata can be declared in the manifest under `guardRouter.routeMeta`. Keys are route names, values are arbitrary objects. The router stores but never interprets the metadata. Guards read it from `context.toMeta` and `context.fromMeta`.
+`guardRouter.routeMeta` maps route names to arbitrary objects. The router stores the metadata and never interprets it. Guards read it from `context.toMeta` and `context.fromMeta`.
 
 ```json
 "guardRouter": {
@@ -649,7 +729,7 @@ Per-route metadata can be declared in the manifest under `guardRouter.routeMeta`
 }
 ```
 
-A single global guard can then implement policy-driven access control:
+One global guard can then enforce it:
 
 ```typescript
 router.addGuard((context) => {
@@ -659,17 +739,17 @@ router.addGuard((context) => {
 });
 ```
 
-Runtime metadata can be set programmatically via `setRouteMeta()`. When read via `getRouteMeta()`, runtime values take precedence over manifest defaults:
+`setRouteMeta()` sets runtime metadata, which takes precedence over the manifest values:
 
 ```typescript
 router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
 ```
 
-`getRouteMeta()` returns a frozen object with manifest defaults merged with runtime overrides. When `inheritance: "pattern-tree"` is enabled, the result also includes metadata inherited from ancestor routes (see [Guard and metadata inheritance](#guard-and-metadata-inheritance)). For unconfigured routes, it returns an empty frozen object.
+`getRouteMeta()` returns a frozen object: manifest values merged with runtime values, plus inherited metadata with `inheritance: "pattern-tree"` (see [Guard and metadata inheritance](#guard-and-metadata-inheritance)). For a route without metadata it returns an empty frozen object.
 
 ### `skipGuards` option
 
-Pass `{ skipGuards: true }` as the options argument of `navTo()` to bypass all guards for a single call. The options follow `bReplace`, or take its place when `bReplace` is left out. Use this for internal redirects or navigations that should not be subject to guard logic:
+`{ skipGuards: true }` as the options argument of `navTo()` bypasses all guards for that call. The options follow `bReplace`, or take its place when `bReplace` is left out:
 
 ```typescript
 router.navTo("settings", {}, false, { skipGuards: true });
@@ -681,7 +761,7 @@ A `skipGuards` navigation does not wait for guards that are still pending for th
 
 ### Guard and metadata inheritance
 
-When `inheritance` is set to `"pattern-tree"`, guards declared on a route automatically apply to all routes whose URL pattern extends that route's pattern:
+With `inheritance: "pattern-tree"`, guards declared on a route apply to all routes whose URL pattern extends that route's pattern:
 
 ```json
 "guardRouter": {
@@ -694,7 +774,7 @@ When `inheritance` is set to `"pattern-tree"`, guards declared on a route automa
 
 With routes `employees`, `employees/{id}`, and `employees/{id}/resume`, the auth guard runs for all three. Ancestor guards run before descendant guards, in whatever order the routes appear under `guards`; guards of the same route keep their declared order.
 
-With the same `inheritance: "pattern-tree"` setting, route metadata also propagates. Inheritance is determined by URL patterns. Assuming the route-to-pattern mapping `"employees"` -> `employees`, `"employee"` -> `employees/{id}`, `"employeeResume"` -> `employees/{id}/resume`:
+Route metadata propagates the same way. With the route-to-pattern mapping `"employees"` -> `employees`, `"employee"` -> `employees/{id}`, `"employeeResume"` -> `employees/{id}/resume`:
 
 ```json
 "guardRouter": {
@@ -706,11 +786,9 @@ With the same `inheritance: "pattern-tree"` setting, route metadata also propaga
 }
 ```
 
-`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (merged, own values win).
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns the same object (merged, own values win).
 
-Defaults to `"none"` for backward compatibility.
-
-**Root-pattern route (`""`) is a universal ancestor.** A route with an empty pattern (typically "home") is considered an ancestor of every other route in the router. With `pattern-tree` inheritance enabled, metadata or guards declared on the root-pattern route propagate to all routes:
+**The root-pattern route (`""`) is an ancestor of every route.** Metadata or guards declared on it, typically on "home", propagate to all routes:
 
 ```json
 "guardRouter": {
@@ -721,19 +799,15 @@ Defaults to `"none"` for backward compatibility.
 }
 ```
 
-Every route in the app inherits `requiresAuth: true` from "home" unless it declares its own override. This is useful for app-wide defaults but requires care. Setting `{ "requiresAuth": false }` on the root route with `pattern-tree` inheritance would make every route public unless explicitly overridden.
+Every route inherits `requiresAuth: true` from "home" unless it overrides it. The reverse holds too: `{ "requiresAuth": false }` on the root route makes every route public unless overridden.
 
-Metadata is resolved lazily on first access via `getRouteMeta()` and cached until `setRouteMeta()` or `addRoute()` invalidates the cache. Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()` time; routes added dynamically via `addRoute()` are integrated into the pattern tree on the fly (inherited guards are registered and the metadata cache is cleared).
-
-Runtime metadata set via `setRouteMeta()` participates in inheritance. Child routes see updated ancestor metadata after cache invalidation.
+Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()`. A route added later with `addRoute()` joins the pattern tree at once: its inherited guards are registered in front of the manifest guards of deeper routes. Metadata, including runtime metadata from `setRouteMeta()`, is resolved on first access and cached until `setRouteMeta()` or `addRoute()` clears the cache.
 
 ### Mixing declarative and programmatic guards
 
-Manifest guards and programmatic guards coexist on the same pipeline. Manifest guards are registered during `initialize()` (before the first navigation), and programmatic guards are added whenever `addGuard()` / `addRouteGuard()` / `addLeaveGuard()` is called.
+Manifest and programmatic guards of the same route both run. Within each phase, guards run in registration order. Manifest guards are registered in declaration order when `initialize()` runs, so they run after programmatic guards added before `initialize()` and before guards added after it. In `"block"` mode they are registered once all modules have loaded, so a guard added after `initialize()` but before loading finishes runs before them.
 
-**Execution order:** within each phase, guards run in registration order. Manifest guards are registered in declaration order when `initialize()` runs, so they run after programmatic guards added before `initialize()` and before guards added after it. In `"block"` mode they are registered only once all modules have loaded, so a guard added after `initialize()` but before loading finishes runs before them. For the same route, both sets execute. They are additive, not exclusive.
-
-A common pattern is to declare static guards in the manifest and add context-dependent guards programmatically:
+Where each kind of guard fits:
 
 - **Manifest:** guards that don't need component state (simple blocks, redirects, logging)
 - **Programmatic:** guards that close over models, services, or runtime state
@@ -741,79 +815,11 @@ A common pattern is to declare static guards in the manifest and add context-dep
 
 ## Examples
 
-### Async guard with AbortSignal
-
-```typescript
-import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-
-router.addRouteGuard("dashboard", async (context: GuardContext): Promise<GuardResult> => {
-	const res = await fetch(`/api/access/${context.toRoute}`, {
-		signal: context.signal, // cancelled when a newer navigation supersedes this one
-	});
-	const { allowed } = await res.json();
-	return allowed ? true : "forbidden";
-});
-```
-
-### Redirect with parameters (GuardRedirect)
-
-```typescript
-import type { GuardRedirect } from "ui5/guard/router/types";
-
-router.addGuard((context): GuardRedirect | true => {
-	if (context.toRoute === "old-detail") {
-		return {
-			route: "detail",
-			parameters: { id: context.toArguments.id },
-		};
-	}
-	return true;
-});
-```
-
-The demo app keeps `createRedirectWithParamsGuard()` as a reference implementation in `packages/demo-app/webapp/guards.ts`; the runnable demo does not register it, because none of its routes was renamed to a route with the same parameters.
-
-### Guard factories
-
-The demo app keeps reusable guard factories in `packages/demo-app/webapp/guards.ts`. `createDirtyFormGuard()` and `createAuthGuard()` are reference-only implementations showing the factory pattern; the runnable demo uses the manifest-declared `guards/dirtyFormGuard.ts` module for the `"protected"` leave guard and the async `createAsyncPermissionGuard()` for the `"protected"` enter guard.
-
-```typescript
-// guards.ts
-import JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
-
-export function createAuthGuard(authModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		return authModel.getProperty("/isLoggedIn") ? true : "home";
-	};
-}
-
-export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
-	return (context: GuardContext): boolean => {
-		return !formModel.getProperty("/isDirty");
-	};
-}
-```
-
-### Object form with RouteGuardConfig
-
-The object form is useful when registering both enter and leave guards for the same route in a single call:
-
-```typescript
-import type { RouteGuardConfig } from "ui5/guard/router/types";
-
-const protectedGuards: RouteGuardConfig = {
-	beforeEnter: createAsyncPermissionGuard(authModel),
-	beforeLeave: createDirtyFormGuard(formModel),
-};
-
-router.addRouteGuard("protected", protectedGuards);
-// later: router.removeRouteGuard("protected", protectedGuards);
-```
+[Guard Integration Patterns](../../docs/guides/integration-patterns.md) has the async check with `AbortSignal`, redirects with parameters (`GuardRedirect`), guard factories and the object form `RouteGuardConfig`, among other patterns.
 
 ### Dynamic guard registration
 
-Guards can be added or removed at any point during the router's lifetime:
+Guards can be added and removed at any time:
 
 ```typescript
 const logGuard: GuardFn = (ctx) => {
@@ -828,10 +834,10 @@ router.removeGuard(logGuard);
 
 ### Leave guard with controller lifecycle
 
-The demo app shows the same lifecycle pattern in `packages/demo-app/webapp/controller/Home.controller.ts`, registering `createHomeLeaveLogger()` on the `home` route and removing it again in `onExit()`.
+From the demo app, `packages/demo-app/webapp/controller/Home.controller.ts`:
 
 ```typescript
-import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
+import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
 
@@ -839,14 +845,14 @@ export default class HomeController extends BaseController {
 	private _leaveGuard: LeaveGuardFn | null = null;
 
 	onInit(): void {
-		const router = this.getRouter<GuardRouter>();
+		const router = this.getRouter();
 		this._leaveGuard = createHomeLeaveLogger();
 		router.addLeaveGuard("home", this._leaveGuard);
 	}
 
 	onExit(): void {
 		if (this._leaveGuard) {
-			const router = this.getRouter<GuardRouter>();
+			const router = this.getRouter();
 			router.removeLeaveGuard("home", this._leaveGuard);
 			this._leaveGuard = null;
 		}
@@ -855,116 +861,62 @@ export default class HomeController extends BaseController {
 ```
 
 > [!TIP]
-> **User feedback on blocked navigation**: When a leave guard blocks, the router stays on the current route without any feedback to the user. There is no built-in confirmation dialog. Show a `sap.m.MessageBox.confirm()` inside your leave guard (returning the user's choice as a `Promise<boolean>`) to make the block visible.
+> **User feedback on blocked navigation**: A blocked navigation gives the user no feedback, and there is no built-in confirmation dialog. Show a `sap.m.MessageBox.confirm()` in the leave guard and return the user's choice as a `Promise<boolean>`.
 
 > [!NOTE]
 > **Guard cleanup and lifecycle**
 >
-> **Component level**: The router's `destroy()` method automatically clears all registered guards when the component is destroyed (including during FLP navigation).
+> **Component level**: The router's `destroy()` clears all guards when the component is destroyed, also during FLP navigation.
 >
-> **Controller level**: UI5's routing caches views indefinitely, so `onExit` is called only when the component is destroyed, not on every navigation away. Controller-registered guards therefore persist across in-app navigations. This is typically the desired behavior for route-specific guards tied to view state.
+> **Controller level**: UI5's routing [caches views indefinitely](../../docs/research/view-caching-controller-lifecycle.md), so `onExit` is called only when the component is destroyed, not on every navigation away. Guards registered by a controller therefore stay across in-app navigations.
 >
 > In FLP apps with `sap-keep-alive`, the component and its guards stay while the app is hidden, see [Keep-alive apps](#keep-alive-apps).
 
-### Metadata-driven guards via manifest (legacy alternative)
-
-> [!NOTE]
-> The native `guardRouter.routeMeta` configuration (see [Route metadata](#route-metadata)) is the recommended way to declare per-route metadata. The approach below reads a custom manifest section instead.
-
-For common patterns like "this route requires authentication", you can store per-route metadata in a custom manifest section and use a single global guard instead of writing repetitive per-route guards:
-
-```json
-{
-	"ui5.guard.router": {
-		"routeMeta": {
-			"admin": { "requiresAuth": true, "roles": ["admin"] },
-			"profile": { "requiresAuth": true },
-			"home": { "public": true }
-		}
-	}
-}
-```
-
-```typescript
-// Component.ts: read the custom section via getManifestEntry (typed path lookup)
-type RouteMeta = Record<string, Record<string, unknown>>;
-const routeMeta = (this.getManifestEntry("/ui5.guard.router/routeMeta") ?? {}) as RouteMeta;
-
-router.addGuard((context) => {
-	const meta = routeMeta[context.toRoute] ?? {};
-	if (meta.requiresAuth && !authModel.getProperty("/isLoggedIn")) return "login";
-	if (meta.roles && !hasAnyRole(meta.roles as string[])) return "forbidden";
-	return true;
-});
-```
-
-`getManifestEntry()` accepts a path string (starting with `/`) to reach into nested manifest sections. The return type is `any`, so the local `RouteMeta` alias provides type safety at the consumption site.
-
-This keeps guard logic in one place and route annotations in the manifest where they're visible and auditable. The custom namespace `ui5.guard.router` is ignored by the UI5 framework. It is a convention for application data.
-
 ### Native alternative for leave guards: Fiori Launchpad data loss prevention
 
-If your app runs inside SAP Fiori Launchpad (FLP), the shell provides built-in data loss protection through two public APIs on `sap.ushell.Container`:
+Inside SAP Fiori Launchpad (FLP), the shell has its own data loss protection on `sap.ushell.Container`:
 
-**`setDirtyFlag(bDirty)`** (since 1.27.0): A simple boolean flag. When set to `true`, FLP shows a browser `confirm()` dialog on every hash change, in-app ones included, and the browser's leave-page dialog on refresh/close. An in-app `navTo()` that the shell holds back for the dialog settles as `Blocked`; if the user confirms, the shell sets the hash again and the router runs the guards for it:
+- **`setDirtyFlag(bDirty)`** (since 1.27.0): while `true`, FLP shows a browser `confirm()` dialog on every hash change, in-app ones included, and the leave-page dialog on refresh or close. An in-app `navTo()` that the shell holds back for the dialog settles as `Blocked`; if the user confirms, the shell sets the hash again and the guards run for it.
+- **`registerDirtyStateProvider(fn)`** (since 1.31.0, `deregisterDirtyStateProvider` since 1.67.0): FLP calls the provider on each navigation with a `NavigationContext` (`isCrossAppNavigation`, `innerAppRoute`), so it can tell cross-app from in-app navigation.
+- Since 1.146, `setDirtyFlag` and the provider functions are on `sap/ushell/navigation/DirtyState`, and the `Container` methods are deprecated.
 
-```typescript
-sap.ushell.Container.setDirtyFlag(true); // mark unsaved changes
-sap.ushell.Container.setDirtyFlag(false); // clear after save
-```
-
-**`registerDirtyStateProvider(fn)`** (since 1.31.0): Registers a callback that FLP calls during navigation to dynamically determine dirty state. The callback receives a `NavigationContext` with `isCrossAppNavigation` (boolean) and `innerAppRoute` (string), allowing the provider to distinguish between cross-app and in-app navigation:
-
-```typescript
-const dirtyProvider = (navigationContext) => {
-	if (navigationContext?.isCrossAppNavigation === false) {
-		return false; // let in-app routing handle it
-	}
-	return formModel.getProperty("/isDirty") === true;
-};
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
-
-// Clean up (since 1.67.0)
-sap.ushell.Container.deregisterDirtyStateProvider(dirtyProvider);
-```
-
-> **Note**: `getDirtyFlag()` is deprecated since UI5 1.120. It still returns the flag combined with all registered providers.
+`getDirtyFlag()` is deprecated since UI5 1.120. The APIs and the shell internals are in [FLP Dirty State Research](../../docs/research/flp-dirty-state.md).
 
 #### Combining leave guards with FLP dirty-state protection
 
-When you use both a route leave guard and `registerDirtyStateProvider`, the two handle separate scopes and do not need to coordinate in application code:
+A leave guard and a dirty-state provider cover separate scopes and need no coordination:
 
-- **Leave guard** protects **in-app** navigation (route to route within your app)
-- **Dirty-state provider** protects **cross-app** navigation (shell home, other tiles, browser close)
+- The **leave guard** protects **in-app** navigation (route to route within your app).
+- The **dirty-state provider** protects **cross-app** navigation (shell home, other tiles, browser close).
 
-`ShellNavigationHashChanger` never passes a cross-app hash to the app router, so the leave guard never runs for it. The provider returns `false` for in-app navigation, so the shell does not prompt for it. The two mechanisms never overlap:
+`ShellNavigationHashChanger` never passes a cross-app hash to the app router, so the leave guard never runs for it. The provider returns `false` for in-app navigation, so the shell does not prompt for it:
 
 ```typescript
+import Container from "sap/ushell/Container";
+
 // 1. Leave guard: blocks in-app navigation when dirty
 router.addRouteGuard("editOrder", {
 	beforeLeave: () => formModel.getProperty("/isDirty") !== true,
 });
 
 // 2. Dirty-state provider: tells FLP about unsaved changes for cross-app
-const dirtyProvider = (navigationContext) => {
+const dirtyProvider = (navigationContext?: { isCrossAppNavigation?: boolean }) => {
 	if (navigationContext?.isCrossAppNavigation === false) {
 		return false; // in-app navigation handled by leave guard
 	}
 	return formModel.getProperty("/isDirty") === true;
 };
-sap.ushell.Container.registerDirtyStateProvider(dirtyProvider);
+Container.registerDirtyStateProvider(dirtyProvider);
 ```
 
-In an app the launchpad keeps alive, deregister the provider while the app is hidden ([Keep-alive apps](#keep-alive-apps)). No `toRoute` check or FLP detection is needed in the leave guard. Cross-app navigation (the shell's `Navigation` service, the home button, other tiles) is handled by the shell in both production and the FLP sandbox.
+The leave guard needs no `toRoute` check or FLP detection: the shell handles cross-app navigation in production and in the FLP sandbox. In an app the launchpad keeps alive, deregister the provider while the app is hidden ([Keep-alive apps](#keep-alive-apps)).
 
 > [!TIP]
-> **Testing with the FLP preview**: The `fiori-tools-preview` middleware supports `enhancedHomePage: true` (UI5 >= 1.123.0), which uses CDM-based bootstrap for a more complete UShell service layer. This is recommended for testing dirty-state provider integration, as it provides `ShellNavigationHashChanger` and `Navigation` service behavior closer to production FLP.
-
-See the [FLP Dirty State Research](../../docs/research/flp-dirty-state.md) for a detailed analysis of the FLP internals.
+> To test a dirty-state provider in the FLP preview, set `useNewSandbox: true` on the `fiori-tools-preview` middleware (SAPUI5 1.151 and later; before that, `enhancedHomePage: true` from 1.123.0). Both start a CDM launchpad, whose `ShellNavigationHashChanger` and `Navigation` service behave like a production FLP.
 
 #### Keep-alive apps
 
-With `sap-keep-alive=true` the launchpad keeps an app that the user leaves for another app, hides it, and shows it again when the user returns. With `sap-keep-alive=restricted` it also destroys kept apps when the user reaches the launchpad home. Returning from the home through a hash with an inner route (browser back, bookmark) creates a new component.
+With `sap-keep-alive=true` the launchpad hides an app that the user leaves for another app and shows it again when the user returns. With `sap-keep-alive=restricted` it also destroys kept apps when the user reaches the launchpad home; returning from there through a hash with an inner route (browser back, bookmark) creates a new component.
 
 What happens to the router depends on whether the manifest declares keep-alive support:
 
@@ -981,91 +933,64 @@ What happens to the router depends on whether the manifest declares keep-alive s
 | Declared     | UI5's `Component#deactivate()` stops the router, then calls `onDeactivate()` | `Component#activate()` calls `initialize()`, which runs the guards for the hash the URL shows, then `onActivate()`. No leave guard runs. Returning through an intent without an inner route starts on the default route |
 | Not declared | The launchpad calls `stop()`                                                 | The launchpad calls `initialize(true)`: the router resumes the route the app was on, and its leave guards keep working                                                                                                  |
 
+Declared: the launchpad goes through the component.
+
 ```mermaid
 sequenceDiagram
-    participant Shell as Launchpad
-    participant Comp as App component
-    participant Router as Guard router
-    alt keepAlive supported
-        Shell->>Comp: deactivate()
-        Comp->>Router: stop()
-        Comp->>Comp: onDeactivate()
-        Note over Shell,Router: app hidden
-        Shell->>Comp: activate()
-        Comp->>Router: initialize(): guards run for the hash
-        Comp->>Comp: onActivate()
-    else not declared
-        Shell->>Router: stop()
-        Note over Shell,Router: app hidden
-        Shell->>Router: initialize(true): resumes the route
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
     end
+    participant Comp as App component
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    Shell->>Comp: deactivate()
+    Comp->>Router: stop()
+    Comp->>Comp: onDeactivate()
+    Note over Shell,Router: app hidden
+    Shell->>Comp: activate()
+    Comp->>Router: initialize()
+    Note over Router: guards run<br/>for the hash
+    Comp->>Comp: onActivate()
 ```
 
-Guards stay registered while the app is hidden, and so do dirty-state providers: the launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden:
+Not declared: the launchpad calls the router itself.
 
-```typescript
-import UIComponent from "sap/ui/core/UIComponent";
-import Container from "sap/ushell/Container";
-import type JSONModel from "sap/ui/model/json/JSONModel";
-
-type DirtyStateProvider = (context?: { isCrossAppNavigation?: boolean }) => boolean;
-
-export default class Component extends UIComponent {
-	public static metadata = { manifest: "json" };
-
-	// No initializer: it would run after init(), which the UIComponent constructor calls.
-	private _dirtyProvider?: DirtyStateProvider;
-
-	override init(): void {
-		super.init();
-		const form = this.getModel("form") as JSONModel;
-		this._dirtyProvider = (context) =>
-			context?.isCrossAppNavigation !== false && form.getProperty("/isDirty") === true;
-		this.onActivate();
-		this.getRouter().initialize();
-	}
-
-	// Hidden: the launchpad would still ask the provider when the user navigates between other apps.
-	override onDeactivate(): void {
-		if (this._dirtyProvider) Container.deregisterDirtyStateProvider(this._dirtyProvider);
-	}
-
-	override onActivate(): void {
-		if (this._dirtyProvider) Container.registerDirtyStateProvider(this._dirtyProvider);
-	}
-
-	override exit(): void {
-		this.onDeactivate();
-	}
-}
+```mermaid
+sequenceDiagram
+    box rgba(110, 119, 129, 0.2) Fiori launchpad
+        participant Shell as Launchpad
+    end
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    Shell->>Router: stop()
+    Note over Shell,Router: app hidden
+    Shell->>Router: initialize(true)
+    Note over Router: resumes the route
 ```
 
-> [!WARNING]
-> `UIComponent` calls `init()` from its constructor. TypeScript class field initializers run after that constructor and overwrite what `init()` stored: with `private _dirtyProvider: DirtyStateProvider | null = null`, `onDeactivate()` and `exit()` find nothing to deregister. The same applies to guards that `init()` registers and `exit()` removes. Declare such fields without an initializer.
-
-The launchpad internals are in [FLP Integration](../../docs/reference/architecture.md#keep-alive). An app that the launchpad runs in an iframe is hidden and shown the same way, but its provider is asked by the app runtime inside the iframe and not by the shell, see [Keep-alive in an iframe](../../docs/reference/architecture.md#keep-alive-in-an-iframe).
+Guards and dirty-state providers stay registered while the app is hidden. The launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider in `onDeactivate()` and register it again in `onActivate()`; UI5 calls both only when the manifest declares keep-alive support. [Keep-alive apps: dirty-state provider](../../docs/guides/flp-keep-alive.md) has the component, a warning about TypeScript class fields that `init()` sets, and the iframe case.
 
 ## Redirect chains
 
-When a guard redirects navigation from route A to route B, the router evaluates route B's guards before committing. If route B also redirects, the chain continues. Leave guards are skipped on redirect hops (they only run on the first navigation), but global and route-specific enter guards run on every hop.
+When a guard redirects from route A to route B, the global and route-specific enter guards of B run before anything commits. If B redirects too, the chain continues. Leave guards run only for the first navigation, not on redirect hops.
 
 ```
 User navigates to "dashboard"
-  → dashboard guard checks permissions, returns "profile"
-  → profile guard checks onboarding status ← this guard RUNS
+  → dashboard guard returns "profile"
+  → profile guard returns "onboarding"
   → onboarding guard allows → onboarding view renders
 ```
 
-Two safeguards prevent infinite redirect loops:
+Two safeguards stop redirect loops. Each logs an error and settles the navigation as `Blocked`:
 
-- **Visited-set detection**: The router tracks every hash evaluated in the current chain. Revisiting a hash is treated as a loop and blocks the navigation.
-- **Depth cap** (10 hops): Chains that exceed 10 redirect hops are blocked, even if every hash is unique. This guards against unbounded chains with parameterized routes.
-
-Both safeguards log an error and settle the navigation as `Blocked`.
+- **Visited set**: a chain that reaches a hash it has evaluated before is a loop.
+- **Depth cap**: a chain longer than 10 hops is blocked, even if every hash is unique.
 
 ## Browser history
 
-The router keeps the browser history as the user left it: a hash that a guard refused does not stay in the history, and Back returns to the page the navigation started from.
+A hash that a guard refused does not stay in the history, and Back returns to the page the navigation started from.
 
 | Navigation                                                     | Blocked (or `Error`)                                                                                   | Redirected                                                                                                                                                   |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1085,53 +1010,107 @@ The history in three cases, starting on `home` (the current entry in bold):
 
 `navTo()` runs the guards before any hash is written:
 
+Allowed: the hash is written once the guards have passed.
+
 ```mermaid
 sequenceDiagram
     participant App
-    participant Router as Guard router
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
     participant History as Browser history
-    App->>Router: navTo("admin")
-    Router->>Router: leave, global and route guards
-    alt allowed
-        Router->>History: new entry #admin
-        Router-->>App: routeMatched "admin", settles Committed
-    else blocked
-        Router-->>App: settles Blocked, nothing written
-    else redirected to "profile"
-        Router->>Router: enter guards of "profile"
-        Router->>History: new entry #profile
-        Router-->>App: routeMatched "profile", settles Redirected
+    rect rgba(0, 158, 115, 0.15)
+        App->>Router: navTo("admin")
+        Router->>Router: leave, global and<br/>route guards allow
+        Router->>History: new entry #35;admin
+        Router-->>App: settles Committed
+        Router-->>App: routeMatched "admin"
+    end
+```
+
+Blocked: nothing is written.
+
+```mermaid
+sequenceDiagram
+    participant App
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    participant History as Browser history
+    rect rgba(213, 94, 0, 0.15)
+        App->>Router: navTo("admin")
+        Router->>Router: a guard blocks
+        Router-->>App: settles Blocked
+        Note over History: no entry written
+    end
+```
+
+Redirected to `profile`: only the final target is written.
+
+```mermaid
+sequenceDiagram
+    participant App
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    participant History as Browser history
+    rect rgba(240, 228, 66, 0.15)
+        App->>Router: navTo("admin")
+        Router->>Router: an enter guard<br/>redirects to "profile"
+        Router->>Router: global and route guards<br/>of "profile" allow
+        Router->>History: new entry #35;profile
+        Router-->>App: settles Redirected
+        Router-->>App: routeMatched "profile"
     end
 ```
 
 A hash change from the browser arrives after the URL has changed, so the router puts it back or replaces it:
 
+Back, blocked by a leave guard: the router takes the step back.
+
 ```mermaid
 sequenceDiagram
     actor User
     participant Browser
-    participant Router as Guard router
-    alt Back, blocked
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(213, 94, 0, 0.15)
         User->>Browser: Back
         Browser->>Router: hashChanged "home"
-        Router->>Router: leave guards of "detail" block
+        Router->>Router: leave guard of<br/>"detail" blocks
         Router->>Browser: history.go(1)
-        Browser->>Router: hashChanged "detail": taken without guards
+        Browser->>Router: hashChanged "detail"
+        Note over Router: taken without guards
         Router-->>User: settles Blocked, history as before
-    else URL bar, redirected
-        User->>Browser: types #admin (new entry)
+    end
+```
+
+`#admin` typed into the URL bar, redirected: the target replaces the new entry.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    box rgba(0, 114, 178, 0.15) This library
+        participant Router as Guard router
+    end
+    rect rgba(240, 228, 66, 0.15)
+        User->>Browser: types #35;admin
+        Note over Browser: new entry #35;admin
         Browser->>Router: hashChanged "admin"
-        Router->>Router: guard of "admin" redirects to "profile"
-        Router->>Router: enter guards of "profile"
-        Router->>Browser: replace the entry with #profile
-        Browser->>Router: hashChanged "profile": commits
+        Router->>Router: an enter guard<br/>redirects to "profile"
+        Router->>Router: global and route guards<br/>of "profile" allow
+        Router->>Browser: replaces the entry<br/>with #35;profile
+        Browser->>Router: hashChanged "profile"
+        Note over Router: commits without guards
         Router-->>User: settles Redirected
     end
 ```
 
-**Settlement of a blocked step.** The browser takes a step asynchronously. A navigation that the router undoes with a step settles once the URL is back: `navigationSettled()` resolves, and the `navigationSettled` event fires, after the `hashChanged` event that started the navigation has returned.
+**Settlement of a blocked step.** The browser takes a step asynchronously. A navigation that the router undoes with a step settles once the URL is back, after the `hashChanged` event that started it has returned.
 
-**How a step is recognized.** The router reads the length and direction of a step from the browser's [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API) (Chrome and Edge 102+, Firefox 147+, Safari 26.2+). Without it, a blocked back or forward step is handled like any other hash change: its entry is replaced with the previous hash. The page the step went to is then gone from the history, and the current page has two entries.
+**How a step is recognized.** The router reads the length and direction of a step from the browser's [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API) (Chrome and Edge 102+, Firefox 147+, Safari 26.2+). Without it, a blocked back or forward step is handled like any other hash change: its entry is replaced with the previous hash, the page the step went to is gone from the history, and the current page has two entries.
 
 The cases that leave the history different from before are listed under [Limitations](#browser-history-after-a-refused-hash-change).
 
@@ -1143,26 +1122,30 @@ A component that a parent router displays through a routing target of type `Comp
 - A redirect names a route of the same router. To leave the nested component, navigate with the parent's router (`Component.getOwnerComponentFor(component).getRouter()`), not from a guard.
 - On the first display, the parent route waits until the nested router's first navigation has passed its guards and matched, as with the native router. If a nested guard blocks that navigation, the parent route is still displayed and the nested component shows no view. If it redirects, the parent waits for the redirect target.
 - When the parent leaves the route, UI5 stops the nested router and removes its part of the hash. To keep the user in the nested component, register a leave guard on the parent's route.
+- A `navTo()` of the parent, or a guard redirect, with `componentTargetInfo` commits and settles when UI5 has loaded the nested components and written the hash, not within the call. Until then the navigation is pending, and a navigation that supersedes it, `stop()` or `destroy()` settles it as `Cancelled`. That is also how a navigation ends whose hash UI5 never writes, because a nested component failed to load or the router is not async.
 - Navigate with `navTo()` of the respective router or with the router's own hash changer (`router.getHashChanger()`). The global `HashChanger.getInstance()` replaces the whole browser hash, including the part of the other router ([Enabling Routing in Nested Components](https://sdk.openui5.org/#/topic/fb19f501b16e4e4991eb6a017770945b)).
 
 When the parent refuses a hash change, it puts the whole URL back, the nested part included. UI5 reports every hash change to the nested router whatever the parent decides, so the nested router first matches its part of the refused hash and then its previous route, and fires the events of both:
 
 ```mermaid
 sequenceDiagram
-    actor User
     participant Browser
-    participant Parent as Parent router
-    participant Child as Nested router
-    Note over Browser: #shell&/child/detail/1
-    User->>Browser: Back to #home
-    Browser->>Parent: hashChanged "home"
-    Parent->>Parent: leave guard of "shell" blocks
-    Parent->>Browser: history.go(1)
-    Browser->>Child: hashChanged "" (its part of #home)
-    Child->>Child: matches "list"
-    Browser->>Parent: hashChanged "shell": taken without guards, settles Blocked
-    Browser->>Child: hashChanged "detail/1"
-    Child->>Child: matches "detail" again
+    box rgba(0, 114, 178, 0.15) This library
+        participant Parent as Parent router
+        participant Child as Nested router
+    end
+    rect rgba(213, 94, 0, 0.15)
+        Note over Browser: #35;shell&/child/detail/1,<br/>Back to #35;home
+        Browser->>Parent: hashChanged "home"
+        Parent->>Parent: leave guard of<br/>"shell" blocks
+        Parent->>Browser: history.go(1)
+        Browser->>Child: hashChanged "", its part of #35;home
+        Note over Child: matches "list"
+        Browser->>Parent: hashChanged "shell"
+        Note over Parent: taken without guards,<br/>settles Blocked
+        Browser->>Child: hashChanged "detail/1"
+        Note over Child: matches "detail" again
+    end
 ```
 
 With `propagateTitle` set on the component target or in the routing config, titles propagate from the nested router to the parent as with the native router. `titleChanged` fires only for navigations that commit; while a navigation waits for async guards, UI5 defers it to the next `routeMatched`.
@@ -1171,27 +1154,24 @@ The router relies on two UI5 internals for this, see [Compatibility](#compatibil
 
 ## Compatibility with `sap.m.routing.Router`
 
-Without guards the router behaves like `sap.m.routing.Router`. With guards it differs only where a guard blocks, redirects or makes a navigation wait. Differential tests prove this: they run the same steps on a native router and on a guard router and compare what each records (hashes, history entries, routing events, titles, displayed views, log lines). Tests in `NativeCompat`, `NativeCompatTraces`, `NestedRouterParity`, `GuardedNavigationParity`, `GuardedEntryParity`, `flp-native-parity` and the vendored OpenUI5 router tests compare with the native router; a test from another file pins a behavior that differs on purpose. Where a guard blocks or redirects, the guard router is compared with the native navigation that the decision stands for: none for a block, a navigation to the target for a redirect. CI runs the QUnit tests on OpenUI5 1.144.0 and 1.120.0, the launchpad test on SAPUI5 1.144.0. How the comparison works: [Upstream Parity](../../docs/reference/upstream-parity.md).
+The router is a `sap.m.routing.Router` with the guard API added. Without guards it behaves like the native router in every row below. With guards it differs only where a guard blocks, redirects or makes a navigation wait. Differential tests run the same steps on both routers and compare hashes, history entries, routing events, titles, displayed views and log lines. The test behind each row is listed in [Compatibility evidence](../../docs/guides/native-router-compatibility.md); how the comparison works is in [Upstream Parity](../../docs/reference/upstream-parity.md).
 
-File names in "Proven by" are those of test files below `packages/lib/test/qunit/`; an `.e2e.ts` file is below `packages/demo-app/test/`.
-
-| Behavior                                                                                                 | Native router                                                                                                                       | Guard router without guards    | Guard router with guards                                                                                                                                                                                                                                   | Proven by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Class and API                                                                                            | `sap.m.routing.Router`                                                                                                              | Same class, plus the guard API | Same                                                                                                                                                                                                                                                       | `NativeCompat.qunit.ts: Both routers are instances of sap.m.routing.Router`<br>`NativeCompat.qunit.ts: ext router has additional guard methods`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Route matching, `getRouteInfoByHash()`, `getURL()`                                                       | The first route whose pattern matches                                                                                               | Same                           | Same; guards get the first match as `toRoute`                                                                                                                                                                                                              | `NativeCompat.qunit.ts: match() returns identical results for known hashes`<br>`NativeCompat.qunit.ts: match() returns identical results for unknown hashes`<br>`NativeCompat.qunit.ts: getRouteInfoByHash returns identical info`<br>`NativeCompatTraces.qunit.ts: a hash that several routes could match resolves to the same route`<br>`NativeCompat.qunit.ts: getURL generates identical URLs for routes without parameters`<br>`NativeCompat.qunit.ts: getURL generates identical URLs for routes with parameters`<br>`NativeCompat.qunit.ts: getURL generates identical URLs for nested routes`<br>`NativeCompat.qunit.ts: getURL returns undefined for unknown routes`                                                                                                                                                                                                                                                                                                                                                                                    |
-| Events: `beforeRouteMatched`, `routeMatched`, `routePatternMatched`, `bypassed`, the events of a `Route` | Fire for every hash                                                                                                                 | Same, in the same order        | Fire once the guards allow; none for a blocked navigation; only those of the target for a redirect                                                                                                                                                         | `NativeCompatTraces.qunit.ts: a sequence of navigations fires the same events in the same order`<br>`NativeCompat.qunit.ts: bypassed event fires identically for unknown routes`<br>`NativeCompat.qunit.ts: Direct hash changes fire events identically`<br>`NativeCompatTraces.qunit.ts: a redirected navTo() behaves like a native navTo() to the target`<br>`GuardedNavigationParity.qunit.ts: a blocked browser back leaves the history, the titles and the pages as they were`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Titles: `titleChanged`, `propagateTitle`                                                                 | Change with every route match                                                                                                       | Same                           | Change only for navigations that commit. The target of a redirected hash change gets the title entry that the redirected hash would have got                                                                                                               | `NestedRouterParity.qunit.ts: the child navigates with navTo, with and without a history entry`<br>`GuardedNavigationParity.qunit.ts: a redirected navTo() leaves the history and the titles of a native navTo() to the target`<br>`GuardedEntryParity.qunit.ts: a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Views and `NavContainer` transitions                                                                     | Targets display views, view levels choose the animation direction                                                                   | Same                           | Same, once the guards allow                                                                                                                                                                                                                                | `Router.qunit.ts: forward navigation on NavContainer matches the upstream contract`<br>`Router.qunit.ts: viewLevel back navigation with multiple targets matches the upstream contract`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `navTo()` with and without `bReplace`                                                                    | Writes the hash: a new entry, or the current one replaced                                                                           | Same                           | Blocked: writes nothing. Redirected: writes only the final target, the way the call asked                                                                                                                                                                  | `NativeCompat.qunit.ts: navTo with replace=true updates hash without history entry`<br>`NativeCompat.qunit.ts: navTo with replace=false creates history entry (default)`<br>`NativeCompatTraces.qunit.ts: navTo with a route or parameters that do not resolve behaves the same`<br>`NativeCompatTraces.qunit.ts: a redirected navTo() behaves like a native navTo() to the target`<br>`GuardedNavigationParity.qunit.ts: a redirected navTo() leaves the history and the titles of a native navTo() to the target`<br>`GuardedEntryParity.qunit.ts: a blocked navTo() leaves the history, the titles and the pages of a native router that is not asked to navigate`                                                                                                                                                                                                                                                                                                                                                                                            |
-| `navTo()` to the route that is shown, `componentTargetInfo`                                              | Sets or resets the hashes of nested components; with `componentTargetInfo` the route matches once UI5 has written the combined hash | Same                           | Same, no guard runs. A redirect to the route that is shown changes nothing, with `componentTargetInfo` it sets the nested hashes                                                                                                                           | `NestedRouterParity.qunit.ts: navTo to the route that is already shown`<br>`NestedRouterParity.qunit.ts: the parent navigates to a route of the child with componentTargetInfo`<br>`NativeCompatTraces.qunit.ts: a navTo() that is redirected to the route that is shown changes nothing, as if the router had not been asked`<br>`GuardedEntryParity.qunit.ts: a redirect to the route that is shown with componentTargetInfo behaves like a native navTo() to that route with componentTargetInfo`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `parse()` with the current hash                                                                          | The route matches again                                                                                                             | Same                           | Same, without guards                                                                                                                                                                                                                                       | `NativeCompatTraces.qunit.ts: a hash that is parsed again matches its route again`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `Targets#display()` without a route                                                                      | Displays the target, no hash change; the route shown before matches again when its hash is reported                                 | Same                           | Same; no guard runs for the display                                                                                                                                                                                                                        | `NestedRouterParity.qunit.ts: a target displayed without a route`<br>`NestedRouterParity.qunit.ts: a route matches again when its hash is reported after a target was displayed without it`<br>`GuardedEntryParity.qunit.ts: Targets#display() displays the target as with the native router although every guard blocks, and runs no guard`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Back, forward and the address bar                                                                        | Every hash that matches a route is displayed                                                                                        | Same                           | A blocked step is taken back with `history.go()`, the history is as it was. A redirected hash change has its entry replaced with the target. See [Browser history](#browser-history)                                                                       | `NestedRouterParity.qunit.ts: browser back and forward across the child's and the parent's routes`<br>`NestedRouterParity.qunit.ts: the address bar navigates into the child and inside of it`<br>`NativeCompat.qunit.ts: replaceHash behaves identically`<br>`GuardedNavigationParity.qunit.ts: a blocked browser back leaves the history, the titles and the pages as they were`<br>`History.qunit.ts: a history step that is redirected has its entry replaced with the target`<br>`RedirectedStepParity.qunit.ts: a redirected browser back leaves the history, the titles and the pages of a native browser back followed by a native navTo() to the target that replaces the entry`<br>`RedirectedStepParity.qunit.ts: a redirected browser forward leaves the history, the titles and the pages of a native browser forward followed by a native navTo() to the target that replaces the entry`<br>`GuardedEntryParity.qunit.ts: a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target` |
-| Nested components (routing target of type `Component`)                                                   | Each nested router has a hash changer of its own and matches its part of the hash                                                   | Same                           | Same with guards that allow. A parent that blocks puts the whole URL back; the nested router matches the refused part first. The parent route waits for a nested first navigation that waits for async guards. See [Nested components](#nested-components) | `NestedRouterParity.qunit.ts: the parent displays the child component for the first time`<br>`NestedRouterParity.qunit.ts: the app starts on a hash that the child does not know`<br>`NestedRouterParity.qunit.ts: the app starts on a hash that the parent does not know`<br>`NestedRouterParity.qunit.ts: the app starts on a deep link to a route of the child`<br>`NestedRouterParity.qunit.ts: the parent leaves the child's route and displays the child again`<br>`NestedRouterParity.qunit.ts: the first page of a nested NavContainer logs the same 'current page' warning with both routers`<br>`GuardedNavigationParity.qunit.ts: a history step that the parent and the nested component block leaves both as they were`<br>`GuardedNavigationParity.qunit.ts: a history step that only the parent blocks brings the nested component back to its route`<br>`Instantiation.qunit.ts: a parent route matches although an async guard blocks a nested component's first navigation`                                                                    |
-| `stop()`, `initialize()`, `initialize(true)`                                                             | `initialize()` parses the hash, `initialize(true)` keeps the current route; a stopped router ignores hash changes and `navTo()`     | Same                           | `initialize()` runs the guards for the hash. After `stop()`, `initialize(true)` resumes the route, so its leave guards run on the next navigation                                                                                                          | `NativeCompat.qunit.ts: initialize/stop behavior matches`<br>`NativeCompat.qunit.ts: stop + initialize fires routeMatched identically`<br>`NativeCompatTraces.qunit.ts: stop and initialize cycles fire the same events`<br>`NativeCompatTraces.qunit.ts: a router that starts with initialize(true) fires the same events`<br>`NativeCompatTraces.qunit.ts: after stop() and initialize(true), the leave guard runs for the route that the native router switches from`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Greedy routes (`greedy: true`)                                                                           | Match in addition to the first match                                                                                                | Same                           | Same with guards that allow. Their guards run too; a greedy route that still matches is left and entered again                                                                                                                                             | `NativeCompatTraces.qunit.ts: greedy routes match and fire their events as with the native router`<br>`NativeCompatTraces.qunit.ts: leave and enter guards run for the routes that the native router matched before and matches after a navigation, a greedy route that still matches included`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Two routers on one hash changer                                                                          | Each parses every hash it is told about, also a redirected hash that UI5 reports after the target                                   | Same                           | A guard router drops the stale report. A native router next to it still parses it. See [Limitations](#routers-that-share-a-hash-changer)                                                                                                                   | `NativeCompatTraces.qunit.ts: two guard routers without guards behave like two native routers`<br>`NativeCompatTraces.qunit.ts: a hash change that the first router redirects is not parsed by the second router after the target`<br>`NativeCompatTraces.qunit.ts: a hash change that the first router blocks is parsed by the second router, which follows the URL back`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Fiori launchpad: shell stops and restarts the router, keep-alive                                         | Stopped on a cross-app change, `initialize(true)` or `initialize()` on return                                                       | Same                           | Same calls; a blocked hash change after a cancelled cross-app navigation returns to the URL the browser showed. See [Keep-alive apps](#keep-alive-apps)                                                                                                    | `flp-native-parity.e2e.ts: the guard router goes through the same as the native router, a blocked hash change counting as no navigation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Behavior                                                                                                 | Native router                                                                                                                       | Guard router with guards                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route matching, `getRouteInfoByHash()`, `getURL()`                                                       | The first route whose pattern matches                                                                                               | Same; guards get the first match as `toRoute`                                                                                                                                                                                                              |
+| Events: `beforeRouteMatched`, `routeMatched`, `routePatternMatched`, `bypassed`, the events of a `Route` | Fire for every hash                                                                                                                 | Fire once the guards allow; none for a blocked navigation; only those of the target for a redirect                                                                                                                                                         |
+| Titles: `titleChanged`, `propagateTitle`                                                                 | Change with every route match                                                                                                       | Change only for navigations that commit. The target of a redirected hash change gets the title entry that the redirected hash would have got                                                                                                               |
+| Views and `NavContainer` transitions                                                                     | Targets display views, view levels choose the animation direction                                                                   | Same, once the guards allow                                                                                                                                                                                                                                |
+| `navTo()` with and without `bReplace`                                                                    | Writes the hash: a new entry, or the current one replaced                                                                           | Blocked: writes nothing. Redirected: writes only the final target, the way the call asked                                                                                                                                                                  |
+| `navTo()` to the route that is shown, `componentTargetInfo`                                              | Sets or resets the hashes of nested components; with `componentTargetInfo` the route matches once UI5 has written the combined hash | Same, no guard runs. A redirect to the route that is shown changes nothing, with `componentTargetInfo` it sets the nested hashes                                                                                                                           |
+| `parse()` with the current hash                                                                          | The route matches again                                                                                                             | Same, without guards                                                                                                                                                                                                                                       |
+| `Targets#display()` without a route                                                                      | Displays the target, no hash change; the route shown before matches again when its hash is reported                                 | Same; no guard runs for the display                                                                                                                                                                                                                        |
+| Back, forward and the address bar                                                                        | Every hash that matches a route is displayed                                                                                        | A blocked step is taken back with `history.go()`, the history is as it was. A redirected hash change has its entry replaced with the target. See [Browser history](#browser-history)                                                                       |
+| Nested components (routing target of type `Component`)                                                   | Each nested router has a hash changer of its own and matches its part of the hash                                                   | Same with guards that allow. A parent that blocks puts the whole URL back; the nested router matches the refused part first. The parent route waits for a nested first navigation that waits for async guards. See [Nested components](#nested-components) |
+| `stop()`, `initialize()`, `initialize(true)`                                                             | `initialize()` parses the hash, `initialize(true)` keeps the current route; a stopped router ignores hash changes and `navTo()`     | `initialize()` runs the guards for the hash. After `stop()`, `initialize(true)` resumes the route, so its leave guards run on the next navigation                                                                                                          |
+| Greedy routes (`greedy: true`)                                                                           | Match in addition to the first match                                                                                                | Same with guards that allow. Their guards run too; a greedy route that still matches is left and entered again                                                                                                                                             |
+| Two routers on one hash changer                                                                          | Each parses every hash it is told about, also a redirected hash that UI5 reports after the target                                   | A guard router drops the stale report. A native router next to it still parses it. See [Limitations](#routers-that-share-a-hash-changer)                                                                                                                   |
+| Fiori launchpad: shell stops and restarts the router, keep-alive                                         | Stopped on a cross-app change, `initialize(true)` or `initialize()` on return                                                       | Same calls; a blocked hash change after a cancelled cross-app navigation returns to the URL the browser showed. See [Keep-alive apps](#keep-alive-apps)                                                                                                    |
 
 ## Limitations
 
@@ -1222,55 +1202,9 @@ The router puts the URL back after every hash change it refuses, see [Browser hi
 
 ### URL bar shows target hash during async guards (browser-initiated only)
 
-For browser-initiated navigation (back/forward, URL bar entry, direct hash changes), the URL bar shows the target hash while an async guard resolves. If the guard blocks or redirects, the router puts the URL back or replaces it with the target (see [Browser history](#browser-history)). There is a brief window where the displayed URL does not match the active route.
+For back/forward, URL bar entries and direct hash changes, the URL bar shows the target hash while an async guard resolves. UI5's `HashChanger` changes the URL and fires `hashChanged` before `parse()` runs, so the router can only react. If the guard blocks or redirects, the router puts the URL back or replaces it with the target (see [Browser history](#browser-history)).
 
-This does **not** apply to programmatic `navTo()` calls, where the hash does not change until guards approve. It also does not affect sync guards on the `parse()` path, which resolve in the same tick as the hash change.
-
-**Why the parse() path cannot prevent this**: UI5's `HashChanger` updates the URL and fires `hashChanged` before `parse()` runs. The router cannot prevent the URL change; it can only react to it. Frameworks like Vue Router and Angular Router avoid this by controlling the URL update themselves (calling `history.pushState` only after guards resolve), but UI5's architecture does not allow this without intercepting at the HashChanger level, which is globally scoped and fragile.
-
-```
-Browser-initiated navigation (back/forward, URL bar, setHash):
-  HashChanger updates browser URL    ← URL changes HERE
-          ↓
-  HashChanger fires hashChanged
-          ↓
-  Router.parse() called              ← guards run HERE
-          ↓
-     ┌────┴────┐
-  allowed    blocked
-     ↓          ↓
-  views      router undoes
-  load       the hash change
-
-Programmatic navigation (navTo):
-  navTo() called                     ← guards run HERE
-          ↓
-     ┌────┴────┐
-  allowed    blocked
-     ↓          ↓
-  super.navTo()  return
-  hash changes   (no hash change)
-```
-
-For the `parse()` path, show a busy indicator while async guards resolve. This communicates that navigation is in progress, making the URL bar state a non-issue:
-
-```typescript
-router.addRouteGuard("dashboard", async (context) => {
-	const app = rootView.byId("app") as App;
-	app.setBusy(true);
-	try {
-		const res = await fetch(`/api/access/${context.toRoute}`, {
-			signal: context.signal,
-		});
-		const { allowed } = await res.json();
-		return allowed ? true : "home";
-	} finally {
-		app.setBusy(false);
-	}
-});
-```
-
-This follows the same pattern as [TanStack Router's `pendingComponent`](https://tanstack.com/router/latest/docs/framework/react/guide/navigation-blocking#handling-blocked-navigations): the URL reflects the intent while a loading state signals that the navigation hasn't committed yet.
+This does not apply to `navTo()`, which changes the hash only after the guards allow, nor to sync guards, which decide in the same tick as the hash change. Show a busy indicator while async guards run, as in the [busy indicator example](#navigation-settlement).
 
 ## Debugging and Troubleshooting
 
@@ -1278,50 +1212,37 @@ This follows the same pattern as [TanStack Router's `pendingComponent`](https://
 
 The router logs configuration and registration problems, invalid guard results, guard errors, redirect loops, and discarded async results through UI5's `Log` API under the component name `ui5.guard.router.Router`. Plain allow and block decisions are not logged. When a manifest guard throws, the error log names it, e.g. `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
 
-Enable debug-level output programmatically:
+Debug output for the router only:
 
 ```typescript
 import Log from "sap/base/Log";
 Log.setLevel(Log.Level.DEBUG, "ui5.guard.router.Router");
 ```
 
-Or set the global log level via URL parameter (per-component filtering is only available through the programmatic API above):
-
-```
-?sap-ui-log-level=DEBUG
-```
-
-> **Note**: UI5 1.120+ uses kebab-case URL parameters (`sap-ui-log-level`). Older versions use camelCase (`sap-ui-logLevel`).
+The URL parameter `?sap-ui-log-level=DEBUG` sets the level for all components.
 
 ### Common issues
 
-**Guards not running**: Verify the route name passed to `addRouteGuard()` matches the route name in `manifest.json`, not the pattern or target name. Guards on redirect targets do run; if a redirect chain is blocked by loop detection, check the error log for details. See [Redirect chains](#redirect-chains).
+**Guards not running**: The name passed to `addRouteGuard()` must be the route name in `manifest.json`, not the pattern or target name. If loop detection blocked a redirect chain, the error log says so, see [Redirect chains](#redirect-chains).
 
-**Navigation blocked unexpectedly**: Only a strict `true` return value allows navigation. Returning `undefined`, `null`, or omitting a return statement blocks and logs the warning `Guard returned invalid value, treating as block`. A plain `false` is not logged, so add logging to your guards to find the one that returned it.
+**Navigation blocked unexpectedly**: Only a strict `true` allows navigation. Returning `undefined` or `null`, or no return statement, blocks and logs `Guard returned invalid value, treating as block`. A plain `false` is not logged.
 
-**Redirect treated as blocked**: The redirect target route does not exist. The router logs the target name (`Guard redirect target "<name>" is not a known route, treating as blocked`) so you can verify it. A redirect to the route that is shown is not treated as blocked; it settles as `Redirected`, and the route does not match again.
+**Redirect treated as blocked**: The redirect target route does not exist. The router logs `Guard redirect target "<name>" is not a known route, treating as blocked`. A redirect to the route that is shown is not a block; it settles as `Redirected` and the route does not match again.
 
-**Async guard hangs indefinitely**: `context.signal` only aborts on supersede or router stop/destroy, not on "too slow." If a guard's `fetch` targets a dead endpoint, the navigation stays in the evaluating phase forever. Combine `context.signal` with `AbortSignal.timeout()` to enforce a hard deadline: `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`. See the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout) for the full example and a compatibility fallback for older browsers.
+**Async guard hangs indefinitely**: `context.signal` aborts only when the navigation is superseded or the router stops or is destroyed, not on a timeout. A `fetch` to a dead endpoint keeps the navigation pending. Set a deadline with `signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)])`, see the [async guard timeout pattern](../../docs/guides/integration-patterns.md#async-guard-timeout), which includes a fallback for older browsers.
 
-**Async guard result discarded**: A newer navigation started before the async guard resolved. The router uses a generation counter to discard stale results. This is expected behavior during rapid sequential navigations. The debug log confirms when this occurs.
+**Async guard result discarded**: A newer navigation started before the async guard resolved, so its result is stale. The debug log records it.
 
-**URL bar shows target hash, then reverts**: This is expected for async guards. The `HashChanger` updates the URL before `parse()` runs. See [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards-browser-initiated-only) for the architectural explanation and the busy-indicator pattern.
+**URL bar shows target hash, then reverts**: Expected for async guards on back/forward and URL changes, see [URL bar shows target hash during async guards](#url-bar-shows-target-hash-during-async-guards-browser-initiated-only).
 
 ## Compatibility
 
 > [!IMPORTANT]
-> **Shipped UI5 baseline: 1.144.0**
+> **Supported UI5 versions: 1.136 and later**
 >
-> The published package declares `minUI5Version: 1.144.0`, and the full CI suite runs on that version. CI also runs the library QUnit suite, the parity tests included, against OpenUI5 `1.120.0`, the oldest version that has `DataType.registerEnum` (used for the `NavigationOutcome` enum). How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
+> The package declares `minUI5Version: 1.136.0`, the version that manifest version 2 (`_version` 2.0.0) requires. CI runs the full suite on OpenUI5 1.144.0 and the launchpad tests on SAPUI5 1.151.0 and 1.154.0. It also runs the library QUnit suite with the parity tests on OpenUI5 1.120.0, the oldest version with `DataType.registerEnum` (used for the `NavigationOutcome` enum); that lane catches regressions on older versions, but 1.120 to 1.135 are not supported. How the router compares with the native one: [Compatibility with `sap.m.routing.Router`](#compatibility-with-sapmroutingrouter).
 
-The router uses public and protected API of `sap.m.routing.Router`, with four exceptions. Two are for [nested components](#nested-components): it mirrors the UI5-private flag `_bMatchingProcessStarted`, and it recognizes the Promise resolve function by which a component target waits for the nested router's `routeMatched`. The other two keep the title history right after a redirected hash change: the router clears the UI5-private flag `_bLastHashReplaced`, and after a redirected step back it removes an entry from the array that `getTitleHistory()` returns. All four are verified against OpenUI5 1.144.0 and 1.120.0, and tests on both versions fail if a UI5 upgrade changes them. See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on).
-
-To run the QUnit suite on both versions from the monorepo root:
-
-```bash
-npm run test:qunit
-npm run test:qunit:compat:120
-```
+The router uses public and protected API of `sap.m.routing.Router`, with four exceptions: two UI5 internals for [nested components](#nested-components) (`_bMatchingProcessStarted` and the component target's wait for the nested `routeMatched`), and two for the title history after a redirected hash change (`_bLastHashReplaced` and the array of `getTitleHistory()`). Tests on OpenUI5 1.144.0 and 1.120.0 fail if a UI5 upgrade changes them. Details: [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui5-internals-the-router-relies-on).
 
 ## License
 

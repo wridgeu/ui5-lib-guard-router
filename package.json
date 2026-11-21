@@ -7,7 +7,7 @@
 		"url": "https://github.com/wridgeu/ui5-lib-guard-router.git"
 	},
 	"engines": {
-		"node": "^24.22.1 || >=26.12.1"
+		"node": ">=26.12.1"
 	},
 	"workspaces": [
 		"packages/*"
@@ -16,11 +16,13 @@
 		"clean": "npm run clean --workspaces",
 		"fmt": "oxfmt .",
 		"fmt:check": "oxfmt --check .",
-		"lint": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
-		"lint:fix": "oxlint packages/ scripts/ tools/ --tsconfig tsconfig.base.json --import-plugin --fix",
-		"check": "npm run fmt:check && npm run lint && npm run typecheck && npm run check:layout",
+		"lint": "oxlint packages/ scripts/ tools/ --deny-warnings",
+		"lint:fix": "oxlint packages/ scripts/ tools/ --fix",
+		"check": "npm run fmt:check && npm run lint && npm run typecheck && npm run check:layout && npm run check:diagrams && npm run test:tooling",
+		"check:diagrams": "node ./scripts/check-diagrams.mjs",
 		"check:layout": "node ./scripts/check-test-layout.mjs",
-		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/lib/tsconfig.test.json && tsc --noEmit -p packages/demo-app/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.test.json",
+		"test:tooling": "node --test \"tools/*.test.mjs\" \"scripts/*.test.mjs\"",
+		"typecheck": "tsc --noEmit -p packages/lib/tsconfig.json && tsc --noEmit -p packages/lib/tsconfig.test.json && tsc --noEmit -p packages/demo-app/tsconfig.json && tsc --noEmit -p packages/demo-app/tsconfig.test.json && tsc --noEmit -p tsconfig.node.json",
 		"build": "npm run build --workspace=packages/lib",
 		"start": "npm start --workspace=packages/demo-app",
 		"start:flp": "npm run start:flp --workspace=packages/demo-app",
@@ -30,19 +32,19 @@
 		"start:lib:mutation": "npm start --workspace=packages/lib -- --port 8084",
 		"serve:demo": "npm run serve --workspace=packages/demo-app",
 		"serve:demo:flp": "npm run serve:flp --workspace=packages/demo-app",
-		"serve:demo:test": "npm run serve --workspace=packages/demo-app -- --port 8081",
-		"serve:demo:flp:test": "npm run serve:flp --workspace=packages/demo-app -- --port 8083",
-		"serve:demo:flp:149:test": "npm run serve:flp --workspace=packages/demo-app -- --port 8085 --framework-version 1.149.0",
+		"serve:demo:test": "npm run serve:test --workspace=packages/demo-app -- --port 8081",
+		"serve:demo:flp:test": "npm run serve:flp:test --workspace=packages/demo-app -- --port 8083",
+		"serve:demo:flp:151:test": "npm run serve:flp:test --workspace=packages/demo-app -- --port 8085 --framework-version 1.151.0",
 		"wdio:qunit": "wdio run packages/lib/test/wdio-qunit.conf.ts",
 		"wdio:e2e": "wdio run packages/demo-app/test/wdio.conf.ts",
 		"wdio:e2e:flp": "wdio run packages/demo-app/test/wdio-flp.conf.ts",
 		"test": "npm run test:qunit && npm run test:e2e",
-		"test:full": "npm run test:qunit && npm run test:qunit:compat:120 && npm run test:e2e && npm run test:e2e:flp && npm run test:e2e:flp:149",
+		"test:full": "npm run test:qunit && npm run test:qunit:compat:120 && npm run test:e2e && npm run test:e2e:flp && npm run test:e2e:flp:151",
 		"test:qunit": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8080 --server-script start:lib --test-script wdio:qunit",
 		"test:qunit:compat:120": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8082 --server-script start:lib:compat:120:test --test-script wdio:qunit --test-base-url http://localhost:8082",
 		"test:e2e": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8081 --server-script serve:demo:test --test-script wdio:e2e --test-base-url http://localhost:8081/index.html",
 		"test:e2e:flp": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp:test --test-script wdio:e2e:flp --test-base-url http://localhost:8083/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
-		"test:e2e:flp:149": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8085/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp:149:test --test-script wdio:e2e:flp --test-base-url http://localhost:8085/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
+		"test:e2e:flp:151": "node ./scripts/run-with-server.mjs --ready-url http://localhost:8085/test/flp.html?sap-ui-xx-viewCache=false --server-script serve:demo:flp:151:test --test-script wdio:e2e:flp --test-base-url http://localhost:8085/test/flp.html?sap-ui-xx-viewCache=false#app-preview",
 		"test:mutation": "node ./scripts/mutation-by-file.mjs",
 		"stryker": "stryker run",
 		"pack:smoke": "node ./scripts/pack-smoke.mjs",
@@ -55,7 +57,7 @@
 	},
 	"lint-staged": {
 		"{packages,scripts,tools}/**/*.{ts,js,mjs}": [
-			"oxlint --fix --tsconfig tsconfig.base.json --import-plugin --deny-warnings",
+			"oxlint --fix --deny-warnings",
 			"oxfmt"
 		],
 		"*.{json,md,yaml,yml}": "oxfmt"
@@ -64,6 +66,7 @@
 		"@commitlint/cli": "^21.2.4",
 		"@commitlint/config-conventional": "^21.2.4",
 		"@openui5/types": "^1.154.0",
+		"@oxlint/plugins": "^1.94.0",
 		"@sapui5/types": "^1.154.0",
 		"@stryker-mutator/core": "^10.1.1",
 		"@stryker-mutator/typescript-checker": "^10.1.1",
@@ -75,9 +78,12 @@
 		"@wdio/mocha-framework": "^9.33.1",
 		"@wdio/spec-reporter": "^9.33.1",
 		"husky": "^9.1.7",
+		"linkedom": "^0.18.15",
 		"lint-staged": "^17.6.1",
+		"mermaid": "12.3.0",
 		"oxfmt": "^0.79.0",
 		"oxlint": "^1.94.0",
+		"oxlint-tsgolint": "^7.0.2007",
 		"release-please": "^17.11.2",
 		"rimraf": "^6.1.4",
 		"typescript": "npm:@typescript/typescript6@^6.0.2",

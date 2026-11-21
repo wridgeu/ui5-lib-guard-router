@@ -5,6 +5,9 @@
 		"suspicious": "warn",
 		"perf": "warn"
 	},
+	"options": {
+		"typeAware": true
+	},
 	"plugins": ["typescript", "oxc", "unicorn", "import"],
 	"jsPlugins": [
 		{
@@ -32,8 +35,18 @@
 		"unicorn/prefer-global-this": "off",
 		"unicorn/consistent-function-scoping": "off",
 		"typescript/no-explicit-any": "warn",
-		"typescript/no-unsafe-type-assertion": "error",
+		"typescript/no-unsafe-argument": "error",
+		"typescript/no-unsafe-assignment": "error",
+		"typescript/no-unsafe-call": "error",
+		"typescript/no-unsafe-member-access": "error",
+		"typescript/no-unsafe-return": "error",
 		"typescript/no-unnecessary-type-assertion": "warn",
+		"typescript/no-misused-promises": "error",
+		"typescript/switch-exhaustiveness-check": "error",
+		"typescript/only-throw-error": "error",
+		"typescript/prefer-promise-reject-errors": "error",
+		"typescript/return-await": "error",
+		"typescript/unbound-method": "off",
 		"code-quality/no-console-only-catch": "warn",
 		"code-quality/no-redundant-boolean-return": "warn",
 		"code-quality/no-em-dash": "warn",
@@ -42,15 +55,32 @@
 		"comment-quality/no-section-divider": "warn",
 		"comment-quality/no-placeholder-comment": "warn",
 		"comment-quality/no-hedging-comment": "warn",
-		"typescript/no-unsafe-function-type": "error"
+		"typescript/no-unsafe-function-type": "error",
+		"typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }]
 	},
 	"overrides": [
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
-				"typescript/no-unsafe-type-assertion": "off",
 				"comment-quality/no-section-divider": "off",
 				"test-guardrails/no-browser-pause": "error"
+			}
+		},
+		{
+			"files": ["packages/lib/test/qunit/upstream-parity/ports/**", "packages/demo-app/test/flp/**/*.js"],
+			"rules": {
+				"typescript/no-unsafe-argument": "off",
+				"typescript/no-unsafe-assignment": "off",
+				"typescript/no-unsafe-call": "off",
+				"typescript/no-unsafe-member-access": "off",
+				"typescript/no-unsafe-return": "off"
+			}
+		},
+		{
+			"files": ["packages/demo-app/**/*.ts"],
+			"rules": {
+				"typescript/consistent-type-assertions": "off",
+				"typescript/no-unsafe-type-assertion": "off"
 			}
 		},
 		{

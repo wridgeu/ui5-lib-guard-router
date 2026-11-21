@@ -6,11 +6,14 @@ import {
 	addGuardUnsafe,
 	addRouteGuardUnsafe,
 	assertBlocked,
+	createdRouterHooks,
 	createPromiseLike,
 	flushPromises,
+	GuardRouterClass,
 	recordSettlements,
 	waitForRoute,
 	routerHooks,
+	getHash,
 } from "../../testHelpers";
 
 let router: GuardRouter;
@@ -22,9 +25,6 @@ const standardHooks = routerHooks(
 	() => router,
 );
 
-// ============================================================
-// Module: Guard allows navigation
-// ============================================================
 QUnit.module("Router - Guard allows navigation", standardHooks);
 
 QUnit.test("Guard returning true allows navigation", async function (assert: Assert) {
@@ -32,7 +32,7 @@ QUnit.test("Guard returning true allows navigation", async function (assert: Ass
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Guard allowed navigation to protected");
+	assert.strictEqual(getHash(), "protected", "Guard allowed navigation to protected");
 });
 
 QUnit.test("Async guard returning true allows navigation", async function (assert: Assert) {
@@ -40,7 +40,7 @@ QUnit.test("Async guard returning true allows navigation", async function (asser
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Async guard allowed navigation");
+	assert.strictEqual(getHash(), "protected", "Async guard allowed navigation");
 });
 
 QUnit.test("Promise-like guard returning true allows navigation", async function (assert: Assert) {
@@ -50,7 +50,7 @@ QUnit.test("Promise-like guard returning true allows navigation", async function
 	await waitForRoute(router, "home");
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Promise-like guard allowed navigation");
+	assert.strictEqual(getHash(), "protected", "Promise-like guard allowed navigation");
 });
 
 QUnit.test("Promise-like guard returning false blocks navigation", async function (assert: Assert) {
@@ -66,12 +66,9 @@ QUnit.test("Route-specific guard returning true allows navigation", async functi
 	router.initialize();
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Route guard allowed navigation");
+	assert.strictEqual(getHash(), "protected", "Route guard allowed navigation");
 });
 
-// ============================================================
-// Module: Guard blocks navigation
-// ============================================================
 QUnit.module("Router - Guard blocks navigation", standardHooks);
 
 QUnit.test("Guard returning false blocks navigation", async function (assert: Assert) {
@@ -114,9 +111,6 @@ QUnit.test("Guard returning rejected Promise produces Error settlement", async f
 	assert.strictEqual(result.error, rejectedError, "Error is the rejected value");
 });
 
-// ============================================================
-// Module: Guard redirects
-// ============================================================
 QUnit.module("Router - Guard redirects", standardHooks);
 
 QUnit.test("Guard returning string redirects to named route", async function (assert: Assert) {
@@ -126,7 +120,7 @@ QUnit.test("Guard returning string redirects to named route", async function (as
 
 	router.navTo("forbidden");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Redirected to the named route");
+	assert.strictEqual(getHash(), "protected", "Redirected to the named route");
 });
 
 QUnit.test("Async guard returning string redirects", async function (assert: Assert) {
@@ -136,12 +130,9 @@ QUnit.test("Async guard returning string redirects", async function (assert: Ass
 
 	router.navTo("forbidden");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Async guard redirected");
+	assert.strictEqual(getHash(), "protected", "Async guard redirected");
 });
 
-// ============================================================
-// Module: Guard context
-// ============================================================
 QUnit.module("Router - Guard context", standardHooks);
 
 QUnit.test("Guard receives correct context", async function (assert: Assert) {
@@ -174,9 +165,6 @@ QUnit.test("Guard context has no ownerComponent when the router has no owner", a
 	assert.strictEqual(capturedContext!.ownerComponent, undefined, "ownerComponent is undefined");
 });
 
-// ============================================================
-// Module: Guard execution order
-// ============================================================
 QUnit.module("Router - Guard execution order", standardHooks);
 
 QUnit.test("Multiple global guards run sequentially, first rejection wins", async function (assert: Assert) {
@@ -278,12 +266,9 @@ QUnit.test("Navigation commits without any guards", async function (assert: Asse
 		route: "protected",
 		hash: "protected",
 	});
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected");
+	assert.strictEqual(getHash(), "protected");
 });
 
-// ============================================================
-// Module: Guard with invalid return values
-// ============================================================
 QUnit.module("Router - Guard invalid values", standardHooks);
 
 QUnit.test("Guard returning invalid value treats as block", async function (assert: Assert) {
@@ -299,9 +284,6 @@ QUnit.test("Guard returning invalid redirect object treats as block", async func
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Invalid redirect object treated as block");
 });
 
-// ============================================================
-// Module: GuardRedirect object
-// ============================================================
 QUnit.module("Router - GuardRedirect object", standardHooks);
 
 QUnit.test("Guard returning GuardRedirect object redirects to route", async function (assert: Assert) {
@@ -311,13 +293,13 @@ QUnit.test("Guard returning GuardRedirect object redirects to route", async func
 
 	router.navTo("forbidden");
 	await waitForRoute(router, "protected");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "protected", "Redirected via GuardRedirect");
+	assert.strictEqual(getHash(), "protected", "Redirected via GuardRedirect");
 });
 
 QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", async function (assert: Assert) {
-	let matchedArgs: Record<string, string> = {};
+	let matchedArgs: object | undefined;
 	router.getRoute("detail")!.attachPatternMatched((event: Route$PatternMatchedEvent) => {
-		matchedArgs = event.getParameter("arguments") as Record<string, string>;
+		matchedArgs = event.getParameter("arguments");
 	});
 	router.addRouteGuard("forbidden", (): GuardRedirect => ({
 		route: "detail",
@@ -326,8 +308,8 @@ QUnit.test("Guard returning GuardRedirect with parameters redirects correctly", 
 	router.initialize();
 	router.navTo("forbidden");
 	await waitForRoute(router, "detail");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "detail/error-403", "Redirect landed with correct params");
-	assert.strictEqual(matchedArgs.id, "error-403", "Redirect parameters propagated to matched event");
+	assert.strictEqual(getHash(), "detail/error-403", "Redirect landed with correct params");
+	assert.deepEqual(matchedArgs, { id: "error-403" }, "Redirect parameters propagated to matched event");
 });
 
 QUnit.test("Async guard returning GuardRedirect works", async function (assert: Assert) {
@@ -337,12 +319,9 @@ QUnit.test("Async guard returning GuardRedirect works", async function (assert: 
 
 	router.navTo("protected");
 	await waitForRoute(router, "forbidden");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "Async GuardRedirect redirected");
+	assert.strictEqual(getHash(), "forbidden", "Async GuardRedirect redirected");
 });
 
-// ============================================================
-// Module: Initial navigation recovery
-// ============================================================
 QUnit.module("Router - Initial navigation recovery", standardHooks);
 
 QUnit.test("Blocked initial navigation falls back to the default hash", async function (assert: Assert) {
@@ -350,7 +329,7 @@ QUnit.test("Blocked initial navigation falls back to the default hash", async fu
 	HashChanger.getInstance().setHash("protected");
 	router.initialize();
 	await waitForRoute(router, "home");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Blocked initial navigation restored the default hash");
+	assert.strictEqual(getHash(), "", "Blocked initial navigation restored the default hash");
 });
 
 QUnit.test(
@@ -368,14 +347,14 @@ QUnit.test(
 		await flushPromises();
 
 		assert.deepEqual(statuses, [NavigationOutcome.Blocked, NavigationOutcome.Committed]);
-		assert.strictEqual(HashChanger.getInstance().getHash(), "forbidden", "the handler's route is kept");
+		assert.strictEqual(getHash(), "forbidden", "the handler's route is kept");
 	},
 );
 
 QUnit.test("Blocked default route on initial navigation stays blocked", async function (assert: Assert) {
 	router.addRouteGuard("home", () => false);
 	await assertBlocked(assert, router, () => router.initialize(), "Blocked default route did not match");
-	assert.strictEqual(HashChanger.getInstance().getHash(), "", "Hash stays on the default target");
+	assert.strictEqual(getHash(), "", "Hash stays on the default target");
 });
 
 QUnit.test("Blocked default route can be entered once its guard allows", async function (assert: Assert) {
@@ -415,4 +394,60 @@ QUnit.test("Blocked default route can be entered with skipGuards", async functio
 	assert.strictEqual(result.status, NavigationOutcome.Committed, "navigation committed without a hash change");
 	assert.strictEqual(result.route, "home");
 	await homeMatched;
+});
+
+QUnit.module(
+	"Router - Query and optional parameters of a guarded route",
+	createdRouterHooks(() => router),
+);
+
+function createProductsRouter(): GuardRouter {
+	return new GuardRouterClass(
+		[
+			{ name: "home", pattern: "" },
+			{ name: "protected", pattern: "protected" },
+			{ name: "products", pattern: "products/:id::?query:" },
+		],
+		{ async: true },
+	);
+}
+
+QUnit.test(
+	"toArguments holds a query as an object under ?query, and undefined for an optional parameter that is left out",
+	async function (assert: Assert) {
+		router = createProductsRouter();
+		let toArguments: GuardContext["toArguments"] | undefined;
+		router.addRouteGuard("products", (context) => {
+			toArguments = context.toArguments;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		HashChanger.getInstance().setHash("products?tab=notes");
+		await waitForRoute(router, "products");
+		assert.deepEqual(toArguments?.["?query"], { tab: "notes" }, "the query after a hash change");
+		assert.strictEqual(toArguments?.id, undefined, "the optional parameter that the hash leaves out");
+
+		router.navTo("products", { id: "7", "?query": { tab: "price" } });
+		await waitForRoute(router, "products");
+		assert.deepEqual(toArguments, { id: "7", "?query": { tab: "price" } }, "after navTo()");
+	},
+);
+
+QUnit.test("GuardRedirect.parameters takes a query as an object under ?query", async function (assert: Assert) {
+	router = createProductsRouter();
+	const parameters = { id: "7", "?query": { tab: "notes" } };
+	router.addRouteGuard("protected", (): GuardRedirect => ({ route: "products", parameters }));
+	let toArguments: GuardContext["toArguments"] | undefined;
+	router.addRouteGuard("products", (context) => {
+		toArguments = context.toArguments;
+		return true;
+	});
+	router.initialize();
+	await waitForRoute(router, "home");
+
+	router.navTo("protected");
+	await waitForRoute(router, "products");
+	assert.deepEqual(toArguments, parameters, "the redirect target gets the parameters in the shape they were passed");
 });
