@@ -907,18 +907,14 @@ A factory closes over what its guard depends on:
 
 ```typescript
 import type JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
+import type { GuardFn, LeaveGuardFn } from "ui5/guard/router/types";
 
 export function createAuthGuard(authModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		return authModel.getProperty("/isLoggedIn") ? true : "home";
-	};
+	return () => (authModel.getProperty("/isLoggedIn") ? true : "home");
 }
 
 export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
-	return (context: GuardContext): boolean => {
-		return !formModel.getProperty("/isDirty");
-	};
+	return () => !formModel.getProperty("/isDirty");
 }
 ```
 

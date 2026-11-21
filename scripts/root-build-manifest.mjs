@@ -1,5 +1,6 @@
 // UI5 Tooling reads the build manifest of a dependency only at <package root>/.ui5/build-manifest.json, with its paths relative to that root.
 // `ui5 build --create-build-manifest` writes it to dist/.ui5, so the prepack script of packages/lib copies it to the root with dist/ prefixed to the paths.
+// Neither location is configurable: @ui5/project 4 hard-codes both (ProjectBuilder._writeResults, Module._readBuildManifest).
 // postpack removes the copy again, so the library and the demo app keep serving the sources during development.
 // Usage (from packages/lib): node ../../scripts/root-build-manifest.mjs
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
