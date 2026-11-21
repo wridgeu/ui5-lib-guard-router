@@ -1323,10 +1323,10 @@ Blue is the library and grey is native UI5 or no action ([diagram style](../../C
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
-- **Packaging**: `ui5 build --create-build-manifest` writes the UI5 build manifest to `dist/.ui5/`, but UI5 Tooling reads a dependency's manifest only at its package root. The `prepack` script of `packages/lib` (`scripts/root-build-manifest.mjs`) therefore copies it to `.ui5/` with `dist/` prefixed to its paths, so consumers serve and build the pre-built files as they are. `postpack` removes the copy, so the library and the demo app keep serving the sources. npm skips `postpack` when packing fails; if the library or the demo app then serve stale `dist/` files, `npm run clean -w packages/lib` removes the leftover `.ui5/`.
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
 - **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
+- **Packaging**: `ui5 build --create-build-manifest` writes the UI5 build manifest to `dist/.ui5/`, but UI5 Tooling reads a dependency's manifest only at its package root. The `prepack` script of `packages/lib` (`scripts/root-build-manifest.mjs`) therefore copies it to `.ui5/` with `dist/` prefixed to its paths, so consumers serve and build the pre-built files as they are. `postpack` removes the copy, so the library and the demo app keep serving the sources. npm skips `postpack` when packing fails; if the library or the demo app then serve stale `dist/` files, `npm run clean -w packages/lib` removes the leftover `.ui5/`.
 
 ## Test Architecture
 
