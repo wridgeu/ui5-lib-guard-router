@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -155,6 +155,14 @@ async function main() {
 		);
 
 		await stat(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "LICENSE"));
+		// UI5 Tooling reads the build manifest only at the package root; without it consumers serve the sources.
+		const buildManifest = await readFile(
+			path.join(tempDir, "node_modules", "ui5-lib-guard-router", ".ui5", "build-manifest.json"),
+			"utf8",
+		);
+		if (!buildManifest.includes('"src": "dist/resources"')) {
+			throw new Error("The packed build manifest does not point its resources into dist/");
+		}
 		await stat(path.join(tempDir, "node_modules", "ui5-lib-guard-router", "dist", "index.d.ts"));
 		await stat(
 			path.join(

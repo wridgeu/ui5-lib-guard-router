@@ -18,6 +18,9 @@
 		}
 	},
 	"sap.ui5": {
+		"library": {
+			"i18n": false
+		},
 		"contentDensities": {
 			"compact": true,
 			"cozy": true

@@ -192,14 +192,19 @@ the committing phase, which commits without running the guards again.
 `parse()` checks the hash in this order, and the first case that applies ends the call:
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 300
+---
 flowchart TD
-    start(["parse(newHash)"]) --> destroyed["router destroyed:<br/>super.parse(), the base router warns"]
-    destroyed -- "otherwise" --> outdated["report out of date (_reportOutdated):<br/>return"]
+    start(["parse(newHash)"]) --> destroyed["router destroyed:<br/>super.parse(),<br/>the base router warns"]
+    destroyed -- "otherwise" --> outdated["report out of date<br/>(_reportOutdated):<br/>return"]
     outdated -- "otherwise" --> suppress["hash equals _suppressedHash:<br/>return"]
-    suppress -- "otherwise" --> back["undo started and root hash equals undo.fullHash:<br/>adopt the hash without guards, _finishRestore(newHash)"]
-    back -- "otherwise" --> redir["✓ committing or awaitingHash phase for newHash:<br/>_commitNavigation()"]
-    redir -- "otherwise" --> moved["same as _currentHash, a pending navigation had moved the URL:<br/>evaluating: _cancelPendingNavigation()<br/>awaiting its hash: forget the undo"]
-    moved -- "otherwise" --> again["same as _currentHash:<br/>super.parse(), the route matches again"]
+    suppress -- "otherwise" --> back["undo started and root hash<br/>equals undo.fullHash:<br/>adopt the hash without guards,<br/>_finishRestore(newHash)"]
+    back -- "otherwise" --> redir["✓ committing or awaitingHash<br/>phase for newHash:<br/>_commitNavigation()"]
+    redir -- "otherwise" --> moved["same as _currentHash,<br/>a pending navigation<br/>had moved the URL:<br/>evaluating:<br/>_cancelPendingNavigation()<br/>awaiting its hash:<br/>forget the undo"]
+    moved -- "otherwise" --> again["same as _currentHash:<br/>super.parse(), the route<br/>matches again"]
     again -- "otherwise" --> guards(["the guards run"])
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
@@ -210,17 +215,22 @@ flowchart TD
     class redir commit
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library and grey is native UI5 or no action. The outcome carries a symbol: ✓ commit (green) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 Every other hash runs the guards:
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 300
+---
 flowchart TD
     cancelprev["resolve route<br/>_cancelPendingNavigation()"] --> handlermoved{"a navigationSettled handler<br/>moved _currentHash?"}
     handlermoved -- "yes" --> ret(["return"])
-    handlermoved -- "no" --> setup["_describeUndo(), none while restoring<br/>_startAttempt(): evaluating phase"]
+    handlermoved -- "no" --> setup["_describeUndo(),<br/>none while restoring<br/>_startAttempt():<br/>evaluating phase"]
     setup --> evaluate["_pipeline.evaluate(context)"]
-    evaluate -- "decision (sync or from Promise)" --> stale{"same generation?"}
+    evaluate -- "decision (sync<br/>or from Promise)" --> stale{"same generation?"}
     stale -- "stale" --> discard(["discard result"])
     stale -- "current" --> apply{"_applyDecision()"}
     apply -- "allow" --> commit(["✓ _commitNavigation()"])
@@ -616,10 +626,15 @@ route. All of them get the one context of the navigation. On a redirect hop
 `skipLeaveGuards` drops all leave guards, those of `alsoLeaving` included.
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 300
+---
 flowchart TD
-    start(["evaluate(context)"]) --> p1["Phase 1: leave guards of fromRoute<br/>and alsoLeaving, none on a redirect hop<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    start(["evaluate(context)"]) --> p1["Phase 1: leave guards<br/>of fromRoute and alsoLeaving,<br/>none on a redirect hop<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
     p1 -- "all true,<br/>not aborted" --> p2["Phase 2: global guards<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
-    p2 -- "all true,<br/>not aborted" --> p3["Phase 3: route guards of toRoute<br/>and alsoEntering<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
+    p2 -- "all true,<br/>not aborted" --> p3["Phase 3: route guards<br/>of toRoute and alsoEntering<br/>_runGuards(), after a Promise<br/>_continueGuardsAsync()"]
     p3 -- "all true" --> allow(["✓ allow"])
 
     p1 -- "non-true<br/>or aborted" --> block(["✕ block"])
@@ -643,7 +658,7 @@ flowchart TD
     class error error
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library and grey is native UI5 or no action. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 The first non-`true` result stops evaluation, and the remaining guards are skipped.
 
@@ -731,18 +746,23 @@ again, which would navigate again.
 pending navigation settles.
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 300
+---
 flowchart TD
     call(["navigationSettled()"]) --> pending{"phase is evaluating,<br/>awaitingHash or restoring?"}
-    pending -- "no (idle or committing)" --> immediate["resolve immediately<br/>(_lastSettlement or Committed default)"]
+    pending -- "no (idle or<br/>committing)" --> immediate["resolve immediately<br/>(_lastSettlement<br/>or Committed default)"]
     pending -- "yes" --> push["push resolver<br/>into _settlementResolvers"]
     push -. "flushed by" .-> actions
 
     subgraph actions ["Terminal actions"]
-        commit["✓ _commitNavigation():<br/>Committed, Bypassed or Redirected"]
-        settle["↪ _settleUncommitted(), redirect to the shown route:<br/>Redirected"]
-        block["✕ _blockNavigation(), also from _redirect()<br/>for an unknown target, a loop or the depth cap:<br/>Blocked"]
-        errornav["⚠ _errorNavigation(), also from _redirect()<br/>for a target without valid hash:<br/>Error"]
-        cancel["_cancelPendingNavigation(), if a navigation is pending:<br/>Cancelled, while restoring its result"]
+        commit["✓ _commitNavigation():<br/>Committed, Bypassed<br/>or Redirected"]
+        settle["↪ _settleUncommitted(),<br/>redirect to the shown route:<br/>Redirected"]
+        block["✕ _blockNavigation(),<br/>also from _redirect()<br/>for an unknown target,<br/>a loop or the depth cap:<br/>Blocked"]
+        errornav["⚠ _errorNavigation(),<br/>also from _redirect()<br/>for a target<br/>without valid hash:<br/>Error"]
+        cancel["_cancelPendingNavigation(),<br/>if a navigation is pending:<br/>Cancelled, while restoring<br/>its result"]
         commit ~~~ settle ~~~ block ~~~ errornav ~~~ cancel
     end
 
@@ -1251,13 +1271,13 @@ A navigation that commits:
 ```mermaid
 stateDiagram-v2
     [*] --> idle
-    idle --> evaluating: parse() of a new hash, navTo()
-    idle --> committing: navTo() that skips the guards
+    idle --> evaluating: parse() of a<br/>new hash, navTo()
+    idle --> committing: navTo() that skips<br/>the guards
     evaluating --> evaluating: redirect hop
     evaluating --> committing: allowed
-    committing --> awaitingHash: component targets, UI5 writes the hash later
-    awaitingHash --> committing: parse() receives the hash
-    committing --> idle: hash is there → Committed, Bypassed or Redirected
+    committing --> awaitingHash: component targets,<br/>UI5 writes<br/>the hash later
+    awaitingHash --> committing: parse() receives<br/>the hash
+    committing --> idle: hash is there →<br/>Committed, Bypassed<br/>or Redirected
 
     classDef native fill:#6e7781,stroke:#424a53,color:#ffffff
     classDef added fill:#0072B2,stroke:#56B4E9,stroke-width:3px,color:#ffffff
@@ -1265,7 +1285,7 @@ stateDiagram-v2
     class evaluating,committing,awaitingHash added
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library and grey is native UI5 or no action ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
 
@@ -1284,7 +1304,7 @@ stateDiagram-v2
     class evaluating,committing,awaitingHash,restoring added
 ```
 
-Blue is the library, grey is native UI5 or no action, and light blue is a decision. The outcomes carry a symbol: ✓ commit (green), ↪ redirect (yellow), ✕ block (orange) and ⚠ error (dark purple, dashed border) ([diagram style](../../CONTRIBUTING.md#diagram-style)).
+Blue is the library and grey is native UI5 or no action ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
 ## Monorepo Tooling
 
@@ -1303,6 +1323,7 @@ Blue is the library, grey is native UI5 or no action, and light blue is a decisi
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`
+- **Packaging**: `ui5 build --create-build-manifest` writes the UI5 build manifest to `dist/.ui5/`, but UI5 Tooling reads a dependency's manifest only at its package root. The `prepack` script of `packages/lib` (`scripts/root-build-manifest.mjs`) therefore copies it to `.ui5/` with `dist/` prefixed to its paths, so consumers serve and build the pre-built files as they are. `postpack` removes the copy, so the library and the demo app keep serving the sources. npm skips `postpack` when packing fails; if the library or the demo app then serve stale `dist/` files, `npm run clean -w packages/lib` removes the leftover `.ui5/`.
 - **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
 - **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts

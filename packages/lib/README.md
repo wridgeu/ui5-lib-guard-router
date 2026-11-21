@@ -21,7 +21,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
+> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships the pre-built library (`dist/`) with its source maps and type declarations, and the TypeScript sources (`src/`) that the declaration maps point to. At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
 
 ### TypeScript
 
@@ -60,46 +60,91 @@ import type { GuardRedirect, RouteGuardConfig } from "ui5/guard/router/types";
 
 ### Serving the library
 
-#### Option A: Pre-built (recommended)
+`ui5 serve` (UI5 CLI v4 or later) serves the library from `node_modules` without configuration. The package carries a UI5 build manifest (`.ui5/build-manifest.json`) that tells UI5 Tooling to use the pre-built files in `dist/` as they are. `ui5 tree` lists `ui5.guard.router` among the dependencies. The source maps contain the TypeScript sources, so the browser debugger shows those.
 
-The package includes a [UI5 build manifest](https://github.com/SAP/ui5-tooling/blob/main/rfcs/0006-local-dependency-resolution.md) (`dist/.ui5/build-manifest.json`). UI5 Tooling v4+ detects it and `ui5 serve` serves the pre-built JavaScript from `dist/`. No `ui5.yaml` change is needed.
-
-#### Option B: Transpile from source
-
-To serve from the TypeScript sources (for example to debug with source maps), install [`ui5-tooling-transpile`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-tooling-transpile) and enable `transpileDependencies` in your app's `ui5.yaml`:
-
-```bash
-npm install -D ui5-tooling-transpile
-```
+When another middleware answers `/resources` before UI5 Tooling does, serve the files statically ahead of it. `fiori-tools-proxy` in Fiori tools projects, for example, forwards `/resources` to the UI5 CDN. With `fiori-tools-servestatic`, which Fiori tools projects already have:
 
 ```yaml
 # ui5.yaml
 server:
     customMiddleware:
-        - name: ui5-tooling-transpile-middleware
-          afterMiddleware: compression
+        - name: fiori-tools-servestatic
+          beforeMiddleware: fiori-tools-proxy
           configuration:
-              transpileDependencies: true
+              paths:
+                  - path: /resources/ui5/guard/router
+                    src: node_modules/ui5-lib-guard-router/dist/resources/ui5/guard/router
 ```
 
-#### Option C: Static serving (workaround)
+Outside Fiori tools, [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) does the same with `mountPath: /resources/ui5/guard/router` and `rootPath: node_modules/ui5-lib-guard-router/dist/resources/ui5/guard/router`.
 
-If neither option fits your setup, mount the pre-built resources with [`ui5-middleware-servestatic`](https://github.com/ui5-community/ui5-ecosystem-showcase/tree/main/packages/ui5-middleware-servestatic) (or a similar middleware) pointed at `dist/resources` in `node_modules`:
+### Building and deploying
 
-```bash
-npm install -D ui5-middleware-servestatic
-```
+`ui5 build` builds the app without its dependencies. Choose where the library lives at runtime:
+
+| Setup                                                  | Library at runtime                            | Fits                                         |
+| ------------------------------------------------------ | --------------------------------------------- | -------------------------------------------- |
+| [Deployed with the app](#deployed-with-the-app)        | `resources/ui5/guard/router/` next to the app | Launchpad, SAP Build Work Zone, standalone   |
+| [In the app's preload](#in-the-apps-component-preload) | Inside `Component-preload.js`                 | The same, with one request less              |
+| [Self-contained](#self-contained-app)                  | Inside `sap-ui-custom.js`, together with UI5  | Standalone apps that ship their own UI5      |
+| [Deployed on its own](#deployed-as-a-reuse-library)    | A reuse library that several apps share       | One library version for all apps on a system |
+
+The first three keep each app on the library version it was built with, so updating the library means redeploying each app. The fourth updates in one place, at the cost of deployment configuration for the library.
+
+#### Deployed with the app
+
+Include the library in the build, in the `ui5.yaml` the build uses (or `ui5 build --include-dependency=ui5.guard.router`):
 
 ```yaml
-# ui5.yaml
-server:
-    customMiddleware:
-        - name: ui5-middleware-servestatic
-          afterMiddleware: compression
-          mountPath: /resources
-          configuration:
-              rootPath: node_modules/ui5-lib-guard-router/dist/resources
+builder:
+    settings:
+        includeDependency:
+            - ui5.guard.router
 ```
+
+The build writes the library, with its `library-preload.js`, to `dist/resources/ui5/guard/router/`. When UI5 itself comes from somewhere else (a CDN, the launchpad), map the namespace to that folder in the app's `manifest.json`:
+
+```json
+{
+	"sap.ui5": {
+		"resourceRoots": {
+			"ui5.guard.router": "./resources/ui5/guard/router"
+		}
+	}
+}
+```
+
+On SAP BTP, add the library to the archive with `includeDependencies: [ui5.guard.router]` in the `ui5-task-zipper` configuration. If `xs-app.json` routes `/resources` to the UI5 CDN, add a route before it that serves `^/resources/ui5/guard/router/(.*)$` from `html5-apps-repo-rt`. [Simplifying UI5 Library Use on BTP by Bundling Libraries at Build Time](https://community.sap.com/t5/technology-blog-posts-by-members/simplifying-ui5-library-use-on-btp-by-bundling-libraries-at-build-time/ba-p/14304012) walks through the complete setup.
+
+#### In the app's Component-preload
+
+A custom bundle that replaces `Component-preload.js` takes the library modules in with the app's. The app then needs neither `includeDependency` nor `resourceRoots`:
+
+```yaml
+builder:
+    bundles:
+        - bundleDefinition:
+              name: my/app/Component-preload.js
+              sections:
+                  - mode: preload
+                    filters:
+                        - my/app/
+                        - my/app/**/manifest.json
+                        - ui5/guard/router/
+                    resolve: false
+          bundleOptions:
+              optimize: true
+```
+
+Replace `my/app` with the namespace of the app. The filters replace those of the default component preload, so add any the app relied on.
+
+#### Self-contained app
+
+`ui5 build self-contained --all` bundles UI5, the app and the library into `resources/sap-ui-custom.js`. This is for apps that ship their own UI5, not for the launchpad.
+
+#### Deployed as a reuse library
+
+Deploy `node_modules/ui5-lib-guard-router/dist/resources/ui5/guard/router` once, as a reuse library: to the SAPUI5 ABAP repository, or to the HTML5 application repository on SAP BTP. Apps keep only the `libs` dependency in their manifest, and the launchpad resolves the library from where it is deployed. On SAP BTP, that takes a destination or a CDM content provider for the library; [the blog above](https://community.sap.com/t5/technology-blog-posts-by-members/simplifying-ui5-library-use-on-btp-by-bundling-libraries-at-build-time/ba-p/14304012) links the guides for both.
 
 ## Setup
 
@@ -167,10 +212,11 @@ The native chain of `sap.m.routing.Router` stays as it is; the library puts its 
 config:
   flowchart:
     minNodeWidth: 60
+    wrappingWidth: 300
 ---
 flowchart TD
-    bar["Address bar, back, forward:<br/>the browser changes the hash"]
-    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
+    bar["Address bar,<br/>back, forward:<br/>the browser<br/>changes the hash"]
+    shell["Fiori launchpad shell:<br/>passes only<br/>in-app hashes on"]
     appCode["Application code<br/>calls navTo()"]
     hash["Hash changer"]
 
@@ -178,17 +224,17 @@ flowchart TD
         preflight["Preflight of navTo():<br/>before the hash changes"]
         parse["Override of parse():<br/>after the hash changed"]
         subgraph pipeline ["Guard pipeline"]
-            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
-            leave["1. Leave guards of the current route"]
+            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(),<br/>addLeaveGuard()"]
+            leave["1. Leave guards<br/>of the current route"]
             global["2. Global enter guards"]
-            enter["3. Enter guards of the target route"]
+            enter["3. Enter guards<br/>of the target route"]
             leave --> global --> enter
         end
-        commit("✓ All guards allow:<br/>commit")
-        redirect("↪ A guard names a route:<br/>redirect")
-        block("✕ A guard returns false:<br/>block")
-        error("⚠ A guard throws:<br/>error")
-        settled(["Event navigationSettled:<br/>Committed, Bypassed, Redirected,<br/>Blocked or Error"])
+        commit("✓ All guards<br/>allow:<br/>commit")
+        redirect("↪ A guard names<br/>a route:<br/>redirect")
+        block("✕ A guard returns<br/>false:<br/>block")
+        error("⚠ A guard<br/>throws:<br/>error")
+        settled(["Event navigationSettled:<br/>Committed, Bypassed,<br/>Redirected, Blocked<br/>or Error"])
     end
 
     subgraph native ["sap.m.routing.Router (native): parse()"]
@@ -397,6 +443,14 @@ If no navigation is in flight, `navigationSettled()` resolves immediately with t
 **App code: busy indicator during async guards**
 
 ```typescript
+import MessageBox from "sap/m/MessageBox";
+import MessageToast from "sap/m/MessageToast";
+import type App from "sap/m/App";
+import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
+
+// In the root view controller, with an sap.m.App of id "app"
+const app = this.byId("app") as App;
+
 router.addRouteGuard("dashboard", async (context) => {
 	app.setBusy(true);
 	try {
@@ -407,7 +461,7 @@ router.addRouteGuard("dashboard", async (context) => {
 	}
 });
 
-// Show a global busy while the guard pipeline runs
+// React to the outcome once the guards have decided
 router.navTo("dashboard");
 const result = await router.navigationSettled();
 switch (result.status) {
@@ -530,7 +584,7 @@ Guards, route metadata and router options can be declared in the `guardRouter` b
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
-When constructing the router in code rather than from the manifest, the config argument is typed as `GuardRouterConfig` (since 1.7.0): the standard router config plus `guardRouter`, so `new Router(routes, { async: true, guardRouter: { navToPreflight: "bypass" } })` type-checks without casts.
+When constructing the router in code rather than from the manifest, the config argument is typed as `GuardRouterConfig` (since 1.7.0): the standard router config plus `guardRouter`, so `new Router(routes, { async: true, guardRouter: { navToPreflight: "bypass" } })` (`import Router from "ui5/guard/router/Router"`) type-checks without casts.
 
 ### Declarative guards
 
@@ -815,7 +869,76 @@ Where each kind of guard fits:
 
 ## Examples
 
-[Guard Integration Patterns](../../docs/guides/integration-patterns.md) has the async check with `AbortSignal`, redirects with parameters (`GuardRedirect`), guard factories and the object form `RouteGuardConfig`, among other patterns.
+### Async guard with AbortSignal
+
+```typescript
+import type { GuardContext, GuardResult } from "ui5/guard/router/types";
+
+router.addRouteGuard("dashboard", async (context: GuardContext): Promise<GuardResult> => {
+	const res = await fetch(`/api/access/${context.toRoute}`, {
+		signal: context.signal, // cancelled when a newer navigation supersedes this one
+	});
+	const { allowed } = await res.json();
+	return allowed ? true : "forbidden";
+});
+```
+
+### Redirect with parameters (GuardRedirect)
+
+```typescript
+import type { GuardRedirect } from "ui5/guard/router/types";
+
+router.addGuard((context): GuardRedirect | true => {
+	if (context.toRoute === "old-detail") {
+		return {
+			route: "detail",
+			parameters: { id: context.toArguments.id },
+		};
+	}
+	return true;
+});
+```
+
+[Guard Integration Patterns](../../docs/guides/integration-patterns.md#redirect-with-parameters) has this guard as a factory for any target route.
+
+### Guard factories
+
+A factory closes over what its guard depends on:
+
+```typescript
+import type JSONModel from "sap/ui/model/json/JSONModel";
+import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
+
+export function createAuthGuard(authModel: JSONModel): GuardFn {
+	return (context: GuardContext): GuardResult => {
+		return authModel.getProperty("/isLoggedIn") ? true : "home";
+	};
+}
+
+export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
+	return (context: GuardContext): boolean => {
+		return !formModel.getProperty("/isDirty");
+	};
+}
+```
+
+### Object form with RouteGuardConfig
+
+The object form is useful when registering both enter and leave guards for the same route in a single call:
+
+```typescript
+import type { RouteGuardConfig } from "ui5/guard/router/types";
+
+const protectedGuards: RouteGuardConfig = {
+	beforeEnter: createAuthGuard(authModel),
+	beforeLeave: createDirtyFormGuard(formModel),
+};
+
+router.addRouteGuard("protected", protectedGuards);
+// later: router.removeRouteGuard("protected", protectedGuards);
+```
+
+More patterns are in [Guard Integration Patterns](../../docs/guides/integration-patterns.md).
 
 ### Dynamic guard registration
 
@@ -834,27 +957,26 @@ router.removeGuard(logGuard);
 
 ### Leave guard with controller lifecycle
 
-From the demo app, `packages/demo-app/webapp/controller/Home.controller.ts`:
+A controller registers its guard in `onInit` and removes the same function in `onExit`:
 
 ```typescript
-import type { LeaveGuardFn } from "ui5/guard/router/types";
-import BaseController from "./BaseController";
-import { createHomeLeaveLogger } from "../guards";
+import Controller from "sap/ui/core/mvc/Controller";
+import UIComponent from "sap/ui/core/UIComponent";
+import type JSONModel from "sap/ui/model/json/JSONModel";
+import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 
-export default class HomeController extends BaseController {
-	private _leaveGuard: LeaveGuardFn | null = null;
+export default class EditController extends Controller {
+	private _leaveGuard?: LeaveGuardFn;
 
 	onInit(): void {
-		const router = this.getRouter();
-		this._leaveGuard = createHomeLeaveLogger();
-		router.addLeaveGuard("home", this._leaveGuard);
+		const form = this.getOwnerComponent()?.getModel("form") as JSONModel;
+		this._leaveGuard = () => form.getProperty("/isDirty") !== true;
+		(UIComponent.getRouterFor(this) as GuardRouter).addLeaveGuard("edit", this._leaveGuard);
 	}
 
 	onExit(): void {
 		if (this._leaveGuard) {
-			const router = this.getRouter();
-			router.removeLeaveGuard("home", this._leaveGuard);
-			this._leaveGuard = null;
+			(UIComponent.getRouterFor(this) as GuardRouter).removeLeaveGuard("edit", this._leaveGuard);
 		}
 	}
 }
@@ -872,7 +994,11 @@ export default class HomeController extends BaseController {
 >
 > In FLP apps with `sap-keep-alive`, the component and its guards stay while the app is hidden, see [Keep-alive apps](#keep-alive-apps).
 
-### Native alternative for leave guards: Fiori Launchpad data loss prevention
+## Fiori Launchpad
+
+The examples in this section import `sap/ushell` modules, whose typings come with `@sapui5/types`, not `@openui5/types`.
+
+### Data loss prevention of the launchpad
 
 Inside SAP Fiori Launchpad (FLP), the shell has its own data loss protection on `sap.ushell.Container`:
 
@@ -880,9 +1006,24 @@ Inside SAP Fiori Launchpad (FLP), the shell has its own data loss protection on 
 - **`registerDirtyStateProvider(fn)`** (since 1.31.0, `deregisterDirtyStateProvider` since 1.67.0): FLP calls the provider on each navigation with a `NavigationContext` (`isCrossAppNavigation`, `innerAppRoute`), so it can tell cross-app from in-app navigation.
 - Since 1.146, `setDirtyFlag` and the provider functions are on `sap/ushell/navigation/DirtyState`, and the `Container` methods are deprecated.
 
+```typescript
+import Container from "sap/ushell/Container"; // 1.146 and later: the same functions on sap/ushell/navigation/DirtyState
+
+const dirtyProvider = (navigationContext?: { isCrossAppNavigation?: boolean }) => {
+	if (navigationContext?.isCrossAppNavigation === false) {
+		return false; // in-app navigation: the leave guards handle it
+	}
+	return formModel.getProperty("/isDirty") === true;
+};
+Container.registerDirtyStateProvider(dirtyProvider);
+
+// When the form or the app goes away
+Container.deregisterDirtyStateProvider(dirtyProvider);
+```
+
 `getDirtyFlag()` is deprecated since UI5 1.120. The APIs and the shell internals are in [FLP Dirty State Research](../../docs/research/flp-dirty-state.md).
 
-#### Combining leave guards with FLP dirty-state protection
+### Combining leave guards with FLP dirty-state protection
 
 A leave guard and a dirty-state provider cover separate scopes and need no coordination:
 
@@ -914,7 +1055,7 @@ The leave guard needs no `toRoute` check or FLP detection: the shell handles cro
 > [!TIP]
 > To test a dirty-state provider in the FLP preview, set `useNewSandbox: true` on the `fiori-tools-preview` middleware (SAPUI5 1.151 and later; before that, `enhancedHomePage: true` from 1.123.0). Both start a CDM launchpad, whose `ShellNavigationHashChanger` and `Navigation` service behave like a production FLP.
 
-#### Keep-alive apps
+### Keep-alive apps
 
 With `sap-keep-alive=true` the launchpad hides an app that the user leaves for another app and shows it again when the user returns. With `sap-keep-alive=restricted` it also destroys kept apps when the user reaches the launchpad home; returning from there through a hash with an inner route (browser back, bookmark) creates a new component.
 
@@ -970,7 +1111,49 @@ sequenceDiagram
     Note over Router: resumes the route
 ```
 
-Guards and dirty-state providers stay registered while the app is hidden. The launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider in `onDeactivate()` and register it again in `onActivate()`; UI5 calls both only when the manifest declares keep-alive support. [Keep-alive apps: dirty-state provider](../../docs/guides/flp-keep-alive.md) has the component, a warning about TypeScript class fields that `init()` sets, and the iframe case.
+Guards and dirty-state providers stay registered while the app is hidden. The launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page, so the user is asked about unsaved data of an app they are not in. Deregister the provider in `onDeactivate()` and register it again in `onActivate()`; UI5 calls both only when the manifest declares keep-alive support (the Declared row):
+
+```typescript
+import UIComponent from "sap/ui/core/UIComponent";
+import Container from "sap/ushell/Container";
+import type JSONModel from "sap/ui/model/json/JSONModel";
+
+type DirtyStateProvider = (context?: { isCrossAppNavigation?: boolean }) => boolean;
+
+export default class Component extends UIComponent {
+	public static metadata = { manifest: "json" };
+
+	// No initializer: it would run after init(), which the UIComponent constructor calls.
+	private _dirtyProvider?: DirtyStateProvider;
+
+	override init(): void {
+		super.init();
+		const form = this.getModel("form") as JSONModel;
+		this._dirtyProvider = (context) =>
+			context?.isCrossAppNavigation !== false && form.getProperty("/isDirty") === true;
+		this.onActivate();
+		this.getRouter().initialize();
+	}
+
+	// Hidden: the launchpad would still ask the provider when the user navigates between other apps.
+	override onDeactivate(): void {
+		if (this._dirtyProvider) Container.deregisterDirtyStateProvider(this._dirtyProvider);
+	}
+
+	override onActivate(): void {
+		if (this._dirtyProvider) Container.registerDirtyStateProvider(this._dirtyProvider);
+	}
+
+	override exit(): void {
+		this.onDeactivate();
+	}
+}
+```
+
+> [!WARNING]
+> `UIComponent` calls `init()` from its constructor. TypeScript class field initializers run after that constructor and overwrite what `init()` stored: with `private _dirtyProvider: DirtyStateProvider | null = null`, `onDeactivate()` and `exit()` find nothing to deregister. The same applies to guards that `init()` registers and `exit()` removes. Declare such fields without an initializer: `ui5-tooling-transpile` (Babel 7, `allowDeclareFields: false`) emits nothing for them. tsc with `useDefineForClassFields` (the default from target ES2022) and Babel with `allowDeclareFields: true` still emit them as `undefined`; there, write `declare private _dirtyProvider: DirtyStateProvider | undefined;`, which Babel 7 with its default options rejects.
+
+An app that the launchpad runs in an iframe is hidden and shown the same way, but the app runtime inside the iframe asks its provider, see [Keep-alive apps: dirty-state provider](../../docs/guides/flp-keep-alive.md).
 
 ## Redirect chains
 
@@ -1022,7 +1205,7 @@ sequenceDiagram
     rect rgba(0, 158, 115, 0.15)
         App->>Router: navTo("admin")
         Router->>Router: leave, global and<br/>route guards allow
-        Router->>History: new entry #35;admin
+        Router->>History: new entry<br/>#35;admin
         Router-->>App: settles Committed
         Router-->>App: routeMatched "admin"
     end
@@ -1058,7 +1241,7 @@ sequenceDiagram
         App->>Router: navTo("admin")
         Router->>Router: an enter guard<br/>redirects to "profile"
         Router->>Router: global and route guards<br/>of "profile" allow
-        Router->>History: new entry #35;profile
+        Router->>History: new entry<br/>#35;profile
         Router-->>App: settles Redirected
         Router-->>App: routeMatched "profile"
     end
@@ -1144,7 +1327,7 @@ sequenceDiagram
         Browser->>Parent: hashChanged "shell"
         Note over Parent: taken without guards,<br/>settles Blocked
         Browser->>Child: hashChanged "detail/1"
-        Note over Child: matches "detail" again
+        Note over Child: matches "detail"<br/>again
     end
 ```
 
