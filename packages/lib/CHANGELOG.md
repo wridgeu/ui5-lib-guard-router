@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.2...v1.7.0) (2026-11-21)
+
+
+### Features
+
+* **router:** owner component for guards; harden navigation and guard loading ([#70](https://github.com/wridgeu/ui5-lib-guard-router/issues/70)) ([4a508eb](https://github.com/wridgeu/ui5-lib-guard-router/commit/4a508eb6efe877c331a28ad36c126b3b1c37fde3))
+
+
+### Bug Fixes
+
+* audit findings in router, demo app, tooling and docs ([#72](https://github.com/wridgeu/ui5-lib-guard-router/issues/72)) ([71a50cd](https://github.com/wridgeu/ui5-lib-guard-router/commit/71a50cd29aa0be44882a0a8cac6d76326cfc67cc))
+
 ## [1.6.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.1...v1.6.2) (2026-05-15)
 
 
