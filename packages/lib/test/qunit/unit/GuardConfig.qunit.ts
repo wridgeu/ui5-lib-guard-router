@@ -65,6 +65,60 @@ QUnit.test("each invalid option falls back to its default", function (this: Sino
 	]);
 });
 
+QUnit.module("GuardConfig - logLevel");
+
+QUnit.test("each level raises the level of the router's log component", function (this: SinonTestContext, assert) {
+	this.stub(Log, "getLevel").returns(Log.Level.ERROR);
+	const setLevel = this.stub(Log, "setLevel");
+	for (const logLevel of ["error", "warning", "info", "debug"]) {
+		parseGuardRouterConfig({ logLevel }, "");
+	}
+	assert.deepEqual(
+		setLevel.getCalls().map((call) => call.args),
+		[
+			[Log.Level.WARNING, "ui5.guard.router.Router"],
+			[Log.Level.INFO, "ui5.guard.router.Router"],
+			[Log.Level.DEBUG, "ui5.guard.router.Router"],
+		],
+		"error is no raise over ERROR",
+	);
+});
+
+QUnit.test(
+	"a more verbose level from sap-ui-log-level or an earlier Log.setLevel() is kept",
+	function (this: SinonTestContext, assert) {
+		const getLevel = this.stub(Log, "getLevel").returns(Log.Level.DEBUG);
+		const setLevel = this.stub(Log, "setLevel");
+		parseGuardRouterConfig({ logLevel: "warning" }, "");
+		assert.deepEqual(getLevel.firstCall.args, ["ui5.guard.router.Router"]);
+		assert.strictEqual(setLevel.callCount, 0);
+	},
+);
+
+QUnit.test("no logLevel leaves the log untouched", function (this: SinonTestContext, assert) {
+	const setLevel = this.stub(Log, "setLevel");
+	parseGuardRouterConfig({}, "");
+	assert.strictEqual(setLevel.callCount, 0);
+});
+
+QUnit.test("an invalid logLevel logs an error and leaves the log untouched", function (this: SinonTestContext, assert) {
+	const error = this.stub(Log, "error");
+	const setLevel = this.stub(Log, "setLevel");
+	for (const logLevel of ["DEBUG", "trace", 3, null]) {
+		parseGuardRouterConfig({ logLevel }, "");
+	}
+	assert.strictEqual(setLevel.callCount, 0);
+	assert.deepEqual(logMessages(error), Array(4).fill("guardRouter.logLevel has invalid value, ignoring it"));
+});
+
+QUnit.test("the level is raised before the other options are validated", function (this: SinonTestContext, assert) {
+	this.stub(Log, "getLevel").returns(Log.Level.ERROR);
+	const setLevel = this.stub(Log, "setLevel");
+	const warning = this.stub(Log, "warning");
+	parseGuardRouterConfig({ guardLoading: "eager", logLevel: "warning" }, "");
+	assert.ok(setLevel.calledBefore(warning), "the warning about guardLoading comes after the raise");
+});
+
 QUnit.module("GuardConfig - routeMeta");
 
 QUnit.test("keeps a frozen copy per route and skips invalid entries", function (this: SinonTestContext, assert) {

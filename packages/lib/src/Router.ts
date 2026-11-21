@@ -8,7 +8,6 @@ import type { ComponentTargetParameters, RouteInfo, Router$RouteMatchedEvent } f
 import type Route from "sap/ui/core/routing/Route";
 import type { $RouteSettings } from "sap/ui/core/routing/Route";
 import type UIComponent from "sap/ui/core/UIComponent";
-// Absolute: the d.ts generator of ui5-tooling-transpile rewrites only single-line relative imports.
 import type {
 	GuardFn,
 	GuardContext,
@@ -20,7 +19,7 @@ import type {
 	NavigationResult,
 	Router$NavigationSettledEvent,
 	RouteGuardConfig,
-} from "ui5/guard/router/types";
+} from "./types";
 import NavigationOutcome from "./NavigationOutcome";
 import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver, LOG_COMPONENT } from "./GuardPipeline";
 import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
@@ -879,6 +878,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _flushSettlement(result: NavigationResult): void {
 		this._lastSettlement = result;
+		Log.debug(`Navigation settled: ${result.status}`, result.hash, LOG_COMPONENT);
 		// After the call that settled: by then a commit has reached super.parse(), and a navigation
 		// that supersedes this one has started.
 		queueMicrotask(() => this._settleMatchWaiters());
