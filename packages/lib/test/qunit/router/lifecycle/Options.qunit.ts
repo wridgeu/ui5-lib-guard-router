@@ -100,12 +100,11 @@ QUnit.test("logLevel raises the level of the router's log component", function (
 });
 
 QUnit.test(
-	"logLevel is applied once, so a Log.setLevel() call after construction wins",
+	"logLevel is applied once at construction and not again on navigation, so a later Log.setLevel() call stays in effect",
 	async function (this: SinonTestContext, assert) {
 		this.stub(Log, "getLevel").returns(Log.Level.ERROR);
 		const setLevel = this.stub(Log, "setLevel");
 		router = createRouterWithOptions({ logLevel: "debug" });
-		Log.setLevel(Log.Level.ERROR, "ui5.guard.router.Router");
 
 		router.initialize();
 		await waitForRoute(router, "home");
@@ -114,10 +113,7 @@ QUnit.test(
 
 		assert.deepEqual(
 			setLevel.getCalls().map((call) => call.args),
-			[
-				[Log.Level.DEBUG, "ui5.guard.router.Router"],
-				[Log.Level.ERROR, "ui5.guard.router.Router"],
-			],
+			[[Log.Level.DEBUG, "ui5.guard.router.Router"]],
 			"the router does not apply its level again",
 		);
 	},

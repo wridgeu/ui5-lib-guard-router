@@ -28,14 +28,15 @@ const isUnknownRouteRegistrationPolicy = isOneOf<UnknownRouteRegistrationPolicy>
 const isNavToPreflightMode = isOneOf<NavToPreflightMode>("guard", "bypass", "off");
 const isGuardLoading = isOneOf<GuardLoading>("block", "lazy");
 const isInheritance = isOneOf<Inheritance>("none", "pattern-tree");
-const isLogLevel = isOneOf<GuardRouterLogLevel>("error", "warning", "info", "debug");
 
 const LOG_LEVELS = {
 	error: Log.Level.ERROR,
 	warning: Log.Level.WARNING,
 	info: Log.Level.INFO,
 	debug: Log.Level.DEBUG,
-};
+} satisfies Record<GuardRouterLogLevel, unknown>;
+
+const isLogLevel = (v: unknown): v is GuardRouterLogLevel => typeof v === "string" && Object.hasOwn(LOG_LEVELS, v);
 
 /** Parsed guard declaration from the manifest `guards` block. */
 export interface GuardDescriptor {
@@ -200,7 +201,8 @@ function applyOption<K extends keyof ResolvedGuardRouterOptions>(
 function applyLogLevel(value: unknown): void {
 	if (value === undefined) return;
 	if (!isLogLevel(value)) {
-		Log.warning("guardRouter.logLevel has invalid value, using default", JSON.stringify(value), LOG_COMPONENT);
+		// An error, not a warning: the level is not raised, so a warning would be filtered out at the default ERROR level.
+		Log.error("guardRouter.logLevel has invalid value, ignoring it", JSON.stringify(value), LOG_COMPONENT);
 		return;
 	}
 	const level = LOG_LEVELS[value];

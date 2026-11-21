@@ -101,14 +101,14 @@ QUnit.test("no logLevel leaves the log untouched", function (this: SinonTestCont
 	assert.strictEqual(setLevel.callCount, 0);
 });
 
-QUnit.test("an invalid logLevel warns and leaves the log untouched", function (this: SinonTestContext, assert) {
-	const warning = this.stub(Log, "warning");
+QUnit.test("an invalid logLevel logs an error and leaves the log untouched", function (this: SinonTestContext, assert) {
+	const error = this.stub(Log, "error");
 	const setLevel = this.stub(Log, "setLevel");
 	for (const logLevel of ["DEBUG", "trace", 3, null]) {
 		parseGuardRouterConfig({ logLevel }, "");
 	}
 	assert.strictEqual(setLevel.callCount, 0);
-	assert.deepEqual(logMessages(warning), Array(4).fill("guardRouter.logLevel has invalid value, using default"));
+	assert.deepEqual(logMessages(error), Array(4).fill("guardRouter.logLevel has invalid value, ignoring it"));
 });
 
 QUnit.test("the level is raised before the other options are validated", function (this: SinonTestContext, assert) {
