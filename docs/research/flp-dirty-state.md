@@ -109,7 +109,7 @@ The Shell controller (`sap.ushell.renderer.Shell.controller`) registers `_handle
 1. A hash change arrives: tile, home button, browser back/forward, or an app's own `navTo()`. The browser hash has already changed.
 2. `ShellNavigationHashChanger.treatHashChanged` calls the navigation filters in sequence, for in-app and cross-app changes alike.
 3. `_handleDataLoss` reads the dirty state (`Container.getDirtyFlag()` in 1.144.0, `DirtyState.getDirtyFlagInternal()` in 1.149.0). Not dirty: it returns `Continue`.
-4. Dirty: it puts the previous hash back (history back/forward, or `replaceHash` after a replaced entry), restarts the app router with `initialize(true)`, and returns `Custom`. `treatHashChanged` stops there; no `hashChanged` event reaches the app router.
+4. Dirty: it restarts the app router with `initialize(true)` while the URL still shows the target, then puts the previous hash back (history back/forward, or `replaceHash` after a replaced entry), and returns `Custom` (`_restoreHashUsingAction()`). `treatHashChanged` stops there; no `hashChanged` event reaches the app router.
 5. The hash change that puts the hash back is swallowed the same way. Once the browser shows the previous hash, the shell shows `window.confirm()`.
 6. Confirmed: it clears the dirty flag and sets the target hash again, which passes the filter this time. Cancelled: nothing more happens; the app stays on its route with its router running.
 

@@ -10,7 +10,7 @@ ui5-lib-guard-router/
 |-- tsconfig.node.json              Node code checked with checkJs: scripts/, tools/, stryker.config.mjs, the wdio configs and testsuite of the library
 |-- .oxlintrc.json                  linter config
 |-- scripts/                        check-*, vendoring, pack smoke, with *.test.mjs beside them
-|-- tools/                          the oxlint JS plugins with their *.test.mjs, and the wdio Chrome profile
+|-- tools/                          the oxlint JS plugins (two with a *.test.mjs), and the wdio Chrome profile
 |
 |-- packages/
     |-- lib/                        the core library
@@ -656,16 +656,17 @@ the error is swallowed and the decision is a block.
 
 `Router.ts` keeps the navigation logic and hands the rest to helper modules:
 
-| Step                         | Router code                                                                                    | Helper                                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Read the `guardRouter` block | constructor                                                                                    | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
-| Lazy-mode preload hint       | constructor                                                                                    | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
-| Pattern-tree expansion       | `initialize()`, `addRoute()`                                                                   | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
-| `guardLoading: "block"`      | `initialize()`                                                                                 | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
-| `guardLoading: "lazy"`       | `initialize()` → `_registerLazyGuards()`; `addRoute()` → `_registerManifestGuard(..., before)` | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
-| Export shapes and names      | -                                                                                              | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
-| Guard names in log messages  | -                                                                                              | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
-| Route metadata               | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()`                                      | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
+| Step                                               | Router code                                               | Helper                                                                                                 |
+| -------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Read the `guardRouter` block                       | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
+| Lazy-mode preload hint                             | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
+| Pattern-tree expansion                             | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
+| `guardLoading: "block"`                            | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
+| `guardLoading: "lazy"`                             | `initialize()` → `_registerLazyGuards()`                  | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
+| `addRoute()` with `pattern-tree`, any loading mode | `addRoute()` → `_registerManifestGuard(..., before)`      | `createLazyGuards()` (`GuardModules.ts`)                                                               |
+| Export shapes and names                            | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
+| Guard names in log messages                        | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
+| Route metadata                                     | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
@@ -837,6 +838,8 @@ sees a cross-app hash. In SAPUI5 1.144.0 and 1.149.0 (`sap/ushell/renderer/Shell
 - The same `initialize(true)` restart runs when a navigation fails and the shell goes back to
   the previous app, and when the target app opens in a new window.
 
+The filter chain step by step, with sources: [FLP dirty state](../research/flp-dirty-state.md).
+
 The hash change that puts the app's hash back reaches the router as no `hashChanged` event.
 After the cancel, UI5 does not report a hash change to the app's own hash `""` either. The router
 therefore takes the hash to undo from the `oldHash` of the next root `hashChanged` event
@@ -883,61 +886,19 @@ application code runs.
 With `sap-keep-alive=true` the shell keeps an app it leaves for another app and hides it.
 With `sap-keep-alive=restricted` it keeps it the same way between apps, but destroys it when
 the user reaches the launchpad home. Before the shell creates a new app component, it stops the
-routers of all kept apps. Embedded apps (`appIntegration/contracts/EmbeddedUI5Handler.js`):
-
-| The component                                                      | Hide                                            | Show                                                                                        |
-| ------------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| supports keep-alive (manifest `sap.ui5/keepAlive/supported: true`) | `deactivate()`: `stop()`, then `onDeactivate()` | `activate()`: `initialize()`, which parses the hash through the guards, then `onActivate()` |
-| does not                                                           | `stop()`                                        | `initialize(true)`, which resumes the route; `initialize()` on the legacy restore flow      |
-
-`Component#deactivate()` and `Component#activate()` are UI5 core (`sap/ui/core/Component.js`);
-`isKeepAliveSupported()` reads the manifest entry. Apps in an iframe are hidden and shown by
-the app runtime the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
-
-The component supports keep-alive:
-
-```mermaid
-sequenceDiagram
-    box rgba(110, 119, 129, 0.2) Fiori launchpad
-        participant Shell as Launchpad
-    end
-    participant Comp as App component
-    box rgba(0, 114, 178, 0.15) This library
-        participant Router as Guard router
-    end
-    Shell->>Router: stop() on the cross-app hash change
-    Shell->>Comp: deactivate()
-    Comp->>Router: stop()
-    Comp->>Comp: onDeactivate()
-    Note over Shell,Router: app hidden
-    Shell->>Comp: activate()
-    Comp->>Router: initialize()
-    Note over Router: parses the hash,<br/>guards run
-    Comp->>Comp: onActivate()
-```
-
-It does not:
-
-```mermaid
-sequenceDiagram
-    box rgba(110, 119, 129, 0.2) Fiori launchpad
-        participant Shell as Launchpad
-    end
-    box rgba(0, 114, 178, 0.15) This library
-        participant Router as Guard router
-    end
-    Shell->>Router: stop() on the<br/>cross-app hash change
-    Shell->>Router: stop()
-    Note over Shell,Router: app hidden
-    Shell->>Router: initialize(true)
-    Note over Router: resumes the route
-```
+routers of all kept apps. How the router is stopped and started while an app is hidden and
+shown, with a table and both sequence diagrams, is in the library README,
+[Keep-alive apps](../../packages/lib/README.md#keep-alive-apps). The sources behind it:
+`appIntegration/contracts/EmbeddedUI5Handler.js` for embedded apps; `Component#deactivate()`
+and `Component#activate()` are UI5 core (`sap/ui/core/Component.js`); `isKeepAliveSupported()`
+reads the manifest entry. In both cases the shell also calls `stop()` once more on the cross-app
+hash change, before it hides the app. Apps in an iframe are hidden and shown by the app runtime
+the same way, see [Keep-alive in an iframe](#keep-alive-in-an-iframe).
 
 The dirty-state providers of a hidden embedded app stay registered: the shell asks them on
-every navigation until the app deregisters them. The application side is in the library README,
-[Keep-alive apps](../../packages/lib/README.md#keep-alive-apps).
+every navigation until the app deregisters them.
 
-Observed in the FLP sandbox (SAPUI5 1.144.0, `?sap-keep-alive=true`, embedded apps; demo
+First observed in the FLP sandbox on SAPUI5 1.144.0 (the spec now runs on 1.154 and 1.151; `?sap-keep-alive=true`, embedded apps; demo
 spec `flp-keep-alive.e2e.ts`):
 
 - A hidden app's router does not react to the other app's hash changes, although both routers
@@ -1410,7 +1371,7 @@ are added to them. For the parity folders see [upstream-parity.md](./upstream-pa
 
 E2E tests run against the demo app served by `ui5 serve`, exercising real browser navigation,
 hash changes, and the full UI5 component lifecycle. FLP preview tests run the demo app under
-`ui5 serve --config ui5-flp.yaml` (SAPUI5) and verify the ushell integration, the dirty-state
+`ui5 serve --config ui5-flp-test.yaml` (SAPUI5) and verify the ushell integration, the dirty-state
 provider, leave guard coexistence and the nested component inside the shell. The spec files are
 listed in the [demo README](../../packages/demo-app/README.md#e2e-tests).
 

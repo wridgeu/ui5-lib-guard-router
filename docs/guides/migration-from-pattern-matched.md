@@ -35,6 +35,11 @@ import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { GuardRouter } from "ui5/guard/router/types";
 
 export default class Component extends UIComponent {
+	static metadata = {
+		manifest: "json",
+		interfaces: ["sap.ui.core.IAsyncContentCreation"],
+	};
+
 	init(): void {
 		super.init();
 		const router = this.getRouter() as GuardRouter;

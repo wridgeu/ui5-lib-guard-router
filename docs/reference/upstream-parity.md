@@ -159,7 +159,7 @@ entries, and both stop growing there.
 Each suite has a page of its own, and the tests are split over three pages, because Chrome
 ignores history steps and hash changes once a page has changed its history entries about 200
 times within ten seconds. UI5 does not notice an ignored hash change, the record of the browser
-does. The pages of the first two suites make about 140 and 90 changes, the third has two tests.
+does. The pages of the first two suites make about 140 and 90 changes, the third has three tests.
 
 | Guarded navigation                                                                                      | Native equivalent                                             |
 | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -183,8 +183,9 @@ purpose and are not compared: right after the redirect, the `NavContainer` of th
 has the page of the step as its previous page, and after a redirected step forward it keeps
 that page on its page stack (`sap/m/routing/TargetHandler.js`, `_applyNavigationResult()`).
 
-In these tests the page that is left, the route of the step and the target each have a title
-of their own. UI5 reports a title only when the title or its target differs from the one
+In the first two tests of the third suite the page that is left, the route of the step and the
+target each have a title of their own; the third test pins a target whose title repeats the one
+of the page it leaves. UI5 reports a title only when the title or its target differs from the one
 reported last (`Targets#fireTitleChanged`), so with titles that repeat, the native title history
 depends on a title that the guard router never gets: the one of the route it keeps from
 matching. How the router aligns the title history is described in
@@ -280,6 +281,7 @@ Pinning tests, on both UI5 lanes (`npm run test:qunit` and `npm run test:qunit:c
 - `GuardedEntryParity.qunit.ts: a redirected address bar entry leaves the history, the titles and the pages of a native address bar entry of the target`
 - `RedirectedStepParity.qunit.ts: a redirected browser back leaves the history, the titles and the pages of a native browser back followed by a native navTo() to the target that replaces the entry`
 - `RedirectedStepParity.qunit.ts: a redirected browser forward leaves the history, the titles and the pages of a native browser forward followed by a native navTo() to the target that replaces the entry`
+- `RedirectedStepParity.qunit.ts`, the test of a redirect back to a page with the title of the page it leaves
 
 What fails when UI5 or the browser changes:
 
@@ -334,8 +336,7 @@ Procedure:
    `packages/lib/src/Router.ts`, and `isPromiseResolver()` in `packages/lib/src/GuardPipeline.ts`,
    to what UI5 does now. If UI5 offers a way to release the wait, use it and remove the
    recognition by shape.
-6. Update the versions and line references in the [UI5 source locations](#ui5-source-locations) table above and the versions in the
-   architecture section.
+6. Update the versions and line references in the [UI5 source locations](#ui5-source-locations) table above.
 7. Run both QUnit lanes.
 
 ### Fiori launchpad (sap.ushell)

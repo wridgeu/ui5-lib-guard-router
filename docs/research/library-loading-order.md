@@ -116,6 +116,6 @@ The core module loader (`ui5loader.js`) is a plain AMD-style system with no conc
 - [Lib.load API](https://sdk.openui5.org/#/api/sap.ui.core.Lib%23methods/load)
 - [Component.create API](https://sdk.openui5.org/#/api/sap.ui.core.Component%23methods/create)
 - [Descriptor Dependencies to Libraries](https://ui5.sap.com/docs/topics/28fcd55b04654977b63dacbee0552712.html)
-- Source: `sap/ui/core/Component.js` lines 2752-2782 (OpenUI5 1.144.0)
+- Source: `sap/ui/core/Component.js` lines 2764-2782 (OpenUI5 1.144.0)
 - Source: `sap/ui/core/UIComponent.js` lines 343-345, 900-959 (OpenUI5 1.144.0)
 - Source: `sap/ui/core/Lib.js` `_load` and `requireLibrariesAsync` methods (OpenUI5 1.144.0)

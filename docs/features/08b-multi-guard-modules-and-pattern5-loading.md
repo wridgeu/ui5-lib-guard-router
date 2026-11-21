@@ -109,14 +109,7 @@ interface GuardDescriptor {
 
 ## 4. Named guards
 
-| Export shape  | Name                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Function      | Last path segment: `guards.auth` -> `auth`                                                                         |
-| Array         | Module name + index: `checks#0`, `checks#1`                                                                        |
-| Object        | The key: `checkAuth`, `checkRole`                                                                                  |
-| Cherry-picked | As above for the picked export: `security#checkAuth` -> `checkAuth`, `checks#1` -> `checks#1`, `auth#key` -> `key` |
-
-Names are derived when a module's exports are resolved, not stored on the descriptor, and only appear in the error log of a guard that throws. A lazy wrapper carries the module name (or `module#export`) until it resolves to a single guard. [08, Named guard logging](./08-declarative-manifest-guards.md#named-guard-logging) has the full rules.
+Each manifest guard gets a name derived from its module and export, shown in the error log of a guard that throws. The rules: [08, Named guard logging](./08-declarative-manifest-guards.md#named-guard-logging).
 
 Names were added as a base for later features (disable by name, ordering hints, DevTools). None of these exist yet.
 

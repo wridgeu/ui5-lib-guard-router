@@ -13,100 +13,18 @@ One manifest-first configuration for the guard router, under `sap.ui5.routing.co
 
 Multi-guard modules, cherry-picks, guard names and the `"lazy"` loading strategy came in a second step: [08b](./08b-multi-guard-modules-and-pattern5-loading.md).
 
-## Manifest schema
+## Configuration
 
-```json
-{
-	"sap.ui5": {
-		"routing": {
-			"config": {
-				"routerClass": "ui5.guard.router.Router",
-				"guardRouter": {
-					"unknownRouteRegistration": "warn",
-					"navToPreflight": "guard",
-					"guardLoading": "lazy",
-					"guards": {
-						"*": ["guards.authGuard"],
-						"admin": {
-							"enter": ["guards.adminGuard"],
-							"leave": ["guards.unsavedChangesGuard"]
-						},
-						"editor": {
-							"leave": ["guards.dirtyFormGuard"]
-						},
-						"settings": ["guards.settingsGuard"]
-					}
-				}
-			}
-		}
-	}
-}
-```
+The schema, the options with their values and defaults, the `guards` block, module paths and the guard module format are documented once, in the library README: [Manifest Configuration](../../packages/lib/README.md#manifest-configuration) and [Guard module format](../../packages/lib/README.md#guard-module-format). The decisions behind them:
 
-### Router options
-
-| Option                     | Values                              | Default   | Description                                                                                                                         |
-| -------------------------- | ----------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `unknownRouteRegistration` | `"ignore"` \| `"warn"` \| `"throw"` | `"warn"`  | Registration for an unknown route name. Under `"throw"`, a manifest guard on an unknown route is logged and skipped; nothing throws |
-| `navToPreflight`           | `"guard"` \| `"bypass"` \| `"off"`  | `"guard"` | How a programmatic `navTo()` runs the guards                                                                                        |
-| `guardLoading`             | `"block"` \| `"lazy"`               | `"lazy"`  | How manifest guard modules load                                                                                                     |
-| `inheritance`              | `"none"` \| `"pattern-tree"`        | `"none"`  | Whether manifest guards and route metadata also apply to routes whose pattern extends the declared route's pattern (1.6.0)          |
-
-The block also holds the `guards` and `routeMeta` maps, which are not options. An invalid option value is warned about and replaced by its default.
-
-### Guards block
-
-| Key           | Format                                     | Equivalent API                        |
-| ------------- | ------------------------------------------ | ------------------------------------- |
-| `"*"`         | `string[]`                                 | `addGuard()` for each module          |
-| `"routeName"` | `string[]` (shorthand for `enter`)         | `addRouteGuard()` for each module     |
-| `"routeName"` | `{ "enter": string[], "leave": string[] }` | `addRouteGuard()` / `addLeaveGuard()` |
-
-- There are no global leave guards. The object form under `"*"` logs an info message and treats `enter` as global guards; a `leave` array under `"*"` is warned about and skipped.
-- Keys other than `enter` and `leave`, and `enter` or `leave` values that are not arrays, are warned about and skipped.
-- Route keys are the route names UI5 registers: the `name` of each entry in a `routes` array; for an object map, the entry's `name` if set, else its key.
-- Array order is execution order within a route.
-
-### Module paths
-
-- Paths use dot notation and resolve relative to the component namespace (`sap.app/id` of the router's owner component). In app `demo.app`, `"guards.authGuard"` becomes `demo/app/guards/authGuard`, and `"authGuard"` becomes `demo/app/authGuard`.
-- Without an owner (standalone tests), no namespace is prepended; dots only become slashes.
-- A `"module:"` prefix skips the namespace, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()`: `"module:some.other.lib.guard"` becomes `some/other/lib/guard`.
-- `sap.ui.require` caches modules globally, so a loaded module is never loaded again.
-
-### Guard module format
-
-A module's default export is a function, an array of functions or a plain object of functions. A module with only named exports counts as an object, in the order its exports are written. `#key` picks one export: `"guards.security#checkAuth"`. [08b](./08b-multi-guard-modules-and-pattern5-loading.md) has the shapes, the cherry-pick rules and the risks.
-
-```typescript
-// guards/authGuard.ts: guard name "authGuard"
-import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-
-export default function authGuard(context: GuardContext): GuardResult {
-	// A module guard has no closure over component state.
-	// Share data between guards through context.bag; reach models through context.ownerComponent (1.7.0).
-	const user = context.bag.get("user");
-	return user ? true : "login";
-}
-```
-
-The shape is detected when the router resolves the module: at `initialize()` for cached or `"block"`-loaded modules, otherwise when a lazy wrapper first loads it.
+- Everything lives in `sap.ui5.routing.config.guardRouter`, next to `routerClass`, so router options and guards are configured in one place. An invalid option value is warned about and replaced by its default instead of failing the app.
+- There are no global leave guards (see [01](./01-leave-guards.md#per-route-only)); `leave` under `"*"` is warned about and skipped.
+- Module paths resolve relative to the component namespace, and a `"module:"` prefix opts out, following UI5's `sap.ui.core.routing.Target._getEffectiveObjectName()`.
+- The export shape is detected when the router resolves the module: at `initialize()` for cached or `"block"`-loaded modules, otherwise when a lazy wrapper first loads it.
 
 ## Guard context `bag`
 
-A `Map<string, unknown>` on `GuardContext` for passing data between guards. Manifest guards need it because they are standalone functions.
-
-- Created per navigation attempt and shared by all its guards (leave, global enter, route enter), including those of every redirect hop.
-- Not carried to the next navigation.
-- The router never reads or writes it.
-
-```typescript
-// Guard A
-context.bag.set("user", await fetchUser(context.signal));
-
-// Guard B, later in array order
-const user = context.bag.get("user");
-```
+Manifest guards are standalone functions without a closure over component state, so they need `context.bag` ([README](../../packages/lib/README.md#guard-context-bag)) to pass data between them. It is created per navigation attempt, shared by all guards of that attempt including every redirect hop, and never read or written by the router.
 
 `bag` is a required field (1.5.0). Guard functions are unaffected; code that builds a `GuardContext` literal (usually tests) must add `bag: new Map()`. This was shipped as a minor version.
 
@@ -204,46 +122,7 @@ A manifest guard has no caller that could catch the throw. Under `"throw"`, `_re
 
 ## Types
 
-```typescript
-type UnknownRouteRegistrationPolicy = "ignore" | "warn" | "throw";
-type NavToPreflightMode = "guard" | "bypass" | "off";
-type GuardLoading = "block" | "lazy";
-
-interface GuardRouterOptions {
-	unknownRouteRegistration?: UnknownRouteRegistrationPolicy;
-	navToPreflight?: NavToPreflightMode;
-	guardLoading?: GuardLoading;
-	inheritance?: Inheritance; // 1.6.0
-	guards?: ManifestGuardConfig;
-	routeMeta?: Record<string, Record<string, unknown>>; // 1.6.0
-}
-
-interface GuardNavToOptions {
-	skipGuards?: boolean;
-}
-
-type ManifestGuardConfig = Record<string, string[] | ManifestRouteGuardConfig>;
-
-interface ManifestRouteGuardConfig {
-	enter?: string[];
-	leave?: string[];
-}
-
-interface GuardContext {
-	toRoute: string;
-	toHash: string;
-	toArguments: RouteInfo["arguments"];
-	fromRoute: string;
-	fromHash: string;
-	signal: AbortSignal;
-	bag: Map<string, unknown>; // 1.5.0
-	toMeta: Readonly<Record<string, unknown>>; // 1.6.0
-	fromMeta: Readonly<Record<string, unknown>>; // 1.6.0
-	ownerComponent?: UIComponent; // 1.7.0
-}
-```
-
-The `GuardRouter` interface declares the four `navTo` overloads above.
+`GuardRouterOptions`, `GuardNavToOptions`, `ManifestGuardConfig` and `GuardContext` are in `packages/lib/src/types.ts`; the `GuardRouter` interface declares the four `navTo` overloads above.
 
 ## Execution order
 

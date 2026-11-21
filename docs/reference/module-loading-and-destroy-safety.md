@@ -77,9 +77,9 @@ In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` calls `super.
 
 A navigation in progress when `destroy()` is called ends the same way in all modes:
 
-1. The generation counter increments, so the in-flight pipeline discards its result.
-2. The `AbortController` aborts, which tells guards to cancel async work (e.g. `fetch`).
-3. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazy wrapper whose module was not cached checks it once the module has loaded and returns `false` instead of running the guards. A lazily loaded multi-guard module also checks it after each of its guards that returns a Promise.
+1. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazy wrapper whose module was not cached checks it once the module has loaded and returns `false` instead of running the guards. A lazily loaded multi-guard module also checks it after each of its guards that returns a Promise.
+2. The generation counter increments, so the in-flight pipeline discards its result.
+3. The `AbortController` aborts, which tells guards to cancel async work (e.g. `fetch`).
 
 ## Summary
 

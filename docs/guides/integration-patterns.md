@@ -11,13 +11,13 @@ Guard patterns for `ui5.guard.router.Router`, with the guard type and the demo a
 | [Async permission check](#async-permission-check-with-abortsignal)          | Route enter          | Async        | `guards.ts` -- `createAsyncPermissionGuard`                          |
 | [Always block](#always-block)                                               | Route enter          | Sync         | `guards/blockedGuard.ts`                                             |
 | [Always redirect](#always-redirect)                                         | Route enter          | Sync         | `guards/forbiddenGuard.ts`                                           |
-| [Dirty form leave guard](#dirty-form-leave-guard)                           | Route leave          | Sync         | inline example                                                       |
+| [Dirty form leave guard](#dirty-form-leave-guard)                           | Route leave          | Sync         | `guards/dirtyFormGuard.ts`                                           |
 | [Redirect with parameters](#redirect-with-parameters)                       | Route enter          | Sync         | inline example                                                       |
 | [Error handling](#error-handling-in-guards)                                 | Global / Route enter | Both         | inline example                                                       |
 | [Guard factories](#guard-factories)                                         | Any                  | Any          | `guards.ts` -- the `create*` functions                               |
 | [Controller-level lifecycle](#controller-level-guard-lifecycle)             | Route leave          | Sync         | `Home.controller.ts` -- `onInit` / `onExit`                          |
 | [Object form (enter + leave)](#object-form-enter--leave)                    | Route enter + leave  | Any          | inline example                                                       |
-| [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Sync         | `guards.ts` -- `adminGuard`, `createAsyncPermissionGuard`            |
+| [Chained authorization](#chained-authorization-redirect-chain-guards)       | Route enter          | Both         | `guards.ts` -- `adminGuard`, `createAsyncPermissionGuard`            |
 | [Async guard timeout](#async-guard-timeout)                                 | Route enter          | Async        | inline example                                                       |
 | [Factory pattern for manifest guards](#factory-pattern-for-manifest-guards) | Any                  | Any          | inline example                                                       |
 | [Nested route guard patterns](#nested-route-guard-patterns)                 | Global / Route enter | Any          | `webapp/reporting/` -- nested component with manifest guards         |
@@ -115,7 +115,7 @@ if (raw) {
 }
 ```
 
-Guards run on the resumed navigation. `router.initialize()` has already processed the current hash, so this makes two navigations: one to the initial hash (usually the default route) and one to the stored destination. With async guards the first route can flash briefly.
+Guards run on the resumed navigation. `router.initialize()` has already processed the current hash, so this makes two navigations: one to the initial hash (usually the default route) and one to the stored destination. With sync guards the first route can flash briefly; with async guards the `navTo()` cancels the first navigation before anything is displayed.
 
 **Variant B: store the hash, restore with `HashChanger` before the router starts**
 
@@ -155,7 +155,7 @@ router.addRouteGuard("dashboard", async (context) => {
 
 Wrap the `await` in a `try/catch` to handle `AbortError` separately from unexpected failures. When a guard Promise rejects, the router logs an error and settles the navigation as `NavigationOutcome.Error`. A rejection after the signal was aborted (the navigation was superseded) is not logged.
 
-Reference: `createAsyncPermissionGuard` in `guards.ts`. The [library README async guard example](../../packages/lib/README.md#async-guard-with-abortsignal) has the full pattern; the [busy indicator example](../../packages/lib/README.md#navigation-settlement) shows a busy indicator while guards run.
+Reference: `createAsyncPermissionGuard` in `guards.ts`. The [busy indicator example](../../packages/lib/README.md#navigation-settlement) shows a busy indicator while guards run.
 
 ## Async guard timeout
 
@@ -272,7 +272,7 @@ export function createRedirectWithParamsGuard(targetRoute: string): GuardFn {
 router.addRouteGuard("old-detail", createRedirectWithParamsGuard("detail"));
 ```
 
-See the [library README redirect example](../../packages/lib/README.md#redirect-with-parameters-guardredirect) for a typed `GuardRedirect` variant; add `componentTargetInfo` to the returned object to pass nested component targets.
+The returned object has the type `GuardRedirect`; add `componentTargetInfo` to the returned object to pass nested component targets.
 
 ## Error handling in guards
 
@@ -300,19 +300,7 @@ router.addRouteGuard("risky", async (context) => {
 });
 ```
 
-Handle both outcomes:
-
-```typescript
-const result = await router.navigationSettled();
-switch (result.status) {
-	case NavigationOutcome.Blocked:
-		MessageToast.show("Access denied");
-		break;
-	case NavigationOutcome.Error:
-		MessageBox.error("Navigation failed: " + String(result.error));
-		break;
-}
-```
+The app tells the two outcomes apart through `navigationSettled()`: [Navigation settlement](../../packages/lib/README.md#navigation-settlement) has the `switch` over all outcomes.
 
 To see all guard errors, enable debug logging ([Debugging and Troubleshooting](../../packages/lib/README.md#debugging-and-troubleshooting)).
 
@@ -402,32 +390,7 @@ Declare the modules in the manifest:
 
 ## Controller-level guard lifecycle
 
-Register a leave guard in `onInit` and remove it in `onExit`. UI5 caches XMLViews by default, so `onInit` runs once but `onExit` runs on `destroy()`. The example uses the `createDirtyFormGuard` factory of [Dirty form leave guard](#dirty-form-leave-guard).
-
-```typescript
-import type JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
-import BaseController from "./BaseController";
-import { createDirtyFormGuard } from "../guards";
-
-export default class EditorController extends BaseController {
-	private _leaveGuard: LeaveGuardFn | null = null;
-
-	onInit(): void {
-		this._leaveGuard = createDirtyFormGuard(this.getModel("form") as JSONModel);
-		(this.getRouter() as GuardRouter).addLeaveGuard("editor", this._leaveGuard);
-	}
-
-	onExit(): void {
-		if (this._leaveGuard) {
-			(this.getRouter() as GuardRouter).removeLeaveGuard("editor", this._leaveGuard);
-			this._leaveGuard = null;
-		}
-	}
-}
-```
-
-Reference: `Home.controller.ts` -- `onInit` / `onExit` pattern. See the [library README controller lifecycle section](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) for the full explanation.
+Register a leave guard in `onInit` and remove it in `onExit`, keeping the function in a field so the same one is removed. The demo code and why views stay cached: [Leave guard with controller lifecycle](../../packages/lib/README.md#leave-guard-with-controller-lifecycle) in the library README.
 
 ## Object form (enter + leave)
 
@@ -445,7 +408,7 @@ router.addRouteGuard("protected", guardConfig);
 router.removeRouteGuard("protected", guardConfig);
 ```
 
-The demo app does not use the object form. See the [library README object form example](../../packages/lib/README.md#object-form-with-routeguardconfig).
+The demo app does not use the object form.
 
 ## Chained authorization (redirect chain guards)
 

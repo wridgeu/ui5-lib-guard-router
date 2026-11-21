@@ -133,7 +133,7 @@ Automated via [release-please](https://github.com/googleapis/release-please) and
 
 1. Merge PRs with [Conventional Commits](https://www.conventionalcommits.org/) into `main` (for example `feat:` or `fix:`)
 2. release-please opens/updates a "Release PR" that bumps versions and maintains `packages/lib/CHANGELOG.md`
-3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.151, and Windows smoke); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
+3. Pushing to `main` runs the full reusable CI workflow first (format, lint, typecheck, diagram and tooling checks, pack checks, vendored parity verification, browser tests, OpenUI5 1.120 compatibility, FLP on SAPUI5 1.154 and 1.151); if release-please creates a release, the publish job then builds `packages/lib` and runs `npm publish` with provenance via OIDC
 
 `npm run release:plan` previews the next release with `release-please release-pr --dry-run`. It uses `RELEASE_PLEASE_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` if set, otherwise `gh auth token`.
 
@@ -142,13 +142,13 @@ Maintainer conventions:
 - Use `[skip ci]` only for commits that touch nothing but docs or issues. Never for library or demo code, tests, tooling, workflows or release files.
 - Do not bump versions by hand. release-please owns versions and release commits.
 - The minimum UI5 version (1.136.0, which manifest version 2 requires) is `minUI5Version` in `packages/lib/src/manifest.json`. If it changes, update the badge and box in `README.md` and the Compatibility box in `packages/lib/README.md`. `packages/lib/ui5.compat-1.120.yaml` runs the library suite on 1.120.0, below the minimum, to catch regressions on older versions.
-- If the development UI5 version (1.144.0) changes, update `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, `packages/demo-app/ui5-flp.yaml`, their `-test.yaml` copies for the test servers, the demo manifests, `packages/demo-app/README.md` and the Compatibility box in `packages/lib/README.md`. The UI5 type packages in the root `package.json` only need to be at least that version.
+- If the development UI5 version (1.144.0) changes, update `packages/lib/ui5.yaml`, `packages/demo-app/ui5.yaml`, their `-test.yaml` copies for the test servers, the demo manifests, `packages/demo-app/README.md` and the Compatibility box in `packages/lib/README.md`. The UI5 type packages in the root `package.json` only need to be at least that version. The launchpad preview (`packages/demo-app/ui5-flp.yaml` and `ui5-flp-test.yaml`) runs its own SAPUI5 version (1.154.0), and the `flp` CI job also runs it on 1.151.
   Also bump the vendored upstream tests: fetch the new tag, migrate the versioned ports, then run `--write-manifest`, which refuses while a port still points at the old version. The steps are in [the upstream parity README](packages/lib/test/qunit/upstream-parity/README.md#bump-the-upstream-version).
 - For a UI5 version change or anything that affects a release, run `npm run check`, `npm run test:full` and `npm run pack:check`.
 
-| File                            | Purpose                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, diagram and tooling checks, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.151, Windows smoke) |
-| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                                                                   |
-| `release-please-config.json`    | Package path, extra version files                                                                                                                                              |
-| `.release-please-manifest.json` | Current version tracker                                                                                                                                                        |
+| File                            | Purpose                                                                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | Reusable CI pipeline (format, lint, typecheck, diagram and tooling checks, pack checks, parity verification, browser tests, compatibility, FLP on SAPUI5 1.154 and 1.151) |
+| `.github/workflows/release.yml` | Release-please + npm publish                                                                                                                                              |
+| `release-please-config.json`    | Package path, extra version files                                                                                                                                         |
+| `.release-please-manifest.json` | Current version tracker                                                                                                                                                   |

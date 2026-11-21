@@ -21,7 +21,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~280 KB compressed (~1.2 MB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
+> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships both pre-built distributables (`dist/`) and TypeScript sources (`src/`) to support multiple [serving options](#serving-the-library). At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
 
 ### TypeScript
 
@@ -697,11 +697,15 @@ When `#` is used on a single-function module, the key selects a function among t
 `context.bag` is a `Map<string, unknown>` created for each navigation and shared by all its guards, across redirect hops too. Use it to fetch data such as the current user once per navigation:
 
 ```typescript
+// guards/firstGuard.ts
 export default function firstGuard(context: GuardContext): GuardResult {
 	context.bag.set("userId", getCurrentUserId());
 	return true;
 }
+```
 
+```typescript
+// guards/secondGuard.ts
 export default function secondGuard(context: GuardContext): GuardResult {
 	const userId = context.bag.get("userId") as string | undefined;
 	if (!userId) return "login";
@@ -811,74 +815,7 @@ Where each kind of guard fits:
 
 ## Examples
 
-### Async guard with AbortSignal
-
-```typescript
-import type { GuardContext, GuardResult } from "ui5/guard/router/types";
-
-router.addRouteGuard("dashboard", async (context: GuardContext): Promise<GuardResult> => {
-	const res = await fetch(`/api/access/${context.toRoute}`, {
-		signal: context.signal, // cancelled when a newer navigation supersedes this one
-	});
-	const { allowed } = await res.json();
-	return allowed ? true : "forbidden";
-});
-```
-
-### Redirect with parameters (GuardRedirect)
-
-```typescript
-import type { GuardRedirect } from "ui5/guard/router/types";
-
-router.addGuard((context): GuardRedirect | true => {
-	if (context.toRoute === "old-detail") {
-		return {
-			route: "detail",
-			parameters: { id: context.toArguments.id },
-		};
-	}
-	return true;
-});
-```
-
-[Guard Integration Patterns](../../docs/guides/integration-patterns.md#redirect-with-parameters) has this guard as a factory for any target route.
-
-### Guard factories
-
-A factory closes over what its guard depends on. The demo app's factories are in `packages/demo-app/webapp/guards.ts`; the two below are examples it does not have.
-
-```typescript
-import type JSONModel from "sap/ui/model/json/JSONModel";
-import type { GuardFn, LeaveGuardFn, GuardContext, GuardResult } from "ui5/guard/router/types";
-
-export function createAuthGuard(authModel: JSONModel): GuardFn {
-	return (context: GuardContext): GuardResult => {
-		return authModel.getProperty("/isLoggedIn") ? true : "home";
-	};
-}
-
-export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
-	return (context: GuardContext): boolean => {
-		return !formModel.getProperty("/isDirty");
-	};
-}
-```
-
-### Object form with RouteGuardConfig
-
-The object form registers enter and leave guards of a route in one call:
-
-```typescript
-import type { RouteGuardConfig } from "ui5/guard/router/types";
-
-const protectedGuards: RouteGuardConfig = {
-	beforeEnter: createAuthGuard(authModel),
-	beforeLeave: createDirtyFormGuard(formModel),
-};
-
-router.addRouteGuard("protected", protectedGuards);
-// later: router.removeRouteGuard("protected", protectedGuards);
-```
+[Guard Integration Patterns](../../docs/guides/integration-patterns.md) has the async check with `AbortSignal`, redirects with parameters (`GuardRedirect`), guard factories and the object form `RouteGuardConfig`, among other patterns.
 
 ### Dynamic guard registration
 
@@ -963,7 +900,7 @@ router.addRouteGuard("editOrder", {
 });
 
 // 2. Dirty-state provider: tells FLP about unsaved changes for cross-app
-const dirtyProvider = (navigationContext) => {
+const dirtyProvider = (navigationContext?: { isCrossAppNavigation?: boolean }) => {
 	if (navigationContext?.isCrossAppNavigation === false) {
 		return false; // in-app navigation handled by leave guard
 	}

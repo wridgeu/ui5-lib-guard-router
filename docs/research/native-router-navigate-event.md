@@ -101,17 +101,17 @@ To actually prevent navigation, you must either:
 
 ## Comparison with This Library
 
-| Aspect                  | Native NavContainer `navigate`   | This Library (`ui5.guard.router`)   |
-| ----------------------- | -------------------------------- | ----------------------------------- |
-| Intercept layer         | NavContainer (after route match) | Router.parse() (before route match) |
-| Prevents route matching | No                               | Yes                                 |
-| Prevents hash change    | No (must restore manually)       | Yes (automatic)                     |
-| Async support           | No                               | Yes (guards can return Promises)    |
-| Route-specific guards   | No (check page ID manually)      | Built-in (`addRouteGuard`)          |
-| Leave guards            | No                               | Built-in (`addLeaveGuard`)          |
-| Redirect support        | Manual (`navTo` after prevent)   | Built-in (return route name)        |
-| History management      | Manual (`history.go`)            | Automatic                           |
-| AbortSignal for cleanup | No                               | Yes                                 |
+| Aspect                  | Native NavContainer `navigate`   | This Library (`ui5.guard.router`)                              |
+| ----------------------- | -------------------------------- | -------------------------------------------------------------- |
+| Intercept layer         | NavContainer (after route match) | Router.parse() (before route match)                            |
+| Prevents route matching | No                               | Yes                                                            |
+| Prevents hash change    | No (must restore manually)       | `navTo()`: yes; back/forward and URL bar: undone automatically |
+| Async support           | No                               | Yes (guards can return Promises)                               |
+| Route-specific guards   | No (check page ID manually)      | Built-in (`addRouteGuard`)                                     |
+| Leave guards            | No                               | Built-in (`addLeaveGuard`)                                     |
+| Redirect support        | Manual (`navTo` after prevent)   | Built-in (return route name)                                   |
+| History management      | Manual (`history.go`)            | Automatic                                                      |
+| AbortSignal for cleanup | No                               | Yes                                                            |
 
 ## The `beforeRouteMatched` Discussion
 

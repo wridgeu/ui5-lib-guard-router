@@ -52,15 +52,7 @@ export interface NavigationResult {
 
 If the context's signal is already aborted, the catch returns `false` without logging. The navigation was cancelled, so its error is expected and settles nothing.
 
-| Guard returns or throws         | Decision                                   |
-| ------------------------------- | ------------------------------------------ |
-| `true`                          | `{ action: "allow" }`                      |
-| `false`                         | `{ action: "block" }`                      |
-| non-empty string                | `{ action: "redirect", target: <string> }` |
-| `GuardRedirect` object          | `{ action: "redirect", target: <object> }` |
-| any other value                 | logs a warning, `{ action: "block" }`      |
-| throws or rejects               | logs, `{ action: "error", error }`         |
-| throws after the signal aborted | `{ action: "block" }`, no log              |
+The other decisions are in [09, Evaluation](./09-guard-pipeline-extraction.md#evaluation). The row this feature added: a guard that throws after the signal aborted gives `{ action: "block" }` without a log.
 
 ## Router
 

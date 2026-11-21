@@ -1,8 +1,6 @@
 # Keep-alive apps in the Fiori launchpad: dirty-state provider
 
-A component that deregisters its dirty-state provider while the launchpad keeps it hidden. How the launchpad hides and shows a kept app: [Keep-alive apps](../../packages/lib/README.md#keep-alive-apps).
-
-The launchpad asks every registered provider on each navigation, also the provider of a hidden app embedded in the launchpad page. The user is then asked about unsaved data of an app they are not in. Deregister the provider while the app is hidden.
+A component that deregisters its dirty-state provider while the launchpad keeps it hidden, so the user is not asked about unsaved data of an app they are not in. How the launchpad hides and shows a kept app: [Keep-alive apps](../../packages/lib/README.md#keep-alive-apps).
 
 The example needs `"keepAlive": { "supported": true }` in the manifest. Without it, UI5 does not call `onDeactivate()` and `onActivate()`, and the provider stays registered. It uses `sap/ushell/navigation/DirtyState` (SAPUI5 1.146 and later); before 1.146 the same two functions are on `sap/ushell/Container`.
 
