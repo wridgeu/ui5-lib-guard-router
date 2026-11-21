@@ -167,10 +167,11 @@ The native chain of `sap.m.routing.Router` stays as it is; the library puts its 
 config:
   flowchart:
     minNodeWidth: 60
+    wrappingWidth: 300
 ---
 flowchart TD
-    bar["Address bar, back, forward:<br/>the browser changes the hash"]
-    shell["Fiori launchpad shell:<br/>passes only in-app hashes on"]
+    bar["Address bar,<br/>back, forward:<br/>the browser<br/>changes the hash"]
+    shell["Fiori launchpad shell:<br/>passes only<br/>in-app hashes on"]
     appCode["Application code<br/>calls navTo()"]
     hash["Hash changer"]
 
@@ -178,17 +179,17 @@ flowchart TD
         preflight["Preflight of navTo():<br/>before the hash changes"]
         parse["Override of parse():<br/>after the hash changed"]
         subgraph pipeline ["Guard pipeline"]
-            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(), addLeaveGuard()"]
-            leave["1. Leave guards of the current route"]
+            sources["Guards from the manifest<br/>and from addGuard(),<br/>addRouteGuard(),<br/>addLeaveGuard()"]
+            leave["1. Leave guards<br/>of the current route"]
             global["2. Global enter guards"]
-            enter["3. Enter guards of the target route"]
+            enter["3. Enter guards<br/>of the target route"]
             leave --> global --> enter
         end
-        commit("✓ All guards allow:<br/>commit")
-        redirect("↪ A guard names a route:<br/>redirect")
-        block("✕ A guard returns false:<br/>block")
-        error("⚠ A guard throws:<br/>error")
-        settled(["Event navigationSettled:<br/>Committed, Bypassed, Redirected,<br/>Blocked or Error"])
+        commit("✓ All guards<br/>allow:<br/>commit")
+        redirect("↪ A guard names<br/>a route:<br/>redirect")
+        block("✕ A guard returns<br/>false:<br/>block")
+        error("⚠ A guard<br/>throws:<br/>error")
+        settled(["Event navigationSettled:<br/>Committed, Bypassed,<br/>Redirected, Blocked<br/>or Error"])
     end
 
     subgraph native ["sap.m.routing.Router (native): parse()"]
@@ -1022,7 +1023,7 @@ sequenceDiagram
     rect rgba(0, 158, 115, 0.15)
         App->>Router: navTo("admin")
         Router->>Router: leave, global and<br/>route guards allow
-        Router->>History: new entry #35;admin
+        Router->>History: new entry<br/>#35;admin
         Router-->>App: settles Committed
         Router-->>App: routeMatched "admin"
     end
@@ -1058,7 +1059,7 @@ sequenceDiagram
         App->>Router: navTo("admin")
         Router->>Router: an enter guard<br/>redirects to "profile"
         Router->>Router: global and route guards<br/>of "profile" allow
-        Router->>History: new entry #35;profile
+        Router->>History: new entry<br/>#35;profile
         Router-->>App: settles Redirected
         Router-->>App: routeMatched "profile"
     end
@@ -1144,7 +1145,7 @@ sequenceDiagram
         Browser->>Parent: hashChanged "shell"
         Note over Parent: taken without guards,<br/>settles Blocked
         Browser->>Child: hashChanged "detail/1"
-        Note over Child: matches "detail" again
+        Note over Child: matches "detail"<br/>again
     end
 ```
 

@@ -21,8 +21,8 @@ config:
 ---
 flowchart LR
     gLogger("✓ navigationLogger, global:<br/>logs, allows")
-    rHome["home<br/>(empty) → Home"] -.- gHome("✓ leave guard, Home.controller:<br/>logs, allows")
-    rProtected["protected<br/>protected → Protected"] -.- gPermission("↪ permission guard, Component.ts,<br/>async: to home if logged out")
+    rHome["home<br/>(empty) → Home"] -.- gHome("✓ leave guard,<br/>Home.controller:<br/>logs, allows")
+    rProtected["protected<br/>protected → Protected"] -.- gPermission("↪ permission guard,<br/>Component.ts, async:<br/>to home if logged out")
     rProtected -.- gDirty("✕ dirtyFormGuard, leave:<br/>blocks if the form is dirty")
     rBlocked["blocked<br/>blocked → Blocked"] -.- gBlocked("✕ blockedGuard: blocks")
     rForbidden["forbidden<br/>forbidden → Forbidden"] -.- gForbidden("↪ forbiddenGuard: to home")
