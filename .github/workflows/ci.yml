@@ -19,19 +19,9 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - uses: actions/setup-node@v4
+            - uses: ./.github/actions/setup
               with:
-                  node-version: 26
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-
-
-            - run: npm ci
+                  ui5-cache: ui5
 
             - name: Commitlint
               if: github.event_name == 'pull_request'
@@ -68,19 +58,9 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - uses: actions/setup-node@v4
+            - uses: ./.github/actions/setup
               with:
-                  node-version: 26
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-
-
-            - run: npm ci
+                  ui5-cache: ui5
 
             - name: Run browser tests
               run: npm test
@@ -92,19 +72,9 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - uses: actions/setup-node@v4
+            - uses: ./.github/actions/setup
               with:
-                  node-version: 26
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-compat-120-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-compat-120-
-
-            - run: npm ci
+                  ui5-cache: ui5-compat-120
 
             - name: Run OpenUI5 1.120 compatibility QUnit suite
               run: npm run test:qunit:compat:120
@@ -125,19 +95,9 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - uses: actions/setup-node@v4
+            - uses: ./.github/actions/setup
               with:
-                  node-version: 26
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-flp-${{ matrix.sapui5 }}-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
-                  restore-keys: ui5-flp-${{ matrix.sapui5 }}-
-
-            - run: npm ci
+                  ui5-cache: ui5-flp-${{ matrix.sapui5 }}
 
             - name: Run FLP preview tests on SAPUI5 ${{ matrix.sapui5 }}
               run: npm run ${{ matrix.script }}
