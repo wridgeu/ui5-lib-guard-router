@@ -2,7 +2,13 @@
  * Parsing and validation of the `guardRouter` config block.
  */
 import Log from "sap/base/Log";
-import type { GuardLoading, Inheritance, NavToPreflightMode, UnknownRouteRegistrationPolicy } from "./types";
+import type {
+	GuardLoading,
+	GuardRouterLogLevel,
+	Inheritance,
+	NavToPreflightMode,
+	UnknownRouteRegistrationPolicy,
+} from "./types";
 import { LOG_COMPONENT } from "./GuardPipeline";
 
 /** Type guard for plain objects. */
@@ -22,6 +28,14 @@ const isUnknownRouteRegistrationPolicy = isOneOf<UnknownRouteRegistrationPolicy>
 const isNavToPreflightMode = isOneOf<NavToPreflightMode>("guard", "bypass", "off");
 const isGuardLoading = isOneOf<GuardLoading>("block", "lazy");
 const isInheritance = isOneOf<Inheritance>("none", "pattern-tree");
+const isLogLevel = isOneOf<GuardRouterLogLevel>("error", "warning", "info", "debug");
+
+const LOG_LEVELS = {
+	error: Log.Level.ERROR,
+	warning: Log.Level.WARNING,
+	info: Log.Level.INFO,
+	debug: Log.Level.DEBUG,
+};
 
 /** Parsed guard declaration from the manifest `guards` block. */
 export interface GuardDescriptor {
@@ -182,6 +196,17 @@ function applyOption<K extends keyof ResolvedGuardRouterOptions>(
 	}
 }
 
+/** Raise the page-wide level of the router's log component; a more verbose level is kept. */
+function applyLogLevel(value: unknown): void {
+	if (value === undefined) return;
+	if (!isLogLevel(value)) {
+		Log.warning("guardRouter.logLevel has invalid value, using default", JSON.stringify(value), LOG_COMPONENT);
+		return;
+	}
+	const level = LOG_LEVELS[value];
+	if (level > Log.getLevel(LOG_COMPONENT)) Log.setLevel(level, LOG_COMPONENT);
+}
+
 function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 	if (!isRecord(raw)) {
 		if (raw !== undefined) {
@@ -190,6 +215,8 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 		return DEFAULT_OPTIONS;
 	}
 
+	// First, so that the warnings about the other options are logged at the new level.
+	applyLogLevel(raw.logLevel);
 	const result = { ...DEFAULT_OPTIONS };
 	applyOption(raw, "unknownRouteRegistration", isUnknownRouteRegistrationPolicy, result);
 	applyOption(raw, "navToPreflight", isNavToPreflightMode, result);
@@ -230,6 +257,7 @@ interface ParsedGuardRouterConfig {
 /**
  * Parse the `guardRouter` config block: options, `routeMeta` and the manifest `guards`.
  * Guard module paths are resolved against `componentNamespace` (the owner's `sap.app/id`).
+ * Side effect: a valid `logLevel` raises the page-wide level of the router's log component.
  */
 export function parseGuardRouterConfig(raw: unknown, componentNamespace: string): ParsedGuardRouterConfig {
 	const options = normalizeGuardRouterOptions(raw);

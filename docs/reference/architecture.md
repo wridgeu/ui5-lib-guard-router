@@ -670,7 +670,9 @@ the error is swallowed and the decision is a block.
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
-`guardRouter.<key> has invalid value, using default`.
+`guardRouter.<key> has invalid value, using default`. `logLevel` has no default: when set, the
+parser raises the page-wide level of `ui5.guard.router.Router` with `Log.setLevel()` before it
+validates the other options, and only if that is more verbose than `Log.getLevel()` reports.
 
 Every manifest guard is registered through `_registerManifestGuard()`. With `unknownRouteRegistration: "throw"`, imperative
 calls (`addRouteGuard`, `addLeaveGuard`, `setRouteMeta`) throw for an unknown route. A

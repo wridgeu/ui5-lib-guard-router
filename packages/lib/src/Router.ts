@@ -879,6 +879,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _flushSettlement(result: NavigationResult): void {
 		this._lastSettlement = result;
+		Log.debug(`Navigation settled: ${result.status}`, result.hash, LOG_COMPONENT);
 		// After the call that settled: by then a commit has reached super.parse(), and a navigation
 		// that supersedes this one has started.
 		queueMicrotask(() => this._settleMatchWaiters());

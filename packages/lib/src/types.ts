@@ -208,6 +208,17 @@ export type GuardLoading = "block" | "lazy";
 export type Inheritance = "none" | "pattern-tree";
 
 /**
+ * Log level for the router's log component `ui5.guard.router.Router`.
+ *
+ * Raises the level only: a more verbose level that is set already, e.g. by
+ * `sap-ui-log-level`, is kept. The level applies to the whole page, so with
+ * several routers the most verbose one wins; `destroy()` does not restore it.
+ *
+ * @since 1.7.0
+ */
+export type GuardRouterLogLevel = "error" | "warning" | "info" | "debug";
+
+/**
  * Per-route guard declaration in the manifest.
  *
  * @since 1.5.0
@@ -258,6 +269,8 @@ export interface GuardRouterOptions {
 	guardLoading?: GuardLoading;
 	/** Strategy for inheriting guards and metadata down the URL pattern tree. Defaults to `"none"`. @since 1.6.0 */
 	inheritance?: Inheritance;
+	/** Log level for the router's log component. Leaves `sap/base/Log` untouched when not set. @since 1.7.0 */
+	logLevel?: GuardRouterLogLevel;
 	/** Declarative guard declarations indexed by route name or `"*"` for globals. */
 	guards?: ManifestGuardConfig;
 	/**

@@ -1,3 +1,4 @@
+import Log from "sap/base/Log";
 import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
@@ -15,6 +16,7 @@ import {
 	waitForRoute,
 	routerHooks,
 	createdRouterHooks,
+	type SinonTestContext,
 } from "../../testHelpers";
 import { isRecord } from "ui5/guard/router/GuardConfig";
 
@@ -86,6 +88,40 @@ QUnit.test("invalid inheritance value warns and falls back to default", function
 	const meta = router.getRouteMeta("employee");
 	assert.deepEqual(meta, {}, "metadata does not propagate with invalid inheritance (falls back to none)");
 });
+
+QUnit.test("logLevel raises the level of the router's log component", function (this: SinonTestContext, assert) {
+	this.stub(Log, "getLevel").returns(Log.Level.ERROR);
+	const setLevel = this.stub(Log, "setLevel");
+	router = createRouterWithOptions({ logLevel: "warning" });
+	assert.deepEqual(
+		setLevel.getCalls().map((call) => call.args),
+		[[Log.Level.WARNING, "ui5.guard.router.Router"]],
+	);
+});
+
+QUnit.test(
+	"logLevel is applied once, so a Log.setLevel() call after construction wins",
+	async function (this: SinonTestContext, assert) {
+		this.stub(Log, "getLevel").returns(Log.Level.ERROR);
+		const setLevel = this.stub(Log, "setLevel");
+		router = createRouterWithOptions({ logLevel: "debug" });
+		Log.setLevel(Log.Level.ERROR, "ui5.guard.router.Router");
+
+		router.initialize();
+		await waitForRoute(router, "home");
+		router.navTo("protected");
+		await router.navigationSettled();
+
+		assert.deepEqual(
+			setLevel.getCalls().map((call) => call.args),
+			[
+				[Log.Level.DEBUG, "ui5.guard.router.Router"],
+				[Log.Level.ERROR, "ui5.guard.router.Router"],
+			],
+			"the router does not apply its level again",
+		);
+	},
+);
 
 QUnit.module(
 	"Router - unknownRouteRegistration",
