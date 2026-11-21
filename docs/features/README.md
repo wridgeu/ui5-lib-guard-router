@@ -21,6 +21,7 @@ Design records for `ui5.guard.router.Router`: shipped features, rejected alterna
 - Owner component on GuardContext (`ownerComponent`) for component-scoped state in manifest guards
 - Typed constructor config (`GuardRouterConfig`) for creating the router in code
 - Pattern-tree inheritance for guards and metadata (`inheritance: "pattern-tree"`)
+- Log level of the router's log component from the manifest (`guardRouter.logLevel`)
 
 ## Documents
 

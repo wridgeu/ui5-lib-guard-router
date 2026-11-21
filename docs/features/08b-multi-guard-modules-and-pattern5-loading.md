@@ -1,6 +1,7 @@
 # Multi-Guard Modules, Named Guards & Pattern 5 Loading
 
-**Status**: Implemented
+> **Status**: Implemented
+
 **Evolves**: [08](./08-declarative-manifest-guards.md)
 
 ## Summary

@@ -71,7 +71,7 @@ flowchart LR
     class gConfidential redirect
 ```
 
-Same key as above; the guard is declared in the manifest of the component.
+Grey: a route. Dashed: what a hash without a route gets. Yellow ↪ redirects. The guard is declared in the manifest of the component.
 
 The hash of a nested route follows that of the parent route, for example `#/reports&/reports/sales`.
 
@@ -102,6 +102,8 @@ The demo registers guards in three ways: in the manifest (modules in `webapp/gua
 | `guards.forbiddenGuard`   | Route enter  | `forbidden` | Always redirects to `home`                   |
 | `guards.retiredPageGuard` | Route enter  | `team`      | Always redirects to the alias route `staff`  |
 | `guards.dirtyFormGuard`   | Route leave  | `protected` | Blocks leaving when form has unsaved changes |
+
+The navigation logger writes at INFO under the log component `demo.app.guards`: add `sap-ui-log-level=INFO` to the URL to see it. The router logs under `ui5.guard.router.Router`; `guardRouter.logLevel` raises that level from the manifest ([Enabling guard logs](../lib/README.md#enabling-guard-logs)).
 
 **Programmatic** (`Component.ts`): registered in `init()` for the lifetime of the component. The permission guard closes over the auth model. Manifest guards reach the component through `context.ownerComponent` instead.
 
