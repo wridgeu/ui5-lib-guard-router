@@ -1373,10 +1373,6 @@ Blue is the library, grey is native UI5 or no action, and light blue is a decisi
   packages/demo-app/test/flp/
   (same specs, SAPUI5 1.151.0 through `ui5 serve --framework-version`)
 
-  CI also runs:
-  - node24-pack-smoke: build + pack + consumer type smoke on Node 24 (oldest supported)
-  - windows-smoke: QUnit smoke on windows-latest
-
   Local only:
   - test:mutation: Stryker mutates packages/lib/src one file at a time
     and runs the QUnit suite once per mutant (report: reports/mutation/)

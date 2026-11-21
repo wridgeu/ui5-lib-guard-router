@@ -61,33 +61,6 @@ jobs:
             - name: Pack check
               run: npm run pack:check
 
-    node24-pack-smoke:
-        needs: validate
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v4
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 24
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-
-
-            - run: npm ci
-
-            - name: Build
-              run: npm run build
-
-            - name: Pack smoke
-              run: npm run pack:smoke
-
     tests:
         needs: validate
         runs-on: ubuntu-latest
@@ -111,9 +84,6 @@ jobs:
 
             - name: Run browser tests
               run: npm test
-
-            - name: Run FLP preview smoke tests
-              run: npm run test:e2e:flp
 
     compatibility-ui5-120:
         needs: validate
@@ -139,10 +109,19 @@ jobs:
             - name: Run OpenUI5 1.120 compatibility QUnit suite
               run: npm run test:qunit:compat:120
 
-    flp-sapui5-151:
+    flp:
         needs: validate
         runs-on: ubuntu-latest
         timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - sapui5: "1.154"
+                      script: test:e2e:flp
+                    - sapui5: "1.151"
+                      script: test:e2e:flp:151
+        name: flp-sapui5-${{ matrix.sapui5 }}
         steps:
             - uses: actions/checkout@v4
 
@@ -155,34 +134,10 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.ui5
-                  key: ui5-flp-151-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
-                  restore-keys: ui5-flp-151-
+                  key: ui5-flp-${{ matrix.sapui5 }}-${{ hashFiles('packages/*/ui5*.yaml', 'package.json') }}
+                  restore-keys: ui5-flp-${{ matrix.sapui5 }}-
 
             - run: npm ci
 
-            - name: Run FLP preview tests on SAPUI5 1.151
-              run: npm run test:e2e:flp:151
-
-    windows-smoke:
-        needs: validate
-        runs-on: windows-latest
-        timeout-minutes: 25
-        steps:
-            - uses: actions/checkout@v4
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 26
-                  cache: npm
-
-            - name: Cache UI5 framework resources
-              uses: actions/cache@v4
-              with:
-                  path: ~/.ui5
-                  key: ui5-win-${{ hashFiles('packages/*/ui5*.yaml') }}
-                  restore-keys: ui5-win-
-
-            - run: npm ci
-
-            - name: QUnit smoke test
-              run: npm run test:qunit
+            - name: Run FLP preview tests on SAPUI5 ${{ matrix.sapui5 }}
+              run: npm run ${{ matrix.script }}

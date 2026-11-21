@@ -6,7 +6,7 @@ The docs are mapped in [docs/README.md](docs/README.md). The architecture, inclu
 
 ## Prerequisites
 
-- Node.js ^24.22.1 or >= 26.12.1
+- Node.js >= 26.12.1
 - npm >= 9 (workspaces)
 
 ## Install and run

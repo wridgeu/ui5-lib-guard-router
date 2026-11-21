@@ -7,7 +7,7 @@
 		"url": "https://github.com/wridgeu/ui5-lib-guard-router.git"
 	},
 	"engines": {
-		"node": "^24.22.1 || >=26.12.1"
+		"node": ">=26.12.1"
 	},
 	"workspaces": [
 		"packages/*"
