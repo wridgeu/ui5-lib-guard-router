@@ -3,7 +3,6 @@
 // postpack removes the copy again, so the library and the demo app keep serving the sources during development.
 // Usage (from packages/lib): node ../../scripts/root-build-manifest.mjs
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { isRecord } from "./upstream-parity-manifest-utils.mjs";
 
 /**
@@ -27,7 +26,7 @@ export function atPackageRoot(text) {
 	return `${JSON.stringify(manifest, null, "\t")}\n`;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
 	mkdirSync(".ui5", { recursive: true });
 	writeFileSync(".ui5/build-manifest.json", atPackageRoot(readFileSync("dist/.ui5/build-manifest.json", "utf8")));
 }

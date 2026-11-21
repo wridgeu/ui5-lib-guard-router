@@ -35,6 +35,7 @@
 	"type": "module",
 	"files": [
 		"dist/**/*",
+		"!dist/.ui5",
 		".ui5/build-manifest.json",
 		"src/**/*",
 		"ui5.yaml",

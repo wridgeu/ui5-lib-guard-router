@@ -19,6 +19,12 @@ await test("a flowchart edge label line and a state transition line may take 20 
 	);
 	assert.deepEqual(
 		longLabelLines(
+			`---\nconfig:\n  flowchart:\n    wrappingWidth: 300\n---\ngraph TD\n    a -->|"twenty-two characters!"| b\n    a == "twenty characters ok" ==> b\n`,
+		),
+		['"twenty-two characters!" is longer than 20 characters'],
+	);
+	assert.deepEqual(
+		longLabelLines(
 			"stateDiagram-v2\n    a --> b: twenty-one characters<br/>short\n    b --> a: twenty characters ok\n",
 		),
 		['"twenty-one characters" is longer than 20 characters'],

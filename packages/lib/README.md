@@ -144,7 +144,7 @@ Replace `my/app` with the namespace of the app. The filters replace those of the
 
 #### Deployed as a reuse library
 
-Build the library from its own `ui5.yaml` project, or deploy `node_modules/ui5-lib-guard-router/dist/resources/ui5/guard/router` as it is. Deploy it to the system once, as a reuse library: to the SAPUI5 ABAP repository, or to the HTML5 application repository on SAP BTP. Apps keep only the `libs` dependency in their manifest, and the launchpad resolves the library from where it is deployed. On SAP BTP, that takes a destination or a CDM content provider for the library; [the blog above](https://community.sap.com/t5/technology-blog-posts-by-members/simplifying-ui5-library-use-on-btp-by-bundling-libraries-at-build-time/ba-p/14304012) links the guides for both.
+Deploy `node_modules/ui5-lib-guard-router/dist/resources/ui5/guard/router` once, as a reuse library: to the SAPUI5 ABAP repository, or to the HTML5 application repository on SAP BTP. Apps keep only the `libs` dependency in their manifest, and the launchpad resolves the library from where it is deployed. On SAP BTP, that takes a destination or a CDM content provider for the library; [the blog above](https://community.sap.com/t5/technology-blog-posts-by-members/simplifying-ui5-library-use-on-btp-by-bundling-libraries-at-build-time/ba-p/14304012) links the guides for both.
 
 ## Setup
 
@@ -926,7 +926,7 @@ export function createDirtyFormGuard(formModel: JSONModel): LeaveGuardFn {
 
 The object form is useful when registering both enter and leave guards for the same route in a single call:
 
-````typescript
+```typescript
 import type { RouteGuardConfig } from "ui5/guard/router/types";
 
 const protectedGuards: RouteGuardConfig = {
@@ -936,6 +936,7 @@ const protectedGuards: RouteGuardConfig = {
 
 router.addRouteGuard("protected", protectedGuards);
 // later: router.removeRouteGuard("protected", protectedGuards);
+```
 
 More patterns are in [Guard Integration Patterns](../../docs/guides/integration-patterns.md).
 
@@ -952,7 +953,7 @@ const logGuard: GuardFn = (ctx) => {
 router.addGuard(logGuard);
 // later...
 router.removeGuard(logGuard);
-````
+```
 
 ### Leave guard with controller lifecycle
 
@@ -994,6 +995,8 @@ export default class EditController extends Controller {
 > In FLP apps with `sap-keep-alive`, the component and its guards stay while the app is hidden, see [Keep-alive apps](#keep-alive-apps).
 
 ## Fiori Launchpad
+
+The examples in this section import `sap/ushell` modules, whose typings come with `@sapui5/types`, not `@openui5/types`.
 
 ### Data loss prevention of the launchpad
 

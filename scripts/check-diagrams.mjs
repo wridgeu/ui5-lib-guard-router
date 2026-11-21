@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import mainManifest from "../packages/demo-app/webapp/manifest.json" with { type: "json" };
 import reportingManifest from "../packages/demo-app/webapp/reporting/manifest.json" with { type: "json" };
-import { longLabelLines } from "./label-lines.mjs";
+import { isFlowchart, longLabelLines } from "./label-lines.mjs";
 import { routeMapErrors } from "./route-map.mjs";
 import { sourceNames } from "./source-names.mjs";
 
@@ -83,8 +83,7 @@ for (const doc of docs) {
 
 		// Rule 4: a call `name(` and a private name `_name` are names of the library source, or listed in EXTERNAL_NAMES.
 		// Only labels are read: a flowchart node `id("label")` is no call.
-		// A front matter (`config:`) may precede the diagram type.
-		const labels = /^\s*flowchart/.test(diagram.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ""))
+		const labels = isFlowchart(diagram)
 			? [...diagram.matchAll(/"([^"\n]*)"/g)].map(([, label]) => label)
 			: [...diagram.matchAll(/^[^:\n]*:(.*)$/gm)].map(([, label]) => label);
 		for (const [, name] of labels.join("\n").matchAll(CODE_NAME)) {

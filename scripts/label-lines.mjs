@@ -9,8 +9,26 @@ const PX_PER_CHAR = 10;
 const EDGE_WIDTH = 200;
 const NODE_WIDTH = 120;
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
-/** A flowchart edge label: `-- "label" -->` or `-. "label" .->`. */
-const EDGE_LABEL = /-[-.]\s*"([^"\n]*)"/g;
+/** A flowchart edge label: `-- "label" -->`, `-. "label" .->`, `== "label" ==>` or `-->|"label"|`. */
+const EDGE_LABEL = /(?:-[-.]|==)\s*"([^"\n]*)"|\|"([^"\n]*)"\|/g;
+
+/**
+ * The diagram without its front matter: a `config:` block may precede the diagram type.
+ *
+ * @param {string} diagram
+ */
+function diagramBody(diagram) {
+	return diagram.replace(FRONT_MATTER, "");
+}
+
+/**
+ * Whether the diagram is a flowchart (`flowchart` or its older keyword `graph`).
+ *
+ * @param {string} diagram
+ */
+export function isFlowchart(diagram) {
+	return /^\s*(?:flowchart|graph)\b/.test(diagramBody(diagram));
+}
 
 /**
  * The label lines of a flowchart or state diagram that are too long to stay unwrapped.
@@ -20,12 +38,12 @@ const EDGE_LABEL = /-[-.]\s*"([^"\n]*)"/g;
  */
 export function longLabelLines(diagram) {
 	const config = diagram.match(FRONT_MATTER)?.[1] ?? "";
-	const body = diagram.replace(FRONT_MATTER, "");
+	const body = diagramBody(diagram);
 	/** @type {[string, number][]} label and its wrapping width */
 	const labels = [];
-	if (/^\s*flowchart/.test(body)) {
+	if (isFlowchart(diagram)) {
 		const nodeWidth = Number(config.match(/wrappingWidth:\s*(\d+)/)?.[1] ?? NODE_WIDTH);
-		for (const [, label] of body.matchAll(EDGE_LABEL)) labels.push([label, EDGE_WIDTH]);
+		for (const [, dashed, piped] of body.matchAll(EDGE_LABEL)) labels.push([dashed ?? piped, EDGE_WIDTH]);
 		// A subgraph title is not wrapped.
 		const nodes = body.replace(EDGE_LABEL, "").replace(/^\s*subgraph .*$/gm, "");
 		for (const [, label] of nodes.matchAll(/"([^"\n]*)"/g)) labels.push([label, nodeWidth]);
