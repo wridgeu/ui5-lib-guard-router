@@ -9,12 +9,15 @@ ui5-lib-guard-router/
 |-- tsconfig.json                   lists every project, so that editors and oxlint find the tsconfig of a file
 |-- tsconfig.node.json              Node code checked with checkJs: scripts/, tools/, stryker.config.mjs, the wdio configs and testsuite of the library
 |-- .oxlintrc.json                  linter config
-|-- scripts/                        check-*, vendoring, pack smoke, with *.test.mjs beside them
+|-- stryker.config.mjs              mutation testing, run locally (npm run test:mutation)
+|-- patches/                        patch-package patches of dependencies, with a README on why
+|-- scripts/                        check-*, vendoring, pack smoke, build manifest copy, test servers, release plan, with *.test.mjs beside them
 |-- tools/                          the oxlint JS plugins (two with a *.test.mjs), and the wdio Chrome profile
 |
 |-- packages/
     |-- lib/                        the core library
     |   |-- ui5.yaml                OpenUI5 1.144.0, specVersion 4.0
+    |   |-- ui5.compat-1.120.yaml   serves the library on OpenUI5 1.120 for the compatibility QUnit run
     |   |-- src/
     |   |   |-- manifest.json       library manifest (minUI5Version 1.136.0)
     |   |   |-- library.ts          Lib.init() entry point
@@ -709,7 +712,9 @@ The `_parseGeneration` counter handles overlapping async navigations:
 ```mermaid
 sequenceDiagram
     participant Nav1 as Nav 1: parse("a")
+    box rgba(0, 114, 178, 0.15) This library
     participant Router as Router State
+    end
     participant Nav2 as Nav 2: parse("b")
     Nav1->>Router: _startAttempt():<br/>gen = 1
     Nav1->>Nav1: await guard...
@@ -1327,8 +1332,11 @@ Blue is the library and grey is native UI5 or no action ([diagram style](../../C
 
 - **TypeScript**: strict mode, ES2023 target, composite builds enabled
 - **Build**: `ui5-tooling-transpile` compiles TS during `ui5 serve` and `ui5 build`. `patches/ui5-tooling-transpile+3.14.1.patch` (applied by `patch-package` on install) lets its type declaration generator rewrite relative imports that span several lines; without it they stay relative and the published `.d.ts` files do not type-check. Drop the patch once a release fixes the regex.
-- **Lint**: `oxlint` with correctness (error), suspicious/perf (warn); typescript, oxc, unicorn, import plugins. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
+- **Lint**: `oxlint` with correctness (error) and suspicious/perf (warn); `npm run lint` fails on warnings too (`--deny-warnings`). Plugins: typescript, oxc, unicorn, import, and the repo's own in `tools/` (code quality, comment quality, test guardrails). Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`), each file with the types of its own tsconfig
 - **Type check**: `tsc --noEmit` against the source and test tsconfigs of both packages and against `tsconfig.node.json`
+- **Format**: `oxfmt`, checked in CI with `npm run fmt:check`
+- **Hooks**: husky runs lint-staged (oxlint and oxfmt on the staged files) before a commit and commitlint (Conventional Commits) on its message
+- **Release**: release-please opens the release PR from the Conventional Commits on `main` and bumps `packages/lib/package.json`, `src/manifest.json` and the library's entry in `package-lock.json`; merging it publishes to npm with provenance
 - **Test isolation**: root test scripts assign dedicated ports per lane so standalone, compatibility, and FLP suites can run concurrently without port conflicts
 - **Packaging**: `ui5 build --create-build-manifest` writes the UI5 build manifest to `dist/.ui5/`, but UI5 Tooling reads a dependency's manifest only at its package root. The `prepack` script of `packages/lib` (`scripts/root-build-manifest.mjs`) therefore copies it to `.ui5/` with `dist/` prefixed to its paths, so consumers serve and build the pre-built files as they are. `postpack` removes the copy, so the library and the demo app keep serving the sources. npm skips `postpack` when packing fails; if the library or the demo app then serve stale `dist/` files, `npm run clean -w packages/lib` removes the leftover `.ui5/`.
 

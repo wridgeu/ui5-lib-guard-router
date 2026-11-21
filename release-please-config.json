@@ -11,6 +11,7 @@
 		{ "type": "ci", "section": "CI", "hidden": true },
 		{ "type": "style", "section": "Style", "hidden": true }
 	],
+	"plugins": ["node-workspace"],
 	"packages": {
 		"packages/lib": {
 			"release-type": "node",

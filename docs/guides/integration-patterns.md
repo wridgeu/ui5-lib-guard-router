@@ -302,7 +302,7 @@ router.addRouteGuard("risky", async (context) => {
 
 The app tells the two outcomes apart through `navigationSettled()`: [Navigation settlement](../../packages/lib/README.md#navigation-settlement) has the `switch` over all outcomes.
 
-To see all guard errors, enable debug logging ([Debugging and Troubleshooting](../../packages/lib/README.md#debugging-and-troubleshooting)).
+Guard errors are logged as errors, so they show at every log level. Debug logging adds each settled outcome and the discarded async results ([Debugging and Troubleshooting](../../packages/lib/README.md#debugging-and-troubleshooting)).
 
 To try both outcomes, register guards that fail on demand. No scenario of the demo app settles as `Error`, so it registers neither:
 
@@ -468,7 +468,7 @@ The parent guard runs first. Each router drops its guards when it is destroyed.
 
 The demo app contains a runnable version of this pattern with manifest guards: its `reports` route displays the nested component [`demo.app.reporting`](../../packages/demo-app/webapp/reporting/), which declares its own `routerClass` and `guardRouter` block.
 
-```json
+```jsonc
 // Parent manifest.json (sap.ui5)
 "componentUsages": {
 	"reports": { "name": "demo.app.reporting", "lazy": true }

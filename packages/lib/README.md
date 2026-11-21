@@ -317,6 +317,8 @@ The pipeline stays **synchronous while guards return plain values**. From the fi
 
 ## API
 
+The public modules are `ui5/guard/router/Router`, `types`, `NavigationOutcome` and `library`. The other modules under `ui5/guard/router` are internal and may change in any release.
+
 All guard registration and removal methods return `this` for chaining. `navigationSettled()` returns a `Promise<NavigationResult>`.
 
 ### Guard registration
@@ -337,7 +339,7 @@ All guard registration and removal methods return `this` for chaining. `navigati
 | `removeRouteGuard(routeName, { beforeEnter?, beforeLeave? })` | Remove enter and/or leave guards via object form |
 | `removeLeaveGuard(routeName, fn)`                             | Remove a leave guard                             |
 
-### Route metadata
+### Route metadata methods
 
 | Method                          | Description                                                           |
 | ------------------------------- | --------------------------------------------------------------------- |
@@ -363,7 +365,7 @@ Every guard receives a `GuardContext` object:
 | `bag`            | `Map<string, unknown>`                             | Shared mutable store for inter-guard data passing within one navigation |
 | `toMeta`         | `Readonly<Record<string, unknown>>`                | Resolved metadata for the target route (manifest + runtime, frozen)     |
 | `fromMeta`       | `Readonly<Record<string, unknown>>`                | Resolved metadata for the current route (manifest + runtime, frozen)    |
-| `ownerComponent` | `UIComponent \| undefined`                         | Component that owns the router; `undefined` for routers without owner   |
+| `ownerComponent` | `UIComponent \| undefined`                         | Component that owns the router; `undefined` without owner (since 1.7.0) |
 
 ### Return values (`GuardResult`)
 
@@ -585,6 +587,8 @@ Guards, route metadata and router options can be declared in the `guardRouter` b
 
 The `guardRouter` block also accepts `guards` (see [Declarative guards](#declarative-guards)) and `routeMeta` (see [Route metadata](#route-metadata)).
 
+An invalid value is logged as a warning and the default is used. An invalid `logLevel` is ignored and logged as an error, which shows at the default `ERROR` level.
+
 When constructing the router in code rather than from the manifest, the config argument is typed as `GuardRouterConfig` (since 1.7.0): the standard router config plus `guardRouter`, so `new Router(routes, { async: true, guardRouter: { navToPreflight: "bypass" } })` (`import Router from "ui5/guard/router/Router"`) type-checks without casts.
 
 ### Declarative guards
@@ -804,7 +808,7 @@ router.setRouteMeta("betaFeature", { enabled: featureToggle.isActive("beta") });
 
 ### `skipGuards` option
 
-`{ skipGuards: true }` as the options argument of `navTo()` bypasses all guards for that call. The options follow `bReplace`, or take its place when `bReplace` is left out:
+`{ skipGuards: true }` as the options argument of `navTo()` bypasses all guards for that call. The options come after `bReplace`; pass `undefined` for `bReplace` to keep its default. With nested components, `componentTargetInfo` (as in the native `navTo()`) comes before `bReplace`:
 
 ```typescript
 router.navTo("settings", {}, false, { skipGuards: true });
@@ -869,6 +873,8 @@ Where each kind of guard fits:
 - **Controller-level:** guards tied to a specific view's lifecycle (registered in `onInit`, removed in `onExit`)
 
 ## Examples
+
+`router`, `authModel` and `formModel` in the examples stand for the app's router and models.
 
 ### Async guard with AbortSignal
 
@@ -965,13 +971,13 @@ import type { GuardRouter, LeaveGuardFn } from "ui5/guard/router/types";
 export default class EditController extends Controller {
 	private _leaveGuard?: LeaveGuardFn;
 
-	onInit(): void {
+	override onInit(): void {
 		const form = this.getOwnerComponent()?.getModel("form") as JSONModel;
 		this._leaveGuard = () => form.getProperty("/isDirty") !== true;
 		(UIComponent.getRouterFor(this) as GuardRouter).addLeaveGuard("edit", this._leaveGuard);
 	}
 
-	onExit(): void {
+	override onExit(): void {
 		if (this._leaveGuard) {
 			(UIComponent.getRouterFor(this) as GuardRouter).removeLeaveGuard("edit", this._leaveGuard);
 		}

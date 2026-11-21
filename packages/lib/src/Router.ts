@@ -387,7 +387,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * calling `initialize()` again changes nothing, and `stop()` cancels
 	 * the pending start until `initialize()` is called again.
 	 *
-	 * @param bIgnoreInitialHash - Whether the current hash is left unparsed, as in the native router.
+	 * @param bIgnoreInitialHash - Whether the current hash is left unparsed, as in the native router (since 1.7.0).
 	 * @override sap.ui.core.routing.Router#initialize
 	 * @since 1.0.1
 	 */
@@ -1393,7 +1393,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 			try {
 				apply(d);
 			} catch (error) {
-				Log.error("Navigation failed after its guards had settled", String(error), LOG_COMPONENT);
+				Log.error(
+					"Navigation failed after its guards had settled",
+					error instanceof Error ? error : String(error),
+					LOG_COMPONENT,
+				);
 				if (this._lastSettlement === lastSettlement) {
 					this._errorNavigation(error, attemptedHash, restoreHash);
 				}

@@ -39,9 +39,9 @@
 		".ui5/build-manifest.json",
 		"src/**/*",
 		"ui5.yaml",
-		"tsconfig.json",
 		"README.md",
-		"LICENSE"
+		"LICENSE",
+		"CHANGELOG.md"
 	],
 	"scripts": {
 		"clean": "rimraf dist .ui5",

@@ -1,6 +1,7 @@
 # Declarative Manifest-Based Guard Configuration
 
-**Status**: Implemented
+> **Status**: Implemented
+
 **Closes**: #41, #31
 **Supersedes**: PR #46 (`feat/router-options-manifest-config`)
 
