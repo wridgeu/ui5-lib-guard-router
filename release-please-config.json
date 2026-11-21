@@ -21,6 +21,11 @@
 					"type": "json",
 					"path": "src/manifest.json",
 					"jsonpath": "$['sap.app'].applicationVersion.version"
+				},
+				{
+					"type": "json",
+					"path": "/package-lock.json",
+					"jsonpath": "$.packages['packages/lib'].version"
 				}
 			]
 		}
