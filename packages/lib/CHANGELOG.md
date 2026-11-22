@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.2...v1.7.0) (2026-11-21)
+
+
+### Features
+
+* **router:** add a logLevel option for the router's log component ([#74](https://github.com/wridgeu/ui5-lib-guard-router/issues/74)) ([d02615b](https://github.com/wridgeu/ui5-lib-guard-router/commit/d02615b4ce20f8dac369ad11642ea5c4aa2c4030))
+* **router:** owner component for guards; harden navigation and guard loading ([#70](https://github.com/wridgeu/ui5-lib-guard-router/issues/70)) ([4a508eb](https://github.com/wridgeu/ui5-lib-guard-router/commit/4a508eb6efe877c331a28ad36c126b3b1c37fde3))
+
+
+### Bug Fixes
+
+* audit findings in router, demo app, tooling and docs ([#72](https://github.com/wridgeu/ui5-lib-guard-router/issues/72)) ([71a50cd](https://github.com/wridgeu/ui5-lib-guard-router/commit/71a50cd29aa0be44882a0a8cac6d76326cfc67cc))
+* **router:** log the error object when applying an async decision fails ([#76](https://github.com/wridgeu/ui5-lib-guard-router/issues/76)) ([aecc13a](https://github.com/wridgeu/ui5-lib-guard-router/commit/aecc13a6496b9af86fceef167643a43cf4bbb6fe))
+* ship the build manifest where UI5 Tooling reads it; document building and deploying ([#73](https://github.com/wridgeu/ui5-lib-guard-router/issues/73)) ([dc37c9a](https://github.com/wridgeu/ui5-lib-guard-router/commit/dc37c9a895994f71c609b24ff527c0a48610fe90))
+
 ## [1.6.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.1...v1.6.2) (2026-05-15)
 
 
