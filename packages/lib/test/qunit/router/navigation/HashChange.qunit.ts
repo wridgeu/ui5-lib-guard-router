@@ -610,7 +610,8 @@ for (const end of ["stop", "destroy"] as const) {
 			const statuses = await navToWithoutHashWrite(this);
 			const settled = router.navigationSettled();
 			router[end]();
-			assert.deepEqual(statuses, [NavigationOutcome.Cancelled]);
+			// destroy() fires no event, like the native router.
+			assert.deepEqual(statuses, end === "stop" ? [NavigationOutcome.Cancelled] : []);
 			assert.deepEqual(await settled, { status: NavigationOutcome.Cancelled, route: "home", hash: "" });
 		},
 	);

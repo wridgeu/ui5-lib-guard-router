@@ -1296,7 +1296,7 @@ stateDiagram-v2
 
 Blue is the library and grey is native UI5 or no action ([diagram style](../../CONTRIBUTING.md#diagram-style)).
 
-A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled`; in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
+A navigation that does not commit settles as `Blocked`, `Error` or `Redirected` (to the route that is shown): at once if the URL is already right, otherwise once it is back. One that is superseded, or that `stop()` or `destroy()` ends, settles as `Cancelled` (`destroy()` resolves the `navigationSettled()` promises but fires no event); in `restoring` it keeps its result. A hash write that the hash changer refuses settles as `Blocked`.
 
 ```mermaid
 stateDiagram-v2

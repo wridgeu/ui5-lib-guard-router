@@ -3,6 +3,7 @@ import HashChanger from "sap/ui/core/routing/HashChanger";
 import type { GuardRouter } from "ui5/guard/router/types";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import {
+	callUnsafe,
 	captureWarnings,
 	createRouter,
 	createRouterWithOptions,
@@ -176,6 +177,20 @@ QUnit.test('"throw" with config object is all-or-nothing', async function (asser
 		"config form also throws for unknown route",
 	);
 	await assertNoGuardRegistered(assert);
+});
+
+QUnit.test('"throw" applies to a config object only when it registers a function', function (assert: Assert) {
+	router = createRouterWithOptions({ unknownRouteRegistration: "throw" });
+
+	const forms: unknown[] = ["notAFunction", { beforeEnter: "notAFunction" }, { beforeLeave: 42 }];
+	for (const guard of forms) {
+		const warnings = captureWarnings(() => callUnsafe(router, "addRouteGuard", "nonexistent", guard));
+		assert.deepEqual(
+			warnings.map((w) => w.message),
+			["addRouteGuard: not a function, ignoring"],
+			`${JSON.stringify(guard)}: only the "not a function" warning, no throw`,
+		);
+	}
 });
 
 QUnit.module(

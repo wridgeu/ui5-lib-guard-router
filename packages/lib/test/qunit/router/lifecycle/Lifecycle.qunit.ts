@@ -116,6 +116,42 @@ QUnit.test(
 	},
 );
 
+QUnit.test(
+	"destroy() fires no navigationSettled event, like the base router, and resolves navigationSettled()",
+	async function (assert: Assert) {
+		router.addRouteGuard("protected", () => Promise.withResolvers<boolean>().promise);
+		router.initialize();
+		await waitForRoute(router, "home");
+		let events = 0;
+		router.attachNavigationSettled(() => {
+			events++;
+		});
+
+		router.navTo("protected");
+		const settled = router.navigationSettled();
+		router.destroy();
+
+		assert.strictEqual((await settled).status, NavigationOutcome.Cancelled, "the promise settles as Cancelled");
+		assert.strictEqual(events, 0, "no event fired");
+	},
+);
+
+QUnit.test("navTo() on a destroyed router warns and does not navigate", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	router.destroy();
+
+	const warnings = captureWarnings(() => router.navTo("detail", { id: "1" }));
+	await flushPromises();
+
+	assert.strictEqual(getHash(), "", "the URL still shows the hash from before");
+	assert.deepEqual(
+		warnings.map((w) => w.message),
+		["navTo: router is destroyed, ignoring"],
+		"a warning says the navigation was ignored",
+	);
+});
+
 QUnit.test("destroy() clears route metadata", function (assert: Assert) {
 	router.setRouteMeta("", { root: true });
 	router.destroy();
