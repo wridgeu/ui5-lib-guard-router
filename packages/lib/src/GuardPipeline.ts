@@ -351,13 +351,15 @@ export default class GuardPipeline {
 	): Promise<R | boolean> {
 		let guardIndex = currentIndex;
 		try {
+			// An aborted navigation discards the result: it is neither validated nor followed by the next guard.
 			const result = await pendingResult;
+			if (context.signal.aborted) return false;
 			if (result !== true) return onBlock(result);
 
 			for (let i = currentIndex + 1; i < guards.length; i++) {
-				if (context.signal.aborted) return false;
 				guardIndex = i;
 				const nextResult = await guards[i](context);
+				if (context.signal.aborted) return false;
 				if (nextResult !== true) return onBlock(nextResult);
 			}
 			return true;

@@ -610,25 +610,18 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
-			this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
-			let hasHandler = false;
-
-			if (guard.beforeEnter !== undefined) {
-				hasHandler = true;
-				if (this._isFn(guard.beforeEnter, "addRouteGuard", routeName)) {
-					this._pipeline.addEnterGuard(routeName, guard.beforeEnter);
-				}
-			}
-			if (guard.beforeLeave !== undefined) {
-				hasHandler = true;
-				if (this._isFn(guard.beforeLeave, "addRouteGuard", routeName)) {
-					this._pipeline.addLeaveGuard(routeName, guard.beforeLeave);
-				}
-			}
-
-			if (!hasHandler) {
+			const { beforeEnter, beforeLeave } = guard;
+			if (beforeEnter === undefined && beforeLeave === undefined) {
 				Log.info("addRouteGuard: config has no beforeEnter or beforeLeave", routeName, LOG_COMPONENT);
+				return this;
 			}
+			// As for a guard function: the route is checked only when something is registered.
+			const enter = beforeEnter !== undefined && this._isFn(beforeEnter, "addRouteGuard", routeName);
+			const leave = beforeLeave !== undefined && this._isFn(beforeLeave, "addRouteGuard", routeName);
+			if (!enter && !leave) return this;
+			this._handleUnknownRouteRegistration(routeName, "addRouteGuard");
+			if (enter) this._pipeline.addEnterGuard(routeName, beforeEnter);
+			if (leave) this._pipeline.addLeaveGuard(routeName, beforeLeave);
 			return this;
 		}
 		if (!this._isFn(guard, "addRouteGuard", routeName)) return this;
@@ -835,7 +828,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Fires synchronously after every guard pipeline settlement with
 	 * a {@link NavigationResult} payload. Unlike the one-shot
 	 * `navigationSettled()` Promise, this event fires for every
-	 * navigation outcome without re-registration.
+	 * navigation outcome without re-registration. It does not fire for the
+	 * navigation that `destroy()` cancels.
 	 *
 	 * @param oData - Application-specific payload passed to the handler as second argument.
 	 * @param fnFunction - The function to be called when the event occurs.
@@ -887,6 +881,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 		for (const resolve of resolvers) {
 			resolve(result);
 		}
+		// Like the native router, destroy() fires no event: no handler runs on a router half torn down.
+		if (this._destroyed) return;
 		try {
 			this.fireEvent("navigationSettled", result);
 		} catch (error) {
@@ -959,6 +955,11 @@ export default class Router extends MobileRouter implements GuardRouter {
 		replaceOrOptions?: boolean | GuardNavToOptions,
 		options?: GuardNavToOptions,
 	): this {
+		// A navigationSettled handler of the navigation that destroy() cancels must not write the hash.
+		if (this._destroyed) {
+			Log.warning("navTo: router is destroyed, ignoring", routeName, LOG_COMPONENT);
+			return this;
+		}
 		const { componentTargetInfo, replace, guardOptions } = this._resolveNavToArgs(
 			componentTargetInfoOrReplace,
 			replaceOrOptions,

@@ -304,7 +304,7 @@ flowchart TD
 
 A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 
-A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`.
+A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. `destroy()` fires no `navigationSettled` event, like the native router; only the `navigationSettled()` promise resolves.
 
 The two entry points run the same guards:
 
@@ -403,12 +403,12 @@ Leave guards cannot redirect. Redirect from an enter guard of the target route.
 
 ### Lifecycle
 
-| Method             | Behavior                                                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `initialize()`     | Starts the router and parses the current hash through the guards, as the native router does                                                             |
-| `initialize(true)` | Starts the router without parsing the hash. After `stop()`, it resumes the route that was current, so its leave guards keep working                     |
-| `stop()`           | Cancels a pending navigation (settles as `Cancelled`, aborts the `AbortSignal`) and resets the current route, hash and last settlement; guards are kept |
-| `destroy()`        | Clears all guards, cancels a pending navigation, then calls `super.destroy()`. A second call does nothing                                               |
+| Method             | Behavior                                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initialize()`     | Starts the router and parses the current hash through the guards, as the native router does                                                                                              |
+| `initialize(true)` | Starts the router without parsing the hash. After `stop()`, it resumes the route that was current, so its leave guards keep working                                                      |
+| `stop()`           | Cancels a pending navigation (settles as `Cancelled`, aborts the `AbortSignal`) and resets the current route, hash and last settlement; guards are kept                                  |
+| `destroy()`        | Clears all guards, cancels a pending navigation without firing `navigationSettled`, then calls `super.destroy()`. A `navTo()` afterwards only logs a warning. A second call does nothing |
 
 Before `initialize()`, while `guardLoading: "block"` modules load, and after `stop()`, the router does not listen to hash changes. `navTo()` then behaves like the native router: it only sets the hash, or does nothing on a stopped router. No guard runs and nothing settles; the guards run when the router starts and parses the hash.
 

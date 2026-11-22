@@ -6,6 +6,7 @@ import type { Router$RouteMatchedEvent } from "sap/ui/core/routing/Router";
 import {
 	addGuardUnsafe,
 	assertBlocked,
+	captureWarningsAsync,
 	flushPromises,
 	getHash,
 	isMatching,
@@ -352,6 +353,22 @@ QUnit.test("Async guard returning invalid value treats as block", async function
 	addGuardUnsafe(router, async () => 42);
 	router.initialize();
 	await assertBlocked(assert, router, () => router.navTo("protected"), "Async invalid guard return treated as block");
+});
+
+QUnit.test("an invalid value from the guard of a superseded navigation is not logged", async function (assert: Assert) {
+	router.initialize();
+	await waitForRoute(router, "home");
+	const pending = Promise.withResolvers<unknown>();
+	addGuardUnsafe(router, (context: GuardContext) => (context.toRoute === "protected" ? pending.promise : true));
+	router.navTo("protected");
+	router.navTo("detail", { id: "1" });
+	await waitForRoute(router, "detail");
+
+	const warnings = await captureWarningsAsync(async () => {
+		pending.resolve(42);
+		await flushPromises();
+	});
+	assert.deepEqual(warnings, [], "no warning for the discarded result");
 });
 
 QUnit.test("Async guard returning invalid redirect object treats as block", async function (assert: Assert) {
