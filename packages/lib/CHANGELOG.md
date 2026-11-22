@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.0...v1.7.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **router:** destroy() fires no navigationSettled event and ignores a later navTo() ([#77](https://github.com/wridgeu/ui5-lib-guard-router/issues/77)) ([e7a89d0](https://github.com/wridgeu/ui5-lib-guard-router/commit/e7a89d0e2564ed1d5036949792f1cf93cd9a6801))
+
 ## [1.7.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.6.2...v1.7.0) (2026-11-21)
 
 
