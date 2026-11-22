@@ -304,7 +304,7 @@ flowchart TD
 
 A commit lets a `navTo()` write its hash and hands the hash to the native `parse()`. A block or an error undoes a hash that the browser changed. A redirect runs the enter guards of its target, without leave guards, for at most 10 hops. The guards of the manifest are the modules under `guards` in the `guardRouter` block.
 
-A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. `destroy()` fires no `navigationSettled` event, like the native router; only the `navigationSettled()` promise resolves.
+A navigation that another one supersedes, or that `stop()` or `destroy()` ends, settles as `Cancelled`. For `destroy()` only the `navigationSettled()` promise resolves: no `navigationSettled` handler runs while the router is torn down.
 
 The two entry points run the same guards:
 
@@ -497,7 +497,7 @@ assert.strictEqual(result.route, "home", "User stays on home");
 
 **Event-based: observe every navigation outcome**
 
-The `navigationSettled` event fires synchronously after every settlement:
+The `navigationSettled` event fires synchronously after every settlement, except for the navigation that `destroy()` cancels:
 
 ```typescript
 router.attachNavigationSettled((event) => {

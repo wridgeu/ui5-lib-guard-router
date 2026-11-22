@@ -881,7 +881,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		for (const resolve of resolvers) {
 			resolve(result);
 		}
-		// Like the native router, destroy() fires no event: no handler runs on a router half torn down.
+		// No handler runs while destroy() tears the router down; the native destroy() fires no event either.
 		if (this._destroyed) return;
 		try {
 			this.fireEvent("navigationSettled", result);
@@ -955,7 +955,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		replaceOrOptions?: boolean | GuardNavToOptions,
 		options?: GuardNavToOptions,
 	): this {
-		// A navigationSettled handler of the navigation that destroy() cancels must not write the hash.
+		// The guards are gone: code that awaited navigationSettled() may still call navTo().
 		if (this._destroyed) {
 			Log.warning("navTo: router is destroyed, ignoring", routeName, LOG_COMPONENT);
 			return this;
