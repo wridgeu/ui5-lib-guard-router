@@ -21,11 +21,11 @@ Three changes to manifest guards:
 
 The default flipped from `"block"` to `"lazy"` before manifest guards shipped, so no consumer saw a change.
 
-**Constructor.** In lazy mode it fires `sap.ui.require(uniquePaths, undefined, () => {})` for the deduplicated module paths, without the `#` part. The error callback is empty: a failed load is reported when the guard runs, its lazy load warns, and the navigation settles as `Error`.
+**Constructor.** In lazy mode, when at least one manifest guard module is declared, it fires `sap.ui.require(uniquePaths, undefined, () => {})` for the deduplicated module paths, without the `#` part. The error callback is empty: a failed load is reported when the guard runs, its lazy load warns, and the navigation settles as `Error`.
 
 **`initialize()`.** Registers the guards from `createLazyGuards()` (`GuardModules.ts`) for each descriptor, then starts the router synchronously. Per descriptor:
 
-- **Cherry-pick (`module#export`):** one wrapper. On first use it takes the module from the cache or loads it, resolves the export once (so a missing export warns once) and runs it. A missing export yields no guard, so the wrapper allows.
+- **Cherry-pick (`module#export`):** one wrapper. On first use it takes the module from the cache or loads it, resolves the export once (so a missing export warns once) and caches the resolved guard list for synchronous runs on later navigations. A missing export yields no guard, so the wrapper allows.
 - **Bare path, module cached** (the preload finished): the module's guards themselves, registered individually.
 - **Bare path, cache miss:** one wrapper that loads the module on first use and runs all of its guards in order. Later navigations run them synchronously.
 

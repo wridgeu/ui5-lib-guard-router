@@ -50,7 +50,7 @@ class GuardPipeline {
 
 ## Evaluation
 
-Order: leave guards (`fromRoute`, then `alsoLeaving`), global guards, route enter guards (`toRoute`, then `alsoEntering`). The first result that is not `true` ends the run. Between async steps the pipeline checks `context.signal.aborted` and blocks if it is set. Each guard array is copied before iteration, so a guard can remove itself (a one-shot guard) without affecting the current run.
+Order: leave guards (`fromRoute`, then `alsoLeaving`), global guards, route enter guards (`toRoute`, then `alsoEntering`). The first result that is not `true` ends the run. After each synchronous guard, between async steps, and between phases the pipeline checks `context.signal.aborted` and blocks if it is set. Each guard array is copied before iteration, so a guard can remove itself (a one-shot guard) without affecting the current run.
 
 | Guard returns          | Decision                                   |
 | ---------------------- | ------------------------------------------ |

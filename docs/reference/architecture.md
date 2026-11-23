@@ -382,10 +382,13 @@ navigation and settles it, or reports that the caller must block it. There are t
 A `navTo()` to the hash that is committed changes no route of this router, so no guard runs.
 It cancels a pending navigation and then calls `super.navTo()`, because UI5 may still have
 work to do: it sets the hashes of nested components (`componentTargetInfo`), or resets them
-when none are given. If UI5 has reset the hash of the router's hash changer, which it does
-after a target was displayed without a route (`Targets#display()`), UI5 reports the hash
-again and the route matches again in the same-hash branch of `parse()`. The call is skipped when a
-`navigationSettled` handler of the cancelled navigation has moved the hash on.
+when none are given. When cancelling a pending browser history traversal that restores
+asynchronously, `super.navTo()` is deferred through `whenBack` until the URL returns, so
+`componentTargetInfo` is not dropped. If UI5 has reset the hash of the router's hash changer,
+which it does after a target was displayed without a route (`Targets#display()`), UI5 reports
+the hash again and the route matches again in the same-hash branch of `parse()`. The call is
+skipped when a `navigationSettled` handler of the cancelled navigation has moved the hash on,
+stopped, or destroyed the router.
 
 `skipGuards: true` and `navToPreflight: "bypass"` take the same path without evaluating
 guards. Both go through `_navigateAllowed()`. If `super.navTo()` throws there, the phase is
@@ -517,9 +520,11 @@ Three rules keep one undo from causing the next:
 (`window.navigation`), registered once when `HistoryUndo.ts` loads, records the last step in
 the module variable `lastStep`: for a `traverse` it stores the index delta and the URL it
 arrived at. Any other entry change clears it, unless only the state of the entry was replaced,
-which UI5's `History` does after a step. UI5's `History` cannot be used for this: it infers
-the direction from the state of the entries and misreads it once an entry lacks that state.
-Without the Navigation API `lastStep` stays `null`.
+which UI5's `History` does after a step. `getUnconsumedStep()` checks that `lastStep.href`
+matches `window.location.href` and that the calling router has not already consumed that step
+(`_consumedStep`), so a traversal is never attributed twice or to an unrelated URL. UI5's
+`History` cannot be used for this: it infers the direction from the state of the entries and
+misreads it once an entry lacks that state. Without the Navigation API `lastStep` stays `null`.
 
 **How it is undone.** `_undoHashChange()` decides:
 
@@ -676,17 +681,19 @@ the error is swallowed and the decision is a block.
 
 `Router.ts` keeps the navigation logic and hands the rest to helper modules:
 
-| Step                                               | Router code                                               | Helper                                                                                                 |
-| -------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Read the `guardRouter` block                       | constructor                                               | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors   |
-| Lazy-mode preload hint                             | constructor                                               | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                  |
-| Pattern-tree expansion                             | `initialize()`, `addRoute()`                              | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                      |
-| `guardLoading: "block"`                            | `initialize()`                                            | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                    |
-| `guardLoading: "lazy"`                             | `initialize()` → `_registerLazyGuards()`                  | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()` |
-| `addRoute()` with `pattern-tree`, any loading mode | `addRoute()` → `_registerManifestGuard(..., before)`      | `createLazyGuards()` (`GuardModules.ts`)                                                               |
-| Export shapes and names                            | -                                                         | `resolveModuleExports()` (`GuardModules.ts`)                                                           |
-| Guard names in log messages                        | -                                                         | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                 |
-| Route metadata                                     | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()` | `RouteMetaStore` (`RouteMeta.ts`)                                                                      |
+| Step                                               | Router code                                                                | Helper                                                                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Read the `guardRouter` block                       | constructor                                                                | `parseGuardRouterConfig()` (`GuardConfig.ts`): options with defaults, `routeMeta`, guard descriptors                                   |
+| Lazy-mode preload hint                             | constructor                                                                | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                                                  |
+| Pattern-tree expansion                             | `initialize()`, `addRoute()`                                               | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                                                      |
+| `guardLoading: "block"`                            | `initialize()`                                                             | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                                                    |
+| `guardLoading: "lazy"`                             | `initialize()` → `_registerLazyGuards()`                                   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()`                                 |
+| `addRoute()` with `pattern-tree`, any loading mode | `addRoute()` → `_registerManifestGuard(..., before)`                       | `createLazyGuards()` (`GuardModules.ts`)                                                                                               |
+| Export shapes and names                            | -                                                                          | `resolveModuleExports()` (`GuardModules.ts`)                                                                                           |
+| Guard names in log messages                        | -                                                                          | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                                                 |
+| Route metadata                                     | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()`                  | `RouteMetaStore` (`RouteMeta.ts`)                                                                                                      |
+| Browser history step tracking & cross-router undo  | `_describeUndo()`, `_undoHashChange()`                                     | `getUnconsumedStep()`, `composeHashChangeUndo()`, `undoHistoryStep()` (`HistoryUndo.ts`)                                               |
+| UI5-private & loosely-typed UI5-boundary adapters  | constructor, `attachRouteMatched()`, `_commitNavigation()`, hash listeners | `withoutGuardRouter()`, `mirrorMatchingProcess()`, `isPromiseResolver()`, `readEventHash()`, `alignTitleHistory()` (`Ui5Internals.ts`) |
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
 `guardLoading: "lazy"`, `inheritance: "none"`. An invalid value logs
@@ -736,8 +743,9 @@ navigation's `AbortSignal`, and then `_startAttempt()`, which gives the new atte
 generation of its own. Everything else that ends an evaluating phase from outside the
 attempt (`stop()`, `destroy()`, the same-hash branch of `parse()` when the URL comes back to
 the committed hash) also goes through `_cancelPendingNavigation()`. Inside the pipeline, the
-aborted signal stops the remaining guards between awaits. When the decision arrives,
-`parse()`, `navTo()` and redirect hops discard it with a debug log if the generation changed.
+aborted signal stops the remaining guards after each synchronous guard, between awaits, and
+between phases. When the decision arrives, `parse()`, `navTo()` and redirect hops discard it
+with a debug log if the generation changed.
 
 The sync path checks the generation too (`_applyPreflightDecision()`, `_applyDecision()`,
 `_applyRedirectDecision()`): a guard that calls `navTo()` itself supersedes the navigation it
@@ -1042,8 +1050,9 @@ The FLP spec files of the demo app are listed in the [demo README](../../package
 ## UI5 Internals the Router Relies On
 
 The router overrides and calls public and protected API of `sap.m.routing.Router`, with four
-exceptions that no public contract covers. The first two concern a component that is displayed
-as a routing target (`"type": "Component"`) of a parent router, the other two the title history:
+exceptions that no public contract covers, all isolated in `Ui5Internals.ts`. The first two
+concern a component that is displayed as a routing target (`"type": "Component"`) of a parent
+router, the other two the title history:
 
 1. The private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`, by which a
    router tells UI5 that a route match is in progress.

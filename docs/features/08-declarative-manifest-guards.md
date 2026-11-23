@@ -41,15 +41,15 @@ constructor(routes, config, owner, ...)
   │   ├── options   -> _options
   │   ├── routeMeta -> _meta (RouteMetaStore, RouteMeta.ts)
   │   └── guards    -> _pendingGuardDescriptors
-  └── guardLoading "lazy": preload hint sap.ui.require(uniqueModulePaths)
+  └── guardLoading "lazy": preload hint sap.ui.require(uniqueModulePaths) when non-empty
 
 initialize()
   ├── no manifest guards: start the router
-  ├── inheritance "pattern-tree": expand descriptors to descendant routes
-  ├── "lazy" (default): register the guards from createLazyGuards() (GuardModules.ts),
-  │   then start synchronously
-  └── "block": load all modules (loadGuardModules()), register their guards,
-      then start
+  ├── "lazy" (default): with inheritance "pattern-tree", expand descriptors to descendant routes,
+  │   register the guards from createLazyGuards() (GuardModules.ts), then start synchronously
+  └── "block": load declared modules once (loadGuardModules()), expand descriptors that produced
+      guards with the routes known then (including any added via addRoute() while loading),
+      register their guards in declaration order, then start
 ```
 
 Every manifest guard goes through `_registerManifestGuard()`. Manifest guards are registered in `initialize()`, so they exist before the first navigation. Guards that a controller of a routed view adds in `onInit` run after them, because `initialize()` displays the target views. Guards added before `initialize()`, for example in a root view created synchronously, run before them; see [Mixing declarative and programmatic guards](../../packages/lib/README.md#mixing-declarative-and-programmatic-guards).
