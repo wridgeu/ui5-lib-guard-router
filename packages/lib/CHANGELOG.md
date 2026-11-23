@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.1...v1.7.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **router:** harden lifecycle re-entrancy, abort handling, history undo, and manifest loading ([#79](https://github.com/wridgeu/ui5-lib-guard-router/issues/79)) ([511468b](https://github.com/wridgeu/ui5-lib-guard-router/commit/511468b02ab44edebeb44b85195fb2e3b60d77aa))
+
 ## [1.7.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.0...v1.7.1) (2026-11-22)
 
 
