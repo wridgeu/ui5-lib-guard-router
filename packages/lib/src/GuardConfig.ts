@@ -72,9 +72,12 @@ function resolveGuardModulePath(dotPath: string, componentNamespace: string): st
  * Split a manifest guard entry on the first `#` to separate the module path
  * from an optional export key.
  */
-function parseGuardEntry(entry: string, componentNamespace: string): { modulePath: string; exportKey?: string } {
+function parseGuardEntry(entry: string, componentNamespace: string): { modulePath: string; exportKey?: string } | null {
 	const hashIndex = entry.indexOf("#");
 	const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex);
+	if (rawPath.length === 0 || (rawPath.startsWith("module:") && rawPath.length === "module:".length)) {
+		return null;
+	}
 	const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1);
 
 	return { modulePath: resolveGuardModulePath(rawPath, componentNamespace), exportKey };
@@ -102,7 +105,8 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 
 	function pushEntries(entries: unknown[], route: string, type: "enter" | "leave", label: string): void {
 		for (const entry of entries) {
-			if (typeof entry !== "string" || entry.length === 0) {
+			const parsed = typeof entry === "string" ? parseGuardEntry(entry, componentNamespace) : null;
+			if (!parsed) {
 				Log.warning(
 					`guardRouter.guards${label}: invalid entry, skipping`,
 					JSON.stringify(entry),
@@ -110,7 +114,6 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				);
 				continue;
 			}
-			const parsed = parseGuardEntry(entry, componentNamespace);
 			descriptors.push({ route, type, ...parsed });
 		}
 	}

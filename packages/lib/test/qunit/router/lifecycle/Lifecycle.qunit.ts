@@ -152,6 +152,38 @@ QUnit.test("navTo() on a destroyed router warns and does not navigate", async fu
 	);
 });
 
+QUnit.test("initialize() on a destroyed router warns and attaches no listener", function (assert: Assert) {
+	const hashChanger = HashChanger.getInstance();
+	const listenersBefore = hashChangedListeners(hashChanger);
+	router.destroy();
+
+	const warnings = captureWarnings(() => router.initialize());
+
+	assert.notOk(router.isInitialized(), "the router stays uninitialized");
+	assert.strictEqual(hashChangedListeners(hashChanger), listenersBefore, "no listener leaked on HashChanger");
+	assert.deepEqual(
+		warnings.map((w) => w.message),
+		["initialize: router is destroyed, ignoring"],
+	);
+});
+
+QUnit.test(
+	"destroy() resolves pending component-target match waiters before initialize()",
+	async function (assert: Assert) {
+		let resolved = false;
+		const { promise, resolve } = Promise.withResolvers<unknown>();
+		router.attachRouteMatched(resolve);
+		void promise.then(() => {
+			resolved = true;
+		});
+
+		router.destroy();
+		await promise;
+
+		assert.ok(resolved, "waiting component target resolves instead of hanging forever");
+	},
+);
+
 QUnit.test("destroy() clears route metadata", function (assert: Assert) {
 	router.setRouteMeta("", { root: true });
 	router.destroy();

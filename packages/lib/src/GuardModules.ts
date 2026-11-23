@@ -158,6 +158,7 @@ export function runGuardsInOrder(guards: GuardFn[], context: GuardContext): Guar
 		const result = guards[i](context);
 		if (isPromiseLike(result)) return finishGuardsAsync(result, guards.slice(i + 1), context);
 		if (result !== true) return result;
+		if (context.signal.aborted) return false;
 	}
 	return true;
 }
@@ -238,6 +239,7 @@ export function createLazyGuards(descriptor: GuardDescriptor): GuardFn[] {
 		return runGuardsInOrder(guards, context);
 	};
 	const wrapper = (context: GuardContext): GuardResult | PromiseLike<GuardResult> => {
+		if (guards !== undefined) return runGuardsInOrder(guards, context);
 		const mod: unknown = sap.ui.require(modulePath);
 		if (mod !== undefined) return run(mod, context);
 		return loadGuardModule(modulePath, `lazy load of "${modulePath}" failed`).then((loadedModule) =>

@@ -467,6 +467,67 @@ QUnit.test(
 );
 
 QUnit.test(
+	"a navTo() to the current route with componentTargetInfo applies it after cancelling an async back step",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		const pending = (): Promise<boolean> => new Promise(() => {});
+		router.addLeaveGuard("protected", pending);
+
+		await historyStepTo(() => window.history.back(), "");
+		const hashChanger = HashChanger.getInstance();
+		const writes: string[] = [];
+		const setHash = this.stub(hashChanger, "setHash").callsFake(function (this: HashChanger, ...args) {
+			writes.push(`set:${args[0]} on ${getHash()}`);
+			return setHash.wrappedMethod.apply(this, args);
+		});
+
+		const cancelled = nextSettlement();
+		router.navTo("protected", {}, { nested: { route: "list" } });
+		assert.strictEqual((await cancelled).status, NavigationOutcome.Cancelled, "the pending back step is cancelled");
+		await flushPromises();
+
+		assert.strictEqual(getHash(), "protected", "the URL is back");
+		assert.deepEqual(
+			writes,
+			["set:protected on protected"],
+			"super.navTo() ran once the URL returned to the current route",
+		);
+	},
+);
+
+QUnit.test(
+	"a hash change at the same URL after a browser back does not replay the consumed history step",
+	async function (this: SinonTestContext, assert: Assert) {
+		router.initialize();
+		await waitForRoute(router, "home");
+		await navTo("protected");
+		await historyStep(() => window.history.back());
+		router.addRouteGuard("forbidden", () => false);
+		const go = this.spy(window.history, "go");
+
+		const hashChanger = HashChanger.getInstance();
+		let simulatedHash = "forbidden";
+		this.stub(hashChanger, "getHash").callsFake(() => simulatedHash);
+		const replaceHash = this.stub(hashChanger, "replaceHash").callsFake((nextHash: string) => {
+			const previous = simulatedHash;
+			simulatedHash = nextHash;
+			hashChanger.fireHashChanged(nextHash, previous);
+		});
+
+		hashChanger.fireHashChanged("forbidden", "");
+		const result = await router.navigationSettled();
+
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "the navigation is blocked");
+		assert.ok(go.notCalled, "the previous history traversal was already consumed and is not replayed");
+		assert.strictEqual(replaceHash.callCount, 1, "the hash is restored by replacing the entry");
+		assert.strictEqual(replaceHash.firstCall.args[0], "", "the entry is restored to the previous hash");
+		assert.strictEqual(router.getHashChanger().getHash(), "", "RouterHashChanger stays in sync with the URL");
+	},
+);
+
+QUnit.test(
 	"a blocked history step is taken back after a hash change that ended with the URL back",
 	async function (assert: Assert) {
 		router.initialize();

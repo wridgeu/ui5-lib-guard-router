@@ -212,7 +212,7 @@ export default class GuardPipeline {
 					})
 					.catch(toErrorDecision);
 			}
-			if (leaveResult !== true) return { action: "block" };
+			if (leaveResult !== true || context.signal.aborted) return { action: "block" };
 
 			return runEnterPhase();
 		} catch (error) {
@@ -259,6 +259,7 @@ export default class GuardPipeline {
 				});
 			}
 			if (result !== true) return result;
+			if (context.signal.aborted) return false;
 		}
 		return true;
 	}
@@ -283,6 +284,7 @@ export default class GuardPipeline {
 			});
 		}
 		if (globalResult !== true) return globalResult;
+		if (context.signal.aborted) return false;
 		return runRouteGuards();
 	}
 
@@ -317,6 +319,7 @@ export default class GuardPipeline {
 				if (isPromiseLike(result)) {
 					return this._continueGuardsAsync(result, guards, i, context, onBlock, label, route);
 				}
+				if (context.signal.aborted) return false;
 				if (result !== true) return onBlock(result);
 			} catch (error) {
 				if (context.signal.aborted) return false;

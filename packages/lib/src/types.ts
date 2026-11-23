@@ -386,7 +386,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	addGuard(guard: GuardFn): GuardRouter;
+	addGuard(guard: GuardFn): this;
 	/**
 	 * Remove a previously registered global guard.
 	 *
@@ -394,7 +394,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	removeGuard(guard: GuardFn): GuardRouter;
+	removeGuard(guard: GuardFn): this;
 	/**
 	 * Register a guard for a specific route.
 	 *
@@ -406,7 +406,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
+	addRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this;
 	/**
 	 * Remove a guard from a specific route.
 	 *
@@ -419,7 +419,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): GuardRouter;
+	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this;
 	/**
 	 * Register a leave guard for a specific route.
 	 *
@@ -431,7 +431,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	addLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	addLeaveGuard(routeName: string, guard: LeaveGuardFn): this;
 	/**
 	 * Remove a previously registered leave guard from a specific route.
 	 *
@@ -440,7 +440,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.0.1
 	 */
-	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): GuardRouter;
+	removeLeaveGuard(routeName: string, guard: LeaveGuardFn): this;
 	/**
 	 * Get resolved metadata for a route.
 	 *
@@ -464,7 +464,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @returns `this` for chaining.
 	 * @since 1.6.0
 	 */
-	setRouteMeta(routeName: string, meta: Record<string, unknown>): GuardRouter;
+	setRouteMeta(routeName: string, meta: Record<string, unknown>): this;
 	/**
 	 * Resolve when the current guard pipeline settles.
 	 *
@@ -496,7 +496,7 @@ export interface GuardRouter extends MobileRouter {
 		oData: object,
 		fnFunction: (evt: Router$NavigationSettledEvent) => void,
 		oListener?: object,
-	): GuardRouter;
+	): this;
 	/**
 	 * Attach an event handler for the `navigationSettled` event (without custom data).
 	 *
@@ -504,7 +504,7 @@ export interface GuardRouter extends MobileRouter {
 	 * @param oListener - Context object to call the event handler with. Defaults to this Router.
 	 * @since 1.3.0
 	 */
-	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
+	attachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
 	/**
 	 * Detach a previously attached `navigationSettled` event handler.
 	 *
@@ -515,5 +515,5 @@ export interface GuardRouter extends MobileRouter {
 	 * @param oListener - Context object on which the given function had to be called.
 	 * @since 1.3.0
 	 */
-	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): GuardRouter;
+	detachNavigationSettled(fnFunction: (evt: Router$NavigationSettledEvent) => void, oListener?: object): this;
 }

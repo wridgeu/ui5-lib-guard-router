@@ -609,3 +609,67 @@ QUnit.test(
 		]);
 	},
 );
+
+QUnit.test("a sync guard that aborts the navigation stops later guards and phases", function (assert: Assert) {
+	const controller = new AbortController();
+	const calls: string[] = [];
+	const pipeline = new GuardPipeline();
+	pipeline.addLeaveGuard("current", () => {
+		calls.push("leave1");
+		controller.abort();
+		return true;
+	});
+	pipeline.addLeaveGuard("current", () => {
+		calls.push("leave2");
+		return true;
+	});
+	pipeline.addLeaveGuard("audit", () => {
+		calls.push("leaveAudit");
+		return true;
+	});
+	pipeline.addGlobalGuard(() => {
+		calls.push("global");
+		return true;
+	});
+	pipeline.addEnterGuard("target", () => {
+		calls.push("route");
+		return true;
+	});
+
+	assert.deepEqual(
+		pipeline.evaluate(createContext({ fromRoute: "current", signal: controller.signal }), {
+			alsoLeaving: ["audit"],
+		}),
+		{ action: "block" },
+		"aborted leave guard stops before the next leave guard and before enter phases",
+	);
+	assert.deepEqual(calls, ["leave1"]);
+
+	const controller2 = new AbortController();
+	const enterCalls: string[] = [];
+	const enterPipeline = new GuardPipeline();
+	enterPipeline.addGlobalGuard(() => {
+		enterCalls.push("global1");
+		controller2.abort();
+		return true;
+	});
+	enterPipeline.addGlobalGuard(() => {
+		enterCalls.push("global2");
+		return true;
+	});
+	enterPipeline.addEnterGuard("target", () => {
+		enterCalls.push("route");
+		return true;
+	});
+	enterPipeline.addEnterGuard("audit", () => {
+		enterCalls.push("routeAudit");
+		return true;
+	});
+
+	assert.deepEqual(
+		enterPipeline.evaluate(createContext({ signal: controller2.signal }), { alsoEntering: ["audit"] }),
+		{ action: "block" },
+		"aborted global guard stops before later global, route and greedy guards",
+	);
+	assert.deepEqual(enterCalls, ["global1"]);
+});

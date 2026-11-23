@@ -190,11 +190,18 @@ QUnit.test('the "*" object form keeps enter guards and drops leave guards', func
 
 QUnit.test("invalid entries are skipped with a warning", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
-	const guards = { home: ["", 1, "g.a"], detail: { enter: [null], leave: [""] }, bad: "g.b" };
-	assert.deepEqual(parseGuardRouterConfig({ guards }, "").guards, [
-		{ route: "home", type: "enter", modulePath: "g/a", exportKey: undefined },
+	const guards = {
+		home: ["", 1, "#onlyKey", "module:", "module:#onlyKey", "g.a"],
+		detail: { enter: [null], leave: [""] },
+		bad: "g.b",
+	};
+	assert.deepEqual(parseGuardRouterConfig({ guards }, "my.app").guards, [
+		{ route: "home", type: "enter", modulePath: "my/app/g/a", exportKey: undefined },
 	]);
 	assert.deepEqual(logMessages(warning), [
+		'guardRouter.guards["home"]: invalid entry, skipping',
+		'guardRouter.guards["home"]: invalid entry, skipping',
+		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["detail"].enter: invalid entry, skipping',
