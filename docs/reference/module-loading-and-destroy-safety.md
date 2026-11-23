@@ -73,21 +73,21 @@ UI5's router stays stopped after `stop()` until `initialize()` is called again, 
 
 ## Lazy mode and destroy safety
 
-In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` calls `super.initialize()` synchronously, so there is no load to race with `destroy()`. `parse()` and `destroy()` read `_destroyed` in every mode: `parse()` hands a hash change that reaches a destroyed router to the base router, and `destroy()` returns early on a second call.
+In lazy mode (`guardLoading: "lazy"`, the default), `initialize()` calls `super.initialize()` synchronously, so there is no load to race with `destroy()`. `initialize()`, `navTo()`, `parse()` and `destroy()` read `_destroyed` in every mode: `initialize()` and `navTo()` warn and return `this`, `parse()` hands a hash change that reaches a destroyed router to the base router, and `destroy()` returns early on a second call.
 
 A navigation in progress when `destroy()` is called ends the same way in all modes:
 
-1. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazy wrapper whose module was not cached checks it once the module has loaded and returns `false` instead of running the guards. A lazily loaded multi-guard module also checks it after each of its guards that returns a Promise.
+1. The guard pipeline is cleared, so later navigations run no guards. The in-flight run iterates a snapshot of the guard arrays, so the aborted signal is what stops it: the pipeline checks the signal after each sync guard, before each remaining guard of a phase in which a guard returned a Promise, and before starting the next phase. A lazy wrapper whose module was not cached checks it once the module has loaded and returns `false` instead of running the guards. A lazily loaded multi-guard module also checks it after each guard (sync or async).
 2. The generation counter increments, so the in-flight pipeline discards its result.
 3. The `AbortController` aborts, which tells guards to cancel async work (e.g. `fetch`).
 
 ## Summary
 
-| Concern              | UI5 TargetCache                              | Guard Router                                                                      |
-| -------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
-| Sentinel field       | `_oCache` (nulled to `undefined`)            | `_destroyed` (set to `true`)                                                      |
-| Check location       | `afterLoaded` callback                       | `.then()` in `initialize()` (block mode); `parse()` and `destroy()` in every mode |
-| Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions)                                       |
-| Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)                                         |
+| Concern              | UI5 TargetCache                              | Guard Router                                                                                                 |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Sentinel field       | `_oCache` (nulled to `undefined`)            | `_destroyed` (set to `true`)                                                                                 |
+| Check location       | `afterLoaded` callback                       | `.then()` in `initialize()` (block mode); `initialize()`, `navTo()`, `parse()` and `destroy()` in every mode |
+| Cleanup on arrival   | `.then(destroyObject)` on cached promises    | Not needed (guards are stateless functions)                                                                  |
+| Set order in destroy | After iterating cache, before `bIsDestroyed` | Before any cleanup (clearing guards etc.)                                                                    |
 
 [targetcache-src]: https://github.com/UI5/openui5/blob/1.144.0/src/sap.ui.core/src/sap/ui/core/routing/TargetCache.js

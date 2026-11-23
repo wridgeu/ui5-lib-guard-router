@@ -134,6 +134,8 @@ interface PhaseCommitting {
 	readonly origin: "preflight" | "redirect" | "parse";
 	/** How the browser got to the history entry that the route replaces (see {@link RedirectChainContext.direction}). */
 	readonly direction?: Direction;
+	/** The hash of the history entry that a redirected hash change arrived at (see {@link _alignTitleHistory}). */
+	readonly attemptedHash?: string;
 	/** Whether the URL showed a hash that never committed when `navTo()` wrote the hash (see {@link NavigationAttempt.restoreHash}). */
 	readonly restoreHash: boolean;
 	/** What the root hash changer showed before `navTo()` wrote the hash: the write is undone with it. */
@@ -1490,19 +1492,23 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * hash change never matched, so UI5 has not handled its title:
 	 * - A new entry or a step forward would have added a title, which the title of the target
 	 *   replaces: UI5 must not remove the title of the route before it.
-	 * - A step back would have removed the title of the route that was left, so that the target
-	 *   replaces the title of the entry the step arrived at: UI5 removes the first for the
-	 *   replaced hash, the router removes the second, under the condition of UI5 for a step back.
+	 * - A step back to a titled route would have removed the title of the route that was left, so
+	 *   that a titled target replaces the entry the step arrived at and an untitled target leaves
+	 *   that entry in place until the next titled route: remove the left entry here under UI5's
+	 *   condition for a step back when the arrived hash has an entry in the title history.
 	 */
-	private _alignTitleHistory(direction: Direction | undefined): void {
+	private _alignTitleHistory(direction: Direction | undefined, attemptedHash?: string): void {
 		if (direction === HistoryDirection.NewEntry || direction === HistoryDirection.Forwards) {
 			Reflect.set(this, "_bLastHashReplaced", false);
 		} else if (direction === HistoryDirection.Backwards) {
 			const titles: unknown[] = this.getTitleHistory();
 			const left = titles.at(-1);
-			const replaced = titles.at(-2);
-			if (isRecord(left) && isRecord(replaced) && !left.isHome && left.title !== replaced.title) {
-				titles.splice(-2, 1);
+			const arrived =
+				attemptedHash === undefined
+					? titles.at(-2)
+					: titles.findLast((entry) => isRecord(entry) && entry.hash === attemptedHash);
+			if (isRecord(left) && isRecord(arrived) && !left.isHome && left.title !== arrived.title) {
+				titles.pop();
 			}
 		}
 	}
@@ -1518,7 +1524,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _commitNavigation(hash: string, route: string): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
-		if (this._phase.kind === "committing") this._alignTitleHistory(this._phase.direction);
+		if (this._phase.kind === "committing") {
+			this._alignTitleHistory(this._phase.direction, this._phase.attemptedHash);
+		}
 		// The URL has moved on: a hash change that was to put it back is not awaited any more.
 		this._undo = null;
 		this._currentHash = hash;
@@ -1694,6 +1702,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 					hash: targetHash,
 					origin: "redirect",
 					direction: chain.direction,
+					attemptedHash: chain.attemptedHash,
 					restoreHash: chain.restoreHash,
 					writtenOver: HashChanger.getInstance().getHash(),
 				};
