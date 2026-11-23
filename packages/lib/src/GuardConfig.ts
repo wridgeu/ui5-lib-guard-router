@@ -11,9 +11,9 @@ import type {
 } from "./types";
 import { LOG_COMPONENT } from "./GuardPipeline";
 
-/** Type guard for plain objects. */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+/** Type guard for plain objects (`{}` or `Object.create(null)`). */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+	if (typeof value !== "object" || value === null) return false;
 	const proto: unknown = Object.getPrototypeOf(value);
 	return proto === Object.prototype || proto === null;
 }
@@ -34,7 +34,7 @@ const LOG_LEVELS = {
 	warning: Log.Level.WARNING,
 	info: Log.Level.INFO,
 	debug: Log.Level.DEBUG,
-} satisfies Record<GuardRouterLogLevel, unknown>;
+} satisfies Record<GuardRouterLogLevel, (typeof Log.Level)[keyof typeof Log.Level]>;
 
 const isLogLevel = (v: unknown): v is GuardRouterLogLevel => typeof v === "string" && Object.hasOwn(LOG_LEVELS, v);
 
@@ -72,9 +72,12 @@ function resolveGuardModulePath(dotPath: string, componentNamespace: string): st
  * Split a manifest guard entry on the first `#` to separate the module path
  * from an optional export key.
  */
-function parseGuardEntry(entry: string, componentNamespace: string): { modulePath: string; exportKey?: string } {
+function parseGuardEntry(entry: string, componentNamespace: string): { modulePath: string; exportKey?: string } | null {
 	const hashIndex = entry.indexOf("#");
 	const rawPath = hashIndex === -1 ? entry : entry.slice(0, hashIndex);
+	if (rawPath.length === 0 || (rawPath.startsWith("module:") && rawPath.length === "module:".length)) {
+		return null;
+	}
 	const exportKey = hashIndex === -1 ? undefined : entry.slice(hashIndex + 1);
 
 	return { modulePath: resolveGuardModulePath(rawPath, componentNamespace), exportKey };
@@ -93,7 +96,7 @@ function parseGuardEntry(entry: string, componentNamespace: string): { modulePat
  * - Invalid entries, object values that are not arrays, unknown object keys -> warn, skip
  */
 function parseGuardDescriptors(guards: unknown, componentNamespace: string): GuardDescriptor[] {
-	if (!isRecord(guards)) {
+	if (!isPlainObject(guards)) {
 		Log.warning("guardRouter.guards is not a plain object, skipping", JSON.stringify(guards), LOG_COMPONENT);
 		return [];
 	}
@@ -102,7 +105,8 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 
 	function pushEntries(entries: unknown[], route: string, type: "enter" | "leave", label: string): void {
 		for (const entry of entries) {
-			if (typeof entry !== "string" || entry.length === 0) {
+			const parsed = typeof entry === "string" ? parseGuardEntry(entry, componentNamespace) : null;
+			if (!parsed) {
 				Log.warning(
 					`guardRouter.guards${label}: invalid entry, skipping`,
 					JSON.stringify(entry),
@@ -110,7 +114,6 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 				);
 				continue;
 			}
-			const parsed = parseGuardEntry(entry, componentNamespace);
 			descriptors.push({ route, type, ...parsed });
 		}
 	}
@@ -118,7 +121,7 @@ function parseGuardDescriptors(guards: unknown, componentNamespace: string): Gua
 	for (const [key, value] of Object.entries(guards)) {
 		if (Array.isArray(value)) {
 			pushEntries(value, key, "enter", `["${key}"]`);
-		} else if (isRecord(value)) {
+		} else if (isPlainObject(value)) {
 			if (key === "*" && value.leave !== undefined) {
 				Log.warning(
 					'guardRouter.guards["*"].leave: global leave guards are not supported, skipping',
@@ -209,14 +212,7 @@ function applyLogLevel(value: unknown): void {
 	if (level > Log.getLevel(LOG_COMPONENT)) Log.setLevel(level, LOG_COMPONENT);
 }
 
-function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
-	if (!isRecord(raw)) {
-		if (raw !== undefined) {
-			Log.warning("guardRouter config is not a plain object, using defaults", JSON.stringify(raw), LOG_COMPONENT);
-		}
-		return DEFAULT_OPTIONS;
-	}
-
+function normalizeGuardRouterOptions(raw: Record<string, unknown>): ResolvedGuardRouterOptions {
 	// First, so that the warnings about the other options are logged at the new level.
 	applyLogLevel(raw.logLevel);
 	const result = { ...DEFAULT_OPTIONS };
@@ -231,12 +227,12 @@ function normalizeGuardRouterOptions(raw: unknown): ResolvedGuardRouterOptions {
 function parseRouteMeta(raw: unknown): Map<string, Readonly<Record<string, unknown>>> {
 	const routeMeta = new Map<string, Readonly<Record<string, unknown>>>();
 	if (raw === undefined) return routeMeta;
-	if (!isRecord(raw)) {
+	if (!isPlainObject(raw)) {
 		Log.warning("guardRouter.routeMeta: expected object, skipping", JSON.stringify(raw), LOG_COMPONENT);
 		return routeMeta;
 	}
 	for (const [routeName, meta] of Object.entries(raw)) {
-		if (isRecord(meta)) {
+		if (isPlainObject(meta)) {
 			routeMeta.set(routeName, Object.freeze({ ...meta }));
 		} else {
 			Log.warning(
@@ -262,10 +258,14 @@ interface ParsedGuardRouterConfig {
  * Side effect: a valid `logLevel` raises the page-wide level of the router's log component.
  */
 export function parseGuardRouterConfig(raw: unknown, componentNamespace: string): ParsedGuardRouterConfig {
-	const options = normalizeGuardRouterOptions(raw);
-	if (!isRecord(raw)) return { options, routeMeta: new Map(), guards: [] };
+	if (!isPlainObject(raw)) {
+		if (raw !== undefined) {
+			Log.warning("guardRouter config is not a plain object, using defaults", JSON.stringify(raw), LOG_COMPONENT);
+		}
+		return { options: DEFAULT_OPTIONS, routeMeta: new Map(), guards: [] };
+	}
 	return {
-		options,
+		options: normalizeGuardRouterOptions(raw),
 		routeMeta: parseRouteMeta(raw.routeMeta),
 		guards: raw.guards === undefined ? [] : parseGuardDescriptors(raw.guards, componentNamespace),
 	};

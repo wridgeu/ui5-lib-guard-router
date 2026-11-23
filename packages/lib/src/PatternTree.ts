@@ -4,6 +4,8 @@
 
 /** Matches a standalone optional (`:param:`) or rest (`:param*:`) segment. */
 const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*:$/;
+/** Matches a standalone mandatory parameter (`{param}` or `{param*}`) segment. */
+const MANDATORY_PARAM_SEGMENT = /^\{[^}]+\}$/;
 
 /**
  * Strips inline query and optional-query suffixes from a segment.
@@ -19,8 +21,8 @@ const OPTIONAL_OR_REST_SEGMENT = /^:[^:]*:$/;
  */
 function stripInlineQuery(seg: string): string {
 	const mqIdx = seg.indexOf("{?");
-	if (mqIdx !== -1) return seg.slice(0, mqIdx);
 	const oqIdx = seg.indexOf(":?");
+	if (mqIdx !== -1 && (oqIdx === -1 || mqIdx < oqIdx)) return seg.slice(0, mqIdx);
 	if (oqIdx !== -1) return seg.slice(0, oqIdx);
 	return seg;
 }
@@ -55,7 +57,7 @@ export function isPatternAncestor(ancestorPattern: string, candidatePattern: str
 	return ancestorSegments.every((seg, i) => {
 		const candidateSeg = candidateSegments[i];
 		if (seg === candidateSeg) return true;
-		return seg.startsWith("{") && candidateSeg.startsWith("{");
+		return MANDATORY_PARAM_SEGMENT.test(seg) && MANDATORY_PARAM_SEGMENT.test(candidateSeg);
 	});
 }
 

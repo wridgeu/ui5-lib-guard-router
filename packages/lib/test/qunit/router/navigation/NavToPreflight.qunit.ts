@@ -323,6 +323,28 @@ QUnit.test("duplicate navTo to same pending hash is a no-op", async function (as
 	assert.strictEqual(guardCallCount, 1, "Guard ran only once despite duplicate navTo");
 });
 
+QUnit.test("navTo to same pending hash with componentTargetInfo is not deduped", async function (assert) {
+	const pending: ((allow: boolean) => void)[] = [];
+	router.addRouteGuard(
+		"protected",
+		() =>
+			new Promise<boolean>((resolve) => {
+				pending.push(resolve);
+			}),
+	);
+	router.initialize();
+	await waitForRoute(router, "home");
+	const statuses = recordSettlements(router);
+
+	router.navTo("protected");
+	router.navTo("protected", {}, { nested: { route: "detail" } });
+	assert.strictEqual(pending.length, 2, "second call superseded the pending preflight");
+	assert.deepEqual(statuses, [NavigationOutcome.Cancelled], "first preflight was cancelled");
+
+	pending[1](true);
+	assert.strictEqual((await router.navigationSettled()).status, NavigationOutcome.Committed);
+});
+
 // Preflight: the hash never changed, so nothing is restored. For the parse path, where the hash
 // has changed and is restored, see "Router - Hash change (direct URL entry)".
 

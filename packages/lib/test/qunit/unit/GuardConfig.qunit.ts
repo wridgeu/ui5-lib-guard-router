@@ -1,5 +1,5 @@
 import Log from "sap/base/Log";
-import { isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
+import { isPlainObject, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
 import { logMessages, type SinonTestContext } from "../testHelpers";
 
 const DEFAULTS: ResolvedGuardRouterOptions = {
@@ -9,17 +9,17 @@ const DEFAULTS: ResolvedGuardRouterOptions = {
 	inheritance: "none",
 };
 
-QUnit.module("GuardConfig - isRecord");
+QUnit.module("GuardConfig - isPlainObject");
 
 QUnit.test("accepts plain objects only", function (assert) {
-	assert.strictEqual(isRecord({}), true);
-	assert.strictEqual(isRecord(Object.create(null)), true);
-	assert.strictEqual(isRecord(null), false);
-	assert.strictEqual(isRecord(undefined), false);
-	assert.strictEqual(isRecord([]), false);
-	assert.strictEqual(isRecord("x"), false);
-	assert.strictEqual(isRecord(new Date()), false);
-	assert.strictEqual(isRecord(new Map()), false);
+	assert.strictEqual(isPlainObject({}), true);
+	assert.strictEqual(isPlainObject(Object.create(null)), true);
+	assert.strictEqual(isPlainObject(null), false);
+	assert.strictEqual(isPlainObject(undefined), false);
+	assert.strictEqual(isPlainObject([]), false);
+	assert.strictEqual(isPlainObject("x"), false);
+	assert.strictEqual(isPlainObject(new Date()), false);
+	assert.strictEqual(isPlainObject(new Map()), false);
 });
 
 QUnit.module("GuardConfig - options");
@@ -190,11 +190,18 @@ QUnit.test('the "*" object form keeps enter guards and drops leave guards', func
 
 QUnit.test("invalid entries are skipped with a warning", function (this: SinonTestContext, assert) {
 	const warning = this.stub(Log, "warning");
-	const guards = { home: ["", 1, "g.a"], detail: { enter: [null], leave: [""] }, bad: "g.b" };
-	assert.deepEqual(parseGuardRouterConfig({ guards }, "").guards, [
-		{ route: "home", type: "enter", modulePath: "g/a", exportKey: undefined },
+	const guards = {
+		home: ["", 1, "#onlyKey", "module:", "module:#onlyKey", "g.a"],
+		detail: { enter: [null], leave: [""] },
+		bad: "g.b",
+	};
+	assert.deepEqual(parseGuardRouterConfig({ guards }, "my.app").guards, [
+		{ route: "home", type: "enter", modulePath: "my/app/g/a", exportKey: undefined },
 	]);
 	assert.deepEqual(logMessages(warning), [
+		'guardRouter.guards["home"]: invalid entry, skipping',
+		'guardRouter.guards["home"]: invalid entry, skipping',
+		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["home"]: invalid entry, skipping',
 		'guardRouter.guards["detail"].enter: invalid entry, skipping',

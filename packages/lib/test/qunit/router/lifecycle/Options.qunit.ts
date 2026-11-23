@@ -19,7 +19,7 @@ import {
 	createdRouterHooks,
 	type SinonTestContext,
 } from "../../testHelpers";
-import { isRecord } from "ui5/guard/router/GuardConfig";
+import { isPlainObject } from "ui5/guard/router/GuardConfig";
 
 let router: GuardRouter;
 
@@ -40,7 +40,7 @@ QUnit.test("UI5 gets the caller's config object without guardRouter", function (
 	router = createRouterUnsafe([{ name: "home", pattern: "" }], config);
 	// The UI5-private member in which sap.ui.core.routing.Router keeps the config it was constructed with.
 	const received: unknown = Reflect.get(router, "_oConfig");
-	if (!isRecord(received)) throw new TypeError("the router has no config object");
+	if (!isPlainObject(received)) throw new TypeError("the router has no config object");
 
 	assert.notOk("guardRouter" in received, "guardRouter is not in the config");
 	assert.ok("async" in received, "the caller's other properties are");

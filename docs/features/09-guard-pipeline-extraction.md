@@ -50,7 +50,7 @@ class GuardPipeline {
 
 ## Evaluation
 
-Order: leave guards (`fromRoute`, then `alsoLeaving`), global guards, route enter guards (`toRoute`, then `alsoEntering`). The first result that is not `true` ends the run. Between async steps the pipeline checks `context.signal.aborted` and blocks if it is set. Each guard array is copied before iteration, so a guard can remove itself (a one-shot guard) without affecting the current run.
+Order: leave guards (`fromRoute`, then `alsoLeaving`), global guards, route enter guards (`toRoute`, then `alsoEntering`). The first result that is not `true` ends the run. After each synchronous guard, between async steps, and between phases the pipeline checks `context.signal.aborted` and blocks if it is set. Each guard array is copied before iteration, so a guard can remove itself (a one-shot guard) without affecting the current run.
 
 | Guard returns          | Decision                                   |
 | ---------------------- | ------------------------------------------ |
@@ -70,7 +70,7 @@ A guard that throws or rejects is logged with `Log.error` and re-thrown; `evalua
 - `GuardDecision`: the normalized result, an inter-module contract between pipeline and Router.
 - `isPromiseLike`: duck-typed thenable check, shared with `Router.ts` and `GuardModules.ts`.
 - `nameGuard`: `GuardModules.ts` names manifest guards after their module. The error log of a throwing guard then shows the name: `Enter guard [1] "checks#1" on route "admin" threw, navigation failed`.
-- `LOG_COMPONENT`, the log component of the whole library, and `isPromiseResolver`, which `Router#attachRouteMatched` uses to recognize a component target that waits for the router.
+- `LOG_COMPONENT`, the log component of the whole library. (`isPromiseResolver`, originally exported here, was moved to `Ui5Internals.ts` alongside the other UI5-private adapters.)
 
 ## Router side
 

@@ -26,28 +26,6 @@ export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
 	return "then" in value && typeof value.then === "function";
 }
 
-/** How this engine prints the resolve function of a Promise: `function () { [native code] }` in V8. */
-let resolverSource!: string;
-void new Promise((resolve) => {
-	resolverSource = Function.prototype.toString.call(resolve);
-});
-
-/**
- * Whether `value` looks exactly like the resolve function of a native Promise: a function with
- * the name `""`, the length `1` and the source text that this engine prints for such a function.
- * `Router#attachRouteMatched` needs this to recognize a UI5 component target that waits for the
- * router. A function written in JavaScript never matches; other anonymous built-ins with one
- * parameter do, above all the reject function of a Promise.
- */
-export function isPromiseResolver(value: unknown): value is () => void {
-	return (
-		typeof value === "function" &&
-		value.name === "" &&
-		value.length === 1 &&
-		Function.prototype.toString.call(value) === resolverSource
-	);
-}
-
 /** Names of manifest guards, derived from their module, for log output. */
 const guardNames = new WeakMap<GuardFn, string>();
 
@@ -79,6 +57,49 @@ function toDecision(result: GuardResult): GuardDecision {
 
 function toErrorDecision(error: unknown): GuardDecision {
 	return { action: "error", error };
+}
+
+/** Validate a non-true guard result; invalid values become false. */
+function validateGuardResult(result: unknown): GuardResult {
+	if (typeof result === "boolean") return result;
+	if (typeof result === "string" && result.length > 0) return result;
+	if (isGuardRedirect(result)) return result;
+	Log.warning("Guard returned invalid value, treating as block", String(result), LOG_COMPONENT);
+	return false;
+}
+
+/** Validate a leave guard result; non-boolean values log a warning and block. */
+function validateLeaveGuardResult(result: unknown): boolean {
+	if (typeof result === "boolean") return result;
+	Log.warning("Leave guard returned non-boolean value, treating as block", String(result), LOG_COMPONENT);
+	return false;
+}
+
+function logGuardError(label: string, index: number, guard: GuardFn, route: string, error: unknown): void {
+	Log.error(
+		`${describeGuard(label, index, guard)} on route "${route}" threw, navigation failed`,
+		error instanceof Error ? error : String(error),
+		LOG_COMPONENT,
+	);
+}
+
+function addToGuardMap(map: Map<string, GuardFn[]>, key: string, guard: GuardFn, before?: GuardFn): void {
+	let guards = map.get(key);
+	if (!guards) {
+		guards = [];
+		map.set(key, guards);
+	}
+	const index = before === undefined ? -1 : guards.indexOf(before);
+	if (index === -1) guards.push(guard);
+	else guards.splice(index, 0, guard);
+}
+
+function removeFromGuardMap(map: Map<string, GuardFn[]>, key: string, guard: GuardFn): void {
+	const guards = map.get(key);
+	if (!guards) return;
+	const index = guards.indexOf(guard);
+	if (index !== -1) guards.splice(index, 1);
+	if (guards.length === 0) map.delete(key);
 }
 
 /**
@@ -115,14 +136,14 @@ export default class GuardPipeline {
 	 * @param before - A guard of the route to register `guard` in front of; at the end without it.
 	 */
 	addEnterGuard(route: string, guard: GuardFn, before?: GuardFn): void {
-		this._addToGuardMap(this._enterGuards, route, guard, before);
+		addToGuardMap(this._enterGuards, route, guard, before);
 	}
 
 	/**
 	 * Remove a previously registered enter guard by reference.
 	 */
 	removeEnterGuard(route: string, guard: GuardFn): void {
-		this._removeFromGuardMap(this._enterGuards, route, guard);
+		removeFromGuardMap(this._enterGuards, route, guard);
 	}
 
 	/**
@@ -130,21 +151,21 @@ export default class GuardPipeline {
 	 *
 	 * Accepts `GuardFn` to support manifest-declared guards loaded from
 	 * untyped modules. Non-boolean return values are caught at runtime
-	 * by {@link _validateLeaveGuardResult}.
+	 * by {@link validateLeaveGuardResult}.
 	 *
 	 * @param route - Route name as defined in `manifest.json`.
 	 * @param guard - Guard function to register as a leave guard.
 	 * @param before - A leave guard of the route to register `guard` in front of; at the end without it.
 	 */
 	addLeaveGuard(route: string, guard: GuardFn, before?: GuardFn): void {
-		this._addToGuardMap(this._leaveGuards, route, guard, before);
+		addToGuardMap(this._leaveGuards, route, guard, before);
 	}
 
 	/**
 	 * Remove a previously registered leave guard by reference.
 	 */
 	removeLeaveGuard(route: string, guard: GuardFn): void {
-		this._removeFromGuardMap(this._leaveGuards, route, guard);
+		removeFromGuardMap(this._leaveGuards, route, guard);
 	}
 
 	/**
@@ -198,7 +219,7 @@ export default class GuardPipeline {
 					this._leaveGuards.get(route) ?? [],
 					context,
 					route,
-					(result) => this._validateLeaveGuardResult(result),
+					validateLeaveGuardResult,
 					"Leave guard",
 				),
 			);
@@ -212,31 +233,12 @@ export default class GuardPipeline {
 					})
 					.catch(toErrorDecision);
 			}
-			if (leaveResult !== true) return { action: "block" };
+			if (leaveResult !== true || context.signal.aborted) return { action: "block" };
 
 			return runEnterPhase();
 		} catch (error) {
 			return toErrorDecision(error);
 		}
-	}
-
-	private _addToGuardMap<T>(map: Map<string, T[]>, key: string, guard: T, before?: T): void {
-		let guards = map.get(key);
-		if (!guards) {
-			guards = [];
-			map.set(key, guards);
-		}
-		const index = before === undefined ? -1 : guards.indexOf(before);
-		if (index === -1) guards.push(guard);
-		else guards.splice(index, 0, guard);
-	}
-
-	private _removeFromGuardMap<T>(map: Map<string, T[]>, key: string, guard: T): void {
-		const guards = map.get(key);
-		if (!guards) return;
-		const index = guards.indexOf(guard);
-		if (index !== -1) guards.splice(index, 1);
-		if (guards.length === 0) map.delete(key);
 	}
 
 	/**
@@ -259,6 +261,7 @@ export default class GuardPipeline {
 				});
 			}
 			if (result !== true) return result;
+			if (context.signal.aborted) return false;
 		}
 		return true;
 	}
@@ -271,7 +274,7 @@ export default class GuardPipeline {
 			this._globalGuards,
 			context,
 			context.toRoute,
-			(result) => this._validateGuardResult(result),
+			validateGuardResult,
 			"Enter guard",
 		);
 
@@ -283,6 +286,7 @@ export default class GuardPipeline {
 			});
 		}
 		if (globalResult !== true) return globalResult;
+		if (context.signal.aborted) return false;
 		return runRouteGuards();
 	}
 
@@ -290,7 +294,7 @@ export default class GuardPipeline {
 	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
 		const guards = toRoute ? this._enterGuards.get(toRoute) : undefined;
 		if (!guards) return true;
-		return this._runGuards(guards, context, toRoute, (result) => this._validateGuardResult(result), "Enter guard");
+		return this._runGuards(guards, context, toRoute, validateGuardResult, "Enter guard");
 	}
 
 	/**
@@ -303,13 +307,13 @@ export default class GuardPipeline {
 	 *
 	 * @param route - The route the guards are registered for, named in error logs.
 	 */
-	private _runGuards<R extends GuardResult>(
+	private _runGuards(
 		guards: GuardFn[],
 		context: GuardContext,
 		route: string,
-		onBlock: (result: unknown) => R,
+		onBlock: (result: unknown) => GuardResult,
 		label: string,
-	): R | boolean | Promise<R | boolean> {
+	): GuardResult | Promise<GuardResult> {
 		guards = guards.slice();
 		for (let i = 0; i < guards.length; i++) {
 			try {
@@ -317,14 +321,11 @@ export default class GuardPipeline {
 				if (isPromiseLike(result)) {
 					return this._continueGuardsAsync(result, guards, i, context, onBlock, label, route);
 				}
+				if (context.signal.aborted) return false;
 				if (result !== true) return onBlock(result);
 			} catch (error) {
 				if (context.signal.aborted) return false;
-				Log.error(
-					`${describeGuard(label, i, guards[i])} on route "${route}" threw, navigation failed`,
-					error instanceof Error ? error : String(error),
-					LOG_COMPONENT,
-				);
+				logGuardError(label, i, guards[i], route, error);
 				throw error;
 			}
 		}
@@ -340,15 +341,15 @@ export default class GuardPipeline {
 	 *
 	 * @param route - The route the guards are registered for, named in error logs.
 	 */
-	private async _continueGuardsAsync<R extends GuardResult>(
+	private async _continueGuardsAsync(
 		pendingResult: PromiseLike<GuardResult>,
 		guards: GuardFn[],
 		currentIndex: number,
 		context: GuardContext,
-		onBlock: (result: unknown) => R,
+		onBlock: (result: unknown) => GuardResult,
 		label: string,
 		route: string,
-	): Promise<R | boolean> {
+	): Promise<GuardResult> {
 		let guardIndex = currentIndex;
 		try {
 			// An aborted navigation discards the result: it is neither validated nor followed by the next guard.
@@ -365,30 +366,10 @@ export default class GuardPipeline {
 			return true;
 		} catch (error) {
 			if (!context.signal.aborted) {
-				Log.error(
-					`${describeGuard(label, guardIndex, guards[guardIndex])} on route "${route}" threw, navigation failed`,
-					error instanceof Error ? error : String(error),
-					LOG_COMPONENT,
-				);
+				logGuardError(label, guardIndex, guards[guardIndex], route, error);
 				throw error;
 			}
 			return false;
 		}
-	}
-
-	/** Validate a non-true guard result; invalid values become false. */
-	private _validateGuardResult(result: unknown): GuardResult {
-		if (typeof result === "boolean") return result;
-		if (typeof result === "string" && result.length > 0) return result;
-		if (isGuardRedirect(result)) return result;
-		Log.warning("Guard returned invalid value, treating as block", String(result), LOG_COMPONENT);
-		return false;
-	}
-
-	/** Validate a leave guard result; non-boolean values log a warning and block. */
-	private _validateLeaveGuardResult(result: unknown): boolean {
-		if (typeof result === "boolean") return result;
-		Log.warning("Leave guard returned non-boolean value, treating as block", String(result), LOG_COMPONENT);
-		return false;
 	}
 }

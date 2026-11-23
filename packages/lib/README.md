@@ -403,12 +403,12 @@ Leave guards cannot redirect. Redirect from an enter guard of the target route.
 
 ### Lifecycle
 
-| Method             | Behavior                                                                                                                                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `initialize()`     | Starts the router and parses the current hash through the guards, as the native router does                                                                                              |
-| `initialize(true)` | Starts the router without parsing the hash. After `stop()`, it resumes the route that was current, so its leave guards keep working                                                      |
-| `stop()`           | Cancels a pending navigation (settles as `Cancelled`, aborts the `AbortSignal`) and resets the current route, hash and last settlement; guards are kept                                  |
-| `destroy()`        | Clears all guards, cancels a pending navigation without firing `navigationSettled`, then calls `super.destroy()`. A `navTo()` afterwards only logs a warning. A second call does nothing |
+| Method             | Behavior                                                                                                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initialize()`     | Starts the router and parses the current hash through the guards, as the native router does                                                                                                                      |
+| `initialize(true)` | Starts the router without parsing the hash. After `stop()`, it resumes the route that was current, so its leave guards keep working                                                                              |
+| `stop()`           | Cancels a pending navigation (settles as `Cancelled`, aborts the `AbortSignal`) and resets the current route, hash and last settlement; guards are kept                                                          |
+| `destroy()`        | Clears all guards, cancels a pending navigation without firing `navigationSettled`, then calls `super.destroy()`. Later `initialize()` and `navTo()` calls only log a warning. A second `destroy()` does nothing |
 
 Before `initialize()`, while `guardLoading: "block"` modules load, and after `stop()`, the router does not listen to hash changes. `navTo()` then behaves like the native router: it only sets the hash, or does nothing on a stopped router. No guard runs and nothing settles; the guards run when the router starts and parses the hash.
 
@@ -845,7 +845,7 @@ Route metadata propagates the same way. With the route-to-pattern mapping `"empl
 }
 ```
 
-`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns the same object (merged, own values win).
+`getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns the same entries (merged, own values win).
 
 **The root-pattern route (`""`) is an ancestor of every route.** Metadata or guards declared on it, typically on "home", propagate to all routes:
 
@@ -868,8 +868,8 @@ Manifest and programmatic guards of the same route both run. Within each phase, 
 
 Where each kind of guard fits:
 
-- **Manifest:** guards that don't need component state (simple blocks, redirects, logging)
-- **Programmatic:** guards that close over models, services, or runtime state
+- **Manifest:** reusable guards (stateless or reading models/services from `context.ownerComponent`)
+- **Programmatic:** guards that close over local state or factories created in `Component.ts`
 - **Controller-level:** guards tied to a specific view's lifecycle (registered in `onInit`, removed in `onExit`)
 
 ## Examples

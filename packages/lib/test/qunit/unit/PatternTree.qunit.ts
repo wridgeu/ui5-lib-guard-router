@@ -13,6 +13,7 @@ QUnit.test("keeps mandatory segments and drops empty, optional and rest segments
 
 QUnit.test("strips inline query suffixes", function (assert) {
 	assert.deepEqual(patternSegments("product{?query}/{id}:?query:"), ["product", "{id}"]);
+	assert.deepEqual(patternSegments("product:?opt:{?req}"), ["product"]);
 });
 
 QUnit.test("keeps segments that only contain colons in other places", function (assert) {
@@ -45,6 +46,8 @@ QUnit.test("mandatory parameters match each other regardless of name", function 
 	assert.strictEqual(isPatternAncestor("employees/{empId}", "employees/{id}/resume"), true);
 	assert.strictEqual(isPatternAncestor("{id}", "x/y"), false);
 	assert.strictEqual(isPatternAncestor("x", "{id}/y"), false);
+	assert.strictEqual(isPatternAncestor("a/{id}-summary", "a/{other}-details/x"), false);
+	assert.strictEqual(isPatternAncestor("a/{id}", "a/{id}-details/x"), false);
 });
 
 const ROUTES = [

@@ -38,8 +38,11 @@ const allowedStatuses = new Set(["ported", "ported-subset"]);
  * @param {unknown} value
  * @returns {value is Record<string, unknown>}
  */
-export function isRecord(value) {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+export function isPlainObject(value) {
+	if (typeof value !== "object" || value === null) return false;
+	/** @type {unknown} */
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
 }
 
 /** @param {string} contents */
@@ -82,7 +85,7 @@ function validateUpstream(upstream, errors) {
  * @param {string[]} errors
  */
 function validateFile(file, index, errors) {
-	if (!isRecord(file)) {
+	if (!isPlainObject(file)) {
 		errors.push(`Manifest file entry at index ${index} must be an object`);
 		return;
 	}
@@ -133,7 +136,7 @@ function validateFile(file, index, errors) {
  * @returns {manifest is Manifest}
  */
 export function isValidUpstreamParityManifest(manifest, errors) {
-	if (!isRecord(manifest)) {
+	if (!isPlainObject(manifest)) {
 		errors.push("Manifest root must be an object");
 		return false;
 	}
@@ -148,7 +151,7 @@ export function isValidUpstreamParityManifest(manifest, errors) {
 		errors.push("Manifest files array is missing or empty");
 	}
 
-	if (!isRecord(manifest.upstream)) {
+	if (!isPlainObject(manifest.upstream)) {
 		errors.push("Manifest upstream metadata is missing or invalid");
 	} else {
 		validateUpstream(manifest.upstream, errors);

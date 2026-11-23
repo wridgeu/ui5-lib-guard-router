@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { computeSha256, isRecord, isValidUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
+import { computeSha256, isPlainObject, isValidUpstreamParityManifest } from "./upstream-parity-manifest-utils.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const manifestPath = path.join(repoRoot, "packages/lib/test/qunit/upstream-parity/vendor-manifest.json");
@@ -47,8 +47,8 @@ async function fetchGitObject(url) {
 
 	/** @type {unknown} */
 	const data = await response.json();
-	const object = isRecord(data) ? data.object : undefined;
-	if (!isRecord(object)) {
+	const object = isPlainObject(data) ? data.object : undefined;
+	if (!isPlainObject(object)) {
 		throw new Error(`Unexpected response from ${url}: no object`);
 	}
 	const { type, sha, url: objectUrl } = object;

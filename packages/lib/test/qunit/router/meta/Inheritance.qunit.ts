@@ -659,3 +659,70 @@ QUnit.test("setRouteMeta on unknown route with warn policy logs a warning", asyn
 	const meta = router.getRouteMeta("nonexistent");
 	assert.strictEqual(meta.key, "value", "metadata stored despite warning and accessible after addRoute");
 });
+
+QUnit.test(
+	"addRoute() during block-mode loading inherits loaded guards without creating lazy wrappers",
+	async function (assert: Assert) {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "employees", pattern: "employees" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					inheritance: "pattern-tree",
+					guardLoading: "block",
+					unknownRouteRegistration: "ignore",
+					guards: {
+						employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					},
+				},
+			},
+		);
+
+		router.initialize();
+		assert.notOk(router.isInitialized(), "still loading block-mode guard modules");
+		router.addRoute({ name: "employee", pattern: "employees/{id}" });
+		await waitForRoute(router, "home");
+
+		router.navTo("employee", { id: "42" });
+		const result = await router.navigationSettled();
+		assert.strictEqual(result.status, NavigationOutcome.Blocked, "dynamic child inherited the block-loaded guard");
+	},
+);
+
+QUnit.test(
+	'unknownRouteRegistration "throw" does not later expand a rejected manifest guard onto descendants',
+	async function (assert: Assert) {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "employee", pattern: "employees/{id}" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					inheritance: "pattern-tree",
+					guardLoading: "lazy",
+					unknownRouteRegistration: "throw",
+					guards: {
+						employees: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					},
+				},
+			},
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		// Adding the previously rejected ancestor route must not propagate a guard that failed registration.
+		router.addRoute({ name: "employees", pattern: "employees" });
+		router.navTo("employee", { id: "42" });
+		assert.strictEqual(
+			(await router.navigationSettled()).status,
+			NavigationOutcome.Committed,
+			"descendant does not inherit a guard rejected by unknownRouteRegistration: throw",
+		);
+	},
+);

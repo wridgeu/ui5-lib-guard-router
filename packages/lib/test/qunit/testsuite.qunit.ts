@@ -11,7 +11,16 @@ interface TestPage {
 const tests: Record<string, TestPage> = {
 	unit: {
 		title: "Modules of the library without a router",
-		files: ["GuardPipeline", "GuardPipelineAsync", "GuardConfig", "GuardModules", "PatternTree", "RouteMeta"],
+		files: [
+			"GuardPipeline",
+			"GuardPipelineAsync",
+			"GuardConfig",
+			"GuardModules",
+			"HistoryUndo",
+			"PatternTree",
+			"RouteMeta",
+			"Ui5Internals",
+		],
 	},
 	"router/guards": {
 		title: "Router: guard API, enter guards, leave guards, greedy routes",

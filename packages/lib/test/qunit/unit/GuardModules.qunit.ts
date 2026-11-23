@@ -184,6 +184,27 @@ QUnit.test("skips the remaining guards when the navigation is aborted while awai
 	assert.deepEqual(calls, ["a"]);
 });
 
+QUnit.test("skips the remaining guards when a sync guard aborts the navigation", function (assert) {
+	const controller = new AbortController();
+	const calls: string[] = [];
+	const result = runGuardsInOrder(
+		[
+			() => {
+				calls.push("a");
+				controller.abort();
+				return true;
+			},
+			() => {
+				calls.push("b");
+				return true;
+			},
+		],
+		createGuardContext({ signal: controller.signal }),
+	);
+	assert.strictEqual(result, false);
+	assert.deepEqual(calls, ["a"]);
+});
+
 QUnit.module("GuardModules - createLazyGuards");
 
 QUnit.test("a navigation aborted while the module loads resolves false and runs no guard", async function (assert) {
@@ -197,3 +218,17 @@ QUnit.test("a navigation aborted while the module loads resolves false and runs 
 	assert.strictEqual(await result, false, "neither an allow nor the guard's own result");
 	assert.strictEqual(await wrapper(createGuardContext()), "ran", "a later navigation runs the guard");
 });
+
+QUnit.test(
+	"a resolved lazy wrapper runs synchronously without probing sap.ui.require again",
+	function (this: SinonTestContext, assert) {
+		const [wrapper] = createLazyGuards({ route: "t", type: "enter", modulePath: PATH, exportKey: "pick" });
+		const requireStub = this.stub(sap.ui, "require").returns({ pick: () => "ok" });
+
+		assert.strictEqual(wrapper(createGuardContext()), "ok", "first call resolves from sap.ui.require");
+		assert.strictEqual(requireStub.callCount, 1);
+
+		assert.strictEqual(wrapper(createGuardContext()), "ok", "second call reuses resolved guards");
+		assert.strictEqual(requireStub.callCount, 1, "sap.ui.require is not probed again");
+	},
+);

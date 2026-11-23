@@ -368,3 +368,76 @@ QUnit.test("a hash change that cancels a pending navigation is still evaluated",
 		hash: "forbidden",
 	});
 });
+
+QUnit.module("Router - Stopping or destroying from a navigationSettled handler", standardHooks);
+
+for (const action of ["stop", "destroy"] as const) {
+	QUnit.test(`a hash change stops when a Cancelled handler calls ${action}()`, async function (assert: Assert) {
+		router.addRouteGuard("protected", never);
+		let forbiddenCalls = 0;
+		router.addRouteGuard("forbidden", () => {
+			forbiddenCalls++;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		const matched: string[] = [];
+		router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+			matched.push(event.getParameter("name")!);
+		});
+		router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
+			if (event.getParameter("status") === NavigationOutcome.Cancelled) router[action]();
+		});
+
+		HashChanger.getInstance().setHash("protected");
+		HashChanger.getInstance().setHash("forbidden");
+		await flushPromises();
+
+		assert.strictEqual(forbiddenCalls, 0, "the superseding hash change did not evaluate guards");
+		assert.deepEqual(matched, [], "nor match a route on the stopped/destroyed router");
+	});
+
+	QUnit.test(`a navTo() stops when a Cancelled handler calls ${action}()`, async function (assert: Assert) {
+		router.addRouteGuard("protected", never);
+		let forbiddenCalls = 0;
+		router.addRouteGuard("forbidden", () => {
+			forbiddenCalls++;
+			return true;
+		});
+		router.initialize();
+		await waitForRoute(router, "home");
+
+		router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
+			if (event.getParameter("status") === NavigationOutcome.Cancelled) router[action]();
+		});
+
+		router.navTo("protected");
+		router.navTo("forbidden");
+		await flushPromises();
+
+		assert.strictEqual(forbiddenCalls, 0, "the superseding navTo() did not run guards");
+		assert.strictEqual(getHash(), "", "and did not write the hash");
+	});
+
+	QUnit.test(
+		`a committed navigation skips super.parse() when a Committed handler calls ${action}()`,
+		async function (assert: Assert) {
+			router.initialize();
+			await waitForRoute(router, "home");
+
+			const matched: string[] = [];
+			router.attachRouteMatched((event: Router$RouteMatchedEvent) => {
+				matched.push(event.getParameter("name")!);
+			});
+			router.attachNavigationSettled((event: Router$NavigationSettledEvent) => {
+				if (event.getParameter("route") === "protected") router[action]();
+			});
+
+			router.navTo("protected");
+			await flushPromises();
+
+			assert.deepEqual(matched, [], "super.parse() did not run after the handler tore down the router");
+		},
+	);
+}
