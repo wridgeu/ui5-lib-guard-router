@@ -1,5 +1,5 @@
 import Log from "sap/base/Log";
-import { isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
+import { isPlainObject, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "ui5/guard/router/GuardConfig";
 import { logMessages, type SinonTestContext } from "../testHelpers";
 
 const DEFAULTS: ResolvedGuardRouterOptions = {
@@ -9,17 +9,17 @@ const DEFAULTS: ResolvedGuardRouterOptions = {
 	inheritance: "none",
 };
 
-QUnit.module("GuardConfig - isRecord");
+QUnit.module("GuardConfig - isPlainObject");
 
 QUnit.test("accepts plain objects only", function (assert) {
-	assert.strictEqual(isRecord({}), true);
-	assert.strictEqual(isRecord(Object.create(null)), true);
-	assert.strictEqual(isRecord(null), false);
-	assert.strictEqual(isRecord(undefined), false);
-	assert.strictEqual(isRecord([]), false);
-	assert.strictEqual(isRecord("x"), false);
-	assert.strictEqual(isRecord(new Date()), false);
-	assert.strictEqual(isRecord(new Map()), false);
+	assert.strictEqual(isPlainObject({}), true);
+	assert.strictEqual(isPlainObject(Object.create(null)), true);
+	assert.strictEqual(isPlainObject(null), false);
+	assert.strictEqual(isPlainObject(undefined), false);
+	assert.strictEqual(isPlainObject([]), false);
+	assert.strictEqual(isPlainObject("x"), false);
+	assert.strictEqual(isPlainObject(new Date()), false);
+	assert.strictEqual(isPlainObject(new Map()), false);
 });
 
 QUnit.module("GuardConfig - options");

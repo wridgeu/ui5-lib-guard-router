@@ -5,7 +5,7 @@
 import Log from "sap/base/Log";
 import type { GuardContext, GuardFn, GuardResult } from "./types";
 import { isPromiseLike, LOG_COMPONENT, nameGuard } from "./GuardPipeline";
-import { type GuardDescriptor, isRecord } from "./GuardConfig";
+import { type GuardDescriptor, isPlainObject } from "./GuardConfig";
 
 /** A guard function from a module, with the name its log messages show. */
 interface NamedGuard {
@@ -101,7 +101,7 @@ export function resolveModuleExports(moduleExport: unknown, modulePath: string, 
 		return results;
 	}
 
-	if (isRecord(moduleExport)) {
+	if (isPlainObject(moduleExport)) {
 		// The transpiler's object of a module with only named exports has `__esModule` as an enumerable first key.
 		const entries = Object.entries(moduleExport).filter(([key]) => key !== "__esModule");
 		if (entries.length === 0) {
@@ -198,11 +198,13 @@ export function loadGuardModules<T extends GuardDescriptor>(
 	return Promise.all(
 		descriptors.map(async (descriptor) => {
 			const { modulePath, exportKey } = descriptor;
-			const guards = await loadGuardModule(modulePath, `failed to load module "${modulePath}", skipping`).then(
-				(moduleExport) => resolveNamedGuards(moduleExport, modulePath, exportKey),
-				() => [],
-			);
-			return { descriptor, guards };
+			let moduleExport: unknown;
+			try {
+				moduleExport = await loadGuardModule(modulePath, `failed to load module "${modulePath}", skipping`);
+			} catch {
+				return { descriptor, guards: [] };
+			}
+			return { descriptor, guards: resolveNamedGuards(moduleExport, modulePath, exportKey) };
 		}),
 	);
 }

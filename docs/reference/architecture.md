@@ -25,8 +25,10 @@ ui5-lib-guard-router/
     |   |   |-- GuardPipeline.ts    guard storage and leave -> enter evaluation
     |   |   |-- GuardConfig.ts      parses the guardRouter block (options, routeMeta, guards)
     |   |   |-- GuardModules.ts     guard module export shapes and names, block and lazy loading
+    |   |   |-- HistoryUndo.ts      Navigation API step tracking and cross-router undo coordination
     |   |   |-- PatternTree.ts      route pattern ancestry and pattern-tree guard expansion
     |   |   |-- RouteMeta.ts        route metadata store with inheritance and caching
+    |   |   |-- Ui5Internals.ts     UI5-private adapters (config proxy, matching mirror, title history)
     |   |   |-- NavigationOutcome.ts  enum for settlement outcomes
     |   |   |-- types.ts            all public type definitions
     |   |-- test/
@@ -512,11 +514,11 @@ Three rules keep one undo from causing the next:
   before the change showed no route of this router either.
 
 **How a step is known.** A listener for `currententrychange` of the browser's Navigation API
-(`window.navigation`), registered once when the module loads, records the last step in the
-module variable `lastStep`: for a `traverse` it stores the index delta and the URL it arrived
-at. Any other entry change clears it, unless only the state of the entry was replaced, which
-UI5's `History` does after a step. UI5's `History` cannot be used for this: it infers the
-direction from the state of the entries and misreads it once an entry lacks that state.
+(`window.navigation`), registered once when `HistoryUndo.ts` loads, records the last step in
+the module variable `lastStep`: for a `traverse` it stores the index delta and the URL it
+arrived at. Any other entry change clears it, unless only the state of the entry was replaced,
+which UI5's `History` does after a step. UI5's `History` cannot be used for this: it infers
+the direction from the state of the entries and misreads it once an entry lacks that state.
 Without the Navigation API `lastStep` stays `null`.
 
 **How it is undone.** `_undoHashChange()` decides:
@@ -524,8 +526,8 @@ Without the Navigation API `lastStep` stays `null`.
 | Situation                                                                                                    | Action                                                                                           |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | No undo, nothing committed, the root hash has moved on since (`shown` differs), or it shows `fullHash` again | `_restoreHash()`: replace the hash of this router's own hash changer, settle at once             |
-| Another router is taking the same step back (`undo.step` is set and `undoneHref` is the current URL)         | Enter `restoring` and wait                                                                       |
-| The change was a step                                                                                        | Enter `restoring`, set `undoneHref`, call `history.go(-offset)`                                  |
+| Another router is taking the same step back (`undo.step` is set and `undoneHref` is the current URL)         | Enter `restoring` and wait (`undoHistoryStep()` is a no-op)                                      |
+| The change was a step                                                                                        | Enter `restoring`, `undoHistoryStep()` sets `undoneHref` and calls `history.go(-offset)`         |
 | `fullHash` is still unknown: UI5 is still reporting the change to other routers                              | Enter `restoring` with `awaitsReport`; `_onRootHashChanged()` writes `fullHash` once it is known |
 | Otherwise                                                                                                    | Enter `restoring`, replace the root hash with `fullHash` (`HistoryDirection.Unknown`)            |
 
@@ -1079,7 +1081,7 @@ displays the component through a component target would count it as displayed, a
 own `routeMatched`, before the first route of the nested component matched.
 
 **What the router does.** The constructor replaces the member with an accessor on the instance
-(`_mirrorMatchingProcess()`). The router never writes the member. The accessor stores the value
+(`mirrorMatchingProcess()` in `Ui5Internals.ts`). The router never writes the member. The accessor stores the value
 UI5 writes in `_nativeMatching`, and reads `true`
 
 - while the value UI5 wrote is `true`, and
@@ -1150,7 +1152,7 @@ resolves and clears `_matchWaiters` immediately so waiting parent component targ
 
 **How the resolve function is recognized.** UI5 passes nothing that identifies the component
 target, so the router tells the listener by its shape (`isPromiseResolver()` in
-`GuardPipeline.ts`). A listener is a Promise resolve function if it is a function and
+`Ui5Internals.ts`). A listener is a Promise resolve function if it is a function and
 
 - its `name` is `""`,
 - its `length` is `1`,
@@ -1208,7 +1210,7 @@ are equal), and `navTo(target, ..., true)` then replaces the title of the entry.
 router keeps the route of the step from matching, so UI5 handles no title for it, and removes
 only one of the two.
 
-**What the router does** (`_alignTitleHistory()`, called by `_commitNavigation()` for the target
+**What the router does** (`alignTitleHistory()` in `Ui5Internals.ts`, called by `_commitNavigation()` for the target
 of a redirected hash change, by the direction that UI5's `History` reports for the hash change):
 
 | Direction              | The router                                                                                                                                                                                                                                                                           | Title history: from `[A, B]` on `B`; for a step back, from `[A, B, C]` on `C` to `B` |
@@ -1243,8 +1245,8 @@ and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#pri
 | `_suppressedHash`          | `string \| null`                       | The hash `_restoreHash()` is writing, which the synchronous `parse()` it causes ignores                                                                                    |
 | `_undo`                    | `HashChangeUndo \| null`               | How to undo the hash change of the pending navigation (see [Undoing a hash change](#undoing-a-hash-change))                                                                |
 | `_consumedStep`            | `HistoryStep \| null`                  | The history traversal this router has already attributed to a hash change, so a later hash change at the same URL does not replay it                                       |
-| `_reportedHash`            | `unknown`                              | The hash that the router's hash changer is reporting, until `parse()` receives it ([Routers that share a hash changer](#routers-that-share-a-hash-changer))                |
-| `_lastReport`              | `unknown`                              | The hash the router's hash changer reported last, out-of-date reports aside                                                                                                |
+| `_reportedHash`            | `string \| null`                       | The hash that the router's hash changer is reporting, until `parse()` receives it ([Routers that share a hash changer](#routers-that-share-a-hash-changer))                |
+| `_lastReport`              | `string \| null`                       | The hash the router's hash changer reported last, out-of-date reports aside                                                                                                |
 | `_reportOutdated`          | `boolean`                              | The report in progress is out of date: the hash changer shows a later hash that the router has parsed                                                                      |
 | `_rootHashChanger`         | `HashChanger \| null`                  | The global hash changer that `_onRootHashChanged()` is attached to; another one after `HashChanger.replaceHashChanger()` ([Undoing a hash change](#undoing-a-hash-change)) |
 | `_stoppedRoute`            | `string`                               | Route that was current when `stop()` ran; `initialize(true)` resumes it                                                                                                    |
@@ -1262,19 +1264,19 @@ and the upgrade procedure are in [Private UI5 Coupling](./upstream-parity.md#pri
 | `_greedyRouteNames`        | `string[]`                             | Names of the routes with `greedy: true`, in definition order, whose guards run in addition to the first match                                                              |
 | `_ownerComponent`          | `UIComponent \| undefined`             | Owner component from the constructor, exposed as `GuardContext.ownerComponent`                                                                                             |
 
-Two variables live at module scope, because they describe the browser and are shared by
-all routers: `lastStep` (the last step through the history, from the Navigation API) and
-`undoneHref` (the URL a router is taking a step back from).
+Two variables live at module scope in `HistoryUndo.ts`, because they describe the browser and
+are shared by all routers: `lastStep` (the last step through the history, from the Navigation
+API) and `undoneHref` (the URL a router is taking a step back from).
 
 `RouterPhase` is a discriminated union with five variants:
 
-| Phase          | Shape                                                                                                                                                                                          | Description                                                                                                                                                                                                                                                                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idle`         | `{ kind: "idle" }`                                                                                                                                                                             | No navigation in progress                                                                                                                                                                                                                                                                                                                                        |
-| `evaluating`   | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                                                                                                                         | Guards are running; attempt carries hash, AbortController, generation, `restoreHash`, `direction`, `hasComponentTargets`; `postponed` is set while the navigation waits for async guards                                                                                                                                                                         |
-| `committing`   | `{ kind: "committing", route: string, hash: string, origin: "preflight" \| "redirect" \| "parse", direction?: Direction, attemptedHash?: string, restoreHash: boolean, writtenOver?: string }` | Navigation is being committed: `parse()` commits it when it receives `hash`, and guards any other hash as a navigation of its own; `origin` distinguishes the entry path; `direction` and `attemptedHash` (how the browser got to the history entry) drive `_alignTitleHistory()`; `restoreHash` and `writtenOver` say how to undo the hash that `navTo()` wrote |
-| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                                            | An allowed `navTo()` or redirect with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                                        |
-| `restoring`    | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }`                                                                                                  | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route or same-hash `navTo()` with `componentTargetInfo`)                                                  |
+| Phase          | Shape                                                                                                                                                                                          | Description                                                                                                                                                                                                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idle`         | `{ kind: "idle" }`                                                                                                                                                                             | No navigation in progress                                                                                                                                                                                                                                                                                                                                       |
+| `evaluating`   | `{ kind: "evaluating", attempt: NavigationAttempt, postponed?: true }`                                                                                                                         | Guards are running; attempt carries hash, AbortController, generation, `restoreHash`, `direction`, `hasComponentTargets`; `postponed` is set while the navigation waits for async guards                                                                                                                                                                        |
+| `committing`   | `{ kind: "committing", route: string, hash: string, origin: "preflight" \| "redirect" \| "parse", direction?: Direction, attemptedHash?: string, restoreHash: boolean, writtenOver?: string }` | Navigation is being committed: `parse()` commits it when it receives `hash`, and guards any other hash as a navigation of its own; `origin` distinguishes the entry path; `direction` and `attemptedHash` (how the browser got to the history entry) drive `alignTitleHistory()`; `restoreHash` and `writtenOver` say how to undo the hash that `navTo()` wrote |
+| `awaitingHash` | `{ kind: "awaitingHash", commit: PhaseCommitting }`                                                                                                                                            | An allowed `navTo()` or redirect with `componentTargetInfo` waits for UI5 to write its hash; `parse()` continues with `commit` when it receives that hash                                                                                                                                                                                                       |
+| `restoring`    | `{ kind: "restoring", result: NavigationResult, awaitsReport?: true, whenBack?: () => void }`                                                                                                  | A navigation that did not commit waits for the URL to be back before it settles with `result`; with `awaitsReport` the router writes the previous hash once UI5 has informed every router; `whenBack` runs after the settlement (redirect to the shown route or same-hash `navTo()` with `componentTargetInfo`)                                                 |
 
 How a navigation moves through the phases, with the `NavigationOutcome` it settles with:
 
@@ -1382,7 +1384,7 @@ that order, and `wdio-qunit.conf.ts` takes the pages from the test suite.
 
 ```
   unit/                modules without a router: GuardPipeline, GuardConfig, GuardModules,
-                       PatternTree, RouteMeta
+                       HistoryUndo, PatternTree, RouteMeta, Ui5Internals
   router/guards/       guard API, enter guards, leave guards, greedy routes
   router/lifecycle/    initialize, stop, destroy, router options
   router/navigation/   hash changes, navTo preflight, redirects, guards on redirect targets

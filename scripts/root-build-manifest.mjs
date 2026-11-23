@@ -4,7 +4,22 @@
 // postpack removes the copy again, so the library and the demo app keep serving the sources during development.
 // Usage (from packages/lib): node ../../scripts/root-build-manifest.mjs
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { isRecord } from "./upstream-parity-manifest-utils.mjs";
+import { isPlainObject } from "./upstream-parity-manifest-utils.mjs";
+
+/**
+ * Walk a dotted path of plain objects, returning `undefined` if any segment is missing or not a plain object.
+ * @param {unknown} root
+ * @param {...string} keys
+ * @returns {Record<string, unknown> | undefined}
+ */
+function readNestedObject(root, ...keys) {
+	let current = root;
+	for (const key of keys) {
+		if (!isPlainObject(current)) return undefined;
+		current = current[key];
+	}
+	return isPlainObject(current) ? current : undefined;
+}
 
 /**
  * The build manifest of dist/.ui5 as it reads from the package root.
@@ -14,15 +29,9 @@ import { isRecord } from "./upstream-parity-manifest-utils.mjs";
 export function atPackageRoot(text) {
 	/** @type {unknown} */
 	const manifest = JSON.parse(text);
-	const paths =
-		isRecord(manifest) &&
-		isRecord(manifest.project) &&
-		isRecord(manifest.project.resources) &&
-		isRecord(manifest.project.resources.configuration)
-			? manifest.project.resources.configuration.paths
-			: undefined;
+	const paths = readNestedObject(manifest, "project", "resources", "configuration", "paths");
 	// A different format from a newer UI5 Tooling must stop the publish rather than ship a manifest no consumer can use.
-	if (!isRecord(paths)) throw new Error("The build manifest has no project.resources.configuration.paths");
+	if (!paths) throw new Error("The build manifest has no project.resources.configuration.paths");
 	for (const [key, value] of Object.entries(paths)) paths[key] = `dist/${String(value)}`;
 	return `${JSON.stringify(manifest, null, "\t")}\n`;
 }

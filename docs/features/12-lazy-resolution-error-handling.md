@@ -52,7 +52,7 @@ Storing for an unknown route lets an app set metadata before it calls `addRoute(
 
 ### Invalid `meta`
 
-`meta` must be a plain object (`isRecord`), as in manifest `routeMeta` parsing. Anything else (`null`, `"string"`, `42`) is ignored with `setRouteMeta: expected object, ignoring`.
+`meta` must be a plain object (`isPlainObject`), as in manifest `routeMeta` parsing. Anything else (`null`, `"string"`, `42`) is ignored with `setRouteMeta: expected object, ignoring`.
 
 `mergeRouteMeta` (proposed in [04](./04-route-metadata.md)) was dropped. Use `router.setRouteMeta(name, { ...router.getRouteMeta(name), ...newMeta })`.
 

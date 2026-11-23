@@ -18,7 +18,7 @@ import {
 	until,
 } from "./parityRecorder";
 import { GuardRouterClass, initHashChanger, loadModule, getHash } from "../testHelpers";
-import { isRecord } from "ui5/guard/router/GuardConfig";
+import { isPlainObject } from "ui5/guard/router/GuardConfig";
 
 /**
  * Differential tests for a component displayed as a routing target: the same parent and child
@@ -83,19 +83,30 @@ export interface Scenario {
 	history?: true;
 }
 
+function readManifestObject(root: Record<string, unknown>, ...path: string[]): Record<string, unknown> {
+	let current: unknown = root;
+	for (const key of path) {
+		if (!isPlainObject(current)) {
+			throw new TypeError(`${FIXTURE_PATH}/manifest.json has no ${path.join(".")}`);
+		}
+		current = current[key];
+	}
+	if (!isPlainObject(current)) {
+		throw new TypeError(`${FIXTURE_PATH}/manifest.json has no ${path.join(".")}`);
+	}
+	return current;
+}
+
 /** The parent manifest of the fixture with the router class and the child of `flavor`. */
 export async function loadParentManifest(flavor: Flavor): Promise<Record<string, unknown>> {
 	const { routerClass, child, guards } = FLAVORS[flavor];
 	const response = await fetch(sap.ui.require.toUrl(`${FIXTURE_PATH}/manifest.json`));
 	const manifest: unknown = await response.json();
-	const ui5 = isRecord(manifest) ? manifest["sap.ui5"] : undefined;
-	const usages = isRecord(ui5) ? ui5.componentUsages : undefined;
-	const usage = isRecord(usages) ? usages.child : undefined;
-	const routing = isRecord(ui5) ? ui5.routing : undefined;
-	const config = isRecord(routing) ? routing.config : undefined;
-	if (!isRecord(manifest) || !isRecord(usage) || !isRecord(config)) {
-		throw new TypeError(`${FIXTURE_PATH}/manifest.json has no child usage or routing config`);
+	if (!isPlainObject(manifest)) {
+		throw new TypeError(`${FIXTURE_PATH}/manifest.json is not a plain object`);
 	}
+	const usage = readManifestObject(manifest, "sap.ui5", "componentUsages", "child");
+	const config = readManifestObject(manifest, "sap.ui5", "routing", "config");
 	usage.name = `${FIXTURE}.${child}`;
 	config.routerClass = routerClass;
 	if (guards) {

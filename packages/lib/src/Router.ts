@@ -21,30 +21,33 @@ import type {
 	RouteGuardConfig,
 } from "./types";
 import NavigationOutcome from "./NavigationOutcome";
-import GuardPipeline, { type GuardDecision, isPromiseLike, isPromiseResolver, LOG_COMPONENT } from "./GuardPipeline";
-import { type GuardDescriptor, isRecord, parseGuardRouterConfig, type ResolvedGuardRouterOptions } from "./GuardConfig";
+import GuardPipeline, { type GuardDecision, isPromiseLike, LOG_COMPONENT } from "./GuardPipeline";
+import {
+	type GuardDescriptor,
+	isPlainObject,
+	parseGuardRouterConfig,
+	type ResolvedGuardRouterOptions,
+} from "./GuardConfig";
 import { createLazyGuards, loadGuardModules } from "./GuardModules";
+import {
+	composeHashChangeUndo,
+	getUnconsumedStep,
+	type HashChangeUndo,
+	type HistoryStep,
+	undoHistoryStep,
+} from "./HistoryUndo";
 import { byRouteDepth, expandForNewRoute, expandToDescendants, type RoutePattern } from "./PatternTree";
 import RouteMetaStore, { EMPTY_META } from "./RouteMeta";
+import {
+	alignTitleHistory,
+	type Direction,
+	isPromiseResolver,
+	mirrorMatchingProcess,
+	readEventHash,
+	withoutGuardRouter,
+} from "./Ui5Internals";
 
 const HistoryDirection = coreLibrary.routing.HistoryDirection;
-type Direction = ReturnType<History["getDirection"]>;
-
-/**
- * The router config as UI5 gets it: the caller's object without `guardRouter`. It is a view and
- * not a copy, because UIComponent adds `targetParent` (the ID of the root view) to its config
- * object after it has constructed the router, and the native router reads it from that object.
- */
-function withoutGuardRouter(config: object): object {
-	const hidden = (key: PropertyKey): boolean => key === "guardRouter";
-	return new Proxy(config, {
-		get: (target, key, receiver): unknown => (hidden(key) ? undefined : Reflect.get(target, key, receiver)),
-		has: (target, key) => !hidden(key) && Reflect.has(target, key),
-		ownKeys: (target) => Reflect.ownKeys(target).filter((key) => !hidden(key)),
-		getOwnPropertyDescriptor: (target, key) =>
-			hidden(key) ? undefined : Reflect.getOwnPropertyDescriptor(target, key),
-	});
-}
 
 function isRouteGuardConfig(guard: GuardFn | RouteGuardConfig): guard is RouteGuardConfig {
 	return typeof guard === "object" && guard !== null;
@@ -54,47 +57,34 @@ function hasComponentTargets(info: Record<string, ComponentTargetParameters> | u
 	return !!info && Object.keys(info).length > 0;
 }
 
-/** A step through the browser history (back, forward): how far it went, and the URL it arrived at. */
-interface HistoryStep {
-	readonly offset: number;
-	readonly href: string;
-}
-
-/** The step through the browser history that brought the browser to the URL it shows, if a step did. */
-let lastStep: HistoryStep | null = null;
-/** The URL of a step that a router is taking back, until the browser reports the next URL change. */
-let undoneHref: string | null = null;
-
-// The Navigation API tells how far a step through the history went, before UI5 learns of the
-// hash change. UI5's History only infers it, and wrongly once an entry lacks its state. Without
-// the API (Firefox before 147, Safari before 26.2) no step is known and the entry is replaced.
-window.navigation?.addEventListener("currententrychange", (event) => {
-	const href = window.location.href;
-	if (undoneHref !== href) undoneHref = null;
-	const entry = window.navigation.currentEntry;
-	if (entry && event.navigationType === "traverse") {
-		lastStep = { offset: entry.index - event.from.index, href };
-	} else if (lastStep?.href !== href) {
-		// Not an entry whose state alone is replaced, as UI5's History does after a step.
-		lastStep = null;
+/**
+ * Disambiguate the `navTo()` overload shapes into resolved arguments.
+ *
+ * UI5's native `navTo` has two signatures where the third parameter is either
+ * `componentTargetInfo` (object) or `bReplace` (boolean). Normalizing both
+ * forms lets `navTo` work with a single set of variables; guard options follow
+ * `bReplace`, or take its place when `bReplace` is omitted.
+ */
+function resolveNavToArgs(
+	componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
+	replaceOrOptions?: boolean | GuardNavToOptions,
+	options?: GuardNavToOptions,
+): {
+	componentTargetInfo?: Record<string, ComponentTargetParameters>;
+	replace?: boolean;
+	guardOptions?: GuardNavToOptions;
+} {
+	if (typeof componentTargetInfoOrReplace === "boolean") {
+		return {
+			replace: componentTargetInfoOrReplace,
+			guardOptions: typeof replaceOrOptions === "object" ? replaceOrOptions : undefined,
+		};
 	}
-});
-
-/** What it takes to undo the hash change that an uncommitted navigation arrived with. */
-interface HashChangeUndo {
-	/** The hash of the root hash changer after the first change that this takes back. */
-	readonly first: string;
-	/**
-	 * The hash of the root hash changer before that change, with the hashes of nested routers.
-	 * The root hash changer reports it with the change, after the routers have parsed their part.
-	 */
-	fullHash: string | undefined;
-	/** The hash of the root hash changer after the change. */
-	readonly shown: string;
-	/** Whether the router has started to put the URL back, and the hash change that does it is still to come. */
-	started: boolean;
-	/** The step through the browser history that the change was, if it was one. */
-	readonly step: HistoryStep | null;
+	return {
+		componentTargetInfo: componentTargetInfoOrReplace,
+		replace: typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined,
+		guardOptions: typeof replaceOrOptions === "object" ? replaceOrOptions : options,
+	};
 }
 
 /** A manifest guard entry of a route, with the declared entry it stems from: itself, or the entry of an ancestor route. */
@@ -134,7 +124,7 @@ interface PhaseCommitting {
 	readonly origin: "preflight" | "redirect" | "parse";
 	/** How the browser got to the history entry that the route replaces (see {@link RedirectChainContext.direction}). */
 	readonly direction?: Direction;
-	/** The hash of the history entry that a redirected hash change arrived at (see {@link _alignTitleHistory}). */
+	/** The hash of the history entry that a redirected hash change arrived at (see {@link alignTitleHistory}). */
 	readonly attemptedHash?: string;
 	/** Whether the URL showed a hash that never committed when `navTo()` wrote the hash (see {@link NavigationAttempt.restoreHash}). */
 	readonly restoreHash: boolean;
@@ -185,7 +175,7 @@ interface RedirectChainContext {
 	readonly replace: boolean | undefined;
 	/**
 	 * How the browser got to the history entry that the target replaces, for the title history
-	 * of UI5 (see {@link Router._alignTitleHistory}); `undefined` after `navTo()` or `parse()`.
+	 * of UI5 (see {@link alignTitleHistory}); `undefined` after `navTo()` or `parse()`.
 	 */
 	readonly direction: Direction | undefined;
 	/** Shared AbortSignal from the original navigation. */
@@ -233,9 +223,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** The history traversal this router has already attributed to a hash change, so it is not reused. */
 	private _consumedStep: HistoryStep | null = null;
 	/** The hash that the hash changer of this router is reporting, until `parse()` receives it. */
-	private _reportedHash: unknown = null;
+	private _reportedHash: string | null = null;
 	/** The hash that the hash changer of this router reported last, reports that are out of date aside. */
-	private _lastReport: unknown = null;
+	private _lastReport: string | null = null;
 	/** Whether the hash changer shows a later hash than the one it is reporting (see {@link _onHashReported}). */
 	private _reportOutdated = false;
 	/** The global hash changer that {@link _onRootHashChanged} is attached to, behind the listener of UI5 that informs the routers. */
@@ -249,7 +239,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	/** The manifest guards registered for a route, by which `addRoute()` places the guards a route inherits then. */
 	private _manifestGuards: { descriptor: ManifestGuardDescriptor; fn: GuardFn }[] = [];
 	private _destroyed = false;
-	/** What UI5 itself wrote to `_bMatchingProcessStarted` (see {@link _mirrorMatchingProcess}). */
+	/** What UI5 itself wrote to `_bMatchingProcessStarted` (see {@link mirrorMatchingProcess}). */
 	private _nativeMatching = false;
 	/** Promises that wait for the `routeMatched` of a match that has not started (see {@link attachRouteMatched}). */
 	private _matchWaiters: (() => void)[] = [];
@@ -272,21 +262,24 @@ export default class Router extends MobileRouter implements GuardRouter {
 		owner?: UIComponent,
 		...rest: [targetsConfig?: object]
 	) {
-		const isRecordConfig = isRecord(config);
-		const guardRouter = isRecordConfig ? config.guardRouter : undefined;
+		const isPlainConfig = isPlainObject(config);
+		const guardRouter = isPlainConfig ? config.guardRouter : undefined;
 		// UI5 passes more than its types declare: after the targets config comes the
 		// hash changer of a component that is loaded as a routing target.
-		super(routes, isRecordConfig ? withoutGuardRouter(config) : config, owner, ...rest);
+		super(routes, isPlainConfig ? withoutGuardRouter(config) : config, owner, ...rest);
 		this._ownerComponent = owner;
 		// A config without routes has made no addRoute() call.
 		this._routeNames ??= [];
 		this._greedyRouteNames ??= [];
-		this._mirrorMatchingProcess();
-		let componentNamespace = "";
-		const appConfig: unknown = owner?.getManifestEntry("sap.app");
-		if (isRecord(appConfig) && typeof appConfig.id === "string") {
-			componentNamespace = appConfig.id;
-		}
+		mirrorMatchingProcess(
+			this,
+			() => this._isMatching(),
+			(matching) => {
+				this._nativeMatching = matching;
+			},
+		);
+		const rawAppId: unknown = owner?.getManifestEntry("/sap.app/id");
+		const componentNamespace = typeof rawAppId === "string" ? rawAppId : "";
 		const parsed = parseGuardRouterConfig(guardRouter, componentNamespace);
 		this._options = parsed.options;
 		this._meta = new RouteMetaStore(
@@ -306,26 +299,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 				sap.ui.require(uniquePaths, undefined, () => {});
 			}
 		}
-	}
-
-	/**
-	 * Report a navigation that waits for async guards as a route match in progress, through the
-	 * UI5-private member `_bMatchingProcessStarted` of `sap.ui.core.routing.Router`. UI5 reads it
-	 * to tell whether the router of a nested component is still matching; without this, a parent
-	 * route would count the component as displayed before its first route matched. The router does
-	 * not write the member: it replaces it with an accessor that keeps what UI5 writes in
-	 * {@link _nativeMatching} and also reads `true` while a navigation is postponed.
-	 *
-	 * See docs/reference/architecture.md ("UI5 Internals the Router Relies On") for the UI5 code this
-	 * relies on, and docs/reference/upstream-parity.md for the tests that pin it.
-	 */
-	private _mirrorMatchingProcess(): void {
-		Object.defineProperty(this, "_bMatchingProcessStarted", {
-			get: () => this._isMatching(),
-			set: (matching: boolean) => {
-				this._nativeMatching = matching;
-			},
-		});
 	}
 
 	/** Whether a route match is in progress: in UI5, or postponed until async guards have decided. */
@@ -497,9 +470,8 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * while a parent router collects the hashes of a navigation shows no hash at all.
 	 */
 	private _onHashReported(event: HashChangerBase$HashChangedEvent): void {
-		// A string, which the UI5 types declare as an object.
-		const newHash: unknown = event.getParameter("newHash");
-		const shown: unknown = this.getHashChanger().getHash();
+		const newHash = readEventHash(event);
+		const shown: string | undefined = this.getHashChanger().getHash();
 		this._reportedHash = newHash;
 		this._reportOutdated = shown !== newHash && shown === this._lastReport;
 		if (!this._reportOutdated) this._lastReport = newHash;
@@ -513,8 +485,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * the URL back does so now (see {@link _undoHashChange}).
 	 */
 	private _onRootHashChanged(event: HashChangerBase$HashChangedEvent): void {
-		// A string, which the UI5 types declare as an object.
-		const newHash: unknown = event.getParameter("newHash");
+		const newHash = readEventHash(event);
 		// Only the first hash change that the page reports has no previous hash.
 		const oldHash = event.getParameter("oldHash") ?? "";
 		const hashChanger = HashChanger.getInstance();
@@ -536,7 +507,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * Tell the undo of the pending navigation what the URL showed before the hash change
 	 * `newHash`, and put the URL back if the navigation waited for that.
 	 */
-	private _completeUndo(newHash: unknown, oldHash: string): void {
+	private _completeUndo(newHash: string | null, oldHash: string): void {
 		const undo = this._undo;
 		if (!undo || undo.first !== newHash) return;
 		undo.fullHash ??= oldHash;
@@ -702,38 +673,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 		return this;
 	}
 
-	/**
-	 * Disambiguate the `navTo()` overload shapes into resolved arguments.
-	 *
-	 * UI5's native `navTo` has two signatures where the third parameter is either
-	 * `componentTargetInfo` (object) or `bReplace` (boolean). This method normalizes
-	 * both forms so the rest of `navTo` can work with a single set of variables.
-	 * The options follow `bReplace`, or take its place when it is left out.
-	 */
-	private _resolveNavToArgs(
-		componentTargetInfoOrReplace?: Record<string, ComponentTargetParameters> | boolean,
-		replaceOrOptions?: boolean | GuardNavToOptions,
-		options?: GuardNavToOptions,
-	): {
-		componentTargetInfo?: Record<string, ComponentTargetParameters>;
-		replace?: boolean;
-		guardOptions?: GuardNavToOptions;
-	} {
-		if (typeof componentTargetInfoOrReplace === "boolean") {
-			// Short form: navTo(name, params, replace, options?)
-			return {
-				replace: componentTargetInfoOrReplace,
-				guardOptions: typeof replaceOrOptions === "object" ? replaceOrOptions : undefined,
-			};
-		}
-		// Long form: navTo(name, params, componentTargetInfo, replace, options?)
-		return {
-			componentTargetInfo: componentTargetInfoOrReplace,
-			replace: typeof replaceOrOptions === "boolean" ? replaceOrOptions : undefined,
-			guardOptions: typeof replaceOrOptions === "object" ? replaceOrOptions : options,
-		};
-	}
-
 	/** Return `true` when the value is a function; otherwise log a warning. */
 	private _isFn(value: unknown, method: string, detail?: string): boolean {
 		if (typeof value === "function") return true;
@@ -811,7 +750,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * @since 1.6.0
 	 */
 	setRouteMeta(routeName: string, meta: Record<string, unknown>): this {
-		if (!isRecord(meta)) {
+		if (!isPlainObject(meta)) {
 			Log.warning("setRouteMeta: expected object, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
@@ -986,7 +925,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.warning("navTo: router is destroyed, ignoring", routeName, LOG_COMPONENT);
 			return this;
 		}
-		const { componentTargetInfo, replace, guardOptions } = this._resolveNavToArgs(
+		const { componentTargetInfo, replace, guardOptions } = resolveNavToArgs(
 			componentTargetInfoOrReplace,
 			replaceOrOptions,
 			options,
@@ -1134,6 +1073,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
+	 * Enter `phase`, invoke `navigate` to write the hash, and commit or block according to
+	 * {@link _commitAfterNavTo}. Resets a leftover committing phase on throw so a failed
+	 * hash write cannot let the next hash change skip guards.
+	 */
+	private _commitNavTo(
+		phase: PhaseCommitting,
+		componentTargetInfo: Record<string, ComponentTargetParameters> | undefined,
+		attemptedHash: string | undefined,
+		navigate: () => void,
+	): void {
+		this._phase = phase;
+		try {
+			navigate();
+			if (!this._commitAfterNavTo(componentTargetInfo)) {
+				this._blockNavigation(attemptedHash, phase.restoreHash);
+			}
+		} finally {
+			if (this._phase.kind === "committing") {
+				this._phase = IDLE;
+			}
+		}
+	}
+
+	/**
 	 * Navigate to a `navTo()` target that needs no guards (allowed or bypassed) and commit it,
 	 * or block it if the hash change was refused (see {@link _commitAfterNavTo}).
 	 */
@@ -1146,25 +1109,21 @@ export default class Router extends MobileRouter implements GuardRouter {
 		toRoute: string,
 		restoreHash: boolean,
 	): void {
-		this._phase = {
-			kind: "committing",
-			route: toRoute,
-			hash: targetHash,
-			origin: "preflight",
-			restoreHash,
-			writtenOver: HashChanger.getInstance().getHash(),
-		};
-		try {
-			super.navTo(routeName, parameters, componentTargetInfo, bReplace);
-			if (!this._commitAfterNavTo(componentTargetInfo)) {
-				this._blockNavigation(targetHash, restoreHash);
-			}
-		} finally {
-			// A failed hash change must not leave the next one to be committed without guards.
-			if (this._phase.kind === "committing") {
-				this._phase = IDLE;
-			}
-		}
+		this._commitNavTo(
+			{
+				kind: "committing",
+				route: toRoute,
+				hash: targetHash,
+				origin: "preflight",
+				restoreHash,
+				writtenOver: HashChanger.getInstance().getHash(),
+			},
+			componentTargetInfo,
+			targetHash,
+			() => {
+				super.navTo(routeName, parameters, componentTargetInfo, bReplace);
+			},
+		);
 	}
 
 	/**
@@ -1427,7 +1386,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 
 	/**
 	 * Apply the decision of async guards once it is there. Until then the navigation is postponed,
-	 * which UI5 sees as a route match in progress (see {@link _mirrorMatchingProcess}). The pipeline
+	 * which UI5 sees as a route match in progress (see {@link mirrorMatchingProcess}). The pipeline
 	 * turns a failing guard into an error decision, so an error thrown here comes from applying the
 	 * decision, which has no caller to throw to: it is logged, and fails the navigation unless that
 	 * has settled.
@@ -1487,33 +1446,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 	}
 
 	/**
-	 * Leave the title history of UI5 (`getTitleHistory()`) as after the native equivalent of a
-	 * redirected hash change: the hash change, then `navTo(target, ..., true)`. The route of the
-	 * hash change never matched, so UI5 has not handled its title:
-	 * - A new entry or a step forward would have added a title, which the title of the target
-	 *   replaces: UI5 must not remove the title of the route before it.
-	 * - A step back to a titled route would have removed the title of the route that was left, so
-	 *   that a titled target replaces the entry the step arrived at and an untitled target leaves
-	 *   that entry in place until the next titled route: remove the left entry here under UI5's
-	 *   condition for a step back when the arrived hash has an entry in the title history.
-	 */
-	private _alignTitleHistory(direction: Direction | undefined, attemptedHash?: string): void {
-		if (direction === HistoryDirection.NewEntry || direction === HistoryDirection.Forwards) {
-			Reflect.set(this, "_bLastHashReplaced", false);
-		} else if (direction === HistoryDirection.Backwards) {
-			const titles: unknown[] = this.getTitleHistory();
-			const left = titles.at(-1);
-			const arrived =
-				attemptedHash === undefined
-					? titles.at(-2)
-					: titles.findLast((entry) => isRecord(entry) && entry.hash === attemptedHash);
-			if (isRecord(left) && isRecord(arrived) && !left.isHome && left.title !== arrived.title) {
-				titles.pop();
-			}
-		}
-	}
-
-	/**
 	 * Delegate to the parent router and update internal state.
 	 *
 	 * State is updated BEFORE calling parse to ensure that if event handlers
@@ -1525,7 +1457,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 	private _commitNavigation(hash: string, route: string): void {
 		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
 		if (this._phase.kind === "committing") {
-			this._alignTitleHistory(this._phase.direction, this._phase.attemptedHash);
+			alignTitleHistory(this, this._phase.direction, this._phase.attemptedHash);
 		}
 		// The URL has moved on: a hash change that was to put it back is not awaited any more.
 		this._undo = null;
@@ -1696,33 +1628,30 @@ export default class Router extends MobileRouter implements GuardRouter {
 					);
 					break;
 				}
-				this._phase = {
-					kind: "committing",
-					route: toRoute,
-					hash: targetHash,
-					origin: "redirect",
-					direction: chain.direction,
-					attemptedHash: chain.attemptedHash,
-					restoreHash: chain.restoreHash,
-					writtenOver: HashChanger.getInstance().getHash(),
-				};
-				try {
-					// Writing the hash the URL already shows changes nothing, except that a nested
-					// router would add its prefix for an empty hash (see _restoreHash).
-					const hashShown = this.getHashChanger().getHash() === targetHash;
-					if (typeof target === "string") {
-						if (!hashShown) this.navTo(target, {}, {}, chain.replace);
-					} else if (!hashShown || componentTargetInfo) {
-						this.navTo(target.route, target.parameters ?? {}, componentTargetInfo, chain.replace);
-					}
-					if (!this._commitAfterNavTo(componentTargetInfo)) {
-						this._blockNavigation(chain.attemptedHash, chain.restoreHash);
-					}
-				} finally {
-					if (this._phase.kind === "committing") {
-						this._phase = IDLE;
-					}
-				}
+				this._commitNavTo(
+					{
+						kind: "committing",
+						route: toRoute,
+						hash: targetHash,
+						origin: "redirect",
+						direction: chain.direction,
+						attemptedHash: chain.attemptedHash,
+						restoreHash: chain.restoreHash,
+						writtenOver: HashChanger.getInstance().getHash(),
+					},
+					componentTargetInfo,
+					chain.attemptedHash,
+					() => {
+						// Writing the hash the URL already shows changes nothing, except that a nested
+						// router would add its prefix for an empty hash (see _restoreHash).
+						const hashShown = this.getHashChanger().getHash() === targetHash;
+						if (typeof target === "string") {
+							if (!hashShown) this.navTo(target, {}, {}, chain.replace);
+						} else if (!hashShown || componentTargetInfo) {
+							this.navTo(target.route, target.parameters ?? {}, componentTargetInfo, chain.replace);
+						}
+					},
+				);
 				break;
 			}
 			case "block":
@@ -1875,19 +1804,9 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 */
 	private _describeUndo(pending: HashChangeUndo | null, reported: boolean): HashChangeUndo | null {
 		if (!reported) return pending;
-		const shown = HashChanger.getInstance().getHash();
-		const step =
-			lastStep && lastStep.href === window.location.href && lastStep !== this._consumedStep ? lastStep : null;
+		const step = getUnconsumedStep(this._consumedStep);
 		if (step) this._consumedStep = step;
-		if (!pending) return { first: shown, fullHash: undefined, shown, step, started: false };
-		const offset = pending.step && step ? pending.step.offset + step.offset : 0;
-		return {
-			first: pending.first,
-			fullHash: pending.fullHash,
-			shown,
-			step: step && offset ? { offset, href: step.href } : null,
-			started: false,
-		};
+		return composeHashChangeUndo(pending, HashChanger.getInstance().getHash(), step);
 	}
 
 	/**
@@ -1915,14 +1834,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 			this._restoreHash(hash ?? "");
 			return true;
 		}
-		const href = window.location.href;
 		undo.started = true;
 		this._phase = { kind: "restoring", result, whenBack };
-		if (undo.step && undoneHref === href) {
-			// Another router is taking the step back.
-		} else if (undo.step) {
-			undoneHref = href;
-			window.history.go(-undo.step.offset);
+		if (undo.step) {
+			undoHistoryStep(undo.step);
 		} else if (undo.fullHash === undefined) {
 			// UI5 is still reporting the change to the nested routers.
 			this._phase = { ...this._phase, awaitsReport: true };

@@ -19,7 +19,7 @@ import {
 	captureErrorsAsync,
 	recordHashChanges,
 } from "../../testHelpers";
-import { isRecord } from "ui5/guard/router/GuardConfig";
+import { isPlainObject } from "ui5/guard/router/GuardConfig";
 
 let router: GuardRouter;
 
@@ -619,7 +619,7 @@ function replaceHashChanger(): HashChanger {
 
 function hashChangedListeners(hashChanger: HashChanger): number {
 	const registry: unknown = Reflect.get(hashChanger, "mEventRegistry");
-	const listeners = isRecord(registry) ? registry.hashChanged : undefined;
+	const listeners = isPlainObject(registry) ? registry.hashChanged : undefined;
 	return Array.isArray(listeners) ? listeners.length : 0;
 }
 
