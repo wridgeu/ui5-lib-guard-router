@@ -21,7 +21,7 @@ npm install ui5-lib-guard-router
 ```
 
 > [!NOTE]
-> The npm package is ~280 KB compressed (~1.1 MB unpacked) because it ships the pre-built library (`dist/`) with its source maps and type declarations, and the TypeScript sources (`src/`) that the declaration maps point to. At runtime, the browser loads only the `library-preload.js` bundle (~36 KB, ~10 KB gzipped).
+> The npm package is ~300 KB compressed (~1.2 MB unpacked) because it ships the pre-built library (`dist/`) with its source maps and type declarations, and the TypeScript sources (`src/`) that the declaration maps point to. At runtime, the browser loads only the `library-preload.js` bundle (~39 KB, ~11 KB gzipped).
 
 ### TypeScript
 
