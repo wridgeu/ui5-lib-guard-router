@@ -1,7 +1,7 @@
 <mvc:View
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
-	controllerName="demo.app.controller.BaseController">
+	controllerName="demo.app.controller.Admin">
 	<Page id="adminPage" title="{i18n>adminTitle}" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavBack">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start">

@@ -13,7 +13,7 @@ import { SETTLEMENT_TEXT_KEYS } from "../model/runtime";
  *
  * @namespace demo.app.controller
  */
-export default class BaseController extends Controller {
+export default abstract class BaseController extends Controller {
 	/** The manifest sets `routerClass` to `ui5.guard.router.Router`. */
 	protected getRouter(): GuardRouter {
 		return UIComponent.getRouterFor(this) as GuardRouter;

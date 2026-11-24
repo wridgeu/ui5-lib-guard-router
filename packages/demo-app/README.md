@@ -185,18 +185,21 @@ See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui
 
 ### Controllers
 
-All controllers extend `BaseController`, which provides shared helpers: `getRouter()` (typed as `GuardRouter`), `getModel()`, `recordAction()`, `formatSettlementStatus()`, and `navBack()` with the Page nav button handler `onNavBack()`. The guarded views that are never rendered (`Blocked`, `Forbidden`, `Admin`) reference `BaseController` directly, and `App.view.xml` uses no controller.
+All controllers extend `BaseController`, which provides shared helpers: `getRouter()` (typed as `GuardRouter`), `getModel()`, `recordAction()`, `formatSettlementStatus()`, and `navBack()` with the Page nav button handler `onNavBack()`. `App.view.xml` is a pure container shell and uses no controller (same as `reporting/view/App.view.xml`).
 
 **Back navigation.** The nav buttons follow the UI5 routing guidance: with a previous entry of this app in the history (`History.getInstance().getPreviousHash()`), `navBack()` goes one step back with `history.go(-1)`; without one (deep link, fresh load) it replaces the current entry with the route one level up, `navTo(route, {}, true)`. Guards run either way, because the history step reaches the router as a hash change. If a guard blocks the step, the router takes it back and the history stays as it was (see [Browser history](../lib/README.md#browser-history)). `onNavBack()` goes back to `home`; `Employee.controller.ts` overrides it to go back to `employees`.
 
-| File                                 | Purpose                                                                                             |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `controller/BaseController.ts`       | Shared base with typed helpers for router, model, action recording, formatting, and back navigation |
-| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard                                  |
-| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back                                      |
-| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button                               |
-| `controller/Employees.controller.ts` | Employees list: displays route metadata, supports runtime metadata updates via `setRouteMeta()`     |
-| `controller/Employee.controller.ts`  | Employee detail: displays inherited metadata from the parent `employees` route via pattern-tree     |
+| File                                 | Purpose                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, action recording, formatting, and back navigation |
+| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard                                    |
+| `controller/Blocked.controller.ts`   | Blocked view (never rendered, guard always blocks)                                                    |
+| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back                                        |
+| `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                                               |
+| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button                                 |
+| `controller/Admin.controller.ts`     | Admin view (never rendered, guard always redirects to `protected`)                                    |
+| `controller/Employees.controller.ts` | Employees list: displays route metadata, supports runtime metadata updates via `setRouteMeta()`       |
+| `controller/Employee.controller.ts`  | Employee detail: displays inherited metadata from the parent `employees` route via pattern-tree       |
 
 ### Demo-only helpers
 
