@@ -43,7 +43,7 @@ ui5-lib-guard-router/
         |-- webapp/
         |   |-- Component.ts        guard registration example
         |   |-- manifest.json       routerClass: "ui5.guard.router.Router"
-        |   |-- controller/         Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
+        |   |-- controller/         App, Home, Protected, Blocked, Forbidden, Admin, Employee, Employees, NotFound (+ BaseController)
         |   |-- view/               XML views + SettlementPanel fragment
         |   |-- i18n/               text bundle of the root component
         |   |-- guards.ts           guard factories that Component.ts and Home.controller.ts register
