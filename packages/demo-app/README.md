@@ -185,22 +185,18 @@ See [UI5 Internals the Router Relies On](../../docs/reference/architecture.md#ui
 
 ### Controllers
 
-All controllers extend `BaseController`, which provides shared helpers: `getRouter()` (typed as `GuardRouter`), `getModel()`, `createScenarioRunner()`, and `navBack()` with the Page nav button handler `onNavBack()`.
+All controllers extend `BaseController`, which provides shared helpers: `getRouter()` (typed as `GuardRouter`), `getModel()`, `recordAction()`, `formatSettlementStatus()`, and `navBack()` with the Page nav button handler `onNavBack()`. The guarded views that are never rendered (`Blocked`, `Forbidden`, `Admin`) reference `BaseController` directly, and `App.view.xml` uses no controller.
 
 **Back navigation.** The nav buttons follow the UI5 routing guidance: with a previous entry of this app in the history (`History.getInstance().getPreviousHash()`), `navBack()` goes one step back with `history.go(-1)`; without one (deep link, fresh load) it replaces the current entry with the route one level up, `navTo(route, {}, true)`. Guards run either way, because the history step reaches the router as a hash change. If a guard blocks the step, the router takes it back and the history stays as it was (see [Browser history](../lib/README.md#browser-history)). `onNavBack()` goes back to `home`; `Employee.controller.ts` overrides it to go back to `employees`.
 
-| File                                 | Purpose                                                                                         |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `controller/BaseController.ts`       | Abstract base with typed helpers for router, model, scenario runner, and back navigation        |
-| `controller/App.controller.ts`       | Root view controller                                                                            |
-| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard                              |
-| `controller/Blocked.controller.ts`   | Blocked view (never rendered, guard always blocks)                                              |
-| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back                                  |
-| `controller/Forbidden.controller.ts` | Forbidden view (never rendered, guard always redirects)                                         |
-| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button                           |
-| `controller/Admin.controller.ts`     | Admin view (never rendered, guard always redirects to `protected`)                              |
-| `controller/Employees.controller.ts` | Employees list: displays route metadata, supports runtime metadata updates via `setRouteMeta()` |
-| `controller/Employee.controller.ts`  | Employee detail: displays inherited metadata from the parent `employees` route via pattern-tree |
+| File                                 | Purpose                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `controller/BaseController.ts`       | Shared base with typed helpers for router, model, action recording, formatting, and back navigation |
+| `controller/Home.controller.ts`      | Home view: auth toggle, navTo buttons, hash scenarios, leave guard                                  |
+| `controller/Protected.controller.ts` | Protected view: dirty form toggle, clear-and-go-home, nav back                                      |
+| `controller/NotFound.controller.ts`  | Not Found page shown for unmatched routes, with a "Go to Home" button                               |
+| `controller/Employees.controller.ts` | Employees list: displays route metadata, supports runtime metadata updates via `setRouteMeta()`     |
+| `controller/Employee.controller.ts`  | Employee detail: displays inherited metadata from the parent `employees` route via pattern-tree     |
 
 ### Demo-only helpers
 
@@ -209,7 +205,6 @@ These files drive the runtime panels and the scenario buttons. The library does 
 | File                         | Purpose                                                                                                                                                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `demo/RuntimeCoordinator.ts` | Orchestrator: records each `navigationSettled` and the hash it ends on in the runtime model, registers the FLP dirty-state provider lazily and deregisters it while the app is hidden |
-| `demo/ScenarioRunner.ts`     | Drives hash-based scenarios (direct navigation, rapid sequence) and records the last action as a text of the i18n bundle in the runtime model                                         |
 | `routing/hashNavigation.ts`  | Wrapper around the global `HashChanger` for the scenario buttons; like the address bar, it replaces the whole hash, including the nested part                                         |
 | `model/runtime.ts`           | Creates and syncs the `runtime` JSONModel (hash, FLP status, last action, last navigation settlement details and the route metadata the Employees pages show): values only, no texts  |
 | `flp/ContainerAdapter.ts`    | Adapter for `sap.ushell.Container`: detects FLP presence and registers/deregisters the dirty-state provider                                                                           |
@@ -232,7 +227,7 @@ The root component and the nested reporting component each have their own bundle
 - Views bind texts with `{i18n>key}`. A text that depends on a value is chosen in an expression binding (`{= ${auth>/isLoggedIn} ? ${i18n>authLoggedIn} : ${i18n>authLoggedOut}}`); a text with a placeholder is filled with `sap/base/strings/formatMessage`, and the text of the settlement status, one per `NavigationOutcome`, is chosen by the `formatSettlementStatus` formatter of `BaseController` (see `view/SettlementPanel.fragment.xml`).
 - The manifest uses `{{appTitle}}` and `{{appDescription}}`, also for the title of the FLP inbound.
 - The `runtime` model holds values only. The views supply the texts: for the settlement status (the model holds the `NavigationOutcome`, such as `committed`) and for empty values, such as "(empty hash)" or "Not settled yet".
-- Code that needs a text awaits the bundle, because the model loads it asynchronously: `ScenarioRunner.recordAction(key, args)` for the last action.
+- Code that needs a text awaits the bundle, because the model loads it asynchronously: `BaseController.recordAction(key, args)` for the last action.
 - Not translated on purpose: route names, hashes and the route metadata JSON are technical values and shown as they are. Log messages are for developers.
 
 ## FLP preview
@@ -295,7 +290,7 @@ Test files are in `test/e2e/`:
 | `redirect-alias.e2e.ts`   | Redirect to an alias route name and `navTo()` to the alias settle on the route that matches the hash; browser back after a redirect returns to Home, a directly entered `#/team` is replaced                  |
 | `route-metadata.e2e.ts`   | Route metadata display, pattern-tree inheritance, runtime updates                                                                                                                                             |
 | `awaiting-hash.e2e.ts`    | A `navTo()` with component targets that waits for its hash (isolated: the nested component fails to load): after a browser back to the committed hash, a redirected browser forward is taken back as one step |
-| `nested-component.e2e.ts` | Nested component: prefixed hash, sales figures of the reports model, guarded nested route, back navigation with and without a previous entry, deep links, fresh page load                                     |
+| `nested-component.e2e.ts` | Nested component: prefixed hash, guarded nested route, back navigation with and without a previous entry, deep links, fresh page load                                                                         |
 
 Tests reference controls only through `test/shared/controls.ts`: each entry is the view ID from the manifest routing target plus the control ID from the XML view. The host-assigned component prefix (`container-…` standalone, `application-…` in FLP) never appears in tests; the component is found by its `sap.app/id`.
 
