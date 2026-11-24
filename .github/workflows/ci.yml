@@ -49,7 +49,7 @@ jobs:
             - name: Check diagrams
               run: npm run check:diagrams
 
-            - name: Test the lint plugins and scripts
+            - name: Test the scripts
               run: npm run test:tooling
 
             - name: Verify vendored OpenUI5 router files
