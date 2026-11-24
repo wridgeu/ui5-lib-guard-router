@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.2...v1.8.0) (2026-11-24)
+
+
+### Code Refactoring
+
+* align docs and CI step name with recent cleanup ([#83](https://github.com/wridgeu/ui5-lib-guard-router/issues/83)) ([04eb93d](https://github.com/wridgeu/ui5-lib-guard-router/commit/04eb93d1844fed54ab8c40692eed91fb2e8afc3d))
+
 ## [1.7.2](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.1...v1.7.2) (2026-11-23)
 
 
