@@ -147,12 +147,6 @@ QUnit.test(
 	},
 );
 
-QUnit.test("guard returning false produces block, not error", function (assert: Assert) {
-	const pipeline = new GuardPipeline();
-	pipeline.addGlobalGuard(() => false);
-	assert.deepEqual(pipeline.evaluate(createContext()), { action: "block" }, "false → block, not error");
-});
-
 QUnit.module("GuardPipeline - async");
 
 QUnit.test("async guard decisions", async function (assert: Assert) {

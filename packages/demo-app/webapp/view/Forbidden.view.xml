@@ -1,7 +1,7 @@
 <mvc:View
 	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
-	controllerName="demo.app.controller.Forbidden">
+	controllerName="demo.app.controller.BaseController">
 	<Page id="forbiddenPage" title="{i18n>forbiddenTitle}" titleAlignment="Center" showNavButton="true" navButtonPress=".onNavBack">
 		<content>
 			<VBox class="sapUiMediumMargin" alignItems="Start">

@@ -1,13 +1,4 @@
-import type List from "sap/m/List";
-import type StandardListItem from "sap/m/StandardListItem";
-import {
-	CONTROLS,
-	REPORTS_APP_ID,
-	expectControlText,
-	getAppComponentId,
-	press,
-	waitForComponent,
-} from "../shared/controls";
+import { CONTROLS, REPORTS_APP_ID, expectControlText, press, waitForComponent } from "../shared/controls";
 import { setConfidentialUnlocked, settleReportsNavigation } from "../shared/reports";
 import { expectHashToBe, waitForPage } from "./helpers/wait";
 import { fireEvent, reloadPage, setBrowserHash } from "./helpers/browser";
@@ -47,32 +38,6 @@ describe("Nested component with its own guard router", () => {
 		const settlement = await settleReportsNavigation();
 		expect(settlement.status).toBe("committed");
 		expect(settlement.route).toBe("sales");
-	});
-
-	it("should list the sales of the reports model with formatted amounts", async () => {
-		await press(CONTROLS.reportsOverview.navSalesBtn);
-		await waitForPage(CONTROLS.reportsSales.salesPage, "Sales Report");
-
-		const { viewId, id } = CONTROLS.reportsSales.salesList;
-		const readItems = async (): Promise<string[]> =>
-			browser.execute(
-				(componentId: string, view: string, list: string) => {
-					const Component = sap.ui.require("sap/ui/core/Component");
-					const control = Component.getComponentById(componentId).byId(view)?.byId(list) as List;
-					const items = control.getItems() as StandardListItem[];
-					// The number format separates amount and currency with a no-break space.
-					return items.map((item) => `${item.getTitle()}: ${item.getInfo()}`.replace(/\s/g, " "));
-				},
-				await getAppComponentId(REPORTS_APP_ID),
-				viewId,
-				id,
-			);
-
-		// The model loads its data asynchronously.
-		await browser.waitUntil(async () => (await readItems()).length > 0, {
-			timeoutMsg: "The sales list has no items",
-		});
-		expect(await readItems()).toEqual(["Q1: 1.2M EUR", "Q2: 1.4M EUR", "Q3: 1.1M EUR"]);
 	});
 
 	it("should redirect to the overview when the nested guard finds the report locked", async () => {

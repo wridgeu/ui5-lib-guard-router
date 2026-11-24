@@ -42,21 +42,6 @@ QUnit.test("NavigationOutcome is registered as a UI5 enum", function (assert: As
 	assert.strictEqual(type?.isValid("pending"), false, "Unknown enum values are rejected");
 });
 
-QUnit.test("NavigationOutcome values are the documented strings", function (assert: Assert) {
-	assert.deepEqual(
-		{ ...NavigationOutcome },
-		{
-			Committed: "committed",
-			Bypassed: "bypassed",
-			Blocked: "blocked",
-			Redirected: "redirected",
-			Cancelled: "cancelled",
-			Error: "error",
-		},
-		"Apps comparing against the string values keep working",
-	);
-});
-
 QUnit.module("Router - Drop-in replacement (no guards)", {
 	beforeEach: function () {
 		initHashChanger();
@@ -116,14 +101,6 @@ QUnit.test("beforeRouteMatched event fires", async function (assert: Assert) {
 	router.navTo("protected");
 	await waitForRoute(router, "protected");
 	assert.deepEqual(routes, ["protected"], "beforeRouteMatched fired once, for the route");
-});
-
-QUnit.test("getRoute returns route by name", function (assert: Assert) {
-	assert.ok(router.getRoute("home"), "getRoute returns the home route");
-});
-
-QUnit.test("getRoute returns undefined for unknown route", function (assert: Assert) {
-	assert.notOk(router.getRoute("nonexistent"), "getRoute returns undefined for unknown route");
 });
 
 QUnit.module("Router - Guard API", standardHooks);

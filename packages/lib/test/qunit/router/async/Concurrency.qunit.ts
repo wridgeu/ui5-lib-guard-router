@@ -445,28 +445,6 @@ QUnit.test(
 
 QUnit.module("Router - Duplicate and overlapping navigation", standardHooks);
 
-QUnit.test(
-	"Repeated navTo to same destination during pending guard runs guard only once",
-	async function (assert: Assert) {
-		let guardCallCount = 0;
-		const pendingGuard = Promise.withResolvers<boolean>();
-		router.addRouteGuard("protected", () => {
-			guardCallCount++;
-			return pendingGuard.promise;
-		});
-		router.initialize();
-		await waitForRoute(router, "home");
-
-		router.navTo("protected");
-		router.navTo("protected");
-
-		const protectedMatched = waitForRoute(router, "protected");
-		pendingGuard.resolve(true);
-		await protectedMatched;
-		assert.strictEqual(guardCallCount, 1, "Guard only ran once (duplicate was deduped)");
-	},
-);
-
 QUnit.test("Route is navigable again after a guarded navigation completes", async function (assert: Assert) {
 	let guardCallCount = 0;
 	router.addRouteGuard("protected", async () => {

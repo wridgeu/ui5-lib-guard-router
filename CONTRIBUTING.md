@@ -98,7 +98,7 @@ npm run commitlint   # validate the latest commit message locally
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
-Lint also runs the repo's own oxlint JS plugins from `tools/`, so some rule names and messages are not upstream oxlint ones.
+Lint also runs the repo's own oxlint JS plugin from `tools/`, so some rule names and messages are not upstream oxlint ones.
 
 ### Diagram style
 

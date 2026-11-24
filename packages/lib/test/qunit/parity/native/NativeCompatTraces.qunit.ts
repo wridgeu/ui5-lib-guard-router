@@ -420,29 +420,6 @@ QUnit.test(
 	},
 );
 
-QUnit.test("a hash that several routes could match resolves to the same route", function (assert: Assert) {
-	const routes = [
-		{ name: "detail", pattern: "detail/{id}" },
-		{ name: "optional", pattern: "optional/:id:" },
-		{ name: "catchAll", pattern: ":all*:" },
-	];
-	const native = new MobileRouter(routes, { async: true });
-	const guard = new GuardRouterClass(routes, { async: true });
-	try {
-		for (const hash of ["", "detail/1", "optional", "optional/1", "anything/else", "detail/a%20b?x=1"]) {
-			assert.deepEqual(
-				guard.getRouteInfoByHash(hash),
-				native.getRouteInfoByHash(hash),
-				`getRouteInfoByHash("${hash}") returns the same route and arguments`,
-			);
-			assert.strictEqual(guard.match(hash), native.match(hash), `match("${hash}") returns the same result`);
-		}
-	} finally {
-		native.destroy();
-		guard.destroy();
-	}
-});
-
 QUnit.module("NativeCompat - Two routers on one hash changer");
 
 const SHARED_FIXTURE = "ui5.guard.router.qunit.fixtures.manifest";

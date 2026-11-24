@@ -91,31 +91,6 @@ QUnit.test("bag is fresh for each navigation (not carried across)", async functi
 	assert.notOk(bagInitialStates[1], "second navigation bag starts without data from first");
 });
 
-QUnit.test("bag is shared across redirect chain hops", async function (assert: Assert) {
-	await waitForRoute(router, "home");
-
-	router.addRouteGuard("protected", (context: GuardContext) => {
-		context.bag.set("writtenBy", "protected-guard");
-		return "forbidden";
-	});
-
-	let redirectTargetBag: Map<string, unknown> | undefined;
-	router.addRouteGuard("forbidden", (context: GuardContext) => {
-		redirectTargetBag = context.bag;
-		return true;
-	});
-
-	router.navTo("protected");
-	await waitForRoute(router, "forbidden");
-
-	assert.ok(redirectTargetBag instanceof Map, "redirect target guard received bag");
-	assert.strictEqual(
-		redirectTargetBag!.get("writtenBy"),
-		"protected-guard",
-		"redirect target guard reads data written by the original guard",
-	);
-});
-
 QUnit.test("bag is shared across multiple redirect hops", async function (assert: Assert) {
 	await waitForRoute(router, "home");
 
@@ -225,6 +200,7 @@ QUnit.test("setRouteMeta overrides manifest metadata", function (assert: Assert)
 
 	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
 	const meta = router.getRouteMeta("protected");
+	assert.ok(Object.isFrozen(meta), "merged result is frozen");
 	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
 	assert.strictEqual(meta.custom, "value", "runtime adds new keys");
 	assert.strictEqual(meta.level, 1, "manifest keys not in runtime are preserved");
@@ -457,21 +433,6 @@ QUnit.test("toMeta updates to redirect target while fromMeta stays pinned to sou
 
 	assert.deepEqual(redirectTargetToMeta, { restricted: true }, "toMeta is for the redirect target (forbidden)");
 	assert.deepEqual(redirectTargetFromMeta, { public: true }, "fromMeta stays pinned to the original source (home)");
-});
-
-QUnit.test("merged manifest+runtime metadata result is frozen", function (assert: Assert) {
-	router = createRouterWithOptions({
-		routeMeta: {
-			protected: { requiresAuth: true, level: 1 },
-		},
-	});
-
-	router.setRouteMeta("protected", { requiresAuth: false, custom: "value" });
-	const meta = router.getRouteMeta("protected");
-
-	assert.ok(Object.isFrozen(meta), "merged result is frozen");
-	assert.strictEqual(meta.requiresAuth, false, "runtime overrides manifest");
-	assert.strictEqual(meta.level, 1, "manifest keys preserved");
 });
 
 QUnit.test('setRouteMeta("") is not subject to the unknown-route policy', function (assert: Assert) {

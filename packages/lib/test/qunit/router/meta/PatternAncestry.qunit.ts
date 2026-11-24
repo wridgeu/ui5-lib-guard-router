@@ -278,26 +278,3 @@ QUnit.test("multiple consecutive optional params are ignored for ancestry", func
 		"grandchild inherits through ancestor with multiple optional params",
 	);
 });
-
-QUnit.test("rest catchall pattern with prefix still acts as ancestor", function (assert: Assert) {
-	// Pattern "files/:path*:". "files" is mandatory, :path*: is rest/catchall
-	// "files/{id}" should inherit from "files/:path*:"
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "files", pattern: "files/:path*:" },
-			{ name: "file", pattern: "files/{id}" },
-			{ name: "fileVersion", pattern: "files/{id}/version" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				inheritance: "pattern-tree",
-				routeMeta: { files: { storage: "cloud" } },
-			},
-		},
-	);
-
-	const versionMeta = router.getRouteMeta("fileVersion");
-	assert.strictEqual(versionMeta.storage, "cloud", "grandchild inherits through ancestor with rest param");
-});

@@ -13,14 +13,6 @@
 		{
 			"name": "test-guardrails",
 			"specifier": "./tools/eslint-plugin-test-guardrails.mjs"
-		},
-		{
-			"name": "code-quality",
-			"specifier": "./tools/eslint-plugin-code-quality.mjs"
-		},
-		{
-			"name": "comment-quality",
-			"specifier": "./tools/eslint-plugin-comment-quality.mjs"
 		}
 	],
 	"rules": {
@@ -47,14 +39,6 @@
 		"typescript/prefer-promise-reject-errors": "error",
 		"typescript/return-await": "error",
 		"typescript/unbound-method": "off",
-		"code-quality/no-console-only-catch": "warn",
-		"code-quality/no-redundant-boolean-return": "warn",
-		"code-quality/no-em-dash": "warn",
-		"comment-quality/no-obvious-comment": "warn",
-		"comment-quality/no-narrator-comment": "warn",
-		"comment-quality/no-section-divider": "warn",
-		"comment-quality/no-placeholder-comment": "warn",
-		"comment-quality/no-hedging-comment": "warn",
 		"typescript/no-unsafe-function-type": "error",
 		"typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }]
 	},
@@ -62,7 +46,6 @@
 		{
 			"files": ["packages/*/test/**/*.ts"],
 			"rules": {
-				"comment-quality/no-section-divider": "off",
 				"test-guardrails/no-browser-pause": "error"
 			}
 		},

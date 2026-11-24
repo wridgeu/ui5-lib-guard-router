@@ -2,6 +2,9 @@ import type JSONModel from "sap/ui/model/json/JSONModel";
 import type { LeaveGuardFn } from "ui5/guard/router/types";
 import BaseController from "./BaseController";
 import { createHomeLeaveLogger } from "../guards";
+import { runHashSequence, setHash } from "../routing/hashNavigation";
+
+const RAPID_HASH_SEQUENCE = ["#/protected", "#/forbidden", "#/protected"];
 
 /**
  * Controller for the Home view.
@@ -27,64 +30,68 @@ export default class HomeController extends BaseController {
 		const model = this.getModel("auth") as JSONModel;
 		const isLoggedIn: unknown = model.getProperty("/isLoggedIn");
 		model.setProperty("/isLoggedIn", !isLoggedIn);
-		this.createScenarioRunner().recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
+		this.recordAction(isLoggedIn ? "actionLoggedOut" : "actionLoggedIn");
 	}
 
 	onNavToProtected(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["protected"]);
-		this.getRouter().navTo("protected");
+		this._navTo("protected");
 	}
 
 	onNavToBlocked(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["blocked"]);
-		this.getRouter().navTo("blocked");
+		this._navTo("blocked");
 	}
 
 	onNavToForbidden(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["forbidden"]);
-		this.getRouter().navTo("forbidden");
+		this._navTo("forbidden");
 	}
 
 	onNavToAdmin(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["admin"]);
-		this.getRouter().navTo("admin");
+		this._navTo("admin");
 	}
 
 	onNavToEmployees(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["employees"]);
-		this.getRouter().navTo("employees");
+		this._navTo("employees");
 	}
 
 	/** "team" is a retired page, see guards/retiredPageGuard.ts. */
 	onNavToTeam(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["team"]);
-		this.getRouter().navTo("team");
+		this._navTo("team");
 	}
 
 	/** "reports" displays the nested reporting component, which has its own guard router. */
 	onNavToReports(): void {
-		this.createScenarioRunner().recordAction("actionNavTo", ["reports"]);
-		this.getRouter().navTo("reports");
+		this._navTo("reports");
 	}
 
 	onDirectHashToProtected(): void {
-		this.createScenarioRunner().goToProtectedByHash();
+		this._setHash("#/protected", "actionHashTo", ["protected"]);
 	}
 
 	onDirectHashToBlocked(): void {
-		this.createScenarioRunner().goToBlockedByHash();
+		this._setHash("#/blocked", "actionHashTo", ["blocked"]);
 	}
 
 	onDirectHashToForbidden(): void {
-		this.createScenarioRunner().goToForbiddenByHash();
+		this._setHash("#/forbidden", "actionHashTo", ["forbidden"]);
 	}
 
 	onDirectHashToMissing(): void {
-		this.createScenarioRunner().goToMissingRouteByHash();
+		this._setHash("#/this/does/not/exist", "actionHashMissing");
 	}
 
 	onRapidHashSequence(): void {
-		this.createScenarioRunner().runRapidHashSequence();
+		this.recordAction("actionRapidHash", [RAPID_HASH_SEQUENCE.map((hash) => hash.replace("#/", "")).join(" -> ")]);
+		runHashSequence(RAPID_HASH_SEQUENCE);
+	}
+
+	private _navTo(route: string): void {
+		this.recordAction("actionNavTo", [route]);
+		this.getRouter().navTo(route);
+	}
+
+	private _setHash(hash: string, key: string, args?: string[]): void {
+		this.recordAction(key, args);
+		setHash(hash);
 	}
 
 	/**

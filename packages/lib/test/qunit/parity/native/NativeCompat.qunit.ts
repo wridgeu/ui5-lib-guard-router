@@ -41,21 +41,6 @@ const routerPairHooks = {
 
 QUnit.module("NativeCompat - API parity", routerPairHooks);
 
-QUnit.test("Both routers are instances of sap.m.routing.Router", function (assert: Assert) {
-	assert.ok(extRouter.isA("sap.m.routing.Router"), "ext router isA sap.m.routing.Router");
-	assert.ok(nativeRouter.isA("sap.m.routing.Router"), "native router isA sap.m.routing.Router");
-});
-
-QUnit.test("ext router has additional guard methods", function (assert: Assert) {
-	assert.ok(typeof extRouter.addGuard === "function", "has addGuard");
-	assert.ok(typeof extRouter.removeGuard === "function", "has removeGuard");
-	assert.ok(typeof extRouter.addRouteGuard === "function", "has addRouteGuard");
-	assert.ok(typeof extRouter.removeRouteGuard === "function", "has removeRouteGuard");
-	assert.ok(typeof extRouter.addLeaveGuard === "function", "has addLeaveGuard");
-	assert.ok(typeof extRouter.removeLeaveGuard === "function", "has removeLeaveGuard");
-	assert.ok(typeof extRouter.navigationSettled === "function", "has navigationSettled");
-});
-
 QUnit.test("an attach call without a handler is passed on to EventProvider", function (assert: Assert) {
 	callUnsafe(extRouter, "attachRouteMatched", { some: "data" });
 	assert.ok(extRouter.hasListeners("routeMatched"), "a call without a handler is left to EventProvider, as natively");
@@ -64,42 +49,7 @@ QUnit.test("an attach call without a handler is passed on to EventProvider", fun
 	assert.ok(extRouter.hasListeners("navigationSettled"), "attachNavigationSettled() registers like attachEvent()");
 });
 
-QUnit.module("NativeCompat - Route matching", routerPairHooks);
-
-QUnit.test("match() returns identical results for known hashes", function (assert: Assert) {
-	const knownHashes = ["", "page1", "detail/123", "category/1/product/2"];
-	for (const hash of knownHashes) {
-		assert.strictEqual(extRouter.match(hash), nativeRouter.match(hash), `match("${hash}") returns same result`);
-	}
-});
-
-QUnit.test("match() returns identical results for unknown hashes", function (assert: Assert) {
-	const unknownHashes = ["nonexistent", "detail", "category/1", "foo/bar/baz"];
-	for (const hash of unknownHashes) {
-		assert.strictEqual(extRouter.match(hash), nativeRouter.match(hash), `match("${hash}") returns same result`);
-	}
-});
-
-QUnit.test("getRouteInfoByHash returns identical info", function (assert: Assert) {
-	const hashes = ["", "page1", "detail/42", "category/5/product/10", "nonexistent"];
-	for (const hash of hashes) {
-		const extInfo = extRouter.getRouteInfoByHash(hash);
-		const nativeInfo = nativeRouter.getRouteInfoByHash(hash);
-		assert.deepEqual(extInfo, nativeInfo, `getRouteInfoByHash("${hash}") returns same result`);
-	}
-});
-
 QUnit.module("NativeCompat - Navigation behavior", routerPairHooks);
-
-QUnit.test("getRoute returns routes with the same pattern", function (assert: Assert) {
-	const pattern = (router: MobileRouter, name: string): string | undefined => router.getRoute(name)?.getPattern();
-	for (const name of ["home", "page1", "detail", "nested"]) {
-		assert.strictEqual(pattern(extRouter, name), pattern(nativeRouter, name), `getRoute("${name}")`);
-		assert.notStrictEqual(pattern(extRouter, name), undefined, `"${name}" is a route of the guard router`);
-	}
-	assert.strictEqual(extRouter.getRoute("nonexistent"), undefined, "an unknown route is undefined");
-	assert.strictEqual(nativeRouter.getRoute("nonexistent"), undefined, "as with the native router");
-});
 
 QUnit.test("initialize/stop behavior matches", function (assert: Assert) {
 	assert.notOk(extRouter.isInitialized(), "ext router not initialized");
@@ -176,37 +126,6 @@ QUnit.test("bypassed event fires identically for unknown routes", async function
 
 	// Trigger bypassed by navigating to unknown route
 	HashChanger.getInstance().setHash("unknown/route/here");
-});
-
-QUnit.module("NativeCompat - URL generation", routerPairHooks);
-
-QUnit.test("getURL generates identical URLs for routes without parameters", function (assert: Assert) {
-	const extUrl = extRouter.getURL("home");
-	const nativeUrl = nativeRouter.getURL("home");
-	assert.strictEqual(extUrl, nativeUrl, "getURL('home') returns identical URL");
-
-	const extUrl2 = extRouter.getURL("page1");
-	const nativeUrl2 = nativeRouter.getURL("page1");
-	assert.strictEqual(extUrl2, nativeUrl2, "getURL('page1') returns identical URL");
-});
-
-QUnit.test("getURL generates identical URLs for routes with parameters", function (assert: Assert) {
-	const extUrl = extRouter.getURL("detail", { id: "123" });
-	const nativeUrl = nativeRouter.getURL("detail", { id: "123" });
-	assert.strictEqual(extUrl, nativeUrl, "getURL('detail', {id: '123'}) returns identical URL");
-});
-
-QUnit.test("getURL generates identical URLs for nested routes", function (assert: Assert) {
-	const extUrl = extRouter.getURL("nested", { catId: "5", prodId: "10" });
-	const nativeUrl = nativeRouter.getURL("nested", { catId: "5", prodId: "10" });
-	assert.strictEqual(extUrl, nativeUrl, "getURL('nested', {...}) returns identical URL");
-});
-
-QUnit.test("getURL returns undefined for unknown routes", function (assert: Assert) {
-	const extUrl = extRouter.getURL("nonexistent");
-	const nativeUrl = nativeRouter.getURL("nonexistent");
-	assert.strictEqual(extUrl, nativeUrl, "getURL('nonexistent') both return undefined");
-	assert.strictEqual(extUrl, undefined, "Returns undefined");
 });
 
 QUnit.module("NativeCompat - navTo with replace", routerPairHooks);

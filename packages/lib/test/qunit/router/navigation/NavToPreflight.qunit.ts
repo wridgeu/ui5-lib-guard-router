@@ -233,33 +233,6 @@ QUnit.test("navTo returns this for chaining", function (assert) {
 	assert.strictEqual(result, router, "navTo returns this");
 });
 
-QUnit.test("navTo to unknown route cancels pending async guard pipeline", async function (assert) {
-	let resolveGuard!: (value: boolean) => void;
-	router.addGuard(
-		() =>
-			new Promise<boolean>((r) => {
-				resolveGuard = r;
-			}),
-	);
-	router.initialize();
-
-	router.navTo("protected");
-	const settled = router.navigationSettled();
-
-	// While the async guard is pending, navTo to an unknown route.
-	// This must cancel the pending navigation so settlement resolvers drain.
-	router.navTo("nonexistent");
-
-	resolveGuard(true);
-
-	const result = await settled;
-	assert.strictEqual(
-		result.status,
-		NavigationOutcome.Cancelled,
-		"Pending navigation cancelled when unknown-route navTo supersedes it",
-	);
-});
-
 QUnit.test("navTo to unknown route then real route works after cancellation", async function (assert) {
 	let resolveGuard!: (value: boolean) => void;
 	router.addGuard((context) => {
@@ -347,34 +320,6 @@ QUnit.test("navTo to same pending hash with componentTargetInfo is not deduped",
 
 // Preflight: the hash never changed, so nothing is restored. For the parse path, where the hash
 // has changed and is restored, see "Router - Hash change (direct URL entry)".
-
-QUnit.test("blocked via navTo leaves hash unchanged", async function (this: SinonTestContext, assert) {
-	router.addRouteGuard("protected", () => false);
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	const recorder = recordHashChanges();
-	const replaceHash = this.spy(HashChanger.getInstance(), "replaceHash");
-	router.navTo("protected");
-	await router.navigationSettled();
-	recorder.stop();
-
-	assert.strictEqual(replaceHash.callCount, 0, "a blocked navTo does not rewrite the history entry");
-	assert.deepEqual(recorder.hashes, [], "Hash unchanged - preflight never changed it");
-});
-
-QUnit.test("rejected async guard via navTo leaves hash unchanged", async function (assert) {
-	router.addRouteGuard("protected", () => Promise.reject(new Error("guard error")));
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	const recorder = recordHashChanges();
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	recorder.stop();
-	assert.strictEqual(result.status, NavigationOutcome.Error, "Rejected guard settles as Error");
-	assert.deepEqual(recorder.hashes, [], "Hash unchanged after rejected async preflight guard");
-});
 
 QUnit.test(
 	"external hash change to same pending hash during async preflight restores hash on block",

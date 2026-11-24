@@ -70,10 +70,6 @@ export function syncRuntimeModel(model: JSONModel, flpDirtyProviderActive: boole
 	);
 }
 
-export function setRuntimeMessage(model: JSONModel, message: string): void {
-	model.setProperty("/lastAction", message);
-}
-
 export function setSettlementResult(model: JSONModel, result: NavigationResult): void {
 	const lastSettlementRevision = (model.getProperty("/lastSettlementRevision") as number) + 1;
 	model.setProperty("/lastSettlementStatus", result.status);
