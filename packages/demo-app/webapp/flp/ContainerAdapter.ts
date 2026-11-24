@@ -4,12 +4,8 @@ import type DirtyState from "sap/ushell/navigation/DirtyState";
 type DirtyStateProvider = Parameters<typeof DirtyState.registerDirtyStateProvider>[0];
 
 // Probe instead of import: standalone runs on OpenUI5, which has no sap.ushell.
-function getContainer(): typeof Container | undefined {
-	return sap.ui.require("sap/ushell/Container") as typeof Container | undefined;
-}
-
 export function hasUshellContainer(): boolean {
-	return getContainer() !== undefined;
+	return (sap.ui.require("sap/ushell/Container") as typeof Container | undefined) !== undefined;
 }
 
 /** Registers with DirtyState (SAPUI5 1.146+), which the launchpad's sap/ushell/Container has loaded. */

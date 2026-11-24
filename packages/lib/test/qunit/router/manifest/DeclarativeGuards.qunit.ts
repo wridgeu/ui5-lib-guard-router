@@ -1,3 +1,5 @@
+import Component from "sap/ui/core/Component";
+import UIComponent from "sap/ui/core/UIComponent";
 import NavigationOutcome from "ui5/guard/router/NavigationOutcome";
 import type { GuardContext, GuardRouter } from "ui5/guard/router/types";
 import {
@@ -278,30 +280,45 @@ QUnit.test("default guardLoading is lazy", async function (assert: Assert) {
 QUnit.module("Router - Manifest guard module path resolution", hooks);
 
 QUnit.test('"module:" prefix bypasses namespace resolution', async function (assert: Assert) {
-	router = new GuardRouterClass(
-		[
-			{ name: "home", pattern: "" },
-			{ name: "protected", pattern: "protected" },
-		],
-		{
-			async: true,
-			guardRouter: {
-				guardLoading: "block",
-				unknownRouteRegistration: "ignore",
-				guards: {
-					protected: ["module:ui5.guard.router.qunit.fixtures.guards.blockGuard"],
+	const owner = await Component.create({
+		name: "ui5.guard.router.qunit.fixtures.manifest",
+	});
+	if (!(owner instanceof UIComponent)) {
+		throw new Error("Expected fixture component to be a UIComponent");
+	}
+	try {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "protected", pattern: "protected" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					unknownRouteRegistration: "ignore",
+					guards: {
+						protected: ["module:ui5.guard.router.qunit.fixtures.guards.blockGuard"],
+					},
 				},
 			},
-		},
-	);
+			owner,
+		);
 
-	router.initialize();
-	await waitForRoute(router, "home");
+		router.initialize();
+		await waitForRoute(router, "home");
 
-	router.navTo("protected");
-	const result = await router.navigationSettled();
+		router.navTo("protected");
+		const result = await router.navigationSettled();
 
-	assert.strictEqual(result.status, NavigationOutcome.Blocked, "guard loaded via module: prefix blocks navigation");
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Blocked,
+			"guard loaded via module: prefix bypasses owner component namespace",
+		);
+	} finally {
+		owner.destroy();
+	}
 });
 
 QUnit.test('"module:" prefix with slash notation (UI5 convention)', async function (assert: Assert) {

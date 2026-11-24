@@ -52,13 +52,18 @@ export async function waitForPage(
 		async (componentId: string, timeoutMs: number) => {
 			const Component = sap.ui.require("sap/ui/core/Component");
 			const router: GuardRouter = Component.getComponentById(componentId).getRouter();
+			let timerId: ReturnType<typeof setTimeout> | undefined;
 			const timedOut = new Promise<never>((_resolve, reject) => {
-				setTimeout(() => {
+				timerId = setTimeout(() => {
 					reject(new Error(`Timed out after ${timeoutMs}ms waiting for router.navigationSettled()`));
 				}, timeoutMs);
 			});
-			const { status, route, hash } = await Promise.race([router.navigationSettled(), timedOut]);
-			return { status, route, hash };
+			try {
+				const { status, route, hash } = await Promise.race([router.navigationSettled(), timedOut]);
+				return { status, route, hash };
+			} finally {
+				clearTimeout(timerId);
+			}
 		},
 		await getAppComponentId(page.appId),
 		timeout,

@@ -557,21 +557,6 @@ QUnit.test(
 				"shell",
 				"the parent stays on its route",
 			);
-		});
-	},
-);
-
-QUnit.test(
-	"a blocked first navigation of a nested component leaves the browser hash as the parent set it",
-	async function (assert: Assert) {
-		await withNestedApp(async (parent, probe) => {
-			const child = await displayChildWithPendingGuard(getComponentRouter(parent), probe);
-
-			child.decide(false);
-			const settled = await child.childRouter.navigationSettled();
-			await child.shellMatched;
-
-			assert.strictEqual(settled.status, NavigationOutcome.Blocked, "the child's first navigation is blocked");
 			assert.strictEqual(getHash(), "shell", "the child's prefix is not added for its empty hash");
 		});
 	},

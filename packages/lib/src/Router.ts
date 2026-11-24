@@ -164,7 +164,7 @@ interface RedirectChainContext {
 	/** Hashes whose guards have been evaluated in this chain (mutated via .add()). */
 	visited: Set<string>;
 	/** Hash of the originally attempted navigation (for settlement / hash restore). */
-	readonly attemptedHash: string | undefined;
+	readonly attemptedHash: string;
 	/** Whether to restore the hash on block (see {@link NavigationAttempt.restoreHash}). */
 	readonly restoreHash: boolean;
 	/** Original source route (the route the user occupies). */
@@ -400,7 +400,12 @@ export default class Router extends MobileRouter implements GuardRouter {
 				this._options.inheritance === "pattern-tree"
 					? expandToDescendants(descriptors, this._collectRoutePatterns())
 					: descriptors;
-			const rejected = this._registerLazyGuards(expandedDescriptors);
+			const rejected = new Set<GuardDescriptor>();
+			for (const descriptor of expandedDescriptors) {
+				for (const fn of createLazyGuards(descriptor)) {
+					if (!this._registerManifestGuard(descriptor, fn)) rejected.add(descriptor.source);
+				}
+			}
 			this._sourceDescriptors = descriptors.filter((d) => !rejected.has(d.source));
 			return this._start(bIgnoreInitialHash);
 		}
@@ -642,10 +647,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	removeRouteGuard(routeName: string, guard: GuardFn | RouteGuardConfig): this {
 		if (isRouteGuardConfig(guard)) {
 			if (typeof guard.beforeEnter === "function") {
-				this.removeRouteGuard(routeName, guard.beforeEnter);
+				this._pipeline.removeEnterGuard(routeName, guard.beforeEnter);
 			}
 			if (typeof guard.beforeLeave === "function") {
-				this.removeLeaveGuard(routeName, guard.beforeLeave);
+				this._pipeline.removeLeaveGuard(routeName, guard.beforeLeave);
 			}
 			return this;
 		}
@@ -1209,8 +1214,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const phase = this._phase;
 		const commit = phase.kind === "awaitingHash" ? phase.commit : phase.kind === "committing" ? phase : null;
 		if (commit?.hash === newHash) {
-			this._phase = commit;
-			this._commitNavigation(newHash, commit.route);
+			this._commitNavigation(commit);
 			return;
 		}
 
@@ -1429,8 +1433,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		if (attempt.generation !== this._parseGeneration) return;
 		switch (decision.action) {
 			case "allow":
-				this._phase = { kind: "committing", route, hash, origin: "parse", restoreHash: false };
-				this._commitNavigation(hash, route);
+				this._commitNavigation({ kind: "committing", route, hash, origin: "parse", restoreHash: false });
 				break;
 			case "block":
 				this._blockNavigation(hash);
@@ -1454,11 +1457,10 @@ export default class Router extends MobileRouter implements GuardRouter {
 	 * fires before parse as well, so the settlements of such nested navigations
 	 * follow it.
 	 */
-	private _commitNavigation(hash: string, route: string): void {
-		const wasRedirect = this._phase.kind === "committing" && this._phase.origin === "redirect";
-		if (this._phase.kind === "committing") {
-			alignTitleHistory(this, this._phase.direction, this._phase.attemptedHash);
-		}
+	private _commitNavigation(phase: PhaseCommitting): void {
+		const { hash, route } = phase;
+		const wasRedirect = phase.origin === "redirect";
+		alignTitleHistory(this, phase.direction, phase.attemptedHash);
 		// The URL has moved on: a hash change that was to put it back is not awaited any more.
 		this._undo = null;
 		this._currentHash = hash;
@@ -1495,7 +1497,7 @@ export default class Router extends MobileRouter implements GuardRouter {
 		const phase = this._phase;
 		if (phase.kind !== "committing") return true;
 		if (this.getHashChanger().getHash() === phase.hash) {
-			this._commitNavigation(phase.hash, phase.route);
+			this._commitNavigation(phase);
 			return true;
 		}
 		if (!hasComponentTargets(componentTargetInfo)) return false;
@@ -1926,20 +1928,6 @@ export default class Router extends MobileRouter implements GuardRouter {
 			Log.error(`guardRouter.guards: failed to register "${descriptor.modulePath}"`, String(err), LOG_COMPONENT);
 			return false;
 		}
-	}
-
-	/**
-	 * Register the guards of each descriptor, loading their modules on first use (see `createLazyGuards`).
-	 * Returns the declared source descriptors rejected by `unknownRouteRegistration: "throw"`.
-	 */
-	private _registerLazyGuards(descriptors: ManifestGuardDescriptor[]): Set<GuardDescriptor> {
-		const rejected = new Set<GuardDescriptor>();
-		for (const descriptor of descriptors) {
-			for (const fn of createLazyGuards(descriptor)) {
-				if (!this._registerManifestGuard(descriptor, fn)) rejected.add(descriptor.source);
-			}
-		}
-		return rejected;
 	}
 
 	/**

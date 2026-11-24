@@ -64,7 +64,7 @@ QUnit tests of the library are below `packages/lib/test/qunit/`. A folder is one
 | The demo app in a browser                                 | `packages/demo-app/test/e2e/`, one spec file per scenario area                                                      |
 | The demo app in the Fiori launchpad preview               | `packages/demo-app/test/flp/`                                                                                       |
 | The demo app in an iframe of the launchpad                | `packages/demo-app/test/flp/`, on the launchpad page of `test/flp/iframe/webapp/` (served at `/iframe`)             |
-| A lint plugin in `tools/` or a script in `scripts/`       | `<name>.test.mjs` next to it, run by `npm run test:tooling` (`node --test`)                                         |
+| A script in `scripts/`                                    | `<name>.test.mjs` next to it, run by `npm run test:tooling` (`node --test`)                                         |
 
 Very large test files have silently stopped registering their later tests, so compare the test count in the runner output after a big addition.
 
@@ -86,7 +86,7 @@ npm run lint         # oxlint, type-aware through oxlint-tsgolint; the no-unsafe
 npm run fmt:check    # oxfmt
 npm run check:layout # test files on a page, unique module names, test paths and citations in the docs
 npm run check:diagrams # every Mermaid block in the docs parses and has no backtick (GitHub prints it); a call name() or a private _name in a label exists in the code of packages/lib/src, comments aside, or is listed as external in the script; the two route maps of the demo README show every route, pattern and manifest guard of the demo manifests; mermaid is pinned to 12.3.0, the version GitHub renders with
-npm run test:tooling # node --test for the lint plugins in tools/ and the scripts in scripts/ (*.test.mjs)
+npm run test:tooling # node --test for the scripts in scripts/ (*.test.mjs)
 npm run check        # all of the above (fmt:check + lint + typecheck + check:layout + check:diagrams + test:tooling)
 npm run fmt          # auto-format all files
 npm run lint:fix     # auto-fix lint issues
@@ -98,7 +98,7 @@ npm run commitlint   # validate the latest commit message locally
 
 The local hooks run `oxlint --fix` and `oxfmt` on staged files, and `commitlint` validates Conventional Commit messages locally and in CI.
 
-Lint also runs the repo's own oxlint JS plugins from `tools/`, so some rule names and messages are not upstream oxlint ones.
+Lint also runs the repo's own oxlint JS plugin from `tools/`, so some rule names and messages are not upstream oxlint ones.
 
 ### Diagram style
 

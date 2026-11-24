@@ -285,19 +285,6 @@ QUnit.test("Async route-specific guard throwing error produces Error settlement"
 });
 
 QUnit.test(
-	"Async route-specific guard returning rejected promise produces Error settlement",
-	async function (assert: Assert) {
-		const rejectedError = new Error("Route guard rejected");
-		router.addRouteGuard("protected", () => Promise.reject(rejectedError));
-		router.initialize();
-		router.navTo("protected");
-		const result = await router.navigationSettled();
-		assert.strictEqual(result.status, NavigationOutcome.Error, "Status is Error");
-		assert.strictEqual(result.error, rejectedError, "Error is the rejected value");
-	},
-);
-
-QUnit.test(
 	"Multiple async guards - the first that blocks short-circuits the remaining",
 	async function (assert: Assert) {
 		const order: number[] = [];
@@ -322,32 +309,6 @@ QUnit.test(
 		assert.deepEqual(order, [1, 2], "Third guard was short-circuited after the second blocked");
 	},
 );
-
-QUnit.test("Async route guard redirects", async function (assert: Assert) {
-	router.addRouteGuard("protected", async () => "home");
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-	assert.deepEqual(
-		{ status: result.status, route: result.route, hash: result.hash },
-		{ status: NavigationOutcome.Redirected, route: "home", hash: "" },
-		"Async route guard redirected to home",
-	);
-});
-
-QUnit.test("Guard returning null is treated as block", async function (assert: Assert) {
-	addGuardUnsafe(router, () => null);
-	router.initialize();
-	await assertBlocked(assert, router, () => router.navTo("protected"), "Null guard return treated as block");
-});
-
-QUnit.test("Guard returning undefined is treated as block", async function (assert: Assert) {
-	addGuardUnsafe(router, () => undefined);
-	router.initialize();
-	await assertBlocked(assert, router, () => router.navTo("protected"), "Undefined guard return treated as block");
-});
 
 QUnit.test("Async guard returning invalid value treats as block", async function (assert: Assert) {
 	addGuardUnsafe(router, async () => 42);

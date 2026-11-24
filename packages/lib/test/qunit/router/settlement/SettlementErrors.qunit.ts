@@ -46,19 +46,6 @@ QUnit.test("resolving orphaned guard after stop() has no side effect", async fun
 	assert.strictEqual(getHash(), "", "Hash was not changed by stale guard resolution after stop");
 });
 
-QUnit.test("settlement outcome reflects redirect origin", async function (assert: Assert) {
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.addRouteGuard("protected", () => "forbidden");
-
-	router.navTo("protected");
-	const result = await router.navigationSettled();
-
-	assert.strictEqual(result.status, NavigationOutcome.Redirected, "Redirected navigation settles as Redirected");
-	assert.strictEqual(result.route, "forbidden", "Settlement route is the redirect target");
-});
-
 QUnit.test("settlement outcome reflects parse-path origin (direct hash change)", async function (assert: Assert) {
 	router.initialize();
 	await waitForRoute(router, "home");

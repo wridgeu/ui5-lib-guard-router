@@ -6,7 +6,6 @@ import type Model from "sap/ui/model/Model";
 import type ResourceModel from "sap/ui/model/resource/ResourceModel";
 import type { GuardRouter } from "ui5/guard/router/types";
 import type NavigationOutcome from "ui5/guard/router/NavigationOutcome";
-import ScenarioRunner from "../demo/ScenarioRunner";
 import { SETTLEMENT_TEXT_KEYS } from "../model/runtime";
 
 /**
@@ -28,8 +27,14 @@ export default abstract class BaseController extends Controller {
 		return model;
 	}
 
-	protected createScenarioRunner(): ScenarioRunner {
-		return new ScenarioRunner(this.getModel("runtime") as JSONModel, this.getModel("i18n") as ResourceModel);
+	/** Show an i18n text as the last action in the runtime panel. */
+	protected recordAction(key: string, args?: string[]): void {
+		const runtimeModel = this.getModel("runtime") as JSONModel;
+		const i18nModel = this.getModel("i18n") as ResourceModel;
+		// The i18n model loads its bundle asynchronously ("async": true in the manifest).
+		void Promise.resolve(i18nModel.getResourceBundle()).then((bundle) => {
+			runtimeModel.setProperty("/lastAction", bundle.getText(key, args) ?? key);
+		});
 	}
 
 	/**

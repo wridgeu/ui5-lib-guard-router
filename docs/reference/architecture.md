@@ -48,7 +48,7 @@ ui5-lib-guard-router/
         |   |-- i18n/               text bundle of the root component
         |   |-- guards.ts           guard factories that Component.ts and Home.controller.ts register
         |   |-- guards/             declarative guard modules (blockedGuard, forbiddenGuard, retiredPageGuard, dirtyFormGuard, navigationLogger)
-        |   |-- demo/               RuntimeCoordinator, ScenarioRunner
+        |   |-- demo/               RuntimeCoordinator
         |   |-- flp/                ContainerAdapter (ushell dirty-state provider)
         |   |-- model/              auth.json, runtime model factory
         |   |-- routing/            hashNavigation helpers
@@ -687,7 +687,7 @@ the error is swallowed and the decision is a block.
 | Lazy-mode preload hint                             | constructor                                                                | `sap.ui.require(paths)` with an empty error callback, fire-and-forget                                                                  |
 | Pattern-tree expansion                             | `initialize()`, `addRoute()`                                               | `expandToDescendants()`, `expandForNewRoute()` (`PatternTree.ts`)                                                                      |
 | `guardLoading: "block"`                            | `initialize()`                                                             | `loadGuardModules()` (`GuardModules.ts`), then `super.initialize()`                                                                    |
-| `guardLoading: "lazy"`                             | `initialize()` → `_registerLazyGuards()`                                   | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()`                                 |
+| `guardLoading: "lazy"`                             | `initialize()`                                                             | `createLazyGuards()` (`GuardModules.ts`); its wrappers run a module's guards with `runGuardsInOrder()`                                 |
 | `addRoute()` with `pattern-tree`, any loading mode | `addRoute()` → `_registerManifestGuard(..., before)`                       | `createLazyGuards()` (`GuardModules.ts`)                                                                                               |
 | Export shapes and names                            | -                                                                          | `resolveModuleExports()` (`GuardModules.ts`)                                                                                           |
 | Guard names in log messages                        | -                                                                          | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                                                 |

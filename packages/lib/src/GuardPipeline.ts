@@ -269,7 +269,11 @@ export default class GuardPipeline {
 	/** Run global guards, then the route-specific guards of each route in `entering`. Stays sync when possible. */
 	private _runEnterGuards(entering: string[], context: GuardContext): GuardResult | Promise<GuardResult> {
 		const runRouteGuards = (): GuardResult | Promise<GuardResult> =>
-			this._runForEach(entering, context, (route) => this._runRouteGuards(route, context));
+			this._runForEach(entering, context, (route) => {
+				const guards = route ? this._enterGuards.get(route) : undefined;
+				if (!guards) return true;
+				return this._runGuards(guards, context, route, validateGuardResult, "Enter guard");
+			});
 		const globalResult = this._runGuards(
 			this._globalGuards,
 			context,
@@ -288,13 +292,6 @@ export default class GuardPipeline {
 		if (globalResult !== true) return globalResult;
 		if (context.signal.aborted) return false;
 		return runRouteGuards();
-	}
-
-	/** Run route-specific guards if any are registered. */
-	private _runRouteGuards(toRoute: string, context: GuardContext): GuardResult | Promise<GuardResult> {
-		const guards = toRoute ? this._enterGuards.get(toRoute) : undefined;
-		if (!guards) return true;
-		return this._runGuards(guards, context, toRoute, validateGuardResult, "Enter guard");
 	}
 
 	/**

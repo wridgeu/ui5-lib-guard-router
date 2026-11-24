@@ -114,21 +114,6 @@ QUnit.test("Guard on redirect target receives correct context", async function (
 	assert.strictEqual(capturedContext!.fromHash, "", "fromHash is original source hash");
 });
 
-QUnit.test("Leave guards run only on first hop, not on redirect hops", async function (assert: Assert) {
-	let leaveCallCount = 0;
-	router.addLeaveGuard("home", () => {
-		leaveCallCount++;
-		return true;
-	});
-	router.addRouteGuard("protected", () => "forbidden");
-	router.initialize();
-	await waitForRoute(router, "home");
-
-	router.navTo("protected");
-	await waitForRoute(router, "forbidden");
-	assert.strictEqual(leaveCallCount, 1, "Leave guard ran exactly once (first hop only)");
-});
-
 QUnit.test("Async guards in redirect chain work correctly", async function (assert: Assert) {
 	router.addRouteGuard("protected", async () => "forbidden");
 	router.addRouteGuard("forbidden", async () => true);

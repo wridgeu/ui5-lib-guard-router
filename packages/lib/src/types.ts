@@ -485,7 +485,8 @@ export interface GuardRouter extends MobileRouter {
 	 * Fires synchronously after every guard pipeline settlement with
 	 * a {@link NavigationResult} payload. Unlike the one-shot
 	 * `navigationSettled()` Promise, this event fires for every
-	 * navigation outcome without re-registration.
+	 * navigation outcome without re-registration. It does not fire
+	 * for the navigation that `destroy()` cancels.
 	 *
 	 * @param oData - Application-specific payload passed to the handler as second argument.
 	 * @param fnFunction - The function to be called when the event occurs.
