@@ -847,7 +847,7 @@ Route metadata propagates the same way. With the route-to-pattern mapping `"empl
 
 `getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns the same entries (merged, own values win).
 
-**The root-pattern route (`""`) is an ancestor of every route.** Metadata or guards declared on it, typically on "home", propagate to all routes:
+**The root-pattern route (`""`) is an ancestor of every non-empty route.** Metadata or guards declared on it, typically on "home", propagate to all other routes:
 
 ```json
 "guardRouter": {

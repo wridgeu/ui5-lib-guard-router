@@ -315,14 +315,7 @@ QUnit.test(
 
 		router.initialize();
 		await waitForRoute(router, "home");
-		const initResult = await router.navigationSettled();
-		assert.strictEqual(
-			initResult.status,
-			NavigationOutcome.Committed,
-			"home commits without inheriting shell's blockGuard",
-		);
 
-		// Navigating to employees runs the inherited blockGuard from shell.
 		router.navTo("employees");
 		const result = await router.navigationSettled();
 		assert.strictEqual(

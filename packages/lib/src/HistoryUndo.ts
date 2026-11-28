@@ -40,7 +40,7 @@ let undoneHref: string | null = null;
  * offset is `0` (so `history.go(0)` can never be triggered to reload the page).
  */
 export function readHistoryStep(fromIndex: number, currentIndex: number | undefined, href: string): HistoryStep | null {
-	if (currentIndex === undefined || currentIndex < 0 || fromIndex < 0) return null;
+	if (currentIndex === undefined || !(currentIndex >= 0 && fromIndex >= 0)) return null;
 	const offset = currentIndex - fromIndex;
 	return offset !== 0 ? { offset, href } : null;
 }

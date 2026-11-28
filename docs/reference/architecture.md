@@ -518,8 +518,10 @@ Three rules keep one undo from causing the next:
 
 **How a step is known.** A listener for `currententrychange` of the browser's Navigation API
 (`window.navigation`), registered once when `HistoryUndo.ts` loads, records the last step in
-the module variable `lastStep`: for a `traverse` it stores the index delta and the URL it
-arrived at. Any other entry change clears it, unless only the state of the entry was replaced,
+the module variable `lastStep`: for a `traverse` with valid non-negative entry indices and a
+non-zero index delta (`readHistoryStep()`), it stores the offset and the URL it arrived at
+(detached entries or a zero offset clear `lastStep`). Any other entry change clears it, unless
+only the state of the entry was replaced,
 which UI5's `History` does after a step. `getUnconsumedStep()` checks that `lastStep.href`
 matches `window.location.href` and that the calling router has not already consumed that step
 (`_consumedStep`), so a traversal is never attributed twice or to an unrelated URL. UI5's
