@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.8.0...v1.8.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **router:** guard detached history indices and irreflexive empty-pattern ancestry ([#85](https://github.com/wridgeu/ui5-lib-guard-router/issues/85)) ([a91e06a](https://github.com/wridgeu/ui5-lib-guard-router/commit/a91e06a6515d5edce28fc9dfe63ae309f7360af3))
+
 ## [1.8.0](https://github.com/wridgeu/ui5-lib-guard-router/compare/v1.7.2...v1.8.0) (2026-11-24)
 
 
