@@ -847,7 +847,7 @@ Route metadata propagates the same way. With the route-to-pattern mapping `"empl
 
 `getRouteMeta("employeeResume")` returns `{ section: "hr", requiresAuth: true, clearance: "manager" }` (inherited from both `employees` and `employee`). `getRouteMeta("employee")` returns the same entries (merged, own values win).
 
-**The root-pattern route (`""`) is an ancestor of every route.** Metadata or guards declared on it, typically on "home", propagate to all routes:
+**The root-pattern route (`""`) is an ancestor of every non-empty route.** Metadata or guards declared on it, typically on "home", propagate to all non-empty routes:
 
 ```json
 "guardRouter": {
@@ -858,7 +858,7 @@ Route metadata propagates the same way. With the route-to-pattern mapping `"empl
 }
 ```
 
-Every route inherits `requiresAuth: true` from "home" unless it overrides it. The reverse holds too: `{ "requiresAuth": false }` on the root route makes every route public unless overridden.
+Every non-empty route inherits `requiresAuth: true` from "home" unless it overrides it. The reverse holds too: `{ "requiresAuth": false }` on the root route makes every non-empty route public unless overridden.
 
 Only manifest guards are inherited; guards added with `addRouteGuard()` or `addLeaveGuard()` apply only to their own route. Guard inheritance is resolved at `initialize()`. A route added later with `addRoute()` joins the pattern tree at once: its inherited guards are registered in front of the manifest guards of deeper routes. Metadata, including runtime metadata from `setRouteMeta()`, is resolved on first access and cached until `setRouteMeta()` or `addRoute()` clears the cache.
 

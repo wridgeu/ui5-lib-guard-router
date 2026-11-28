@@ -43,13 +43,15 @@ export function patternSegments(pattern: string): string[] {
 /**
  * Check if `ancestorPattern` is a URL-tree ancestor of `candidatePattern`.
  *
- * Both patterns are reduced to their mandatory path segments and compared
- * positionally. Mandatory parameter segments (`{paramA}`, `{paramB}`) are
- * treated as equivalent regardless of name, so `employees/{empId}` is
- * recognized as an ancestor of `employees/{id}/resume`.
+ * The empty pattern `""` is an ancestor of every non-empty pattern, and no
+ * pattern is its own ancestor. Non-empty patterns are reduced to their
+ * mandatory path segments and compared positionally. Mandatory parameter
+ * segments (`{paramA}`, `{paramB}`) are treated as equivalent regardless of
+ * name, so `employees/{empId}` is recognized as an ancestor of
+ * `employees/{id}/resume`.
  */
 export function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
-	if (ancestorPattern === "") return true;
+	if (ancestorPattern === "") return candidatePattern !== "";
 	const ancestorSegments = patternSegments(ancestorPattern);
 	if (ancestorSegments.length === 0) return false;
 	const candidateSegments = patternSegments(candidatePattern);
