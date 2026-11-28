@@ -694,7 +694,7 @@ the error is swallowed and the decision is a block.
 | Export shapes and names                            | -                                                                          | `resolveModuleExports()` (`GuardModules.ts`)                                                                                           |
 | Guard names in log messages                        | -                                                                          | `nameGuard()` / `describeGuard()` (`GuardPipeline.ts`)                                                                                 |
 | Route metadata                                     | `_meta`, `getRouteMeta()`, `setRouteMeta()`, `addRoute()`                  | `RouteMetaStore` (`RouteMeta.ts`)                                                                                                      |
-| Browser history step tracking & cross-router undo  | `_describeUndo()`, `_undoHashChange()`                                     | `getUnconsumedStep()`, `composeHashChangeUndo()`, `undoHistoryStep()` (`HistoryUndo.ts`)                                               |
+| Browser history step tracking & cross-router undo  | `_describeUndo()`, `_undoHashChange()`                                     | `readHistoryStep()`, `getUnconsumedStep()`, `composeHashChangeUndo()`, `undoHistoryStep()` (`HistoryUndo.ts`)                          |
 | UI5-private & loosely-typed UI5-boundary adapters  | constructor, `attachRouteMatched()`, `_commitNavigation()`, hash listeners | `withoutGuardRouter()`, `mirrorMatchingProcess()`, `isPromiseResolver()`, `readEventHash()`, `alignTitleHistory()` (`Ui5Internals.ts`) |
 
 Option defaults: `unknownRouteRegistration: "warn"`, `navToPreflight: "guard"`,
