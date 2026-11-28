@@ -278,3 +278,57 @@ QUnit.test("multiple consecutive optional params are ignored for ancestry", func
 		"grandchild inherits through ancestor with multiple optional params",
 	);
 });
+
+QUnit.test(
+	"distinct empty-pattern routes do not inherit metadata or guards from each other",
+	async function (assert: Assert) {
+		router = new GuardRouterClass(
+			[
+				{ name: "home", pattern: "" },
+				{ name: "shell", pattern: "" },
+				{ name: "employees", pattern: "employees" },
+			],
+			{
+				async: true,
+				guardRouter: {
+					guardLoading: "block",
+					inheritance: "pattern-tree",
+					routeMeta: {
+						home: { area: "home" },
+						shell: { chrome: "shell" },
+					},
+					guards: {
+						home: ["ui5/guard/router/qunit/fixtures/guards/allowGuard"],
+						shell: ["ui5/guard/router/qunit/fixtures/guards/blockGuard"],
+					},
+				},
+			},
+		);
+
+		assert.deepEqual(router.getRouteMeta("home"), { area: "home" }, "home does not inherit shell metadata");
+		assert.deepEqual(router.getRouteMeta("shell"), { chrome: "shell" }, "shell does not inherit home metadata");
+		assert.deepEqual(
+			router.getRouteMeta("employees"),
+			{ area: "home", chrome: "shell" },
+			"non-empty descendant inherits from both empty-pattern routes",
+		);
+
+		router.initialize();
+		await waitForRoute(router, "home");
+		const initResult = await router.navigationSettled();
+		assert.strictEqual(
+			initResult.status,
+			NavigationOutcome.Committed,
+			"home commits without inheriting shell's blockGuard",
+		);
+
+		// Navigating to employees runs the inherited blockGuard from shell.
+		router.navTo("employees");
+		const result = await router.navigationSettled();
+		assert.strictEqual(
+			result.status,
+			NavigationOutcome.Blocked,
+			"non-empty descendant inherits guard from empty-pattern route",
+		);
+	},
+);

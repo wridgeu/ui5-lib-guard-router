@@ -77,6 +77,18 @@ QUnit.test("merges by pattern depth, not by the order routes are declared in", f
 	assert.deepEqual(store.get("resume"), { level: "employee" });
 });
 
+QUnit.test("distinct empty-pattern routes do not inherit metadata from each other", function (assert) {
+	const routes = [
+		{ name: "home", pattern: "" },
+		{ name: "shell", pattern: "" },
+		{ name: "employees", pattern: "employees" },
+	];
+	const store = new RouteMetaStore(manifest({ home: { fromHome: true }, shell: { fromShell: true } }), () => routes);
+	assert.deepEqual(store.get("home"), { fromHome: true });
+	assert.deepEqual(store.get("shell"), { fromShell: true });
+	assert.deepEqual(store.get("employees"), { fromHome: true, fromShell: true });
+});
+
 QUnit.test("a route without a pattern only sees its own metadata", function (assert) {
 	const store = new RouteMetaStore(manifest({ home: { root: true }, loose: { own: 1 } }), () => ROUTES);
 	assert.deepEqual(store.get("loose"), { own: 1 });

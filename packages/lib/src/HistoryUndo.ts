@@ -34,15 +34,25 @@ let lastStep: HistoryStep | null = null;
 /** The URL of a step that a router is taking back, until the browser reports the next URL change. */
 let undoneHref: string | null = null;
 
+/**
+ * Compute a history step from a Navigation API `traverse` event's entry indices.
+ * Returns `null` when either entry is detached (`index < 0` or missing) or the
+ * offset is `0` (so `history.go(0)` can never be triggered to reload the page).
+ */
+export function readHistoryStep(fromIndex: number, currentIndex: number | undefined, href: string): HistoryStep | null {
+	if (currentIndex === undefined || currentIndex < 0 || fromIndex < 0) return null;
+	const offset = currentIndex - fromIndex;
+	return offset !== 0 ? { offset, href } : null;
+}
+
 // The Navigation API tells how far a step through the history went, before UI5 learns of the
 // hash change. UI5's History only infers it, and wrongly once an entry lacks its state. Without
 // the API (Firefox before 147, Safari before 26.2) no step is known and the entry is replaced.
 window.navigation?.addEventListener("currententrychange", (event) => {
 	const href = window.location.href;
 	if (undoneHref !== href) undoneHref = null;
-	const entry = window.navigation.currentEntry;
-	if (entry && event.navigationType === "traverse") {
-		lastStep = { offset: entry.index - event.from.index, href };
+	if (event.navigationType === "traverse") {
+		lastStep = readHistoryStep(event.from.index, window.navigation.currentEntry?.index, href);
 	} else if (lastStep?.href !== href) {
 		// Not an entry whose state alone is replaced, as UI5's History does after a step.
 		lastStep = null;

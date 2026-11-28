@@ -22,9 +22,10 @@ QUnit.test("keeps segments that only contain colons in other places", function (
 
 QUnit.module("PatternTree - isPatternAncestor");
 
-QUnit.test("the empty pattern is an ancestor of every pattern", function (assert) {
+QUnit.test("the empty pattern is an ancestor of every non-empty pattern", function (assert) {
 	assert.strictEqual(isPatternAncestor("", "a"), true);
-	assert.strictEqual(isPatternAncestor("", ""), true);
+	assert.strictEqual(isPatternAncestor("", ":opt:"), true);
+	assert.strictEqual(isPatternAncestor("", ""), false);
 });
 
 QUnit.test("a pattern without mandatory segments is no ancestor", function (assert) {
@@ -105,6 +106,22 @@ QUnit.test("an entry of the empty-pattern route is not copied to that route agai
 		expandToDescendants([{ route: "home" }], ROUTES),
 		ROUTES.map(({ name }) => ({ route: name })),
 	);
+});
+
+QUnit.test("distinct empty-pattern routes do not inherit entries from each other", function (assert) {
+	const routes = [
+		{ name: "home", pattern: "" },
+		{ name: "shell", pattern: "" },
+		{ name: "employees", pattern: "employees" },
+	];
+	assert.deepEqual(expandToDescendants([{ route: "home" }, { route: "shell" }], routes), [
+		{ route: "home" },
+		{ route: "employees" },
+		{ route: "shell" },
+		{ route: "employees" },
+	]);
+	assert.deepEqual(expandForNewRoute([{ route: "home" }], "shell", routes), []);
+	assert.deepEqual(expandForNewRoute([{ route: "shell" }], "shell", routes), [{ route: "employees" }]);
 });
 
 QUnit.test('global entries are not copied even when a route is named "*"', function (assert) {

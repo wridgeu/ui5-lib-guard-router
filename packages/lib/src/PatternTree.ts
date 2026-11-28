@@ -49,7 +49,7 @@ export function patternSegments(pattern: string): string[] {
  * recognized as an ancestor of `employees/{id}/resume`.
  */
 export function isPatternAncestor(ancestorPattern: string, candidatePattern: string): boolean {
-	if (ancestorPattern === "") return true;
+	if (ancestorPattern === "") return candidatePattern !== "";
 	const ancestorSegments = patternSegments(ancestorPattern);
 	if (ancestorSegments.length === 0) return false;
 	const candidateSegments = patternSegments(candidatePattern);
